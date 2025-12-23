@@ -1,0 +1,53 @@
+import React, { useEffect, useState } from 'react';
+import { User, CheckCircle, X } from './Icons';
+
+interface WelcomeToastProps {
+  userName: string;
+  visible: boolean;
+  onClose: () => void;
+}
+
+const WelcomeToast: React.FC<WelcomeToastProps> = ({ userName, visible, onClose }) => {
+  const [show, setShow] = useState(visible);
+
+  useEffect(() => {
+    setShow(visible);
+    if (visible) {
+      const timer = setTimeout(() => {
+        setShow(false);
+        onClose();
+      }, 4000); // 4 segundos
+      return () => clearTimeout(timer);
+    }
+  }, [visible, onClose]);
+
+  if (!show) return null;
+
+  return (
+    <div className="fixed top-24 right-4 z-[200] animate-in slide-in-from-right duration-500">
+      <div className="bg-tech-900 border border-[#dd9933] shadow-[0_0_20px_rgba(221,153,51,0.3)] rounded-xl p-4 flex items-center gap-4 min-w-[300px] relative overflow-hidden">
+        {/* Glow Effect */}
+        <div className="absolute top-0 right-0 w-20 h-20 bg-[#dd9933]/20 blur-2xl rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+        
+        <div className="w-12 h-12 rounded-full bg-tech-800 border border-tech-700 flex items-center justify-center shrink-0">
+           <User size={24} className="text-[#dd9933]" />
+        </div>
+        
+        <div className="flex-1">
+           <h4 className="text-[#dd9933] font-bold text-sm uppercase tracking-wider mb-0.5">Bem-vindo de volta!</h4>
+           <p className="text-gray-200 text-sm font-bold truncate max-w-[180px]">{userName}</p>
+        </div>
+
+        <button onClick={() => setShow(false)} className="text-gray-500 hover:text-white transition-colors">
+           <X size={16} />
+        </button>
+        
+        {/* Progress Bar */}
+        <div className="absolute bottom-0 left-0 h-1 bg-[#dd9933] animate-[progress_4s_linear_forwards]" style={{width: '100%'}}></div>
+      </div>
+      <style>{`@keyframes progress { from { width: 100%; } to { width: 0%; } }`}</style>
+    </div>
+  );
+};
+
+export default WelcomeToast;

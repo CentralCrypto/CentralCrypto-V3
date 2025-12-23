@@ -1,0 +1,201 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Central Crypto | Terminal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Highcharts Dependencies -->
+    <script src="https://code.highcharts.com/highcharts.js"></script>
+    <script src="https://code.highcharts.com/highcharts-more.js"></script>
+    <script src="https://code.highcharts.com/modules/treemap.js"></script>
+    <script src="https://code.highcharts.com/modules/boost.js"></script>
+    <script src="https://code.highcharts.com/modules/exporting.js"></script>
+    <script src="https://code.highcharts.com/modules/accessibility.js"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              mono: ['JetBrains Mono', 'monospace'],
+            },
+            colors: {
+              tech: {
+                950: 'var(--color-bg-main)',
+                900: 'var(--color-bg-panel)',
+                800: 'var(--color-bg-element)',
+                700: 'var(--color-border)',
+                600: '#b87b22',
+                500: '#dd9933',
+                400: '#eeb04e',
+                accent: '#dd9933',
+                danger: '#ef4444',
+                success: '#22c55e',
+              },
+              gray: {
+                200: 'var(--color-text-main)',
+                300: 'var(--color-text-secondary)',
+                400: 'var(--color-text-muted)',
+                500: '#6b7280',
+                600: '#4b5563',
+              }
+            },
+            animation: {
+              'spin-slow': 'spin 3s linear infinite',
+              'scroll': 'scroll 320s linear infinite', /* Much slower and linear */
+              'magazine-scroll': 'magazine-scroll 300s linear infinite',
+            },
+            keyframes: {
+              scroll: {
+                '0%': { transform: 'translateX(0)' },
+                '100%': { transform: 'translateX(-50%)' }, /* Moves half because list is duplicated */
+              },
+              'magazine-scroll': {
+                '0%': { transform: 'translateX(0)' },
+                '100%': { transform: 'translateX(-100%)' },
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      :root {
+        /* LIGHT MODE (Updated Colors & No Borders) */
+        --color-bg-main: #eeeeee;      /* Fundo Claro Mais Escuro (Body) */
+        --color-bg-panel: #ffffff;     /* Fundo Claro Mais Claro (Cards) - White for contrast */
+        --color-bg-element: #f8fafc;
+        --color-border: transparent;   /* NO BORDERS IN LIGHT MODE */
+        
+        --color-text-main: #1a1c1e;     
+        --color-text-secondary: #374151;
+        --color-text-muted: #64748b;
+
+        --color-gauge-val: #1a1c1e;
+        --color-widget-title: #334155;
+      }
+      
+      .dark {
+        /* DARK MODE */
+        --color-bg-main: #1a1c1e;
+        --color-bg-panel: #232528;
+        --color-bg-element: #2f3032;
+        --color-border: #3e4044;
+        
+        --color-text-main: #e2e8f0;
+        --color-text-secondary: #cbd5e1;
+        --color-text-muted: #9ca3af;
+        
+        --color-gauge-val: #dd9933;
+        --color-widget-title: #9ca3af;
+      }
+
+      body {
+        background-color: var(--color-bg-main);
+        color: var(--color-text-main);
+        overflow-x: hidden;
+        transition: background-color 0.7s cubic-bezier(0.4, 0, 0.2, 1), color 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      div, header, footer, button, input, .glass-panel {
+        transition-property: background-color, border-color, color, fill, stroke, box-shadow;
+        transition-duration: 0.7s;
+        transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      
+      path {
+        transition: fill 0.7s ease, stroke 0.7s ease;
+      }
+
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: var(--color-bg-main); 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--color-bg-element); 
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #dd9933; 
+      }
+      
+      /* Updated Glass Panel - Shadow only in Light Mode */
+      .glass-panel {
+        background: var(--color-bg-panel); 
+        border: 1px solid var(--color-border);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+      }
+      
+      .group:hover .animate-scroll {
+        animation-play-state: paused;
+      }
+      
+      /* Force Linear Animation for Ticker to prevent Jumps */
+      .animate-scroll {
+        animation-timing-function: linear !important;
+        will-change: transform;
+      }
+      
+      .fan-item {
+        transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        opacity: 0;
+        transform: translate(0, 0) scale(0.5);
+        pointer-events: none; 
+        z-index: 0;
+        position: absolute;
+      }
+      
+      .group:hover .fan-item {
+        opacity: 1;
+        pointer-events: auto;
+        cursor: pointer;
+      }
+
+      .group:hover .fan-item:nth-child(1) { transform: translate(-90px, 45px) scale(1); z-index: 6; transition-delay: 0.05s; }
+      .group:hover .fan-item:nth-child(2) { transform: translate(-55px, 80px) scale(1); z-index: 5; transition-delay: 0.1s; }
+      .group:hover .fan-item:nth-child(3) { transform: translate(0px, 95px) scale(1); z-index: 4; transition-delay: 0.15s; }
+      .group:hover .fan-item:nth-child(4) { transform: translate(55px, 80px) scale(1); z-index: 3; transition-delay: 0.2s; }
+      .group:hover .fan-item:nth-child(5) { transform: translate(90px, 45px) scale(1); z-index: 2; transition-delay: 0.25s; }
+      
+      .fan-bridge {
+        position: absolute;
+        top: -40px;
+        left: -120px;
+        right: -120px;
+        bottom: -150px;
+        z-index: 1;
+        display: none;
+      }
+      .group:hover .fan-bridge {
+        display: block;
+      }
+    </style>
+    <script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react-dom": "https://aistudiocdn.com/react-dom@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0",
+    "recharts": "https://aistudiocdn.com/recharts@^3.5.0",
+    "framer-motion": "https://aistudiocdn.com/framer-motion@^12.23.24",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+    "react-markdown": "https://aistudiocdn.com/react-markdown@^10.1.0",
+    "react-grid-layout": "https://aistudiocdn.com/react-grid-layout@^1.5.2",
+    "uuid": "https://aistudiocdn.com/uuid@^13.0.0"
+  }
+}
+</script>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
