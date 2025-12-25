@@ -10,6 +10,7 @@ import SearchResults from './pages/SearchResults';
 import UserProfile from './components/UserProfile';
 import Academy from './pages/Academy';
 import Workspace from './pages/Workspace';
+import Cockpit from './pages/Cockpit';
 import AuthModal from './components/AuthModal';
 import TermsModal from './components/TermsModal';
 import PrivacyModal from './components/PrivacyModal';
@@ -93,6 +94,8 @@ const App: React.FC = () => {
     switch (currentView) {
       case ViewMode.DASHBOARD:
         return <Dashboard onPostClick={handlePostClick} language={language} setView={setView} theme={theme} />;
+      case ViewMode.COCKPIT:
+        return <Cockpit language={language} theme={theme} />;
       case ViewMode.INDICATORS:
         return <Indicators user={user} language={language} />; 
       case ViewMode.WORKSPACE:

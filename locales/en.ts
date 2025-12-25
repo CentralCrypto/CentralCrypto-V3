@@ -1,3 +1,4 @@
+
 export const en = {
     common: {
         search: "Search",
@@ -25,14 +26,13 @@ export const en = {
         widgets: {
             fng: { title: "Fear & Greed", s0: "Extreme Fear", s1: "Fear", s2: "Neutral", s3: "Greed", s4: "Extreme Greed", s5: "Euphoria" },
             rsi: { title: "Average RSI", oversold: "Oversold", bearish: "Bearish", neutral: "Neutral", bullish: "Bullish", overbought: "Overbought" },
-            // Add macd to dashboard widgets
             macd: { title: "Average MACD", bullish: "Bullish", bearish: "Bearish", neutral: "Neutral" },
             altseason: { title: "Altcoin Season", bitcoinSeason: "Bitcoin Season", altcoinSeason: "Altcoin Season", btcDomZone: "BTC Dominance", transition: "Transition", yesterday: "Yesterday", week: "7D", month: "30D" },
             mktcapHistory: { title: "Global Mkt Cap", yesterday: "Yesterday", week: "7D", month: "30D" },
             lsr: { title: "Long/Short Ratio", longs: "Longs", shorts: "Shorts", neutral: "Neutral" },
             etf: { title: "ETF Flow", netFlow: "Net Flow" },
             trump: { title: "Trump-o-Meter", fallback: "Neutral", sarcastic: { positiveMedium: "Very Bullish", negativeMedium: "Very Bearish", neutral: "Neutral" } },
-            gainers: { title: "Top Gainers/Losers", gainers: "Gainers", losers: "Losers" },
+            gainers: { title: "Top Movers", gainers: "Gainers", losers: "Losers" },
             mktcap: { title: "Top 10 Market Cap" },
             calendar: { title: "Economic Calendar", today: "TODAY", tomorrow: "TOMORROW", previous: "Prev.", forecast: "Proj.", actual: "Real" },
             time: { yesterday: "Yesterday", d7: "7D", d30: "30D" }
@@ -67,7 +67,6 @@ export const en = {
         vipModal: { title: "Request VIP Access", successTitle: "Request Sent", successDesc: "We will contact you.", btnGo: "Ok", labelName: "Name", placeholderName: "Your name", labelUser: "TV Username", placeholderUser: "Your TradingView ID", btnSubmit: "Submit", btnSending: "Sending..." },
         features: { title: "Why Choose CCT?", f1: { title: "Fast", desc: "Instant execution." }, f2: { title: "Secure", desc: "100% audited." }, f3: { title: "Simple", desc: "Intuitive interface." }, f4: { title: "Updated", desc: "Constant support." } },
         testimonials: { title: "What traders say" },
-        // Add faq translations for Indicators page
         faq: { 
             title: "Frequently Asked Questions", 
             q1: "How do I install the indicators?", 
@@ -82,6 +81,10 @@ export const en = {
     },
     workspace: {
         toolbar: { plan: "Plan", saveLayout: "Save", resetLayout: "Reset", addBoard: "New Board", deleteBoard: "Delete Board", addWidget: "Add" },
+        pages: {
+            marketcap: "Market Cap",
+            topmovers: "Top Movers"
+        },
         widgets: {
             fng: { title: "Fear & Greed", desc: "Market sentiment index.", historical: "Historical", index: "Index" },
             rsi: { title: "Average RSI", desc: "Average RSI of multiple assets.", timeframe: "Period", limit: "Coins", xAxis: "X Axis" },
@@ -90,15 +93,15 @@ export const en = {
             lsr: { title: "Long/Short Ratio", desc: "Ratio between long and short positions.", fetching: "Fetching...", unavailable: "Unavailable", couldNotFetch: "Error fetching." },
             altseason: { title: "Altcoin Season", desc: "Indicates if market favors Alts or BTC.", index: "Index", altsMcap: "Alts Mkt Cap" },
             etf: { title: "ETF Flow", desc: "Institutional flow for BTC/ETH ETFs.", dailyFlow: "Daily Flow", lastUpdate: "Last update:", btcEtf: "BTC ETF", ethEtf: "ETH ETF", last7d: "7 Days", last30d: "30 Days", last90d: "90 Days" },
-            gainers: { title: "Gainers & Losers", desc: "Top 100 coins with highest changes.", gainers: "Gainers", losers: "Losers" },
+            gainers: { title: "Top Movers", desc: "Top 100 coins with highest changes.", gainers: "Gainers", losers: "Losers" },
             calendar: { title: "Calendar", desc: "Important macroeconomic events.", previous: "Prev.", forecast: "Proj.", actual: "Real", today: "TODAY", tomorrow: "TOMORROW" },
             heatmap: { title: "Crypto Heatmap", desc: "Visual block view (Treemap) of the crypto market. Grouped by categories and sized by Market Cap or 24h Volume.", modeCap: "Market Cap", modeVol: "24h Volume", price: "Price", change: "Change", noData: "Heatmap data unavailable" },
-            // Add title and desc to standard widgets for GridHeader.tsx
             price: { title: "Price and Charts", desc: "Real-time price tracking with historical charts.", price: "Price", volEst: "Est. Vol.", mcap: "Mkt Cap", change24h: "24h %", noData: "No data." },
             volume: { title: "Volume", desc: "Trading volume analysis over time.", vol24h: "24h Volume" },
             trend: { title: "Trend Analysis", desc: "Technical trend analysis based on moving averages.", bullish: "Bullish", bearish: "Bearish", neutral: "Neutral", strength: "Strength", basedOn: "Based on" },
             sentiment: { title: "Technical Sentiment", desc: "Market sentiment based on technical indicators (RSI).", extremeGreed: "Euphoria", greed: "Greed", extremeFear: "Panic", fear: "Fear", strong: "Strong", weak: "Weak", consistent: "Consistent", easing: "Easing", recovering: "Recovering", neutralBiasUp: "Neutral (Bias Up)", neutralBiasDown: "Neutral (Bias Down)" },
             orderbook: { title: "Order Book", desc: "Real-time order book and market depth.", price: "Price", size: "Size", total: "Total", noData: "No book data." },
+            // Fixed typo on line 104: try another coin. -> tryAnother: "Try another coin."
             news: { title: "Market News", desc: "Latest news from the crypto market.", noNews: "No news found.", tryAnother: "Try another coin." }
         }
     }

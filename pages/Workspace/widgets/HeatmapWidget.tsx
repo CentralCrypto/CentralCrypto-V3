@@ -65,13 +65,13 @@ const HeatmapWidget: React.FC<Props> = ({ item, language = 'pt' }) => {
     }, []);
 
     const getBgColor = (change: number) => {
-        if (change >= 3) return 'rgba(8, 153, 129, 0.9)'; 
-        if (change >= 1) return 'rgba(11, 191, 155, 0.85)';
-        if (change > 0) return 'rgba(27, 67, 61, 0.85)';
-        if (change <= -3) return 'rgba(242, 54, 69, 0.9)'; 
-        if (change <= -1) return 'rgba(124, 37, 43, 0.85)';
-        if (change < 0) return 'rgba(67, 28, 31, 0.85)';
-        return 'rgba(54, 58, 69, 0.85)'; 
+        if (change >= 3) return '#089981'; 
+        if (change >= 1) return '#0bbf9b';
+        if (change > 0) return '#1b433d';
+        if (change <= -3) return '#f23645'; 
+        if (change <= -1) return '#7c252b';
+        if (change < 0) return '#431c1f';
+        return '#363a45'; 
     };
 
     useEffect(() => {
@@ -180,7 +180,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, language = 'pt' }) => {
             series: [{
                 data: treemapData,
                 layoutAlgorithm: 'squarified',
-                borderColor: 'rgba(0,0,0,0.3)',
+                borderColor: '#000000',
                 borderWidth: 1,
                 dataLabels: {
                     enabled: true,
@@ -224,15 +224,6 @@ const HeatmapWidget: React.FC<Props> = ({ item, language = 'pt' }) => {
 
     return (
         <div className="h-full flex flex-col bg-black relative overflow-hidden">
-            {/* MARCA D'ÁGUA CENTRALIZADA - AJUSTADA PARA 0.12 */}
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
-                <img 
-                    src="https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png" 
-                    alt="Watermark" 
-                    className="h-[80%] w-auto object-contain opacity-[0.12] grayscale"
-                />
-            </div>
-
             <div className="flex flex-col z-30 border-b border-white/10 bg-[#0a0b0c]/90 backdrop-blur-md shrink-0">
                 <div className="flex justify-between items-center px-4 py-2.5">
                     <div className="flex items-center gap-2">
@@ -256,7 +247,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, language = 'pt' }) => {
                 </div>
             </div>
 
-            <div className="flex-1 relative bg-transparent overflow-hidden z-10">
+            <div className="flex-1 relative bg-black overflow-visible">
                 <div ref={chartRef} className="absolute inset-0 w-full h-full" />
                 {isLoading && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-[100]">

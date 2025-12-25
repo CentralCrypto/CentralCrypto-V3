@@ -1,7 +1,7 @@
 
 import React from 'react';
 
-// Define Layout manually to avoid type confusion with react-grid-layout exports
+// Define Layout manualmente to avoid type confusion with react-grid-layout exports
 export interface Layout {
   i: string;
   x: number;
@@ -46,7 +46,8 @@ export enum ViewMode {
   PROFILE = 'PROFILE',
   ACADEMY = 'ACADEMY',
   INDICATORS = 'INDICATORS',
-  WORKSPACE = 'WORKSPACE'
+  WORKSPACE = 'WORKSPACE',
+  COCKPIT = 'COCKPIT'
 }
 
 export interface NavItem {
@@ -122,15 +123,15 @@ export interface Indicator {
   description_es?: string;
   fullDescription_es?: string;
 
-  price: string; // Pode ser "Grátis", "Script Protegido" ou preço
+  price: string; 
   tags: string[];
   imageUrl: string;
   features: string[];
-  originalUrl: string; // Link para o script no TradingView
+  originalUrl: string; 
   type: 'Indicator' | 'Strategy';
   likes: number;
   comments: number;
-  badge?: 'VIP' | 'Editor\'s Pick' | 'New'; // Novo campo para destaque
+  badge?: 'VIP' | 'Editor\'s Pick' | 'New';
 }
 
 export interface Testimonial {
@@ -165,13 +166,14 @@ export enum WidgetType {
   GAINERS_LOSERS = 'GAINERS_LOSERS',
   CALENDAR = 'CALENDAR',
   HEATMAP = 'HEATMAP',
-  BUBBLE_HEATMAP = 'BUBBLE_HEATMAP'
+  BUBBLE_HEATMAP = 'BUBBLE_HEATMAP',
+  TV_CHART = 'TV_CHART'
 }
 
 export enum UserTier {
-  TIER_1 = 'TIER_1', // 3 Dashboards
-  TIER_2 = 'TIER_2', // 5 Dashboards
-  TIER_3 = 'TIER_3', // 10 Dashboards
+  TIER_1 = 'TIER_1', 
+  TIER_2 = 'TIER_2', 
+  TIER_3 = 'TIER_3', 
 }
 
 export interface DashboardItem {
@@ -189,7 +191,7 @@ export interface Dashboard {
   items: DashboardItem[];
   layouts: { [key: string]: Layout[] };
   lastUpdated: number;
-  isLocked?: boolean; // For Main Board (cannot add items)
+  isLocked?: boolean; 
 }
 
 export interface DashboardState {
@@ -219,7 +221,6 @@ export interface HeatmapCrypto {
   categories: string[];
 }
 
-// External API Shape
 export interface ApiCoin {
   id: string;
   symbol: string;
@@ -227,7 +228,15 @@ export interface ApiCoin {
   current_price: number;
   price_change_percentage_24h: number;
   market_cap: number;
+  /**
+   * market_cap_rank added to fix missing property error in IndicatorPage.tsx
+   */
+  market_cap_rank?: number;
   total_volume: number;
+  /**
+   * circulating_supply added to fix missing property error in IndicatorPage.tsx
+   */
+  circulating_supply?: number;
   image: string;
   ath: number;
   ath_change_percentage: number;

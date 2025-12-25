@@ -129,6 +129,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ language }) => {
         });
         setCoinMap(map);
       } else {
+        /* Add missing numeric properties required by ApiCoin interface */
         const fallbackApiCoins = FALLBACK_COINS.map(c => ({
           id: c.symbol.toLowerCase(),
           symbol: c.symbol,
@@ -138,6 +139,12 @@ const Workspace: React.FC<WorkspaceProps> = ({ language }) => {
           market_cap: 0,
           total_volume: 0,
           image: '',
+          ath: 0,
+          ath_change_percentage: 0,
+          atl: 0,
+          atl_change_percentage: 0,
+          high_24h: 0,
+          low_24h: 0,
         }));
         setAvailableCoins(fallbackApiCoins);
       }

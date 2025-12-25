@@ -311,11 +311,9 @@ const Header: React.FC<HeaderProps> = ({ currentView, setView, theme, toggleThem
   ));
 
   const menuAnalysis = [
-    { label: t.cockpit, mode: ViewMode.DASHBOARD, img: 'https://images.unsplash.com/photo-1640340434855-6084b1f4901c?auto=format&fit=crop&q=80&w=600' }, 
+    { label: t.cockpit, mode: ViewMode.COCKPIT, img: 'https://images.unsplash.com/photo-1640340434855-6084b1f4901c?auto=format&fit=crop&q=80&w=600' }, 
     { label: t.workspace, mode: ViewMode.WORKSPACE, img: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&q=80&w=600' }, 
-    // UPDATED: High reliability charts
     { label: t.indicators, mode: ViewMode.INDICATORS, img: 'https://images.unsplash.com/photo-1642543492481-44e81e3914a7?auto=format&fit=crop&q=80&w=600' }, 
-    // UPDATED: High reliability blockchain
     { label: t.marketCap, mode: ViewMode.MARKET, img: 'https://images.unsplash.com/photo-1639762681485-074b7f938ba0?auto=format&fit=crop&q=80&w=600' }, 
   ];
 
@@ -424,7 +422,6 @@ const Header: React.FC<HeaderProps> = ({ currentView, setView, theme, toggleThem
         </div>
       )}
 
-      {/* Increased Z-Index to ensure this header is always on top of Workspace Toolbar */}
       <header className="fixed top-0 left-0 right-0 z-[1000] w-full flex flex-col shadow-lg transition-all duration-700">
         
         <div 
@@ -442,7 +439,7 @@ const Header: React.FC<HeaderProps> = ({ currentView, setView, theme, toggleThem
         <div className="bg-[#f3f4f6] dark:bg-tech-900 relative z-20 transition-colors duration-700">
           <div className="container mx-auto px-4 h-24 flex items-center justify-between relative">
             
-            <div className="flex items-center z-30 min-w-max">
+            <div className="flex items-center z-30 min-max">
               <div 
                 className="flex items-center cursor-pointer mr-4 group" 
                 onClick={() => setView(ViewMode.DASHBOARD)}
@@ -462,7 +459,6 @@ const Header: React.FC<HeaderProps> = ({ currentView, setView, theme, toggleThem
 
               <div className="relative group ml-16 z-50 hidden md:block w-12 h-12"> 
                  <div className="fan-bridge"></div>
-                 {/* Half-Circle Blur Background - Bottom - Subtler Blur [2px] */}
                  <div className="absolute left-1/2 top-1/2 -translate-x-1/2 w-[240px] h-[120px] rounded-b-full bg-white/20 dark:bg-black/20 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-500 z-0"></div>
                  
                  <button className="w-12 h-12 bg-white dark:bg-tech-800 rounded-full flex items-center justify-center text-tech-accent hover:text-black dark:hover:text-white hover:bg-yellow-400 dark:hover:bg-tech-700 transition-all duration-300 z-20 relative shadow-lg">
@@ -498,15 +494,12 @@ const Header: React.FC<HeaderProps> = ({ currentView, setView, theme, toggleThem
                         {menuAnalysis.map((item, idx) => (
                           <div key={idx} onClick={() => setView(item.mode)} className="relative h-28 rounded-lg border border-gray-100 dark:border-tech-800 hover:border-tech-accent overflow-hidden cursor-pointer group/box transition-all duration-700 shadow-lg bg-white dark:bg-black">
                             
-                            {/* Image - Subtle opacity (opacity-10 -> opacity-40), Grayscale -> Color */}
                             <div className="absolute inset-0 transition-all duration-700 grayscale group-hover/box:grayscale-0 opacity-10 group-hover/box:opacity-40 dark:opacity-30 dark:group-hover/box:opacity-50">
                               <img src={item.img} className="w-full h-full object-cover group-hover/box:scale-105 transition-transform duration-1000" alt=""/>
                             </div>
                             
-                            {/* Overlay - Add dark overlay on hover for Light Mode to support white text */}
                             <div className="absolute inset-0 bg-transparent group-hover/box:bg-black/40 dark:bg-black/50 transition-all duration-700"></div>
                             
-                            {/* Text - Light Mode Hover: White. Dark Mode Hover: Gold (#dd9933) */}
                             <div className="absolute inset-0 flex items-center justify-center">
                               <div className="font-black uppercase text-lg tracking-widest drop-shadow-sm text-gray-800 dark:text-white group-hover/box:text-white dark:group-hover/box:text-[#dd9933] group-hover/box:scale-110 transition-all duration-500">
                                 {item.label}
@@ -566,7 +559,6 @@ const Header: React.FC<HeaderProps> = ({ currentView, setView, theme, toggleThem
                               ))}
                           </div>
                           
-                          {/* CUSTOM PREMIUM GOLD TOOLTIP (Without Header) */}
                           {hoveredLang && hoveredLang !== 'pt' && (
                               <div className="absolute top-0 right-full mr-2 w-48 p-3 rounded-xl bg-tech-900/95 border border-[#dd9933]/50 shadow-xl shadow-[#dd9933]/10 text-white text-xs backdrop-blur-md animate-in slide-in-from-right-2 fade-in z-[200]">
                                   <div className="absolute top-4 -right-1.5 w-3 h-3 bg-tech-900 border-t border-r border-[#dd9933]/50 rotate-45"></div>

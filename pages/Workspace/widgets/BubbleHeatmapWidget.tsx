@@ -264,7 +264,7 @@ const BubbleHeatmapWidget: React.FC<Props> = ({ item, language = 'pt' }) => {
                             `;
                         }
                     },
-                    marker: { fillOpacity: 0.95, lineWidth: 1.5, lineColor: 'rgba(255,255,255,0.2)' }
+                    marker: { fillOpacity: 1, lineWidth: 1.5, lineColor: 'rgba(255,255,255,0.2)' }
                 }
             },
             series: [{ name: 'MarketData', data: filteredBubbleData }]
@@ -292,16 +292,8 @@ const BubbleHeatmapWidget: React.FC<Props> = ({ item, language = 'pt' }) => {
 
     const ChartArea = (
         <div className="flex-1 relative bg-black overflow-hidden">
-            {/* MARCA D'ÁGUA CENTRALIZADA - 80% ALTURA */}
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
-                <img 
-                    src="https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png" 
-                    alt="Watermark" 
-                    className="h-[80%] w-auto object-contain opacity-[0.07] grayscale brightness-200"
-                />
-            </div>
-            <div className="absolute inset-0 opacity-[0.06] pointer-events-none z-0" style={{ backgroundImage: 'radial-gradient(#666 1.2px, transparent 1.2px)', backgroundSize: '100px 100px' }}></div>
-            <div ref={chartRef} className="absolute inset-0 w-full h-full z-10 bg-transparent" />
+            <div className="absolute inset-0 opacity-[0.06] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#666 1.2px, transparent 1.2px)', backgroundSize: '100px 100px' }}></div>
+            <div ref={chartRef} className="absolute inset-0 w-full h-full" />
         </div>
     );
 

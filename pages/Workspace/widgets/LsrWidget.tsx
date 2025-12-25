@@ -1,217 +1,176 @@
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Loader2 } from 'lucide-react';
-import { motion } from 'framer-motion';
-import { LsrData, fetchLongShortRatio } from '../services/api'; 
-import { DashboardItem, Language } from '../../../types';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Loader2, AlertTriangle, ChevronsUpDown } from 'lucide-react';
+import { LsrData, fetchLongShortRatio, fetchTopCoins } from '../services/api'; 
+import { DashboardItem, Language, ApiCoin } from '../../../types';
 import { getTranslations } from '../../../locales';
 
-declare global {
-  interface Window { Highcharts: any; }
-}
-
 const LSR_SYMBOLS = [
-    'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT', 'AVAXUSDT', 'TRXUSDT', 'LINKUSDT',
-    'MATICUSDT', 'LTCUSDT', 'BCHUSDT', 'NEARUSDT', 'UNIUSDT', 'INJUSDT', 'OPUSDT', 'ARBUSDT', 'SHIBUSDT', 'DOTUSDT',
-    'TRXUSDT', 'ETCUSDT', 'FILUSDT', 'APTUSDT', 'HBARUSDT', 'XLMUSDT', 'STXUSDT', 'IMXUSDT', 'VETUSDT', 'GRTUSDT'
+    'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT', 'AVAXUSDT', 'SHIBUSDT', 'DOTUSDT',
+    'TRXUSDT', 'LINKUSDT', 'MATICUSDT', 'LTCUSDT', 'BCHUSDT', 'NEARUSDT', 'UNIUSDT', 'INJUSDT', 'OPUSDT', 'ARBUSDT'
 ];
 
 const LSR_INTERVALS = ['5m', '15m', '30m', '1h', '2h', '4h', '6h', '12h', '1D'];
+const STABLECOINS = ['USDT', 'USDC', 'DAI', 'FDUSD', 'TUSD', 'USDD', 'PYUSD', 'USDE', 'GUSD'];
 
-const LsrHistoryChart: React.FC<{ data: any[], isDark: boolean }> = ({ data, isDark }) => {
-    const chartRef = useRef<HTMLDivElement>(null);
+interface LsrTableRow {
+    rank: number;
+    symbol: string;
+    price: number;
+    priceChangePercent: number;
+    lsr30m?: number;
+    lsr4h?: number;
+    lsr12h?: number;
+    lsr24h?: number;
+    image?: string;
+}
+
+const FlashCell = ({ value, formatter, isPercent }: { value: number, formatter: (v:number) => string, isPercent?: boolean }) => {
+    const prevValue = useRef(value);
+    const [flashClass, setFlashClass] = useState('');
 
     useEffect(() => {
-        if (!chartRef.current || !window.Highcharts || data.length === 0) return;
+        if (value === undefined || value === null) return;
+        if (value > prevValue.current) {
+            setFlashClass('bg-green-500/30 text-green-600 dark:text-green-200');
+        } else if (value < prevValue.current) {
+            setFlashClass('bg-red-500/30 text-red-600 dark:text-red-200');
+        }
+        prevValue.current = value;
+        const timer = setTimeout(() => setFlashClass(''), 800);
+        return () => clearTimeout(timer);
+    }, [value]);
 
-        const textColor = isDark ? '#94a3b8' : '#64748b';
-        const gridColor = isDark ? '#334155' : '#e2e8f0';
-        const labelColor = isDark ? '#cbd5e1' : '#1e293b';
+    const safeVal = value || 0;
+    let textColor = 'text-gray-900 dark:text-gray-300';
+    if (isPercent) textColor = safeVal >= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500';
 
-        window.Highcharts.chart(chartRef.current, {
-            chart: {
-                backgroundColor: 'transparent',
-                zoomType: 'x',
-                style: { fontFamily: 'Inter, sans-serif' },
-                marginTop: 20,
-                spacingBottom: 15,
-                resetZoomButton: {
-                    theme: {
-                        fill: isDark ? '#dd9933' : '#334155',
-                        stroke: isDark ? '#dd9933' : '#334155',
-                        r: 4,
-                        style: { color: isDark ? '#000' : '#fff', fontWeight: 'bold' }
-                    }
-                }
-            },
-            title: { text: null },
-            credits: { enabled: false },
-            exporting: { enabled: false },
-            xAxis: {
-                type: 'datetime',
-                gridLineColor: gridColor,
-                labels: { style: { color: labelColor, fontSize: '9px', fontWeight: '800' } },
-                lineColor: gridColor
-            },
-            yAxis: [{
-                title: { text: 'Ratio', style: { color: '#dd9933', fontWeight: 'bold', fontSize: '10px' } },
-                labels: { style: { color: textColor, fontSize: '9px' } },
-                gridLineColor: gridColor,
-                opposite: true
-            }, {
-                title: { text: '%', style: { color: textColor, fontSize: '10px' } },
-                labels: { style: { color: textColor, fontSize: '9px' } },
-                max: 100, min: 0,
-                gridLineWidth: 0
-            }],
-            tooltip: {
-                shared: true,
-                backgroundColor: isDark ? '#1a1c1e' : '#ffffff',
-                borderColor: '#dd9933',
-                style: { color: isDark ? '#fff' : '#000' }
-            },
-            plotOptions: { column: { stacking: 'normal', borderWidth: 0 } },
-            series: [
-                { name: 'Shorts %', type: 'column', yAxis: 1, data: data.map(p => [p.timestamp, p.shorts]), color: 'rgba(239, 68, 68, 0.4)', tooltip: { valueSuffix: '%' } },
-                { name: 'Longs %', type: 'column', yAxis: 1, data: data.map(p => [p.timestamp, p.longs]), color: 'rgba(34, 197, 94, 0.4)', tooltip: { valueSuffix: '%' } },
-                { name: 'Ratio', type: 'spline', data: data.map(p => [p.timestamp, p.lsr]), color: '#dd9933', lineWidth: 3, marker: { enabled: false } }
-            ]
-        });
-    }, [data, isDark]);
-
-    return <div ref={chartRef} className="w-full h-full" />;
+    return (
+        <span className={`transition-colors duration-500 rounded px-1 inline-block ${flashClass} ${textColor}`}>
+            {formatter(safeVal)}
+        </span>
+    );
 };
 
 const LsrWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ item, language = 'pt' }) => {
     const [lsrData, setLsrData] = useState<LsrData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [lsrSymbol, setLsrSymbol] = useState(item.symbol === 'MARKET' ? 'BTCUSDT' : item.symbol);
+    const [lsrSymbol, setLsrSymbol] = useState('BTCUSDT');
     const [lsrPeriod, setLsrPeriod] = useState('5m');
-    const [needleAngle, setNeedleAngle] = useState(-90);
-    const [isDark, setIsDark] = useState(false);
+    const [displayLsr, setDisplayLsr] = useState(0);
+
+    const [maximizedTickers, setMaximizedTickers] = useState<LsrTableRow[]>([]);
+    const [isLoadingTable, setIsLoadingTable] = useState(false);
+    const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
 
     const t = getTranslations(language as Language).dashboard.widgets.lsr;
+    const tWs = getTranslations(language as Language).workspace.widgets.lsr;
 
     useEffect(() => {
-        const check = () => setIsDark(document.documentElement.classList.contains('dark'));
-        check();
-        const observer = new MutationObserver(check);
-        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-        return () => observer.disconnect();
-    }, []);
-
-    const loadData = async (isManual = false) => {
-        if(isManual) setIsLoading(true);
-        // Reset ponteiro para o mínimo (-90 graus) antes de mover para o novo valor
-        setNeedleAngle(-90);
-        
-        try {
-            const data = await fetchLongShortRatio(lsrSymbol, lsrPeriod, item.isMaximized ? 50 : 1);
-            if (data && data.lsr !== null) {
-                setLsrData(data);
-                const norm = Math.min(Math.max(data.lsr, 0), 5);
-                const targetAngle = (norm / 5) * 180 - 90;
-                setTimeout(() => setNeedleAngle(targetAngle), 100);
-            }
-        } catch (e) {
-            console.error(e);
-        } finally {
+        if (item.isMaximized) return;
+        setIsLoading(true);
+        fetchLongShortRatio(lsrSymbol, lsrPeriod).then((data) => {
+            setLsrData(data);
             setIsLoading(false);
-        }
-    };
+            if (data && data.lsr !== null) setDisplayLsr(data.lsr || 0);
+        });
+    }, [lsrSymbol, lsrPeriod, item.isMaximized]);
 
     useEffect(() => {
-        loadData(true);
-    }, [lsrSymbol, lsrPeriod]);
+        if (!item.isMaximized) return;
+        const loadTableData = async () => {
+            if(maximizedTickers.length === 0) setIsLoadingTable(true);
+            const topCoins = await fetchTopCoins();
+            const limitedTickers = topCoins
+                .filter(coin => coin && coin.symbol && !STABLECOINS.includes(coin.symbol.toUpperCase()))
+                .slice(0, 15)
+                .map((coin, index) => ({
+                    rank: index + 1,
+                    symbol: coin.symbol.toUpperCase() + 'USDT',
+                    price: coin.current_price || 0,
+                    priceChangePercent: coin.price_change_percentage_24h || 0,
+                    image: coin.image
+                }));
+            setMaximizedTickers(limitedTickers);
+            setIsLoadingTable(false);
 
-    const val = lsrData?.lsr || 1.0;
-    const longs = lsrData?.longs || 50;
-    const shorts = lsrData?.shorts || 50;
-    const gradId = `lsr-grad-${item.id}`;
+            for (let i = 0; i < limitedTickers.length; i++) {
+                const symbol = limitedTickers[i].symbol;
+                const [lsr30m, lsr4h, lsr12h, lsr1d] = await Promise.all([
+                    fetchLongShortRatio(symbol, '30m'), fetchLongShortRatio(symbol, '4h'),
+                    fetchLongShortRatio(symbol, '12h'), fetchLongShortRatio(symbol, '1D')
+                ]);
+                setMaximizedTickers(prev => prev.map(t => t.symbol === symbol ? { ...t, lsr30m: lsr30m.lsr || undefined, lsr4h: lsr4h.lsr || undefined, lsr12h: lsr12h.lsr || undefined, lsr24h: lsr1d.lsr || undefined } : t));
+                await new Promise(r => setTimeout(r, 100));
+            }
+        };
+        loadTableData();
+    }, [item.isMaximized]);
+
+    const sortedTickers = useMemo(() => {
+        if (!sortConfig) return maximizedTickers;
+        return [...maximizedTickers].sort((a: any, b: any) => {
+            const aVal = a[sortConfig.key] || 0;
+            const bVal = b[sortConfig.key] || 0;
+            return sortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal;
+        });
+    }, [maximizedTickers, sortConfig]);
+
+    const Watermark = () => (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden opacity-[0.05] z-0">
+            <img src="https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png" className="w-3/4 h-auto grayscale filter" />
+        </div>
+    );
 
     if (item.isMaximized) {
         return (
-            <div className="h-full flex flex-col bg-white dark:bg-[#2f3032] p-4 relative overflow-hidden transition-colors">
-                <div className="z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4 border-b border-gray-100 dark:border-slate-700/50 pb-4">
-                    <div className="flex items-center gap-6">
-                        <div className="text-center">
-                            <div className="text-4xl font-black text-[#dd9933]">{val.toFixed(2)}</div>
-                            <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Ratio</div>
-                        </div>
-                        <div className="h-10 w-px bg-gray-200 dark:bg-slate-700"></div>
-                        <div className="flex gap-4">
-                            <div className="text-center"><div className="text-xl font-black text-green-500">{longs}%</div><div className="text-[8px] font-bold text-gray-400 uppercase">Longs</div></div>
-                            <div className="text-center"><div className="text-xl font-black text-red-500">{shorts}%</div><div className="text-[8px] font-bold text-gray-400 uppercase">Shorts</div></div>
-                        </div>
-                    </div>
-                    <div className="flex gap-2">
-                        <select value={lsrSymbol} onChange={e => setLsrSymbol(e.target.value)} className="bg-gray-100 dark:bg-[#1a1c1e] text-[10px] font-black p-2 rounded border-none text-gray-900 dark:text-white outline-none">
-                            {LSR_SYMBOLS.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                        <select value={lsrPeriod} onChange={e => setLsrPeriod(e.target.value)} className="bg-gray-100 dark:bg-[#1a1c1e] text-[10px] font-black p-2 rounded border-none text-gray-900 dark:text-white outline-none">
-                            {LSR_INTERVALS.map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                    </div>
+            <div className="h-full flex flex-col bg-white dark:bg-[#0b0e11] text-gray-900 dark:text-white overflow-hidden relative p-4">
+                <div className="grid grid-cols-[1fr_1fr_0.8fr_0.8fr_0.8fr_0.8fr_1fr] gap-2 px-4 py-3 bg-gray-100 dark:bg-[#1e2329] text-[10px] font-bold text-gray-500 uppercase tracking-wider rounded-t-lg">
+                    <span>Symbol</span><span className="text-right">Price</span><span className="text-center">LSR 30m</span><span className="text-center">LSR 4h</span><span className="text-center">LSR 12h</span><span className="text-center">LSR 1d</span><span className="text-right">24h %</span>
                 </div>
-                <div className="flex-1 min-h-0 z-10">
-                    <LsrHistoryChart data={lsrData?.history || []} isDark={isDark} />
+                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                    {isLoadingTable ? <div className="p-10 flex justify-center"><Loader2 className="animate-spin" /></div> : sortedTickers.map(row => (
+                        <div key={row.symbol} className="grid grid-cols-[1fr_1fr_0.8fr_0.8fr_0.8fr_0.8fr_1fr] gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-800 items-center text-xs">
+                            <div className="font-bold flex items-center gap-2">{row.image && <img src={row.image} className="w-5 h-5 rounded-full" />} {row.symbol.replace('USDT', '')}</div>
+                            <div className="text-right font-mono"><FlashCell value={row.price} formatter={v => `$${v < 1 ? v.toFixed(5) : v.toLocaleString()}`} /></div>
+                            <div className="text-center">{(row.lsr30m || 0).toFixed(2)}</div>
+                            <div className="text-center">{(row.lsr4h || 0).toFixed(2)}</div>
+                            <div className="text-center">{(row.lsr12h || 0).toFixed(2)}</div>
+                            <div className="text-center">{(row.lsr24h || 0).toFixed(2)}</div>
+                            <div className="text-right font-bold"><FlashCell value={row.priceChangePercent} formatter={v => `${v > 0 ? '+' : ''}${v.toFixed(2)}%`} isPercent /></div>
+                        </div>
+                    ))}
                 </div>
             </div>
         );
     }
 
+    const lsrVal = displayLsr || 0;
+    const lsrAngle = (Math.min(Math.max(lsrVal, 0), 5) / 5) * 180;
+
     return (
-        <div className="h-full flex flex-col p-4 relative bg-white dark:bg-[#2f3032] overflow-hidden transition-colors">
-            <div className="absolute top-2 left-2 right-2 z-20 flex justify-between">
-                <select value={lsrSymbol} onChange={e => setLsrSymbol(e.target.value)} className="bg-white/50 dark:bg-black/30 text-[9px] font-bold p-1 rounded text-gray-900 dark:text-white outline-none border-none backdrop-blur-sm">
-                    {LSR_SYMBOLS.slice(0, 10).map(s => <option key={s} value={s}>{s.replace('USDT','')}</option>)}
+        <div className="h-full flex flex-col items-center justify-center relative bg-white dark:bg-[#2f3032] p-4 text-center">
+            <Watermark />
+            <div className="absolute top-2 w-full flex justify-between px-2 z-20">
+                <select value={lsrSymbol} onChange={e => setLsrSymbol(e.target.value)} className="bg-gray-100 dark:bg-[#1a1c1e] text-[10px] font-bold p-1 rounded border-none outline-none text-gray-900 dark:text-white">
+                    {LSR_SYMBOLS.map(s => <option key={s} value={s}>{s.replace('USDT','')}</option>)}
                 </select>
-                <select value={lsrPeriod} onChange={e => setLsrPeriod(e.target.value)} className="bg-white/50 dark:bg-black/30 text-[9px] font-bold p-1 rounded text-gray-900 dark:text-white outline-none border-none backdrop-blur-sm">
+                <select value={lsrPeriod} onChange={e => setLsrPeriod(e.target.value)} className="bg-gray-100 dark:bg-[#1a1c1e] text-[10px] font-bold p-1 rounded border-none outline-none text-gray-900 dark:text-white">
                     {LSR_INTERVALS.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
             </div>
-
-            <div className="flex-1 flex flex-col items-center justify-center mt-4">
-                <div className="relative w-[180px] h-[100px] z-10 overflow-visible">
-                    <svg viewBox="0 0 200 110" className="overflow-visible">
-                        <defs>
-                            <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
-                                <stop offset="0%" stopColor="#ef4444" />
-                                <stop offset="50%" stopColor="#eab308" />
-                                <stop offset="100%" stopColor="#22c55e" />
-                            </linearGradient>
-                        </defs>
-                        <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" className="stroke-gray-100 dark:stroke-slate-800" strokeWidth="16" strokeLinecap="round" />
-                        <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" stroke={`url(#${gradId})`} strokeWidth="16" strokeDasharray={`${((needleAngle + 90)/180)*283} 283`} strokeLinecap="round" style={{ transition: 'stroke-dasharray 1s ease' }} />
-                        <motion.g 
-                            animate={{ rotate: needleAngle }}
-                            transition={{ type: 'spring', stiffness: 40, damping: 10 }}
-                            style={{ originX: '100px', originY: '100px' }}
-                        >
-                            <path d="M 100 100 L 100 25" className="stroke-gray-900 dark:stroke-white" strokeWidth="4" strokeLinecap="round" />
-                            <circle cx="100" cy="100" r="5" className="fill-gray-900 dark:fill-white" />
-                        </motion.g>
+            {isLoading ? <Loader2 className="animate-spin text-slate-500" /> : (
+                <>
+                <div className="mt-6 w-[80%] max-w-[240px]">
+                    <svg viewBox="0 0 200 110">
+                        <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" className="stroke-gray-100 dark:stroke-slate-800" strokeWidth="18" strokeLinecap="round" />
+                        <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" stroke="#dd9933" strokeWidth="18" strokeDasharray={`${(lsrAngle/180)*283} 283`} strokeLinecap="round" />
+                        <g transform={`rotate(${lsrAngle - 90} 100 100)`}><path d="M 100 100 L 100 20" className="stroke-gray-800 dark:stroke-white" strokeWidth="3" /><circle cx="100" cy="100" r="5" className="fill-gray-800 dark:fill-white" /></g>
                     </svg>
-                    {isLoading && <div className="absolute inset-0 flex items-center justify-center"><Loader2 size={16} className="animate-spin text-[#dd9933]" /></div>}
                 </div>
-                <div className="text-center z-10">
-                    <div className="text-4xl font-black text-[#dd9933] leading-none">{val.toFixed(2)}</div>
-                    <div className="text-[10px] font-bold text-gray-500 dark:text-slate-400 uppercase mt-1">
-                        {val > 1.1 ? t.longs : val < 0.9 ? t.shorts : t.neutral}
-                    </div>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-gray-100 dark:border-slate-700/50 text-center z-10">
-                <div className="flex flex-col">
-                    <span className="text-sm font-black text-green-500">{longs}%</span>
-                    <span className="text-[8px] text-gray-400 uppercase font-bold">Longs</span>
-                </div>
-                <div className="flex flex-col">
-                    <span className="text-sm font-black text-red-500">{shorts}%</span>
-                    <span className="text-[8px] text-gray-400 uppercase font-bold">Shorts</span>
-                </div>
-            </div>
+                <div className="mt-2"><div className="text-4xl font-black text-[#dd9933] leading-none">{lsrVal.toFixed(2)}</div><div className="text-xs font-bold text-gray-900 dark:text-white uppercase mt-1">{lsrVal > 1.1 ? t.longs : lsrVal < 0.9 ? t.shorts : t.neutral}</div></div>
+                </>
+            )}
         </div>
     );
 };

@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { fetchWithFallback } from '../pages/Workspace/services/api';
 
 // --- HELPER: FORMAT USD ---
 const formatUSD = (num: number) => {
@@ -24,27 +25,21 @@ const GlobalStatsBar = () => {
     const loadCGData = async () => {
       const url = "https://centralcrypto.com.br/cachecko/cg_global.json";
       try {
-        let res = await fetch(url);
-        
-        if (!res.ok) {
-            // Proxy Fallback
-            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-            res = await fetch(proxyUrl);
+        const json = await fetchWithFallback(url);
+        if (json) {
+            const d = (Array.isArray(json) ? json[0].data : json.data);
+            setStats({
+              coins: d.active_cryptocurrencies || 0,
+              exchanges: d.markets || 0,
+              mcap: d.total_market_cap?.usd || 0,
+              mcapChange: d.market_cap_change_percentage_24h_usd || 0,
+              vol24: d.total_volume?.usd || 0,
+              btcDom: d.market_cap_percentage?.btc || 0,
+              ethDom: d.market_cap_percentage?.eth || 0
+            });
         }
-
-        if (!res.ok) throw new Error("Network response was not ok");
-        const json = await res.json();
-        const d = (Array.isArray(json) ? json[0].data : json.data);
-        setStats({
-          coins: d.active_cryptocurrencies,
-          exchanges: d.markets,
-          mcap: d.total_market_cap.usd,
-          mcapChange: d.market_cap_change_percentage_24h_usd,
-          vol24: d.total_volume.usd,
-          btcDom: d.market_cap_percentage.btc,
-          ethDom: d.market_cap_percentage.eth
-        });
       } catch (e) {
+        console.error("GlobalStatsBar error", e);
         setStats({
           coins: 14230,
           exchanges: 890,

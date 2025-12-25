@@ -1,4 +1,3 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { AcademyLanguage } from '../../../types';
 
@@ -54,9 +53,8 @@ export const generateCourseContent = async (promptInput: string, systemInstructi
   `;
 
   try {
-    // Fix: Updated to recommended gemini-3-flash-preview model for basic text tasks
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-2.5-flash',
       contents: fullPrompt,
     });
 
@@ -99,9 +97,8 @@ export const translateContent = async (content: string, targetLang: AcademyLangu
   `;
 
   try {
-    // Fix: Updated to recommended gemini-3-flash-preview model for basic text tasks
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-2.5-flash',
       contents: prompt,
     });
     

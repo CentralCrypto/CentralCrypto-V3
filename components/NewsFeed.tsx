@@ -2,20 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowUpRight, ArrowLeft, ArrowRight, Loader2, Clock, User, ChevronRight } from 'lucide-react';
 import { getTranslations } from '../locales';
-import { Language } from '../types';
-
-interface WPPost {
-  id: number;
-  title: { rendered: string };
-  excerpt: { rendered: string };
-  date: string;
-  link: string;
-  categories: number[];
-  _embedded?: {
-    'wp:featuredmedia'?: Array<{ source_url: string }>;
-    'author'?: Array<{ name: string }>;
-  };
-}
+import { Language, WPPost } from '../types';
+import { fetchWithFallback } from '../pages/Workspace/services/api';
 
 interface NewsFeedProps {
     onPostClick: (postId: number) => void;
@@ -23,17 +11,18 @@ interface NewsFeedProps {
 }
 
 const decodeHTML = (html: string) => {
+  if (!html) return '';
   const txt = document.createElement("textarea");
   txt.innerHTML = html;
   return txt.value;
 };
 
 const getImageUrl = (post: WPPost) => {
-  return post._embedded?.['wp:featuredmedia']?.[0]?.source_url || 'https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png';
+  return post?._embedded?.['wp:featuredmedia']?.[0]?.source_url || 'https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png';
 };
 
 const getAuthor = (post: WPPost) => {
-  return post._embedded?.['author']?.[0]?.name || 'Central Crypto';
+  return post?._embedded?.['author']?.[0]?.name || 'Central Crypto';
 };
 
 const NewsFeed: React.FC<NewsFeedProps> = ({ onPostClick, language }) => {
@@ -62,40 +51,42 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ onPostClick, language }) => {
     const fetchLists = async () => {
         try {
             setLoadingSpecifics(true);
-            const catRes = await fetch('https://centralcrypto.com.br/2/wp-json/wp/v2/categories?per_page=100');
-            const cats = await catRes.json();
+            const cats = await fetchWithFallback('https://centralcrypto.com.br/2/wp-json/wp/v2/categories?per_page=100');
             
             let dailyId, editorId, bulletinsId;
             if (Array.isArray(cats)) {
-                dailyId = cats.find((c:any) => c.name.toLowerCase().includes('notícias do dia') || c.slug.includes('noticia') || c.slug.includes('daily'))?.id;
-                editorId = cats.find((c:any) => c.name.toLowerCase().includes('escolha') || c.slug.includes('editor') || c.slug.includes('featured'))?.id;
-                bulletinsId = cats.find((c:any) => c.name.toLowerCase().includes('boletim') || c.slug.includes('mini'))?.id;
+                dailyId = cats.find((c:any) => c.name?.toLowerCase().includes('notícias do dia') || c.slug?.includes('noticia') || c.slug?.includes('daily'))?.id;
+                editorId = cats.find((c:any) => c.name?.toLowerCase().includes('escolha') || c.slug?.includes('editor') || c.slug?.includes('featured'))?.id;
+                bulletinsId = cats.find((c:any) => c.name?.toLowerCase().includes('boletim') || c.slug?.includes('mini'))?.id;
             }
 
             const getPosts = async (catId: number | undefined, count: number) => {
                 let url = `https://centralcrypto.com.br/2/wp-json/wp/v2/posts?per_page=${count}&_embed`;
                 if (catId) url += `&categories=${catId}`;
-                const res = await fetch(url);
-                return res.ok ? await res.json() : [];
+                const data = await fetchWithFallback(url);
+                return Array.isArray(data) ? data : [];
             }
 
-            const [d, e, b] = await Promise.all([
-                getPosts(dailyId, 5),
-                getPosts(editorId, 5),
-                getPosts(bulletinsId, 5)
-            ]);
+            // MUDANÇA CRÍTICA: Execução sequencial para não estourar o servidor
+            const d = await getPosts(dailyId, 5);
+            const e = await getPosts(editorId, 5);
+            const b = await getPosts(bulletinsId, 5);
 
             let fallbacks: WPPost[] = [];
             if (d.length === 0 || e.length === 0 || b.length === 0) {
-                 const fbRes = await fetch('https://centralcrypto.com.br/2/wp-json/wp/v2/posts?per_page=20&_embed');
-                 if(fbRes.ok) fallbacks = await fbRes.json();
+                 const fbData = await fetchWithFallback('https://centralcrypto.com.br/2/wp-json/wp/v2/posts?per_page=20&_embed');
+                 if(Array.isArray(fbData)) fallbacks = fbData;
             }
 
             setDailyNews(d.length > 0 ? d : fallbacks.slice(0, 5));
             setEditorChoice(e.length > 0 ? e : fallbacks.slice(5, 10));
             setBulletins(b.length > 0 ? b : fallbacks.slice(10, 15));
 
-        } catch(e) { } finally { setLoadingSpecifics(false); }
+        } catch(e) { 
+            console.error("NewsFeed init error", e);
+        } finally { 
+            setLoadingSpecifics(false); 
+        }
     };
     fetchLists();
   }, []);
@@ -104,15 +95,17 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ onPostClick, language }) => {
     const fetchFeed = async () => {
         setLoadingMain(true);
         try {
-            const res = await fetch(`https://centralcrypto.com.br/2/wp-json/wp/v2/posts?per_page=10&page=${page}&_embed`);
-            if(res.ok) {
-                setMainFeed(await res.json());
+            const data = await fetchWithFallback(`https://centralcrypto.com.br/2/wp-json/wp/v2/posts?per_page=10&page=${page}&_embed`);
+            if(Array.isArray(data)) {
+                setMainFeed(data);
                 if (page > 1) {
                     const el = document.getElementById('main-feed-anchor');
                     if (el) el.scrollIntoView({ behavior: 'smooth' });
                 }
             }
-        } catch(e) {}
+        } catch(e) {
+            console.error("NewsFeed main feed error", e);
+        }
         setLoadingMain(false);
     };
     fetchFeed();
@@ -139,7 +132,6 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ onPostClick, language }) => {
     <div className="w-full h-full bg-tech-950 border border-tech-800 p-6 rounded-xl shadow-2xl transition-colors">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             
-            {/* LEFT COLUMN: DAILY NEWS */}
             <div className="lg:col-span-3 flex flex-col gap-6">
                 <div className="border-b-2 border-[#dd9933] pb-2 mb-2">
                     <h3 className="text-gray-200 font-bold uppercase tracking-widest text-sm">{t.dailyNews}</h3>
@@ -153,7 +145,7 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ onPostClick, language }) => {
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
                                 <div className="absolute bottom-2 left-3 right-3 text-[10px] text-[#dd9933] font-bold uppercase">{getAuthor(post)}</div>
                             </div>
-                            <h4 className="text-gray-200 dark:text-[#dd9933] font-bold text-base leading-tight group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors">{decodeHTML(post.title.rendered)}</h4>
+                            <h4 className="text-gray-200 dark:text-[#dd9933] font-bold text-base leading-tight group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors">{decodeHTML(post.title?.rendered)}</h4>
                             <div className="flex items-center gap-2 mt-2 text-xs text-gray-500 font-mono"><Clock size={12} /> {new Date(post.date).toLocaleDateString(currentLocale)}</div>
                         </div>
                     ))}
@@ -164,7 +156,7 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ onPostClick, language }) => {
                                     <img src={getImageUrl(post)} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-opacity" alt="" />
                                 </div>
                                 <div>
-                                    <h5 className="text-gray-300 dark:text-[#dd9933] font-medium text-xs leading-snug group-hover:text-[#dd9933] dark:group-hover:text-white line-clamp-2 transition-colors">{decodeHTML(post.title.rendered)}</h5>
+                                    <h5 className="text-gray-300 dark:text-[#dd9933] font-medium text-xs leading-snug group-hover:text-[#dd9933] dark:group-hover:text-white line-clamp-2 transition-colors">{decodeHTML(post.title?.rendered)}</h5>
                                     <div className="text-[10px] text-gray-600 mt-1">{new Date(post.date).toLocaleDateString(currentLocale)}</div>
                                 </div>
                             </div>
@@ -174,7 +166,6 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ onPostClick, language }) => {
                 )}
             </div>
 
-            {/* CENTER COLUMN: CAROUSEL + FEED */}
             <div className="lg:col-span-6 flex flex-col">
                 <div className="mb-10">
                     <div className="flex justify-between items-center border-b-2 border-[#dd9933] pb-2 mb-4">
@@ -187,14 +178,13 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ onPostClick, language }) => {
                                 <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div>
                             </div>
                             
-                            {/* ARROWS INSIDE IMAGE */}
-                            <button onClick={prevSlide} className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/50 hover:bg-[#dd9933] text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all z-20 hover:scale-110"><ArrowLeft size={20}/></button>
-                            <button onClick={nextSlide} className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/50 hover:bg-[#dd9933] text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all z-20 hover:scale-110"><ArrowRight size={20}/></button>
+                            <button onClick={(e) => prevSlide(e)} className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/50 hover:bg-[#dd9933] text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all z-20 hover:scale-110"><ArrowLeft size={20}/></button>
+                            <button onClick={(e) => nextSlide(e)} className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/50 hover:bg-[#dd9933] text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all z-20 hover:scale-110"><ArrowRight size={20}/></button>
 
                             <div className="absolute bottom-0 left-0 right-0 p-8 cursor-pointer">
                                 <div className="bg-[#dd9933] text-black text-[10px] font-black px-2 py-0.5 inline-block mb-3 rounded-sm uppercase tracking-wider">{t.editorsChoice}</div>
                                 <h2 className="text-3xl font-black text-white dark:text-[#dd9933] leading-tight drop-shadow-md mb-4 hover:text-[#dd9933] dark:hover:text-white transition-colors">
-                                    {decodeHTML(editorChoice[carouselIndex].title.rendered)}
+                                    {decodeHTML(editorChoice[carouselIndex].title?.rendered)}
                                 </h2>
                                 <div className="flex items-center gap-4 text-xs text-gray-300 font-mono">
                                     <span className="flex items-center gap-1 font-bold text-[#dd9933]"><User size={12}/> {getAuthor(editorChoice[carouselIndex])}</span>
@@ -217,8 +207,8 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ onPostClick, language }) => {
                                         <img src={getImageUrl(post)} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" alt="" />
                                     </div>
                                     <div className="flex-1 flex flex-col justify-center">
-                                        <h3 className="text-lg font-bold text-gray-200 dark:text-[#dd9933] group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors leading-tight mb-2">{decodeHTML(post.title.rendered)}</h3>
-                                        <div className="text-xs text-gray-400 line-clamp-2 mb-3 leading-relaxed" dangerouslySetInnerHTML={{__html: post.excerpt.rendered}} />
+                                        <h3 className="text-lg font-bold text-gray-200 dark:text-[#dd9933] group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors leading-tight mb-2">{decodeHTML(post.title?.rendered)}</h3>
+                                        <div className="text-xs text-gray-400 line-clamp-2 mb-3 leading-relaxed" dangerouslySetInnerHTML={{__html: post.excerpt?.rendered || ''}} />
                                         <div className="flex items-center gap-3 text-[10px] text-gray-500 font-mono uppercase">
                                             <span className="text-[#dd9933] font-bold">{getAuthor(post)}</span><span>•</span><span>{new Date(post.date).toLocaleDateString(currentLocale, {day: '2-digit', month: 'short', year: 'numeric'})}</span>
                                         </div>
@@ -235,7 +225,6 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ onPostClick, language }) => {
                 </div>
             </div>
 
-            {/* RIGHT COLUMN: BOLETINS */}
             <div className="lg:col-span-3">
                  <div className="border-b-2 border-[#dd9933] pb-2 mb-4">
                     <h3 className="text-gray-200 font-bold uppercase tracking-widest text-sm">{t.miniBulletins}</h3>
@@ -247,7 +236,7 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ onPostClick, language }) => {
                             <div className="h-24 w-full rounded overflow-hidden mb-3 border border-tech-950">
                                 <img src={getImageUrl(post)} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" alt="" />
                             </div>
-                            <h4 className="text-gray-200 dark:text-[#dd9933] font-bold text-xs leading-snug group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors mb-2">{decodeHTML(post.title.rendered)}</h4>
+                            <h4 className="text-gray-200 dark:text-[#dd9933] font-bold text-xs leading-snug group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors mb-2">{decodeHTML(post.title?.rendered)}</h4>
                             <div className="flex items-center text-[10px] text-gray-500 gap-1"><User size={10} /> {getAuthor(post)} <span className="mx-1">•</span> <Clock size={10} /> {new Date(post.date).toLocaleDateString(currentLocale)}</div>
                         </div>
                       ))
