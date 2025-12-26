@@ -37,12 +37,12 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
     setLoading(true);
     setError('');
     try {
-      const [cats, res] = await Promise.all([
+      const [cats, allData] = await Promise.all([
            fetchMagazineCategories().catch(() => []),
            fetchMagazinePosts({ perPage: 15 })
       ]);
 
-      const allPosts = res.posts || [];
+      const allPosts = allData.posts;
 
       if (!allPosts || allPosts.length === 0) {
          setError('A Central não retornou publicações no momento.');
@@ -73,7 +73,8 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
   }, []);
 
   useEffect(() => {
-    fetchNews();
+    const timer = setTimeout(fetchNews, 800);
+    return () => clearTimeout(timer);
   }, [fetchNews]);
 
   useEffect(() => {
@@ -89,7 +90,7 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
   if (loading && estudos.length === 0) return (
       <div className="w-full h-[600px] flex flex-col items-center justify-center bg-tech-900/50 rounded-xl border border-tech-800">
           <Loader2 className="w-10 h-10 text-[#dd9933] animate-spin mb-4 opacity-50" />
-          <div className="text-gray-500 font-mono tracking-widest text-xs animate-pulse uppercase">Sincronizando Magazine Turbo...</div>
+          <div className="text-gray-500 font-mono tracking-widest text-xs animate-pulse uppercase">Autenticando Magazine...</div>
       </div>
   );
   
@@ -98,14 +99,18 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
         <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mb-6">
             <WifiOff size={32} className="text-red-500 opacity-80" />
         </div>
-        <h3 className="text-gray-200 font-bold text-xl mb-2">Sem Conexão com o Banco</h3>
+        <h3 className="text-gray-200 font-bold text-xl mb-2">Erro de Sincronização</h3>
         <p className="text-gray-400 font-mono text-xs max-w-sm mb-8 leading-relaxed">
-            {error}
+            O servidor da Central recusou a conexão por restrição de segurança (CORS). 
+            <br/><span className="text-red-400/80 mt-2 block italic">"{error}"</span>
         </p>
         <div className="flex flex-col sm:flex-row gap-3">
             <button onClick={fetchNews} className="flex items-center justify-center gap-2 bg-[#dd9933] hover:bg-amber-600 text-black font-black uppercase text-xs px-6 py-3 rounded-lg transition-all active:scale-95 shadow-lg">
                 <RefreshCw size={14} /> Tentar Novamente
             </button>
+            <a href="https://centralcrypto.com.br/2/" target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 bg-tech-800 hover:bg-tech-700 text-white font-bold uppercase text-xs px-6 py-3 rounded-lg border border-tech-700 transition-all">
+                Abrir Site Original
+            </a>
         </div>
     </div>
   );
