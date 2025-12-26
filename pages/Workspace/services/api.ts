@@ -1,5 +1,6 @@
 
 import { ApiCoin, HeatmapCrypto } from '../../../types';
+import { httpGetJson } from '../../../services/http';
 
 const PRIMARY_API_URL = 'https://centralcrypto.com.br/cachecko/cachecko.json';
 const FNG_URL_PRIMARY = 'https://centralcrypto.com.br/cachecko/fearandgreed_data.json';
@@ -17,54 +18,32 @@ const ETF_ETH_FLOWS_URL = 'https://centralcrypto.com.br/cachecko/spot-eth-etf-fl
 
 const STABLECOINS = ['USDT', 'USDC', 'DAI', 'FDUSD', 'TUSD', 'USDD', 'PYUSD', 'USDE', 'GUSD', 'USDP', 'BUSD'];
 
-const parseSafeJson = (text: string): any | null => {
-    if (!text || typeof text !== 'string') return null;
-    const trimmed = text.trim();
-    if (!((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']')))) return null;
-    try { return JSON.parse(trimmed); } catch (e) { return null; }
-};
-
 /**
- * Fetch ultra-veloz com salt de 1 hora (evita sobrecarga no WP).
- * Timeout de 1s para queries do WordPress.
+ * Fetch veloz com salt de 1 hora.
+ * Migrado para httpGetJson para usar o novo wrapper sênior com timeouts reais.
  */
 export const fetchWithFallback = async (url: string): Promise<any | null> => {
     const isWordPress = url.includes('/wp-json/');
-    const timeoutLimit = isWordPress ? 1000 : 3000;
     
-    // Salt que muda apenas uma vez por hora para aproveitar cache do servidor
+    // Salt que muda a cada hora para cache eficiente
     const salt = `cache_h=${Math.floor(Date.now() / 3600000)}`;
     const finalUrl = url.includes('?') ? `${url}&${salt}` : `${url}?${salt}`;
 
     try {
-        const controller = new AbortController();
-        const tid = setTimeout(() => controller.abort(), timeoutLimit); 
-        
-        const response = await fetch(finalUrl, { 
-            signal: controller.signal,
-            headers: { 'Accept': 'application/json' }
+        const { data } = await httpGetJson(finalUrl, { 
+            timeoutMs: isWordPress ? 3000 : 8000 
         });
-        clearTimeout(tid);
-        
-        if (response.ok) {
-            const text = await response.text();
-            const data = parseSafeJson(text);
-            if (data) return data;
-        }
-    } catch (e) {}
+        return data;
+    } catch (e: any) {
+        console.warn(`[API] fetchWithFallback direct failed: ${url} -> ${e.message}`);
+    }
 
-    // Fallback rápido via proxy apenas se não for WP
+    // Proxy Fallback apenas para APIs não-WP se falhar direto
     if (!isWordPress) {
         try {
             const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(finalUrl)}`;
-            const controller = new AbortController();
-            const tid = setTimeout(() => controller.abort(), 4000);
-            const response = await fetch(proxyUrl, { signal: controller.signal });
-            clearTimeout(tid);
-            if (response.ok) {
-                const text = await response.text();
-                return parseSafeJson(text);
-            }
+            const { data } = await httpGetJson(proxyUrl, { timeoutMs: 12000 });
+            return data;
         } catch (e) {}
     }
     
@@ -168,8 +147,8 @@ export const fetchEtfFlow = async (): Promise<EtfFlowData | null> => {
 export const fetchOrderBook = async (symbol: string): Promise<OrderBookData | null> => {
     const url = `https://api.binance.com/api/v3/depth?symbol=${symbol}&limit=20`;
     try {
-        const res = await fetch(url);
-        if (res.ok) return await res.json();
+        const { data } = await httpGetJson(url);
+        return data;
     } catch (e) {}
     return null;
 };
