@@ -195,7 +195,7 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
 
   return (
     <>
-      {/* ENRICHED TOOLTIP - FIXO E SEGUIDOR */}
+      {/* ENRICHED TOOLTIP - ADJUSTED FONT SIZES */}
       {tooltip.visible && tooltip.data && (
         <div 
             className="fixed z-[9999] pointer-events-none animate-in fade-in zoom-in-95 duration-75" 
@@ -208,35 +208,35 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
                 <div className="flex items-center gap-3 mb-3 border-b border-gray-100 dark:border-tech-800 pb-3">
                     <div className="relative">
                         <img src={`https://assets.coincap.io/assets/icons/${tooltip.symbol.toLowerCase()}@2x.png`} className="w-10 h-10 rounded-full bg-white p-0.5 border border-gray-100 dark:border-tech-700" alt="" />
-                        <span className="absolute -top-1 -right-1 bg-tech-accent text-black text-[8px] font-black w-4 h-4 flex items-center justify-center rounded-full shadow">#{tooltip.meta?.rank || '?'}</span>
+                        <span className="absolute -top-1 -right-1 bg-tech-accent text-black text-[10px] font-black w-5 h-5 flex items-center justify-center rounded-full shadow">#{tooltip.meta?.rank || '?'}</span>
                     </div>
                     <div className="flex flex-col">
-                        <div className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tighter leading-none">{tooltip.meta?.name || tooltip.symbol}</div>
-                        <div className="text-[10px] font-bold text-tech-accent uppercase mt-1">{tooltip.symbol}/USDT</div>
+                        <div className="text-base font-black text-gray-900 dark:text-white uppercase tracking-tighter leading-none">{tooltip.meta?.name || tooltip.symbol}</div>
+                        <div className="text-xs font-bold text-tech-accent uppercase mt-1">{tooltip.symbol}/USDT</div>
                     </div>
                 </div>
                 <div className="grid grid-cols-2 gap-y-3 gap-x-4">
                     <div className="flex flex-col">
-                        <span className="text-gray-500 dark:text-gray-500 text-[8px] font-black uppercase tracking-widest">Price</span>
-                        <span className="font-bold font-mono text-xs dark:text-white">{tooltip.data.p}</span>
+                        <span className="text-gray-500 dark:text-gray-500 text-[10px] font-black uppercase tracking-widest">Price</span>
+                        <span className="font-bold font-mono text-sm dark:text-white">{tooltip.data.p}</span>
                     </div>
                     <div className="flex flex-col text-right">
-                        <span className="text-gray-500 dark:text-gray-500 text-[8px] font-black uppercase tracking-widest">Change 24h</span>
-                        <span className={`font-bold font-mono text-xs ${tooltip.data.c >= 0 ? 'text-tech-success' : 'text-tech-danger'}`}>
+                        <span className="text-gray-500 dark:text-gray-500 text-[10px] font-black uppercase tracking-widest">Change 24h</span>
+                        <span className={`font-bold font-mono text-sm ${tooltip.data.c >= 0 ? 'text-tech-success' : 'text-tech-danger'}`}>
                             {tooltip.data.c >= 0 ? '+' : ''}{tooltip.data.c.toFixed(2)}%
                         </span>
                     </div>
                     <div className="flex flex-col">
-                        <span className="text-gray-500 dark:text-gray-500 text-[8px] font-black uppercase tracking-widest">Market Cap</span>
-                        <span className="font-bold font-mono text-xs text-blue-400">{formatUSD(tooltip.meta?.mcap || 0)}</span>
+                        <span className="text-gray-500 dark:text-gray-500 text-[10px] font-black uppercase tracking-widest">Market Cap</span>
+                        <span className="font-bold font-mono text-sm text-blue-400">{formatUSD(tooltip.meta?.mcap || 0)}</span>
                     </div>
                     <div className="flex flex-col text-right">
-                        <span className="text-gray-500 dark:text-gray-500 text-[8px] font-black uppercase tracking-widest">Volume (Daily)</span>
-                        <span className="font-bold font-mono text-xs text-[#dd9933]">{tooltip.data.v}</span>
+                        <span className="text-gray-500 dark:text-gray-500 text-[10px] font-black uppercase tracking-widest">Volume (Daily)</span>
+                        <span className="font-bold font-mono text-sm text-[#dd9933]">{tooltip.data.v}</span>
                     </div>
                 </div>
                 <div className="mt-3 pt-3 border-t border-gray-100 dark:border-tech-800 flex justify-center">
-                    <div className="text-[8px] font-black text-gray-400 dark:text-gray-600 uppercase tracking-[0.2em] flex items-center gap-1.5 animate-pulse">
+                    <div className="text-[9px] font-black text-gray-400 dark:text-gray-600 uppercase tracking-[0.2em] flex items-center gap-1.5 animate-pulse">
                         <span className="w-1.5 h-1.5 rounded-full bg-tech-success"></span> Live Binance Data
                     </div>
                 </div>

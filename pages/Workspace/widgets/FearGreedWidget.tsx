@@ -31,22 +31,22 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
     }, []);
 
     const getClassification = (val: number): string => {
-        if (val <= 25) return t.s0; // Cagaço extremo
-        if (val <= 45) return t.s1; // Rebosteio
-        if (val <= 55) return t.s2; // Andando de lado
-        if (val <= 75) return t.s3; // Agora Vai
-        if (val <= 94) return t.s4; // É luaaaa!
-        return t.s5; // Vende a mãe!
+        if (val <= 25) return t.s0; 
+        if (val <= 45) return t.s1; 
+        if (val <= 55) return t.s2; 
+        if (val <= 75) return t.s3; 
+        if (val <= 94) return t.s4; 
+        return t.s5; 
     };
 
     const CustomFngTick = ({ x, y, payload }: any) => {
         const label = getClassification(payload.value);
-        return <text x={x} y={y} dy={4} textAnchor="start" className="fill-gray-500 dark:fill-slate-400" fontSize={9} fontWeight="900" textTransform="uppercase">{label}</text>;
+        return <text x={x} y={y} dy={4} textAnchor="start" className="fill-gray-500 dark:fill-slate-400" fontSize={12} fontStyle="italic" fontWeight="900" textTransform="uppercase">{label}</text>;
     };
 
     const CustomXAxisTick = ({ x, y, payload }: any) => { 
         const date = new Date(payload.value); 
-        return (<g transform={`translate(${x},${y})`}><text x={0} y={0} dy={10} textAnchor="middle" className="fill-gray-500 dark:fill-slate-400" fontSize={10}>{date.toLocaleDateString(language, {month:'short', day:'numeric'})}</text></g>); 
+        return (<g transform={`translate(${x},${y})`}><text x={0} y={0} dy={12} textAnchor="middle" className="fill-gray-500 dark:fill-slate-400" fontSize={11} fontWeight="bold">{date.toLocaleDateString(language, {month:'short', day:'numeric'})}</text></g>); 
     };
 
     const fgSeries = useMemo(() => {
@@ -79,10 +79,9 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
                 <Watermark />
                 
                 {isOnPage ? (
-                    /* LAYOUT FULL - PARA AS PAGES (DASHBOARD COMPLETO) */
-                    <div className="z-10 flex flex-col lg:flex-row items-center justify-center gap-12 p-6 mb-4 shrink-0 animate-in fade-in duration-500">
-                        <div className="w-full max-w-[240px] flex flex-col items-center">
-                            <svg viewBox="0 0 200 120" className="w-full overflow-visible">
+                    <div className="z-10 flex flex-col lg:flex-row items-center justify-center gap-16 p-8 mb-4 shrink-0 animate-in fade-in duration-500">
+                        <div className="w-full max-w-[280px] flex flex-col items-center">
+                            <svg viewBox="0 0 200 130" className="w-full overflow-visible">
                                 <defs>
                                     <linearGradient id="fngGradFull" x1="0" y1="0" x2="1" y2="0">
                                         <stop offset="0%" stopColor="#E03A3E" />
@@ -92,45 +91,43 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
                                         <stop offset="100%" stopColor="#009E4F" />
                                     </linearGradient>
                                 </defs>
-                                <path d="M 35 75 A 65 65 0 0 1 165 75" fill="none" stroke="currentColor" className="text-gray-200 dark:text-tech-800" strokeWidth={8} strokeLinecap="round" />
-                                <path d="M 35 75 A 65 65 0 0 1 165 75" fill="none" stroke="url(#fngGradFull)" strokeWidth={8} strokeLinecap="round" />
+                                <path d="M 35 75 A 65 65 0 0 1 165 75" fill="none" stroke="currentColor" className="text-gray-200 dark:text-tech-800" strokeWidth={10} strokeLinecap="round" />
+                                <path d="M 35 75 A 65 65 0 0 1 165 75" fill="none" stroke="url(#fngGradFull)" strokeWidth={10} strokeLinecap="round" />
                                 <g transform={`rotate(${rotation} 100 75)`}>
-                                    <path d="M 100 75 L 100 15" className="stroke-gray-900 dark:stroke-white" strokeWidth="3" strokeLinecap="round" />
-                                    <circle cx={100} cy={75} r="5" className="fill-gray-900 dark:fill-white" />
+                                    <path d="M 100 75 L 100 15" className="stroke-gray-900 dark:stroke-white" strokeWidth="4" strokeLinecap="round" />
+                                    <circle cx={100} cy={75} r="6" className="fill-gray-900 dark:fill-white" />
                                 </g>
-                                <text x="100" y="105" textAnchor="middle" className="fill-gray-900 dark:fill-[#dd9933]" fontSize="32" fontWeight="900" fontFamily="monospace">{fgValue}</text>
-                                <text x="100" y="125" textAnchor="middle" className="fill-gray-600 dark:fill-gray-300" fontSize="14" fontWeight="900" letterSpacing="1">{fgLabel}</text>
+                                <text x="100" y="105" textAnchor="middle" className="fill-gray-900 dark:fill-[#dd9933]" fontSize="38" fontWeight="1000" fontFamily="monospace">{fgValue}</text>
+                                <text x="100" y="128" textAnchor="middle" className="fill-gray-600 dark:fill-gray-300" fontSize="16" fontWeight="1000" letterSpacing="1.5">{fgLabel}</text>
                             </svg>
                         </div>
-                        <div className="flex flex-wrap justify-center gap-4">
+                        <div className="flex flex-wrap justify-center gap-6">
                             {[
                                 { label: tTime.yesterday, val: fgYesterday, sub: getClassification(parseInt(fgYesterday)) },
                                 { label: tTime.d7, val: fgWeek, sub: getClassification(parseInt(fgWeek)) },
                                 { label: tTime.d30, val: fgMonth, sub: getClassification(parseInt(fgMonth)) }
                             ].map((card, i) => (
-                                <div key={i} className="bg-gray-50 dark:bg-tech-900 border border-gray-100 dark:border-tech-800 p-4 rounded-2xl w-36 text-center shadow-lg">
-                                    <div className="text-[10px] font-black text-gray-400 uppercase mb-1">{card.label}</div>
-                                    <div className="text-3xl font-black text-[#dd9933] mb-1">{card.val}</div>
-                                    <div className="text-[9px] font-bold text-gray-500 uppercase leading-tight">{card.sub}</div>
+                                <div key={i} className="bg-gray-50 dark:bg-tech-900 border border-gray-100 dark:border-tech-800 p-6 rounded-2xl w-44 text-center shadow-xl">
+                                    <div className="text-xs font-black text-gray-400 uppercase mb-2 tracking-widest">{card.label}</div>
+                                    <div className="text-4xl font-black text-[#dd9933] mb-2">{card.val}</div>
+                                    <div className="text-[10px] font-black text-gray-500 uppercase leading-tight tracking-wider">{card.sub}</div>
                                 </div>
                             ))}
                         </div>
                     </div>
                 ) : (
-                    /* LAYOUT DISCRETO - PARA GRID MAXIMIZADO (TOP-LEFT) */
-                    <div className="z-10 flex flex-col items-start p-6 pb-2 shrink-0 animate-in slide-in-from-left-4 duration-500">
-                        <div className="flex items-baseline gap-4">
-                            <span className="text-6xl font-black text-[#dd9933] leading-none font-mono">{fgValue}</span>
-                            <span className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-widest">{fgLabel}</span>
+                    <div className="z-10 flex flex-col items-start p-8 pb-4 shrink-0 animate-in slide-in-from-left-4 duration-500">
+                        <div className="flex items-baseline gap-6">
+                            <span className="text-7xl font-black text-[#dd9933] leading-none font-mono">{fgValue}</span>
+                            <span className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-[0.15em]">{fgLabel}</span>
                         </div>
-                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-2 border-l-2 border-[#dd9933] pl-2">Análise de Sentimento Macroeconômico</div>
+                        <div className="text-xs font-black text-gray-400 uppercase tracking-widest mt-3 border-l-4 border-[#dd9933] pl-3">Análise de Sentimento Macroeconômico</div>
                     </div>
                 )}
                 
-                {/* GRÁFICO - ÁREA COMUM */}
                 <div className="flex-1 min-h-0 w-full z-10 relative">
                     <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={fgSeries} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
+                        <AreaChart data={fgSeries} margin={{ top: 20, right: 20, left: 20, bottom: 20 }}>
                             <defs><linearGradient id="gradFg" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#dd9933" stopOpacity={0.4}/><stop offset="95%" stopColor="#dd9933" stopOpacity={0}/></linearGradient></defs>
                             <ReferenceArea y1={0} y2={25} fill="#E03A3E" fillOpacity={0.06} />
                             <ReferenceArea y1={25} y2={45} fill="#F47C20" fillOpacity={0.06} />
@@ -139,20 +136,20 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
                             <ReferenceArea y1={75} y2={94} fill="#009E4F" fillOpacity={0.08} />
                             <ReferenceArea y1={95} y2={100} fill="#00ffff" fillOpacity={0.12} />
                             <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-slate-700" opacity={0.15} />
-                            <XAxis dataKey="date" type="number" domain={['dataMin', 'dataMax']} tick={<CustomXAxisTick />} minTickGap={50} hide />
-                            <YAxis orientation="right" domain={[0, 100]} tick={<CustomFngTick />} ticks={[12, 35, 50, 65, 85, 97]} width={110} axisLine={false} tickLine={false} />
+                            <XAxis dataKey="date" type="number" domain={['dataMin', 'dataMax']} tick={<CustomXAxisTick />} minTickGap={60} hide={!item.isMaximized} />
+                            <YAxis orientation="right" domain={[0, 100]} tick={<CustomFngTick />} ticks={[12, 35, 50, 65, 85, 97]} width={140} axisLine={false} tickLine={false} />
                             <Tooltip 
                                 content={({ active, payload }) => {
                                     if (active && payload && payload.length) {
                                         const d = payload[0].payload;
                                         return (
-                                            <div className="bg-white dark:bg-[#1a1c1e] border border-gray-200 dark:border-gray-700 p-4 rounded-xl shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-                                                <p className="text-gray-500 font-bold text-[10px] uppercase mb-2 border-b border-gray-100 dark:border-white/5 pb-1">
+                                            <div className="bg-white dark:bg-[#1a1c1e] border border-gray-200 dark:border-gray-700 p-5 rounded-2xl shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+                                                <p className="text-gray-500 font-black text-xs uppercase mb-3 border-b border-gray-100 dark:border-white/5 pb-2">
                                                     {new Date(d.date).toLocaleDateString(language, {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'})}
                                                 </p>
-                                                <div className="flex items-end gap-3">
-                                                    <span className="text-4xl font-black text-[#dd9933] leading-none">{d.value}</span>
-                                                    <span className="text-xs font-black uppercase text-gray-900 dark:text-white tracking-widest mb-1">{d.label}</span>
+                                                <div className="flex items-end gap-4">
+                                                    <span className="text-5xl font-black text-[#dd9933] leading-none">{d.value}</span>
+                                                    <span className="text-sm font-black uppercase text-gray-900 dark:text-white tracking-[0.1em] mb-1.5">{d.label}</span>
                                                 </div>
                                             </div>
                                         );
@@ -160,8 +157,8 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
                                     return null;
                                 }}
                             />
-                            <Area type="monotone" dataKey="value" stroke="#dd9933" fill="url(#gradFg)" strokeWidth={2} activeDot={{ r: 6, fill: '#dd9933', stroke: '#fff', strokeWidth: 2 }} />
-                            <Brush dataKey="date" height={30} stroke="#dd9933" fill="transparent" tickFormatter={() => ''} />
+                            <Area type="monotone" dataKey="value" stroke="#dd9933" fill="url(#gradFg)" strokeWidth={3} activeDot={{ r: 8, fill: '#dd9933', stroke: '#fff', strokeWidth: 3 }} />
+                            <Brush dataKey="date" height={35} stroke="#dd9933" fill="transparent" tickFormatter={() => ''} />
                         </AreaChart>
                     </ResponsiveContainer>
                 </div>
@@ -170,7 +167,6 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
     }
     
     return (
-        /* LAYOUT MINIMIZADO PADRÃO (GRID NORMAL) */
         <div className="h-full flex flex-col justify-center gap-2 p-2 relative text-center bg-white dark:bg-[#2f3032]">
             <Watermark />
             <div className="flex items-center justify-center relative mt-6 z-10">
@@ -184,7 +180,7 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
             </div>
             <div className="flex flex-col items-center mt-2 z-10">
                 <div className="text-4xl font-black text-[#dd9933] leading-none">{fgValue}</div>
-                <div className="text-sm font-bold text-gray-900 dark:text-white uppercase mt-1">{fgLabel}</div>
+                <div className="text-sm font-black text-gray-900 dark:text-white uppercase mt-1 tracking-wider">{fgLabel}</div>
             </div>
             <div className="flex justify-around w-full mt-2 text-center z-10 border-t border-gray-200 dark:border-slate-700/30 pt-2 pb-2">
                 <div><div className="text-[10px] text-gray-500 dark:text-slate-500 font-bold uppercase">{tTime.yesterday}</div><div className="text-sm font-bold text-gray-800 dark:text-white">{fgYesterday}</div></div>

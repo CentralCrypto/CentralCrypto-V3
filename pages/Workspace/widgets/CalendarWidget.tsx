@@ -17,9 +17,7 @@ const CalendarWidget: React.FC<{ item: DashboardItem, language?: Language }> = (
             setLoading(true);
             const allEvents = await fetchEconomicCalendar();
             
-            // Set range: Yesterday Start to Tomorrow End
             const now = new Date();
-            
             const startRange = new Date(now);
             startRange.setDate(now.getDate() - 1);
             startRange.setHours(0, 0, 0, 0);
@@ -31,15 +29,11 @@ const CalendarWidget: React.FC<{ item: DashboardItem, language?: Language }> = (
             const filtered = allEvents.filter(e => {
                 const eventDate = new Date(e.date);
                 const isRelevantCountry = e.country === 'USD' || e.country === 'BRL'; 
-                
-                // Compare timestamps
                 const inDateRange = eventDate.getTime() >= startRange.getTime() && eventDate.getTime() <= endRange.getTime();
-                
                 return isRelevantCountry && inDateRange;
             });
             
             filtered.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
             setEvents(filtered);
             setLoading(false);
         };
@@ -71,82 +65,80 @@ const CalendarWidget: React.FC<{ item: DashboardItem, language?: Language }> = (
 
         if (checkDate.getTime() === today.getTime()) return t.today;
         if (checkDate.getTime() === tomorrow.getTime()) return t.tomorrow;
-        if (checkDate.getTime() === yesterday.getTime()) return 'ONTEM'; // Should translate this too if possible
+        if (checkDate.getTime() === yesterday.getTime()) return 'ONTEM'; 
         return d.toLocaleDateString();
     };
 
     return (
         <div className="h-full flex flex-col relative bg-white dark:bg-[#2f3032] p-4">
-             <div className="flex justify-between items-center mb-3 relative z-20 h-6 shrink-0 border-b border-gray-100 dark:border-slate-700/50 pb-2">
+             <div className="flex justify-between items-center mb-4 relative z-20 shrink-0 border-b border-gray-100 dark:border-slate-700/50 pb-3">
                 <div className="flex items-center gap-2">
-                    <span className="font-bold text-gray-500 dark:text-slate-400 text-xs uppercase tracking-wider">{t.title}</span>
+                    <span className="font-black text-gray-500 dark:text-slate-400 text-sm uppercase tracking-[0.1em]">{t.title}</span>
                 </div>
                 
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-2">
                     <button 
                         onClick={() => setFilter(prev => prev === 'BRL' ? 'ALL' : 'BRL')} 
-                        className={`transition-opacity hover:scale-110 ${filter === 'BRL' ? 'opacity-100 scale-110' : filter === 'ALL' ? 'opacity-100' : 'opacity-30 grayscale'}`}
+                        className={`transition-all hover:scale-110 ${filter === 'BRL' ? 'opacity-100 ring-2 ring-[#dd9933] ring-offset-2 dark:ring-offset-[#2f3032] rounded-full' : filter === 'ALL' ? 'opacity-100' : 'opacity-30 grayscale'}`}
                         title="Filter BRL"
                     >
-                        <img src="https://hatscripts.github.io/circle-flags/flags/br.svg" className="w-4 h-4 rounded-full shadow-sm" alt="BRL" />
+                        <img src="https://hatscripts.github.io/circle-flags/flags/br.svg" className="w-5 h-5 rounded-full shadow-md" alt="BRL" />
                     </button>
                     <button 
                         onClick={() => setFilter(prev => prev === 'USD' ? 'ALL' : 'USD')} 
-                        className={`transition-opacity hover:scale-110 ${filter === 'USD' ? 'opacity-100 scale-110' : filter === 'ALL' ? 'opacity-100' : 'opacity-30 grayscale'}`}
+                        className={`transition-all hover:scale-110 ${filter === 'USD' ? 'opacity-100 ring-2 ring-[#dd9933] ring-offset-2 dark:ring-offset-[#2f3032] rounded-full' : filter === 'ALL' ? 'opacity-100' : 'opacity-30 grayscale'}`}
                         title="Filter USD"
                     >
-                        <img src="https://hatscripts.github.io/circle-flags/flags/us.svg" className="w-4 h-4 rounded-full shadow-sm" alt="USD" />
+                        <img src="https://hatscripts.github.io/circle-flags/flags/us.svg" className="w-5 h-5 rounded-full shadow-md" alt="USD" />
                     </button>
                 </div>
             </div>
             
             <div className="flex-1 w-full relative z-10 overflow-y-auto custom-scrollbar pr-1">
                  {loading ? (
-                     <div className="flex items-center justify-center h-full text-gray-500 text-xs">
-                         <Loader2 className="animate-spin w-4 h-4 mr-2" /> {common.loading}
+                     <div className="flex items-center justify-center h-full text-gray-500 text-sm font-bold">
+                         <Loader2 className="animate-spin w-5 h-5 mr-3" /> {common.loading}
                      </div>
                  ) : filteredEvents.length === 0 ? (
-                     <div className="flex items-center justify-center h-full text-gray-500 text-xs text-center px-4">
+                     <div className="flex items-center justify-center h-full text-gray-500 text-sm font-bold text-center px-4">
                          No events found.
                      </div>
                  ) : (
-                     <div className="flex flex-col gap-1">
+                     <div className="flex flex-col gap-2">
                          {filteredEvents.map((e, i) => {
                              const date = new Date(e.date);
-                             // FORCE 24H FORMAT FOR ALL LANGUAGES
                              const timeStr = date.toLocaleTimeString('en-GB', { hour: '2-digit', minute:'2-digit', hour12: false });
                              const dayLabel = getDayLabel(date);
                              
-                             // Maximized Sizing
-                             const textSize = item.isMaximized ? 'text-sm' : 'text-xs';
-                             const timeSize = item.isMaximized ? 'text-xs' : 'text-[10px]';
-                             const rowPadding = item.isMaximized ? 'p-3' : 'p-2';
+                             const textSize = item.isMaximized ? 'text-lg' : 'text-base';
+                             const timeSize = item.isMaximized ? 'text-base' : 'text-sm';
+                             const rowPadding = item.isMaximized ? 'p-4' : 'p-3';
                              
                              return (
-                                 <div key={i} className={`flex items-center gap-2 ${rowPadding} rounded hover:bg-gray-100 dark:hover:bg-white/5 border border-transparent hover:border-gray-100 dark:hover:border-slate-700 transition-colors`}>
-                                     <div className="flex flex-col items-center w-12 shrink-0">
-                                         <span className={`${timeSize} font-bold text-gray-600 dark:text-gray-300`}>{timeStr}</span>
-                                         <span className="text-[8px] uppercase text-gray-400 dark:text-slate-500 font-bold">{dayLabel}</span>
+                                 <div key={i} className={`flex items-center gap-3 ${rowPadding} rounded-xl hover:bg-gray-100 dark:hover:bg-white/5 border border-transparent hover:border-gray-100 dark:hover:border-slate-700 transition-all shadow-sm`}>
+                                     <div className="flex flex-col items-center w-16 shrink-0">
+                                         <span className={`${timeSize} font-black text-gray-800 dark:text-gray-100 font-mono tracking-tighter`}>{timeStr}</span>
+                                         <span className="text-[10px] uppercase text-gray-500 dark:text-slate-400 font-black tracking-widest">{dayLabel}</span>
                                      </div>
                                      
-                                     <div className={`w-1 ${item.isMaximized ? 'h-10' : 'h-8'} rounded-full shrink-0 ${getImpactColor(e.impact)}`}></div>
-                                     <div className="flex-1 min-w-0 flex items-center gap-2">
-                                         <img src={getFlag(e.country)} className={`${item.isMaximized ? 'w-5 h-5' : 'w-4 h-4'} rounded-full shadow-sm shrink-0`} alt={e.country} />
-                                         <span className={`${textSize} font-bold text-gray-800 dark:text-gray-200 truncate leading-tight`}>{e.title}</span>
+                                     <div className={`w-1.5 ${item.isMaximized ? 'h-12' : 'h-10'} rounded-full shrink-0 ${getImpactColor(e.impact)} shadow-sm`}></div>
+                                     <div className="flex-1 min-w-0 flex items-center gap-3">
+                                         <img src={getFlag(e.country)} className={`${item.isMaximized ? 'w-6 h-6' : 'w-5 h-5'} rounded-full shadow-md shrink-0 border border-white/10`} alt={e.country} />
+                                         <span className={`${textSize} font-black text-gray-900 dark:text-gray-200 truncate leading-none group-hover:text-[#dd9933] transition-colors tracking-tight`}>{e.title}</span>
                                      </div>
 
-                                     <div className={`grid grid-cols-3 gap-2 shrink-0 text-right ${item.isMaximized ? 'w-[30%] min-w-[220px]' : 'w-[140px]'}`}>
+                                     <div className={`grid grid-cols-3 gap-3 shrink-0 text-right ${item.isMaximized ? 'w-[30%] min-w-[260px]' : 'w-[160px]'}`}>
                                          <div className="flex flex-col hidden sm:flex">
-                                             <span className="text-[8px] text-gray-500 dark:text-slate-500 font-bold uppercase">{t.previous}</span>
-                                             <span className={`${item.isMaximized ? 'text-xs' : 'text-[9px]'} text-gray-700 dark:text-gray-300 font-mono font-bold`}>{e.previous}</span>
+                                             <span className="text-[10px] text-gray-500 dark:text-slate-500 font-black uppercase tracking-tighter">{t.previous}</span>
+                                             <span className={`${item.isMaximized ? 'text-sm' : 'text-xs'} text-gray-700 dark:text-gray-300 font-mono font-black`}>{e.previous}</span>
                                          </div>
                                          <div className="flex flex-col">
-                                             <span className="text-[8px] text-gray-500 dark:text-slate-500 font-bold uppercase">{t.forecast}</span>
-                                             <span className={`${item.isMaximized ? 'text-xs' : 'text-[9px]'} text-gray-700 dark:text-gray-300 font-mono font-bold`}>{e.forecast || '--'}</span>
+                                             <span className="text-[10px] text-gray-500 dark:text-slate-500 font-black uppercase tracking-tighter">{t.forecast}</span>
+                                             <span className={`${item.isMaximized ? 'text-sm' : 'text-xs'} text-gray-700 dark:text-gray-300 font-mono font-black`}>{e.forecast || '--'}</span>
                                          </div>
                                          <div className="flex flex-col">
-                                             <span className="text-[8px] text-gray-500 dark:text-slate-500 font-bold uppercase">{t.actual}</span>
-                                             <span className={`${item.isMaximized ? 'text-xs' : 'text-[9px]'} text-gray-700 dark:text-gray-300 font-mono font-bold`}>--</span>
+                                             <span className="text-[10px] text-gray-500 dark:text-slate-500 font-black uppercase tracking-tighter">{t.actual}</span>
+                                             <span className={`${item.isMaximized ? 'text-sm' : 'text-xs'} text-gray-700 dark:text-gray-300 font-mono font-black`}>--</span>
                                          </div>
                                      </div>
                                  </div>

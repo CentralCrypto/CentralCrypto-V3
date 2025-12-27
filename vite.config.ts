@@ -1,34 +1,29 @@
+
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
   server: {
-    host: true,
-    port: 3000,
-    strictPort: true,
     proxy: {
-      // Cachecko (arquivos JSON estáticos)
+      // Túnel para os arquivos de dados estáticos do servidor
       '/cachecko': {
         target: 'https://centralcrypto.com.br',
         changeOrigin: true,
         secure: true,
       },
-
-      // WordPress REST API (pega tudo do wp-json, não só wp/v2)
-      '/2/wp-json': {
+      // Túnel para a API nativa do WP Core (Magazine)
+      '/2/wp-json/wp/v2': {
         target: 'https://centralcrypto.com.br',
         changeOrigin: true,
         secure: true,
-        secure: true,
       },
-
-      // Mídias/uploads
+      // Túnel para mídias e uploads
       '/2/wp-content': {
         target: 'https://centralcrypto.com.br',
         changeOrigin: true,
         secure: true,
-      },
+      }
     },
   },
 });

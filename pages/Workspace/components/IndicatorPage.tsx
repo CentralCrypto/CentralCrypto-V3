@@ -44,7 +44,6 @@ const PageFaq = ({ language, pageType }: { language: Language, pageType: string 
     const [openIndex, setOpenIndex] = useState<number | null>(null);
     const t = getTranslations(language).workspace.pages.faq;
     
-    // Mapeia o tipo de página para a chave correta no objeto de tradução
     const faqData = useMemo(() => {
         switch(pageType) {
             case 'FNG': return t.fng;
@@ -78,11 +77,11 @@ const PageFaq = ({ language, pageType }: { language: Language, pageType: string 
                             onClick={() => setOpenIndex(openIndex === i ? null : i)}
                             className="w-full flex items-center justify-between p-5 text-left group"
                         >
-                            <span className={`font-bold text-sm transition-colors ${openIndex === i ? 'text-[#dd9933]' : 'text-gray-700 dark:text-gray-300'}`}>{item.q}</span>
-                            <ChevronDown size={18} className={`text-gray-400 transition-transform duration-500 ${openIndex === i ? 'rotate-180 text-[#dd9933]' : ''}`} />
+                            <span className={`font-bold text-base transition-colors ${openIndex === i ? 'text-[#dd9933]' : 'text-gray-700 dark:text-gray-300'}`}>{item.q}</span>
+                            <ChevronDown size={20} className={`text-gray-400 transition-transform duration-500 ${openIndex === i ? 'rotate-180 text-[#dd9933]' : ''}`} />
                         </button>
                         <div className={`transition-all duration-500 ease-in-out ${openIndex === i ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}>
-                            <div className="p-5 pt-0 text-sm text-gray-500 dark:text-slate-400 leading-relaxed border-t border-transparent dark:border-white/5">
+                            <div className="p-5 pt-0 text-base text-gray-500 dark:text-slate-400 leading-relaxed border-t border-transparent dark:border-white/5">
                                 <div dangerouslySetInnerHTML={{ __html: item.a }} />
                             </div>
                         </div>
@@ -146,7 +145,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
         >
             <div className={`flex items-center gap-1 ${align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : 'justify-start'}`}>
                 {label}
-                <ChevronsUpDown size={12} className={`text-gray-400 group-hover:text-tech-accent ${sortConfig.key === sortKey ? 'text-tech-accent' : ''}`} />
+                <ChevronsUpDown size={14} className={`text-gray-400 group-hover:text-tech-accent ${sortConfig.key === sortKey ? 'text-tech-accent' : ''}`} />
             </div>
         </th>
     );
@@ -155,17 +154,17 @@ const MarketCapTable = ({ language }: { language: Language }) => {
         <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-100 dark:border-slate-800 shadow-xl overflow-hidden flex flex-col h-full min-h-0">
             <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4 bg-gray-50/50 dark:bg-black/20 shrink-0">
                 <div className="relative w-full md:w-80">
-                    <Search size={16} className="absolute left-3 top-2.5 text-gray-500" />
+                    <Search size={18} className="absolute left-3 top-2.5 text-gray-500" />
                     <input 
                         type="text" 
-                        placeholder="Buscar ativo por nome ou symbol..." 
+                        placeholder="Buscar ativo..." 
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full bg-white dark:bg-[#2f3032] border border-gray-200 dark:border-slate-700 rounded-lg py-2 pl-10 pr-4 text-sm text-gray-900 dark:text-white focus:border-[#dd9933] outline-none transition-all shadow-inner border-none"
+                        className="w-full bg-white dark:bg-[#2f3032] border border-gray-200 dark:border-slate-700 rounded-lg py-2.5 pl-11 pr-4 text-base text-gray-900 dark:text-white focus:border-[#dd9933] outline-none transition-all shadow-inner border-none"
                     />
                 </div>
-                <button onClick={load} className="p-2 hover:bg-gray-200 dark:hover:bg-slate-700 rounded-lg text-gray-500 transition-colors" title="Atualizar">
-                    <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+                <button onClick={load} className="p-2.5 hover:bg-gray-200 dark:hover:bg-slate-700 rounded-lg text-gray-500 transition-colors" title="Atualizar">
+                    <RefreshCw size={22} className={loading ? 'animate-spin' : ''} />
                 </button>
             </div>
 
@@ -173,12 +172,12 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                 {loading && coins.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-64 text-gray-500">
                         <Loader2 className="animate-spin mb-2" size={32} />
-                        <span className="font-bold text-xs uppercase tracking-widest animate-pulse">Sincronizando Mercado...</span>
+                        <span className="font-bold text-sm uppercase tracking-widest animate-pulse">Sincronizando Mercado...</span>
                     </div>
                 ) : (
                     <table className="w-full text-left border-collapse min-w-[1000px]">
                         <thead className="sticky top-0 z-20 bg-gray-50 dark:bg-[#2f3032]">
-                            <tr className="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-slate-400 border-b border-gray-100 dark:border-slate-800">
+                            <tr className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-slate-400 border-b border-gray-100 dark:border-slate-800">
                                 <SortHeader label="#" sortKey="market_cap_rank" />
                                 <SortHeader label="Ativo" sortKey="name" />
                                 <SortHeader label="Preço" sortKey="current_price" align="right" />
@@ -197,36 +196,36 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
                                 return (
                                     <tr key={coin.id} className="hover:bg-gray-50 dark:hover:bg-white/5 transition-colors group">
-                                        <td className="p-4 text-xs font-bold text-gray-400">#{coin.market_cap_rank}</td>
+                                        <td className="p-4 text-sm font-bold text-gray-400">#{coin.market_cap_rank}</td>
                                         <td className="p-4">
                                             <div className="flex items-center gap-3">
-                                                <img src={coin.image} alt="" className="w-7 h-7 rounded-full bg-white p-0.5 border border-gray-200 dark:border-slate-700" onError={(e) => (e.currentTarget.style.display='none')} />
+                                                <img src={coin.image} alt="" className="w-9 h-9 rounded-full bg-white p-0.5 border border-gray-200 dark:border-slate-700" onError={(e) => (e.currentTarget.style.display='none')} />
                                                 <div className="flex flex-col">
-                                                    <span className="text-sm font-black text-gray-900 dark:text-white leading-none group-hover:text-[#dd9933] transition-colors">{coin.name}</span>
-                                                    <span className="text-[10px] font-bold text-gray-500 uppercase mt-1">{coin.symbol}</span>
+                                                    <span className="text-base font-black text-gray-900 dark:text-white leading-none group-hover:text-[#dd9933] transition-colors">{coin.name}</span>
+                                                    <span className="text-xs font-bold text-gray-500 uppercase mt-1">{coin.symbol}</span>
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="p-4 text-right font-mono text-sm font-bold text-gray-900 dark:text-slate-200">
+                                        <td className="p-4 text-right font-mono text-base font-black text-gray-900 dark:text-slate-200">
                                             {formatUSD(coin.current_price)}
                                         </td>
-                                        <td className={`p-4 text-right font-mono text-sm font-black ${isPos ? 'text-green-500' : 'text-red-500'}`}>
+                                        <td className={`p-4 text-right font-mono text-base font-black ${isPos ? 'text-green-500' : 'text-red-500'}`}>
                                             {isPos ? '+' : ''}{change.toFixed(2)}%
                                         </td>
-                                        <td className="p-4 text-right font-mono text-xs font-bold text-gray-600 dark:text-slate-400">
+                                        <td className="p-4 text-right font-mono text-sm font-bold text-gray-600 dark:text-slate-400">
                                             {formatUSD(coin.market_cap, true)}
                                         </td>
-                                        <td className="p-4 text-right font-mono text-xs font-bold text-gray-600 dark:text-slate-400">
+                                        <td className="p-4 text-right font-mono text-sm font-bold text-gray-600 dark:text-slate-400">
                                             {formatUSD(coin.total_volume, true)}
                                         </td>
-                                        <td className="p-4 text-right font-mono text-[10px] font-bold text-gray-500 dark:text-slate-500">
+                                        <td className="p-4 text-right font-mono text-xs font-bold text-gray-500 dark:text-slate-500">
                                             {coin.circulating_supply?.toLocaleString()} <span className="uppercase opacity-50">{coin.symbol}</span>
                                         </td>
-                                        <td className="p-4 w-28 h-12">
+                                        <td className="p-4 w-32 h-14">
                                             {sparkData.length > 0 && (
                                                 <ResponsiveContainer width="100%" height="100%">
                                                     <LineChart data={sparkData}>
-                                                        <Line type="monotone" dataKey="v" stroke={isPos ? '#22c55e' : '#ef4444'} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                                                        <Line type="monotone" dataKey="v" stroke={isPos ? '#22c55e' : '#ef4444'} strokeWidth={2} dot={false} isAnimationActive={false} />
                                                         <YAxis domain={['auto', 'auto']} hide />
                                                     </LineChart>
                                                 </ResponsiveContainer>
@@ -251,7 +250,7 @@ interface IndicatorPageProps {
   userTier: UserTier;
 }
 
-type PageType = 'MARKETCAP' | 'RSI' | 'MACD' | 'FNG' | 'LSR' | 'ALTSEASON' | 'ETF' | 'GAINERS' | 'TRUMP' | 'CALENDAR' | 'HEATMAP' | 'BUBBLE_HEATMAP';
+type PageType = 'MARKETCAP' | 'RSI' | 'MACD' | 'FNG' | 'LSR' | 'ALTSEASON' | 'ETF' | 'GAINERS' | 'HEATMAP' | 'BUBBLE_HEATMAP' | 'CALENDAR';
 
 const IndicatorPage: React.FC<IndicatorPageProps> = ({ language, coinMap, userTier }) => {
     const [activePage, setActivePage] = useState<PageType>('MARKETCAP');
@@ -260,22 +259,21 @@ const IndicatorPage: React.FC<IndicatorPageProps> = ({ language, coinMap, userTi
 
     const GROUPS = [
         { title: 'Market', items: [ 
-            { id: 'MARKETCAP' as PageType, label: tPages.marketcap, icon: <List size={16} /> },
-            { id: 'GAINERS' as PageType, label: tPages.topmovers, icon: <TrendingUp size={16} /> }, 
-            { id: 'HEATMAP' as PageType, label: "Heatmap Square", icon: <LayoutGrid size={16} /> },
-            { id: 'BUBBLE_HEATMAP' as PageType, label: "Crypto Bubbles", icon: <CircleDashed size={16} /> },
-            { id: 'RSI' as PageType, label: tWs.rsi.title, icon: <Activity size={16} /> }, 
-            { id: 'MACD' as PageType, label: tWs.macd.title, icon: <BarChart2 size={16} /> }, 
-            { id: 'LSR' as PageType, label: tWs.lsr.title, icon: <BarChart2 size={16} /> }, 
+            { id: 'MARKETCAP' as PageType, label: tPages.marketcap, icon: <List size={18} /> },
+            { id: 'GAINERS' as PageType, label: tPages.topmovers, icon: <TrendingUp size={18} /> }, 
+            { id: 'HEATMAP' as PageType, label: "Heatmap Square", icon: <LayoutGrid size={18} /> },
+            { id: 'BUBBLE_HEATMAP' as PageType, label: "Crypto Bubbles", icon: <CircleDashed size={18} /> },
+            { id: 'RSI' as PageType, label: tWs.rsi.title, icon: <Activity size={18} /> }, 
+            { id: 'MACD' as PageType, label: tWs.macd.title, icon: <BarChart2 size={18} /> }, 
+            { id: 'LSR' as PageType, label: tWs.lsr.title, icon: <BarChart2 size={18} /> }, 
         ] },
         { title: 'Global', items: [ 
-            { id: 'CALENDAR' as PageType, label: tWs.calendar.title, icon: <Calendar size={16} /> }, 
-            { id: 'ETF' as PageType, label: tWs.etf.title, icon: <ArrowUpRight size={16} /> }, 
+            { id: 'CALENDAR' as PageType, label: tWs.calendar.title, icon: <Calendar size={18} /> }, 
+            { id: 'ETF' as PageType, label: tWs.etf.title, icon: <ArrowUpRight size={18} /> }, 
         ] },
         { title: 'Sentiment', items: [ 
-            { id: 'TRUMP' as PageType, label: tWs.trump.title, icon: <Activity size={16} /> }, 
-            { id: 'FNG' as PageType, label: tWs.fng.title, icon: <PieChart size={16} /> }, 
-            { id: 'ALTSEASON' as PageType, label: tWs.altseason.title, icon: <Activity size={16} /> }, 
+            { id: 'FNG' as PageType, label: tWs.fng.title, icon: <PieChart size={18} /> }, 
+            { id: 'ALTSEASON' as PageType, label: tWs.altseason.title, icon: <Activity size={18} /> }, 
         ] }
     ];
     
@@ -287,17 +285,17 @@ const IndicatorPage: React.FC<IndicatorPageProps> = ({ language, coinMap, userTi
             <div className="flex h-full w-full gap-4 overflow-hidden">
                 {/* Sidebar de Navegação */}
                 <div className="w-64 flex-shrink-0 bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-slate-800 rounded-xl flex flex-col overflow-hidden shadow-sm transition-colors shrink-0">
-                    <div className="p-4 border-b border-gray-100 dark:border-slate-800 font-bold text-gray-500 dark:text-slate-400 text-xs uppercase tracking-wider">Pages</div>
+                    <div className="p-4 border-b border-gray-100 dark:border-slate-800 font-black text-gray-500 dark:text-slate-400 text-xs uppercase tracking-wider">Dashboard Pages</div>
                     <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
                         {GROUPS.map((group, groupIdx) => (
                             <div key={groupIdx} className="mb-4">
-                                <div className="px-4 py-2 text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest">{group.title}</div>
+                                <div className="px-4 py-2 text-[10px] font-black text-gray-400 dark:text-slate-500 uppercase tracking-widest">{group.title}</div>
                                 <div className="space-y-1">
                                     {group.items.map((item) => (
                                         <button 
                                             key={item.id} 
                                             onClick={() => setActivePage(item.id)} 
-                                            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-bold transition-all ${activePage === item.id ? 'bg-[#dd9933] text-black shadow-md' : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-[#2f3032]'}`}
+                                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-black transition-all tracking-wide ${activePage === item.id ? 'bg-[#dd9933] text-black shadow-md' : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-[#2f3032]'}`}
                                         >
                                             {item.icon}{item.label}
                                         </button>
@@ -355,11 +353,6 @@ const IndicatorPage: React.FC<IndicatorPageProps> = ({ language, coinMap, userTi
                                 <CryptoWidget item={{ id: 'bubble-page', type: WidgetType.BUBBLE_HEATMAP, title: 'Crypto Bubbles', symbol: 'MARKET', isMaximized: true }} language={language} />
                             </div>
                         )}
-                        {activePage === 'TRUMP' && (
-                            <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                                <CryptoWidget item={{ id: 'trump-page', type: WidgetType.TRUMP_METER, title: 'Trump-o-Meter', symbol: 'TRUMP', isMaximized: true }} language={language} />
-                            </div>
-                        )}
                         {activePage === 'CALENDAR' && (
                             <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
                                 <CryptoWidget item={{ id: 'cal-page', type: WidgetType.CALENDAR, title: 'Calendar', symbol: 'CAL', isMaximized: true }} language={language} />
@@ -375,7 +368,6 @@ const IndicatorPage: React.FC<IndicatorPageProps> = ({ language, coinMap, userTi
                         )}
                     </div>
                     
-                    {/* FAQ SECTION DINÂMICO */}
                     <PageFaq language={language} pageType={activePage} />
                 </div>
             </div>

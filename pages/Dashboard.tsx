@@ -35,7 +35,7 @@ const WorkspaceLink = ({ onClick }: { onClick: () => void }) => (
         className="text-gray-500 hover:text-tech-accent transition-colors p-0.5 ml-2" 
         title="Open in Workspace"
     >
-        <LayoutDashboard size={12} />
+        <LayoutDashboard size={14} />
     </button>
 );
 
@@ -43,7 +43,7 @@ const HorizontalHistoryRow = ({ data, labels }: { data: (string | number)[], lab
   <div className="flex justify-between pt-1 px-1 text-center border-t border-tech-700/50 mt-1 w-full">
       {labels.map((label, i) => (
           <div key={label}>
-              <div className="text-[8px] text-gray-500 font-bold uppercase">{label}</div>
+              <div className="text-[9px] text-gray-500 font-bold uppercase">{label}</div>
               <div className="text-sm font-bold text-gray-300 font-mono">{data[i] !== undefined ? data[i] : '-'}</div>
           </div>
       ))}
@@ -55,8 +55,8 @@ const GAUGE_CY = 75;
 const GAUGE_R = 65;  
 const GAUGE_RY = 65; 
 const TEXT_VAL_Y = 102; 
-const TEXT_LBL_Y = 118;
-const GAUGE_STROKE = 7; 
+const TEXT_LBL_Y = 120;
+const GAUGE_STROKE = 8; 
 
 const FearAndGreedWidget = ({ language, onNavigate }: { language: Language; onNavigate: () => void }) => {
   const [data, setData] = useState<any[]>([]);
@@ -89,15 +89,15 @@ const FearAndGreedWidget = ({ language, onNavigate }: { language: Language; onNa
   return (
     <div className="glass-panel p-2 rounded-xl flex flex-col h-full relative overflow-hidden bg-tech-800 border-tech-700 hover:border-[#dd9933]/50 transition-all">
       <div className="flex justify-between items-start absolute top-2 left-2 right-2 z-10">
-          <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider truncate">{t.title}</span>
+          <span className="text-sm text-gray-400 font-black uppercase tracking-wider truncate">{t.title}</span>
           <WorkspaceLink onClick={onNavigate} />
       </div>
       {loading ? (
-        <div className="flex-1 flex items-center justify-center text-[10px] text-gray-500 animate-pulse">Loading...</div>
+        <div className="flex-1 flex items-center justify-center text-xs text-gray-500 animate-pulse">Loading...</div>
       ) : (
         <>
            <div className="flex-1 relative w-full flex justify-center items-end pb-1 mt-4">
-             <svg viewBox="0 0 200 125" className="w-full h-full overflow-visible" preserveAspectRatio="xMidYMax meet">
+             <svg viewBox="0 0 200 130" className="w-full h-full overflow-visible" preserveAspectRatio="xMidYMax meet">
                <defs>
                  <linearGradient id="fngGradient" x1="0" y1="0" x2="1" y2="0">
                    <stop offset="0%" stopColor="#E03A3E" />
@@ -113,8 +113,8 @@ const FearAndGreedWidget = ({ language, onNavigate }: { language: Language; onNa
                  <path d={`M ${GAUGE_CX} ${GAUGE_CY} L ${GAUGE_CX} ${GAUGE_CY - GAUGE_RY + 2}`} stroke="var(--color-text-main)" strokeWidth="3" strokeLinecap="round" />
                  <circle cx={GAUGE_CX} cy={GAUGE_CY} r="4" fill="var(--color-text-main)" />
                </g>
-               <text x={GAUGE_CX} y={TEXT_VAL_Y} textAnchor="middle" fill="var(--color-gauge-val)" fontSize="26" fontWeight="900" fontFamily="monospace">{val}</text>
-               <text x={GAUGE_CX} y={TEXT_LBL_Y} textAnchor="middle" fill="var(--color-text-main)" fontSize="11" fontWeight="900" letterSpacing="0.5">{classification}</text>
+               <text x={GAUGE_CX} y={TEXT_VAL_Y} textAnchor="middle" fill="var(--color-gauge-val)" fontSize="32" fontWeight="900" fontFamily="monospace">{val}</text>
+               <text x={GAUGE_CX} y={TEXT_LBL_Y} textAnchor="middle" fill="var(--color-text-main)" fontSize="13" fontWeight="900" letterSpacing="0.5">{classification}</text>
              </svg>
            </div>
            <HorizontalHistoryRow 
@@ -143,11 +143,11 @@ const RsiWidget = ({ language, onNavigate }: { language: Language; onNavigate: (
   return (
     <div className="glass-panel p-2 rounded-xl flex flex-col h-full relative overflow-hidden bg-tech-800 border-tech-700 hover:border-[#dd9933]/50 transition-all">
       <div className="flex justify-between items-start absolute top-2 left-2 right-2 z-10">
-          <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider truncate">{t.title}</span>
+          <span className="text-sm text-gray-400 font-black uppercase tracking-wider truncate">{t.title}</span>
           <WorkspaceLink onClick={onNavigate} />
       </div>
       {loading ? (
-          <div className="flex-1 flex items-center justify-center text-[10px] text-gray-500 animate-pulse">Loading...</div>
+          <div className="flex-1 flex items-center justify-center text-xs text-gray-500 animate-pulse">Loading...</div>
       ) : (
       <>
           <div className="flex-1 relative w-full flex justify-center items-end pb-1 mt-4">
@@ -167,10 +167,10 @@ const RsiWidget = ({ language, onNavigate }: { language: Language; onNavigate: (
                 <path d={`M ${GAUGE_CX} ${GAUGE_CY} L ${GAUGE_CX} ${GAUGE_CY - GAUGE_RY + 2}`} stroke="var(--color-text-main)" strokeWidth="3" strokeLinecap="round" />
                 <circle cx={GAUGE_CX} cy={GAUGE_CY} r="4" fill="var(--color-text-main)" />
               </g>
-              <text x={GAUGE_CX} y={TEXT_VAL_Y} textAnchor="middle" fill="var(--color-gauge-val)" fontSize="24" fontWeight="bold" fontFamily="monospace">{(rsiVal).toFixed(1)}</text>
+              <text x={GAUGE_CX} y={TEXT_VAL_Y} textAnchor="middle" fill="var(--color-gauge-val)" fontSize="32" fontWeight="900" fontFamily="monospace">{(rsiVal).toFixed(0)}</text>
             </svg>
           </div>
-          <HorizontalHistoryRow labels={[timeT.yesterday, timeT.d7, timeT.d30]} data={[(data.yesterday ?? 0).toFixed(1), (data.days7Ago ?? 0).toFixed(1), (data.days30Ago ?? 0).toFixed(1)]} />
+          <HorizontalHistoryRow labels={[timeT.yesterday, timeT.d7, timeT.d30]} data={[(data.yesterday ?? 0).toFixed(0), (data.days7Ago ?? 0).toFixed(0), (data.days30Ago ?? 0).toFixed(0)]} />
       </>
       )}
     </div>
@@ -193,14 +193,14 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
   return (
     <div className="glass-panel p-2 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 hover:border-[#dd9933]/50 transition-all relative">
         <div className="w-full flex justify-between items-center mb-1">
-            <span className="text-[10px] text-gray-400 uppercase tracking-wider font-bold ml-1">{t.title}</span>
+            <span className="text-sm text-gray-400 uppercase tracking-wider font-black ml-1">{t.title}</span>
             <WorkspaceLink onClick={onNavigate} />
         </div>
         <div className="flex justify-center gap-1 mb-1">
-            <select value={symbol} onChange={e => setSymbol(e.target.value)} className="bg-tech-900 text-gray-200 text-[9px] font-bold rounded px-1 py-0.5 border border-tech-700 outline-none">
+            <select value={symbol} onChange={e => setSymbol(e.target.value)} className="bg-tech-900 text-gray-200 text-xs font-bold rounded px-1.5 py-1 border border-tech-700 outline-none">
                 <option value="BTCUSDT">BTC</option><option value="ETHUSDT">ETH</option><option value="SOLUSDT">SOL</option>
             </select>
-            <select value={period} onChange={e => setPeriod(e.target.value)} className="bg-tech-900 text-gray-200 text-[9px] font-bold rounded px-1 py-0.5 border border-tech-700 outline-none">
+            <select value={period} onChange={e => setPeriod(e.target.value)} className="bg-tech-900 text-gray-200 text-xs font-bold rounded px-1.5 py-1 border border-tech-700 outline-none">
                 <option value="5m">5m</option><option value="1h">1h</option><option value="1D">1D</option>
             </select>
         </div>
@@ -213,7 +213,7 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
                     <path d={`M ${GAUGE_CX} ${GAUGE_CY} L ${GAUGE_CX} ${GAUGE_CY - GAUGE_RY + 2}`} stroke="var(--color-text-main)" strokeWidth="3" strokeLinecap="round" />
                     <circle cx={GAUGE_CX} cy={GAUGE_CY} r="4" fill="var(--color-text-main)" />
                 </g>
-                <text x={GAUGE_CX} y={TEXT_VAL_Y} textAnchor="middle" fill="var(--color-gauge-val)" fontSize="24" fontWeight="bold" fontFamily="monospace">{val.toFixed(2)}</text>
+                <text x={GAUGE_CX} y={TEXT_VAL_Y} textAnchor="middle" fill="var(--color-gauge-val)" fontSize="32" fontWeight="900" fontFamily="monospace">{val.toFixed(2)}</text>
             </svg>
         </div>
     </div>
@@ -241,7 +241,7 @@ const AltSeasonWidget = ({ language, onNavigate }: { language: Language; onNavig
   return (
     <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 relative">
       <div className="shrink-0 flex justify-between items-start mb-1">
-        <div className="flex flex-col"><span className="font-bold text-[10px] text-gray-400 uppercase tracking-wider">{t.title}</span><span className="text-[10px] font-bold text-gray-200">Index</span></div>
+        <div className="flex flex-col"><span className="font-black text-sm text-gray-400 uppercase tracking-wider">{t.title}</span><span className="text-[10px] font-bold text-gray-200">Index</span></div>
         <div className="text-right flex items-start gap-2"><span className="text-2xl font-bold text-gray-200 font-mono">{data.index ?? 0}</span><WorkspaceLink onClick={onNavigate} /></div>
       </div>
       <div className="relative flex-1 bg-tech-900/50 rounded-lg mb-1 overflow-hidden">
@@ -267,7 +267,7 @@ const MarketCapHistoryWidget = ({ language, onNavigate }: { language: Language; 
   return (
     <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 relative">
       <div className="shrink-0 flex justify-between items-start mb-1">
-        <div className="flex flex-col"><span className="font-bold text-[10px] text-gray-400 uppercase tracking-wider">{t.title}</span><span className="text-[10px] font-bold text-gray-200">Global</span></div>
+        <div className="flex flex-col"><span className="font-black text-sm text-gray-400 uppercase tracking-wider">{t.title}</span><span className="text-[10px] font-bold text-gray-200">Global</span></div>
         <div className="text-right flex items-start gap-2"><span className="text-lg font-bold text-tech-accent font-mono">{data ? formatVal(data.current) : '---'}</span><WorkspaceLink onClick={onNavigate} /></div>
       </div>
       <div className="relative flex-1 bg-tech-900/50 rounded-lg mb-1 overflow-hidden">
@@ -288,19 +288,19 @@ const EtfFlowWidget = ({ language, onNavigate }: { language: Language; onNavigat
     return (
         <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 relative">
             <div className="flex justify-between items-center mb-1">
-                <div className="font-bold text-gray-400 text-[10px] uppercase tracking-wider">{t.title}</div>
+                <div className="font-black text-gray-400 text-sm uppercase tracking-wider">{t.title}</div>
                 <WorkspaceLink onClick={onNavigate} />
             </div>
             <div className="flex-1 flex flex-col items-center justify-center py-2">
-                <div className={`text-[10px] font-bold uppercase tracking-widest ${data.net >= 0 ? 'text-green-500' : 'text-red-500'}`}>{t.netFlow}</div>
+                <div className={`text-[11px] font-black uppercase tracking-widest ${data.net >= 0 ? 'text-green-500' : 'text-red-500'}`}>{t.netFlow}</div>
                 <div className="flex items-center gap-1">
                     {data.net >= 0 ? <ArrowUp size={24} className="text-green-500"/> : <ArrowDown size={24} className="text-red-500"/>}
                     <span className={`text-2xl font-mono font-black ${data.net >= 0 ? 'text-green-500' : 'text-red-500'}`}>{formatNet(data.net)}</span>
                 </div>
             </div>
             <div className="grid grid-cols-2 gap-1 border-t border-tech-700/50 pt-2">
-                <div className="text-center"><div className="text-[8px] text-[#dd9933] font-bold uppercase">BTC ETF</div><div className="text-xs font-mono font-bold text-gray-300">{(data.btc / 1e6).toFixed(1)}M</div></div>
-                <div className="text-center"><div className="text-[8px] text-[#627eea] font-bold uppercase">ETH ETF</div><div className="text-xs font-mono font-bold text-gray-300">{(data.eth / 1e6).toFixed(1)}M</div></div>
+                <div className="text-center"><div className="text-[9px] text-[#dd9933] font-black uppercase">BTC ETF</div><div className="text-sm font-mono font-bold text-gray-300">{(data.btc / 1e6).toFixed(1)}M</div></div>
+                <div className="text-center"><div className="text-[9px] text-[#627eea] font-black uppercase">ETH ETF</div><div className="text-sm font-mono font-bold text-gray-300">{(data.eth / 1e6).toFixed(1)}M</div></div>
             </div>
         </div>
     );
@@ -316,16 +316,16 @@ const TrumpOMeterWidget = ({ language, onNavigate }: { language: Language; onNav
     return (
         <div className="glass-panel p-2 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 relative">
             <div className="flex justify-between items-start mb-1 shrink-0">
-                <div className="text-left font-bold text-[10px] uppercase tracking-wider">{t.title}</div>
+                <div className="text-left font-black text-sm uppercase tracking-wider">{t.title}</div>
                 <WorkspaceLink onClick={onNavigate} />
             </div>
             <div className="relative h-2 w-full rounded-full bg-gradient-to-r from-red-500 via-yellow-500 to-green-500 mt-4 mb-5">
                 <div className="absolute w-0 h-0 border-l-[5px] border-r-[5px] border-b-[6px] border-b-tech-950 transition-all duration-700" style={{ left: `calc(${percent}% - 5px)`, top: '100%' }}></div>
             </div>
-            <div className="text-center mb-1 shrink-0 text-[10px] font-black uppercase text-[#dd9933]">{data.sarcastic_label}</div>
-            <div className="text-center text-2xl font-black text-white leading-none mb-2">{score > 0 ? '+' : ''}{score}</div>
+            <div className="text-center mb-1 shrink-0 text-[11px] font-black uppercase text-[#dd9933]">{data.sarcastic_label}</div>
+            <div className="text-center text-3xl font-black text-white leading-none mb-2">{score > 0 ? '+' : ''}{score}</div>
             <div className="flex-1 flex flex-col border border-dashed border-gray-600 rounded-lg p-1.5 bg-black/10 min-h-0 overflow-hidden">
-                <p className="text-[9px] text-gray-300 font-medium line-clamp-3">{data.title}</p>
+                <p className="text-[10px] text-gray-300 font-medium line-clamp-3">{data.title}</p>
             </div>
         </div>
     );
@@ -340,18 +340,18 @@ const GainersLosersWidget = ({ language, onNavigate }: { language: Language; onN
     return (
         <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700">
             <div className="flex bg-tech-900 rounded p-1 mb-2">
-                <button onClick={() => setTab('gainers')} className={`flex-1 py-1 text-[10px] font-bold uppercase rounded ${tab==='gainers'?'bg-green-500 text-black':'text-gray-500'}`}>{t.gainers}</button>
-                <button onClick={() => setTab('losers')} className={`flex-1 py-1 text-[10px] font-bold uppercase rounded ${tab==='losers'?'bg-red-500 text-black':'text-gray-500'}`}>{t.losers}</button>
+                <button onClick={() => setTab('gainers')} className={`flex-1 py-1 text-sm font-black uppercase rounded ${tab==='gainers'?'bg-green-500 text-black':'text-gray-500'}`}>{t.gainers}</button>
+                <button onClick={() => setTab('losers')} className={`flex-1 py-1 text-sm font-black uppercase rounded ${tab==='losers'?'bg-red-500 text-black':'text-gray-500'}`}>{t.losers}</button>
                 <WorkspaceLink onClick={onNavigate} />
             </div>
             <div className="flex-1 flex flex-col gap-1 overflow-y-auto custom-scrollbar">
                 {list?.slice(0, 10).map((coin: any, i: number) => (
                     <div key={i} className="flex items-center justify-between px-2 py-1.5 hover:bg-white/5 rounded">
                         <div className="flex items-center gap-3">
-                            <img src={coin.image} className="w-6 h-6 rounded-full" alt="" />
-                            <div className="flex flex-col"><span className="text-sm font-bold text-white leading-none">{coin.symbol?.toUpperCase()}</span><span className="text-[10px] text-gray-500 font-mono">${(coin.current_price ?? 0).toFixed(4)}</span></div>
+                            <img src={coin.image} className="w-7 h-7 rounded-full" alt="" />
+                            <div className="flex flex-col"><span className="text-base font-black text-white leading-none">{coin.symbol?.toUpperCase()}</span><span className="text-[11px] text-gray-500 font-mono">${(coin.current_price ?? 0).toFixed(4)}</span></div>
                         </div>
-                        <div className={`text-sm font-bold font-mono ${(coin.price_change_percentage_24h ?? 0) >=0 ?'text-green-400':'text-red-400'}`}>{(coin.price_change_percentage_24h ?? 0).toFixed(2)}%</div>
+                        <div className={`text-base font-black font-mono ${(coin.price_change_percentage_24h ?? 0) >=0 ?'text-green-400':'text-red-400'}`}>{(coin.price_change_percentage_24h ?? 0).toFixed(2)}%</div>
                     </div>
                 ))}
             </div>
@@ -365,19 +365,19 @@ const MarketCapWidget = ({ language, onNavigate }: { language: Language; onNavig
     return (
         <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700">
             <div className="flex justify-between items-center mb-2">
-                <div className="font-bold text-[var(--color-widget-title)] text-xs uppercase tracking-wider">TOP 10 MARKET CAP</div>
+                <div className="font-black text-gray-400 text-sm uppercase tracking-wider">TOP 10 MARKET CAP</div>
                 <WorkspaceLink onClick={onNavigate} />
             </div>
             <div className="flex-1 overflow-y-auto flex flex-col gap-1 custom-scrollbar">
                 {list.map((coin, i) => (
                     <div key={i} className="flex items-center justify-between px-2 py-1.5 hover:bg-white/5 rounded">
                         <div className="flex items-center gap-3">
-                            <img src={coin.image} className="w-6 h-6 rounded-full" alt="" />
-                            <div className="flex flex-col"><span className="text-sm font-bold text-white leading-none">{coin.name}</span><span className="text-[10px] font-bold text-gray-500 uppercase">{coin.symbol}</span></div>
+                            <img src={coin.image} className="w-7 h-7 rounded-full" alt="" />
+                            <div className="flex flex-col"><span className="text-base font-black text-white leading-none">{coin.name}</span><span className="text-[11px] font-bold text-gray-500 uppercase">{coin.symbol}</span></div>
                         </div>
                         <div className="text-right">
-                            <div className="text-sm font-bold text-white font-mono">${(coin.current_price ?? 0).toLocaleString()}</div>
-                            <div className={`text-[10px] font-mono ${(coin.price_change_percentage_24h ?? 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>{(coin.price_change_percentage_24h ?? 0).toFixed(2)}%</div>
+                            <div className="text-base font-black text-white font-mono">${(coin.current_price ?? 0).toLocaleString()}</div>
+                            <div className={`text-[11px] font-black font-mono ${(coin.price_change_percentage_24h ?? 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>{(coin.price_change_percentage_24h ?? 0).toFixed(2)}%</div>
                         </div>
                     </div>
                 ))}
@@ -395,16 +395,16 @@ const EconomicCalendarWidget = ({ language, onNavigate }: { language: Language; 
     return (
         <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700">
              <div className="flex justify-between items-center mb-2">
-                <div className="font-bold text-xs uppercase tracking-wider">{t.title}</div>
+                <div className="font-black text-sm uppercase tracking-wider">{t.title}</div>
                 <WorkspaceLink onClick={onNavigate} />
             </div>
             <div className="flex-1 overflow-y-auto custom-scrollbar">
                  {loading ? <div className="animate-pulse h-20 bg-white/5 rounded" /> : events.map((e, i) => (
-                    <div key={i} className="flex items-center gap-2 p-1.5 hover:bg-white/5 rounded">
-                        <div className="w-10 text-[10px] font-bold text-gray-400">{new Date(e.date).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
-                        <div className={`w-1 h-6 rounded-full ${getImpactColor(e.impact)}`} />
-                        <span className="text-xs font-bold text-gray-200 truncate flex-1">{e.title}</span>
-                        <span className="text-[10px] font-mono text-gray-500 w-12 text-right">{e.forecast || '--'}</span>
+                    <div key={i} className="flex items-center gap-3 p-2 hover:bg-white/5 rounded">
+                        <div className="w-12 text-sm font-black text-gray-400">{new Date(e.date).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
+                        <div className={`w-1.5 h-8 rounded-full ${getImpactColor(e.impact)}`} />
+                        <span className="text-base font-black text-gray-200 truncate flex-1">{e.title}</span>
+                        <span className="text-xs font-mono font-black text-gray-500 w-14 text-right">{e.forecast || '--'}</span>
                     </div>
                  ))}
             </div>
@@ -436,17 +436,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onPostClick, language = 'pt' as L
 
         {showStats && (
             <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-[repeat(7,minmax(0,1fr))] gap-3 animate-in fade-in slide-in-from-top-4 duration-700">
-                <div className="h-[180px]"><FearAndGreedWidget language={language} onNavigate={navigateToWorkspace} /></div>
-                <div className="h-[180px]"><RsiWidget language={language} onNavigate={navigateToWorkspace} /></div>
-                <div className="h-[180px]"><LongShortRatioWidget language={language} onNavigate={navigateToWorkspace} /></div>
-                <div className="h-[180px]"><AltSeasonWidget language={language} onNavigate={navigateToWorkspace} /></div>
-                <div className="h-[180px]"><MarketCapHistoryWidget language={language} onNavigate={navigateToWorkspace} /></div>
-                <div className="h-[180px]"><EtfFlowWidget language={language} onNavigate={navigateToWorkspace} /></div>
-                <div className="h-[180px]"><TrumpOMeterWidget language={language} onNavigate={navigateToWorkspace} /></div>
+                <div className="h-[200px]"><FearAndGreedWidget language={language} onNavigate={navigateToWorkspace} /></div>
+                <div className="h-[200px]"><RsiWidget language={language} onNavigate={navigateToWorkspace} /></div>
+                <div className="h-[200px]"><LongShortRatioWidget language={language} onNavigate={navigateToWorkspace} /></div>
+                <div className="h-[200px]"><AltSeasonWidget language={language} onNavigate={navigateToWorkspace} /></div>
+                <div className="h-[200px]"><MarketCapHistoryWidget language={language} onNavigate={navigateToWorkspace} /></div>
+                <div className="h-[200px]"><EtfFlowWidget language={language} onNavigate={navigateToWorkspace} /></div>
+                <div className="h-[200px]"><TrumpOMeterWidget language={language} onNavigate={navigateToWorkspace} /></div>
                 
-                <div className="h-[260px] md:col-span-1 xl:col-span-2"><GainersLosersWidget language={language} onNavigate={navigateToWorkspace} /></div>
-                <div className="h-[260px] md:col-span-2 xl:col-span-2"><MarketCapWidget language={language} onNavigate={navigateToWorkspace} /></div>
-                <div className="h-[260px] md:col-span-3 xl:col-span-3"><EconomicCalendarWidget language={language} onNavigate={navigateToWorkspace} /></div>
+                <div className="h-[300px] md:col-span-1 xl:col-span-2"><GainersLosersWidget language={language} onNavigate={navigateToWorkspace} /></div>
+                <div className="h-[300px] md:col-span-2 xl:col-span-2"><MarketCapWidget language={language} onNavigate={navigateToWorkspace} /></div>
+                <div className="h-[300px] md:col-span-3 xl:col-span-3"><EconomicCalendarWidget language={language} onNavigate={navigateToWorkspace} /></div>
             </div>
         )}
       </div>
