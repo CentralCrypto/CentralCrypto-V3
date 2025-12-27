@@ -228,14 +228,8 @@ export interface ApiCoin {
   current_price: number;
   price_change_percentage_24h: number;
   market_cap: number;
-  /**
-   * market_cap_rank added to fix missing property error in IndicatorPage.tsx
-   */
   market_cap_rank?: number;
   total_volume: number;
-  /**
-   * circulating_supply added to fix missing property error in IndicatorPage.tsx
-   */
   circulating_supply?: number;
   image: string;
   ath: number;

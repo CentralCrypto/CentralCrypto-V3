@@ -6,7 +6,7 @@ import CryptoWidget from './CryptoWidget';
 import { 
   BarChart2, TrendingUp, Activity, PieChart, ArrowUpRight, 
   Calendar, ChevronsUpDown, List, Loader2, 
-  LayoutGrid, CircleDashed, Search, RefreshCw, Lock
+  LayoutGrid, CircleDashed, Search, RefreshCw, Lock, ChevronDown
 } from 'lucide-react';
 import { fetchTopCoins } from '../services/api';
 import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts';
@@ -38,7 +38,45 @@ const PageHeader = ({ title, description }: { title: string, description: string
     </div>
 );
 
-// --- MARKET CAP TABLE COMPONENT ---
+// --- FAQ COMPONENT ---
+
+const PageFaq = ({ language }: { language: Language }) => {
+    const [openIndex, setOpenIndex] = useState<number | null>(null);
+    const t = getTranslations(language).workspace.pages.faq;
+
+    const items = [
+        { q: t.q1, a: t.a1 },
+        { q: t.q2, a: t.a2 },
+        { q: t.q3, a: t.a3 },
+        { q: t.q4, a: t.a4 }
+    ];
+
+    return (
+        <div className="mt-8 mb-12 max-w-4xl mx-auto px-4">
+            <h3 className="text-xl font-black text-gray-800 dark:text-[#dd9933] uppercase tracking-widest text-center mb-8">{t.title}</h3>
+            <div className="space-y-3">
+                {items.map((item, i) => (
+                    <div key={i} className="bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-tech-800 rounded-xl overflow-hidden shadow-sm transition-all duration-500">
+                        <button 
+                            onClick={() => setOpenIndex(openIndex === i ? null : i)}
+                            className="w-full flex items-center justify-between p-5 text-left group"
+                        >
+                            <span className={`font-bold text-sm transition-colors ${openIndex === i ? 'text-[#dd9933]' : 'text-gray-700 dark:text-gray-300'}`}>{item.q}</span>
+                            <ChevronDown size={18} className={`text-gray-400 transition-transform duration-500 ${openIndex === i ? 'rotate-180 text-[#dd9933]' : ''}`} />
+                        </button>
+                        <div className={`transition-all duration-500 ease-in-out ${openIndex === i ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
+                            <div className="p-5 pt-0 text-sm text-gray-500 dark:text-slate-400 leading-relaxed border-t border-gray-50 dark:border-tech-900/50">
+                                {item.a}
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// --- MARKET CAP TABLE ---
 
 const MarketCapTable = ({ language }: { language: Language }) => {
     const [coins, setCoins] = useState<ApiCoin[]>([]);
@@ -188,7 +226,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     );
 };
 
-// --- WRAPPERS ---
+// --- MAIN PAGE WRAPPER ---
 
 interface IndicatorPageProps {
   language: Language;
@@ -209,8 +247,8 @@ const IndicatorPage: React.FC<IndicatorPageProps> = ({ language, coinMap, userTi
             { id: 'GAINERS' as PageType, label: tPages.topmovers, icon: <TrendingUp size={16} /> }, 
             { id: 'HEATMAP' as PageType, label: "Heatmap Square", icon: <LayoutGrid size={16} /> },
             { id: 'BUBBLE_HEATMAP' as PageType, label: "Crypto Bubbles", icon: <CircleDashed size={16} /> },
-            { id: 'RSI' as PageType, label: "Média RSI", icon: <Activity size={16} /> }, 
-            { id: 'MACD' as PageType, label: "Média MACD", icon: <BarChart2 size={16} /> }, 
+            { id: 'RSI' as PageType, label: tWs.rsi.title, icon: <Activity size={16} /> }, 
+            { id: 'MACD' as PageType, label: tWs.macd.title, icon: <BarChart2 size={16} /> }, 
             { id: 'LSR' as PageType, label: tWs.lsr.title, icon: <BarChart2 size={16} /> }, 
         ] },
         { title: 'Global', items: [ 
@@ -228,96 +266,100 @@ const IndicatorPage: React.FC<IndicatorPageProps> = ({ language, coinMap, userTi
     for (const group of GROUPS) { const found = group.items.find(item => item.id === activePage); if (found) { currentPage = found; break; } }
     
     return (
-        <div className="flex h-[calc(100vh-160px)] w-full gap-4 overflow-hidden">
-            {/* Sidebar de Navegação */}
-            <div className="w-64 flex-shrink-0 bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-slate-800 rounded-xl flex flex-col overflow-hidden shadow-sm transition-colors shrink-0">
-                <div className="p-4 border-b border-gray-100 dark:border-slate-800 font-bold text-gray-500 dark:text-slate-400 text-xs uppercase tracking-wider">Pages</div>
-                <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
-                    {GROUPS.map((group, groupIdx) => (
-                        <div key={groupIdx} className="mb-4">
-                            <div className="px-4 py-2 text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest">{group.title}</div>
-                            <div className="space-y-1">
-                                {group.items.map((item) => (
-                                    <button 
-                                        key={item.id} 
-                                        onClick={() => setActivePage(item.id)} 
-                                        className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-bold transition-all ${activePage === item.id ? 'bg-[#dd9933] text-black shadow-md' : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-[#2f3032]'}`}
-                                    >
-                                        {item.icon}{item.label}
-                                    </button>
-                                ))}
+        <div className="flex flex-col w-full h-[calc(100vh-160px)] overflow-hidden">
+            <div className="flex h-full w-full gap-4 overflow-hidden">
+                {/* Sidebar de Navegação */}
+                <div className="w-64 flex-shrink-0 bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-slate-800 rounded-xl flex flex-col overflow-hidden shadow-sm transition-colors shrink-0">
+                    <div className="p-4 border-b border-gray-100 dark:border-slate-800 font-bold text-gray-500 dark:text-slate-400 text-xs uppercase tracking-wider">Pages</div>
+                    <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
+                        {GROUPS.map((group, groupIdx) => (
+                            <div key={groupIdx} className="mb-4">
+                                <div className="px-4 py-2 text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest">{group.title}</div>
+                                <div className="space-y-1">
+                                    {group.items.map((item) => (
+                                        <button 
+                                            key={item.id} 
+                                            onClick={() => setActivePage(item.id)} 
+                                            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-bold transition-all ${activePage === item.id ? 'bg-[#dd9933] text-black shadow-md' : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-[#2f3032]'}`}
+                                        >
+                                            {item.icon}{item.label}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        ))}
+                    </div>
                 </div>
-            </div>
 
-            {/* Conteúdo Principal */}
-            <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
-                <PageHeader title={currentPage.label} description="Dados analíticos e ferramentas de mercado em tempo real." />
-                
-                <div className="flex-1 min-h-0 overflow-hidden relative">
-                    {activePage === 'MARKETCAP' && <MarketCapTable language={language} />}
+                {/* Conteúdo Principal */}
+                <div className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto custom-scrollbar pr-1">
+                    <PageHeader title={currentPage.label} description="Dados analíticos e ferramentas de mercado em tempo real." />
                     
-                    {/* Demais páginas carregadas dinamicamente */}
-                    {activePage === 'ALTSEASON' && (
-                        <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                            <CryptoWidget item={{ id: 'altseason-page', type: WidgetType.ALTCOIN_SEASON, title: 'Altcoin Season Index', symbol: 'GLOBAL', isMaximized: true }} language={language} />
-                        </div>
-                    )}
-                    {activePage === 'ETF' && (
-                        <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                            <CryptoWidget item={{ id: 'etf-page', type: WidgetType.ETF_NET_FLOW, title: 'ETF Net Flow', symbol: 'GLOBAL', isMaximized: true }} language={language} />
-                        </div>
-                    )}
-                    {activePage === 'FNG' && (
-                        <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                            <CryptoWidget item={{ id: 'fng-page', type: WidgetType.FEAR_GREED, title: 'Fear & Greed Index', symbol: 'GLOBAL', isMaximized: true }} language={language} />
-                        </div>
-                    )}
-                    {activePage === 'RSI' && (
-                        <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                            <CryptoWidget item={{ id: 'rsi-page', type: WidgetType.RSI_AVG, title: 'RSI Average Tracker', symbol: 'MARKET', isMaximized: true }} language={language} />
-                        </div>
-                    )}
-                    {activePage === 'MACD' && (
-                        <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                            <CryptoWidget item={{ id: 'macd-page', type: WidgetType.MACD_AVG, title: 'MACD Average Tracker', symbol: 'MARKET', isMaximized: true }} language={language} />
-                        </div>
-                    )}
-                    {activePage === 'GAINERS' && (
-                        <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                            <CryptoWidget item={{ id: 'gainers-page', type: WidgetType.GAINERS_LOSERS, title: 'Top Movers (24h)', symbol: 'MARKET', isMaximized: true }} language={language} />
-                        </div>
-                    )}
-                    {activePage === 'HEATMAP' && (
-                        <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                            <CryptoWidget item={{ id: 'heatmap-page', type: WidgetType.HEATMAP, title: 'Crypto Heatmap', symbol: 'MARKET', isMaximized: true }} language={language} />
-                        </div>
-                    )}
-                    {activePage === 'BUBBLE_HEATMAP' && (
-                        <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                            <CryptoWidget item={{ id: 'bubble-page', type: WidgetType.BUBBLE_HEATMAP, title: 'Crypto Bubbles', symbol: 'MARKET', isMaximized: true }} language={language} />
-                        </div>
-                    )}
-                    {activePage === 'TRUMP' && (
-                        <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                            <CryptoWidget item={{ id: 'trump-page', type: WidgetType.TRUMP_METER, title: 'Trump-o-Meter', symbol: 'TRUMP', isMaximized: true }} language={language} />
-                        </div>
-                    )}
-                    {activePage === 'CALENDAR' && (
-                        <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                            <CryptoWidget item={{ id: 'cal-page', type: WidgetType.CALENDAR, title: 'Calendar', symbol: 'CAL', isMaximized: true }} language={language} />
-                        </div>
-                    )}
-                    {activePage === 'LSR' && (
-                        <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800 relative">
-                            {userTier === UserTier.TIER_1 && <LockOverlay />}
-                            <div className={userTier === UserTier.TIER_1 ? 'blur-sm h-full' : 'h-full'}>
-                                <CryptoWidget item={{ id: 'lsr-page', type: WidgetType.LONG_SHORT_RATIO, title: 'Long/Short Ratio', symbol: 'GLOBAL', isMaximized: true }} language={language} />
+                    <div className="flex-1 min-h-[600px] relative">
+                        {activePage === 'MARKETCAP' && <MarketCapTable language={language} />}
+                        
+                        {activePage === 'ALTSEASON' && (
+                            <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
+                                <CryptoWidget item={{ id: 'altseason-page', type: WidgetType.ALTCOIN_SEASON, title: 'Altcoin Season Index', symbol: 'GLOBAL', isMaximized: true }} language={language} />
                             </div>
-                        </div>
-                    )}
+                        )}
+                        {activePage === 'ETF' && (
+                            <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
+                                <CryptoWidget item={{ id: 'etf-page', type: WidgetType.ETF_NET_FLOW, title: 'ETF Net Flow', symbol: 'GLOBAL', isMaximized: true }} language={language} />
+                            </div>
+                        )}
+                        {activePage === 'FNG' && (
+                            <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
+                                <CryptoWidget item={{ id: 'fng-page', type: WidgetType.FEAR_GREED, title: 'Fear & Greed Index', symbol: 'GLOBAL', isMaximized: true }} language={language} />
+                            </div>
+                        )}
+                        {activePage === 'RSI' && (
+                            <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
+                                <CryptoWidget item={{ id: 'rsi-page', type: WidgetType.RSI_AVG, title: 'RSI Average Tracker', symbol: 'MARKET', isMaximized: true }} language={language} />
+                            </div>
+                        )}
+                        {activePage === 'MACD' && (
+                            <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
+                                <CryptoWidget item={{ id: 'macd-page', type: WidgetType.MACD_AVG, title: 'MACD Average Tracker', symbol: 'MARKET', isMaximized: true }} language={language} />
+                            </div>
+                        )}
+                        {activePage === 'GAINERS' && (
+                            <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
+                                <CryptoWidget item={{ id: 'gainers-page', type: WidgetType.GAINERS_LOSERS, title: 'Top Movers (24h)', symbol: 'MARKET', isMaximized: true }} language={language} />
+                            </div>
+                        )}
+                        {activePage === 'HEATMAP' && (
+                            <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
+                                <CryptoWidget item={{ id: 'heatmap-page', type: WidgetType.HEATMAP, title: 'Crypto Heatmap', symbol: 'MARKET', isMaximized: true }} language={language} />
+                            </div>
+                        )}
+                        {activePage === 'BUBBLE_HEATMAP' && (
+                            <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
+                                <CryptoWidget item={{ id: 'bubble-page', type: WidgetType.BUBBLE_HEATMAP, title: 'Crypto Bubbles', symbol: 'MARKET', isMaximized: true }} language={language} />
+                            </div>
+                        )}
+                        {activePage === 'TRUMP' && (
+                            <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
+                                <CryptoWidget item={{ id: 'trump-page', type: WidgetType.TRUMP_METER, title: 'Trump-o-Meter', symbol: 'TRUMP', isMaximized: true }} language={language} />
+                            </div>
+                        )}
+                        {activePage === 'CALENDAR' && (
+                            <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
+                                <CryptoWidget item={{ id: 'cal-page', type: WidgetType.CALENDAR, title: 'Calendar', symbol: 'CAL', isMaximized: true }} language={language} />
+                            </div>
+                        )}
+                        {activePage === 'LSR' && (
+                            <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800 relative">
+                                {userTier === UserTier.TIER_1 && <LockOverlay />}
+                                <div className={userTier === UserTier.TIER_1 ? 'blur-sm h-full' : 'h-full'}>
+                                    <CryptoWidget item={{ id: 'lsr-page', type: WidgetType.LONG_SHORT_RATIO, title: 'Long/Short Ratio', symbol: 'GLOBAL', isMaximized: true }} language={language} />
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    
+                    {/* FAQ SECTION */}
+                    <PageFaq language={language} />
                 </div>
             </div>
         </div>

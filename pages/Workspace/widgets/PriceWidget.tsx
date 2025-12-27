@@ -32,6 +32,7 @@ const CustomChartTooltip = ({ active, payload, item, marketCap, priceChange, lab
         const labelSize = isMaximized ? 'text-sm' : 'text-xs';
         const valueSize = isMaximized ? 'text-2xl' : 'text-sm';
         const containerPadding = isMaximized ? 'p-4' : 'p-3';
+        const price = p.price || 0;
 
         return (
             <div className={`bg-white dark:bg-[#2f3032] border border-gray-100 dark:border-slate-700 rounded-lg ${containerPadding} shadow-xl z-50`}>
@@ -39,7 +40,7 @@ const CustomChartTooltip = ({ active, payload, item, marketCap, priceChange, lab
                      {new Date(p.timestamp).toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 </div>
                 <div className={`${valueSize} font-bold text-gray-900 dark:text-white mb-2`}>
-                    {labels.price}: ${p.price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 4})}
+                    {labels.price}: ${price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 4})}
                 </div>
                 <div className="space-y-1">
                     <div className={`${isMaximized ? 'text-lg' : 'text-sm'} text-gray-600 dark:text-slate-300`}>
@@ -50,7 +51,7 @@ const CustomChartTooltip = ({ active, payload, item, marketCap, priceChange, lab
                     </div>
                     <div className={`${isMaximized ? 'text-lg' : 'text-sm'} text-gray-600 dark:text-slate-300`}>
                         {labels.change24h}: <span className={(priceChange || 0) >= 0 ? 'text-green-500' : 'text-red-500'}>
-                            {priceChange?.toFixed(2)}%
+                            {(priceChange || 0).toFixed(2)}%
                         </span>
                     </div>
                 </div>
@@ -63,7 +64,6 @@ const CustomChartTooltip = ({ active, payload, item, marketCap, priceChange, lab
 const PriceWidget: React.FC<Props> = ({ item, currentPrice = 0, priceChange = 0, sparkline = [], totalVolume = 0, marketCap = 0, language = 'pt' }) => {
     const t = getTranslations(language as Language).workspace.widgets.price;
     
-    // Theme Detection for Charts
     const isDark = document.documentElement.classList.contains('dark');
     const axisColor = isDark ? '#94a3b8' : '#334155';
     const gridColor = isDark ? '#334155' : '#cbd5e1';
@@ -95,7 +95,7 @@ const PriceWidget: React.FC<Props> = ({ item, currentPrice = 0, priceChange = 0,
 
     const isPositive = priceChange >= 0;
     const gradientColor = isPositive ? '#009E4F' : '#E03A3E';
-    const displayPrice = currentPrice;
+    const displayPrice = currentPrice || 0;
 
     return (
         <div className="h-full flex flex-col p-2 relative">

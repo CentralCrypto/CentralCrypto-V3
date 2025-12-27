@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { getTranslations } from '../locales';
 import { Language } from '../types';
 import { fetchMagazinePosts, fetchMagazineCategories, MagazinePost } from '../services/magazine';
-import { RefreshCw, AlertCircle, Loader2, WifiOff } from 'lucide-react';
+import { RefreshCw, Loader2, WifiOff } from 'lucide-react';
 
 interface NewsGridProps {
   onPostClick: (postId: number) => void;
@@ -37,44 +37,31 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
     setLoading(true);
     setError('');
     try {
-      const [cats, allData] = await Promise.all([
-           fetchMagazineCategories().catch(() => []),
-           fetchMagazinePosts({ perPage: 15 })
+      const cats = await fetchMagazineCategories();
+      const estudosCat = cats.find(c => c.slug?.includes('estudo'));
+      const analisesCat = cats.find(c => c.slug?.includes('analise'));
+
+      // Requisição local rápida: Exatamente o que cada coluna precisa
+      const [resEstudos, resAnalises] = await Promise.all([
+          fetchMagazinePosts({ categories: estudosCat?.id, perPage: 2 }).catch(() => ({ posts: [] })),
+          fetchMagazinePosts({ categories: analisesCat?.id, perPage: 5 }).catch(() => ({ posts: [] }))
       ]);
 
-      const allPosts = allData.posts;
+      setEstudos(resEstudos.posts);
+      setAnalises(resAnalises.posts);
 
-      if (!allPosts || allPosts.length === 0) {
-         setError('A Central não retornou publicações no momento.');
-         setLoading(false);
-         return;
+      if (resEstudos.posts.length === 0 && resAnalises.posts.length === 0) {
+          setError('O Banco de Dados está vazio ou inacessível.');
       }
-
-      const estudosCat = cats.find(c => c.slug?.includes('estudo'));
-      let estudosList = estudosCat 
-          ? allPosts.filter(p => p.categories?.includes(estudosCat.id))
-          : [];
-      
-      if (estudosList.length === 0) {
-         estudosList = allPosts.slice(0, 2);
-      }
-      
-      const usedIds = new Set(estudosList.map(p => p.id));
-      const analisesList = allPosts.filter(p => !usedIds.has(p.id));
-
-      setEstudos(estudosList.slice(0, 2));
-      setAnalises(analisesList.length > 0 ? analisesList : allPosts);
     } catch (e: any) {
-      console.error("NewsGrid sync failure:", e);
-      setError(e.message || 'Falha na sincronização segura com a Central.');
+      setError('Falha na comunicação local com o WordPress.');
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    const timer = setTimeout(fetchNews, 800);
-    return () => clearTimeout(timer);
+    fetchNews();
   }, [fetchNews]);
 
   useEffect(() => {
@@ -85,33 +72,26 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
     return () => clearInterval(interval);
   }, [analises]);
 
-  const currentHero = analises[heroIndex] || estudos[0];
+  const trending = [...analises].reverse();
+  const currentHero = analises[heroIndex];
 
-  if (loading && estudos.length === 0) return (
+  if (loading && estudos.length === 0 && analises.length === 0) return (
       <div className="w-full h-[600px] flex flex-col items-center justify-center bg-tech-900/50 rounded-xl border border-tech-800">
           <Loader2 className="w-10 h-10 text-[#dd9933] animate-spin mb-4 opacity-50" />
-          <div className="text-gray-500 font-mono tracking-widest text-xs animate-pulse uppercase">Autenticando Magazine...</div>
+          <div className="text-gray-500 font-mono tracking-widest text-xs animate-pulse uppercase">Conexão direta estabelecida...</div>
       </div>
   );
   
-  if (error && estudos.length === 0) return (
+  if (error && estudos.length === 0 && analises.length === 0) return (
     <div className="w-full h-[500px] flex flex-col items-center justify-center bg-tech-900 rounded-xl border border-red-500/20 p-12 text-center shadow-2xl">
-        <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mb-6">
-            <WifiOff size={32} className="text-red-500 opacity-80" />
-        </div>
-        <h3 className="text-gray-200 font-bold text-xl mb-2">Erro de Sincronização</h3>
-        <p className="text-gray-400 font-mono text-xs max-w-sm mb-8 leading-relaxed">
-            O servidor da Central recusou a conexão por restrição de segurança (CORS). 
-            <br/><span className="text-red-400/80 mt-2 block italic">"{error}"</span>
+        <WifiOff size={32} className="text-red-500 mb-6 opacity-80" />
+        <h3 className="text-gray-200 font-bold text-xl mb-2">Central Inacessível</h3>
+        <p className="text-gray-400 font-mono text-xs max-w-sm mb-8">
+            Verifique as permissões da pasta /2 no seu servidor.
         </p>
-        <div className="flex flex-col sm:flex-row gap-3">
-            <button onClick={fetchNews} className="flex items-center justify-center gap-2 bg-[#dd9933] hover:bg-amber-600 text-black font-black uppercase text-xs px-6 py-3 rounded-lg transition-all active:scale-95 shadow-lg">
-                <RefreshCw size={14} /> Tentar Novamente
-            </button>
-            <a href="https://centralcrypto.com.br/2/" target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 bg-tech-800 hover:bg-tech-700 text-white font-bold uppercase text-xs px-6 py-3 rounded-lg border border-tech-700 transition-all">
-                Abrir Site Original
-            </a>
-        </div>
+        <button onClick={fetchNews} className="flex items-center justify-center gap-2 bg-[#dd9933] hover:bg-amber-600 text-black font-black uppercase text-xs px-6 py-3 rounded-lg transition-all">
+            <RefreshCw size={14} /> Tentar Agora
+        </button>
     </div>
   );
 
@@ -120,18 +100,18 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#dd9933]/5 blur-[120px] rounded-full pointer-events-none"></div>
 
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6 h-full relative z-10">
-        <div className="md:col-span-3 flex flex-col justify-between h-full">
-          <div className="text-base font-bold uppercase tracking-widest text-gray-200 border-b-2 border-[#dd9933] pb-2 mb-2 shrink-0">{t.recentStudies}</div>
+        <div className="md:col-span-3 flex flex-col h-full">
+          <div className="text-base font-bold uppercase tracking-widest text-gray-200 border-b-2 border-[#dd9933] pb-2 mb-4 shrink-0">{t.recentStudies}</div>
           <div className="flex-1 flex flex-col gap-4">
             {estudos.map((post) => (
-               <div onClick={() => onPostClick(post.id)} key={post.id} className="relative group cursor-pointer overflow-hidden rounded-lg h-[48%] border border-tech-700 hover:border-[#dd9933] transition-colors shadow-lg bg-black">
+               <div onClick={() => onPostClick(post.id)} key={post.id} className="relative group cursor-pointer overflow-hidden rounded-lg flex-1 border border-tech-700 hover:border-[#dd9933] transition-colors shadow-lg bg-black">
                   <img src={post.featuredImage} alt="" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-70 group-hover:opacity-100" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-transparent"></div>
                   <div className="absolute bottom-0 left-0 right-0 p-5">
-                     <h4 className="text-white dark:text-[#dd9933] font-bold text-xl leading-tight drop-shadow-md mb-3 line-clamp-3 group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors">{decodeHTML(post.titleHtml)}</h4>
-                     <div className="flex items-center text-xs text-gray-300 gap-3 font-mono border-t border-gray-600 pt-3">
-                        <span className="flex items-center gap-1 font-bold text-[#dd9933] uppercase">{post.authorName}</span>
-                        <span>{new Date(post.date).toLocaleDateString(currentLocale)}</span>
+                     <h4 className="text-white dark:text-[#dd9933] font-bold text-lg leading-tight drop-shadow-md mb-2 line-clamp-2 group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors">{decodeHTML(post.titleHtml)}</h4>
+                     <div className="flex items-center text-[10px] text-gray-300 gap-2 font-mono border-t border-gray-600/50 pt-2">
+                        <span className="font-bold text-[#dd9933] uppercase truncate">{post.authorName}</span>
+                        <span className="shrink-0">{new Date(post.date).toLocaleDateString(currentLocale)}</span>
                      </div>
                   </div>
                </div>
@@ -150,7 +130,7 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
                   <h2 className="text-gray-200 dark:text-[#dd9933] font-black text-3xl md:text-5xl leading-none mb-6 drop-shadow-xl shadow-black group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors">{decodeHTML(currentHero.titleHtml)}</h2>
                   <div className="flex items-center text-base text-gray-200 gap-6 font-mono border-t border-gray-500/50 pt-6">
                       <span className="flex items-center gap-2 font-bold text-[#dd9933]"><span className="w-2.5 h-2.5 rounded-full bg-[#dd9933] animate-pulse"></span>{currentHero.authorName}</span>
-                      <span>{new Date(currentHero.date).toLocaleDateString(currentLocale, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                      <span className="hidden sm:inline">{new Date(currentHero.date).toLocaleDateString(currentLocale, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
                   </div>
                </div>
                <div className="absolute top-0 left-0 h-1.5 bg-[#dd9933] z-20 animate-[progress_8s_linear_infinite]" style={{ width: '100%' }}></div>
@@ -160,16 +140,16 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
 
         <div className="md:col-span-3 flex flex-col h-full">
            <div className="text-base font-bold uppercase tracking-widest text-gray-200 border-b-2 border-[#dd9933] pb-2 mb-6 text-right shrink-0">{t.trendingTopics}</div>
-           <div className="flex-1 flex flex-col gap-4 overflow-hidden relative">
-             {analises.slice(0, 4).map((post: any, i) => (
-               <div onClick={() => onPostClick(post.id)} key={`${post.id}-${i}`} className="flex gap-4 bg-tech-900 border border-tech-800 hover:border-[#dd9933] transition-all p-3 rounded-lg shadow-lg cursor-pointer flex-1 animate-in slide-in-from-bottom-4 duration-700 group items-center">
-                  <div className="relative w-24 h-full shrink-0 overflow-hidden rounded-md bg-black">
-                     <img src={post.featuredImage} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 opacity-80 group-hover:opacity-100" alt=""/>
-                     <div className="absolute top-0 left-0 bg-[#dd9933] text-black text-xs font-black px-2 py-1 shadow-md z-10">{i + 1}</div>
+           <div className="flex-1 flex flex-col gap-3 overflow-hidden relative">
+             {trending.map((post, i) => (
+               <div onClick={() => onPostClick(post.id)} key={`${post.id}-${i}`} className="flex gap-3 bg-tech-900 border border-tech-800 hover:border-[#dd9933] transition-all p-2 rounded-lg shadow-lg cursor-pointer flex-1 animate-in slide-in-from-bottom-2 duration-500 group items-center">
+                  <div className="relative w-20 h-full shrink-0 overflow-hidden rounded-md bg-black">
+                     <img src={post.featuredImage} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 opacity-70 group-hover:opacity-100" alt=""/>
+                     <div className="absolute top-0 left-0 bg-[#dd9933] text-black text-[10px] font-black px-1.5 py-0.5 shadow-md z-10">{i + 1}</div>
                   </div>
-                  <div className="flex flex-col justify-center">
-                     <h5 className="text-sm font-bold text-gray-200 dark:text-[#dd9933] leading-tight line-clamp-3 group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors mb-2">{decodeHTML(post.titleHtml)}</h5>
-                     <div className="text-xs text-gray-500 font-mono flex items-center gap-2"><span>{new Date(post.date).toLocaleDateString(currentLocale)}</span></div>
+                  <div className="flex flex-col justify-center flex-1 min-w-0">
+                     <h5 className="text-xs font-bold text-gray-200 dark:text-[#dd9933] leading-tight line-clamp-2 group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors mb-1">{decodeHTML(post.titleHtml)}</h5>
+                     <div className="text-[9px] text-gray-500 font-mono flex items-center gap-2"><span>{new Date(post.date).toLocaleDateString(currentLocale)}</span></div>
                   </div>
                </div>
              ))}

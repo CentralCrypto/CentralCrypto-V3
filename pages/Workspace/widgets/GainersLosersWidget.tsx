@@ -21,7 +21,8 @@ const TickerList: React.FC<{ tickers: ApiCoin[], type: 'gainer' | 'loser' }> = (
     return (
         <div className="flex flex-col gap-1">
             {tickers.slice(0, 10).map(t => {
-                const change = t.price_change_percentage_24h || 0;
+                const change = t.price_change_percentage_24h ?? 0;
+                const price = t.current_price ?? 0;
                 return (
                     <div key={t.id} className="flex items-center justify-between text-xs px-2 py-1 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors rounded">
                         <div className="flex items-center gap-2">
@@ -29,7 +30,7 @@ const TickerList: React.FC<{ tickers: ApiCoin[], type: 'gainer' | 'loser' }> = (
                             <span className="font-bold text-gray-900 dark:text-white uppercase">{t.symbol}</span>
                         </div>
                         <div className="text-right">
-                            <div className="font-semibold text-gray-600 dark:text-slate-300">${(t.current_price || 0) > 1 ? t.current_price.toFixed(2) : (t.current_price || 0).toPrecision(3)}</div>
+                            <div className="font-semibold text-gray-600 dark:text-slate-300">${price > 1 ? price.toFixed(2) : price.toPrecision(3)}</div>
                             <div className={`font-bold ${color}`}>{change.toFixed(2)}%</div>
                         </div>
                     </div>
@@ -91,7 +92,8 @@ const MaximizedTable: React.FC<{ data: ApiCoin[], type: 'gainers' | 'losers' }> 
                 {sortedData.map((coin, index) => {
                     if (!coin) return null;
                     
-                    const change = coin.price_change_percentage_24h || 0;
+                    const change = coin.price_change_percentage_24h ?? 0;
+                    const price = coin.current_price ?? 0;
                     const isPositive = change >= 0;
                     const chartData = coin.sparkline_in_7d?.price?.map((val, i) => ({ i, val })) || [];
                     
@@ -106,7 +108,7 @@ const MaximizedTable: React.FC<{ data: ApiCoin[], type: 'gainers' | 'losers' }> 
                                 </div>
                             </div>
                             <div className="text-right font-mono text-gray-700 dark:text-slate-300">
-                                ${(coin.current_price || 0) < 1 ? coin.current_price?.toFixed(6) : coin.current_price?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                                ${price < 1 ? price.toFixed(6) : price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                             </div>
                             <div className={`text-right font-bold ${isPositive ? 'text-green-500' : 'text-red-500'}`}>
                                 {isPositive ? '+' : ''}{change.toFixed(2)}%
@@ -166,17 +168,6 @@ const GainersLosersWidget: React.FC<{ item: DashboardItem, language?: Language }
 
     useEffect(() => {
         load();
-        const interval = setInterval(load, 60000); 
-        const safetyTimeout = setTimeout(() => {
-            if (isLoading && allCoins.length === 0) {
-                setIsLoading(false);
-                setError(true);
-            }
-        }, 15000);
-        return () => {
-            clearInterval(interval);
-            clearTimeout(safetyTimeout);
-        }
     }, []);
 
     const { gainers, losers } = useMemo(() => {
@@ -199,10 +190,9 @@ const GainersLosersWidget: React.FC<{ item: DashboardItem, language?: Language }
         return (
             <div className="flex flex-col items-center justify-center h-full text-center p-4 text-gray-500 dark:text-slate-400">
                 <AlertTriangle size={24} className="mb-2 text-yellow-500" />
-                <span className="text-xs font-bold">Dados Indisponíveis</span>
-                <span className="text-[10px] mt-1 opacity-70">Falha ao carregar mercado.</span>
-                <button onClick={load} className="mt-3 flex items-center gap-1 text-[10px] bg-gray-100 dark:bg-slate-800 px-3 py-1.5 rounded hover:text-[#dd9933] transition-colors">
-                    <RefreshCw size={10} /> Tentar Novamente
+                <span className="text-xs font-bold">Offline</span>
+                <button onClick={load} className="mt-3 text-[10px] bg-gray-100 dark:bg-slate-800 px-3 py-1.5 rounded hover:text-[#dd9933]">
+                    Reconectar
                 </button>
             </div>
         );
@@ -216,10 +206,10 @@ const GainersLosersWidget: React.FC<{ item: DashboardItem, language?: Language }
                 <div className="flex justify-between items-center mb-4">
                     <div className="flex bg-gray-100 dark:bg-slate-800/50 p-1 rounded-lg">
                         <button onClick={() => setActiveGnlTab('gainers')} className={`flex items-center gap-2 text-sm font-bold px-4 py-2 rounded-md transition-all ${activeGnlTab === 'gainers' ? 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-white shadow' : 'text-gray-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700/50'}`}>
-                            <TrendingUp size={16} className="text-green-500" /> {t.gainers} (Top 100)
+                            <TrendingUp size={16} className="text-green-500" /> {t.gainers}
                         </button>
                         <button onClick={() => setActiveGnlTab('losers')} className={`flex items-center gap-2 text-sm font-bold px-4 py-2 rounded-md transition-all ${activeGnlTab === 'losers' ? 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-white shadow' : 'text-gray-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700/50'}`}>
-                            <TrendingDown size={16} className="text-red-500" /> {t.losers} (Top 100)
+                            <TrendingDown size={16} className="text-red-500" /> {t.losers}
                         </button>
                     </div>
                 </div>
@@ -234,10 +224,10 @@ const GainersLosersWidget: React.FC<{ item: DashboardItem, language?: Language }
         <div className="h-full flex flex-col p-2 bg-white dark:bg-[#2f3032]">
             <div className="flex bg-gray-100 dark:bg-slate-800/50 p-1 rounded-lg mb-2">
                 <button onClick={() => setActiveGnlTab('gainers')} className={`flex-1 flex items-center justify-center gap-2 text-xs font-bold p-1 rounded-md transition-all ${activeGnlTab === 'gainers' ? 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-white shadow' : 'text-gray-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700/50'}`}>
-                    <TrendingUp size={14} className="text-green-500" /> {t.gainers}
+                    {t.gainers}
                 </button>
                 <button onClick={() => setActiveGnlTab('losers')} className={`flex-1 flex items-center justify-center gap-2 text-xs font-bold p-1 rounded-md transition-all ${activeGnlTab === 'losers' ? 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-white shadow' : 'text-gray-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700/50'}`}>
-                    <TrendingDown size={14} className="text-red-500" /> {t.losers}
+                    {t.losers}
                 </button>
             </div>
             <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">

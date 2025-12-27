@@ -46,7 +46,8 @@ import {
   RefreshCw,
   Clock,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  Menu // Adicionado Menu
 } from 'lucide-react';
 
 // --- CUSTOM FILLED BRAND ICONS ---
@@ -149,5 +150,6 @@ export {
   RefreshCw,
   Clock,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  Menu // Adicionado aqui
 };

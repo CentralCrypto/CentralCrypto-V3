@@ -25,12 +25,13 @@ const GridHeader: React.FC<Props> = ({ item, onRemove, onToggleMaximize, languag
           case WidgetType.ALTCOIN_SEASON: return { title: tWorkspace.altseason.title, desc: tWorkspace.altseason.desc };
           case WidgetType.ETF_NET_FLOW: return { title: tWorkspace.etf.title, desc: tWorkspace.etf.desc };
           case WidgetType.GAINERS_LOSERS: return { title: tWorkspace.gainers.title, desc: tWorkspace.gainers.desc };
-          case WidgetType.PRICE: return tWorkspace.price;
-          case WidgetType.VOLUME: return tWorkspace.volume;
-          case WidgetType.TREND: return tWorkspace.trend;
-          case WidgetType.SENTIMENT: return tWorkspace.sentiment;
-          case WidgetType.ORDER_BOOK: return tWorkspace.orderbook;
-          case WidgetType.NEWS: return tWorkspace.news;
+          // Fix: Always return { title, desc } for all widget types
+          case WidgetType.PRICE: return { title: tWorkspace.price.price, desc: tWorkspace.price.desc };
+          case WidgetType.VOLUME: return { title: tWorkspace.volume.vol24h, desc: tWorkspace.volume.desc };
+          case WidgetType.TREND: return { title: tWorkspace.trend.bullish, desc: tWorkspace.trend.desc };
+          case WidgetType.SENTIMENT: return { title: tWorkspace.sentiment.greed, desc: tWorkspace.sentiment.desc };
+          case WidgetType.ORDER_BOOK: return { title: tWorkspace.orderbook.price, desc: tWorkspace.orderbook.desc };
+          case WidgetType.NEWS: return { title: tWorkspace.news.noNews, desc: tWorkspace.news.desc };
           default: return null;
       }
   };

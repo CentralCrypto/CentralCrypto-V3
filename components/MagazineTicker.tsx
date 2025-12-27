@@ -14,9 +14,11 @@ const MagazineTicker: React.FC<MagazineTickerProps> = ({ onPostClick }) => {
     const fetchTickerPosts = async () => {
       try {
         setLoading(true);
+        // Busca leve das categorias
         const cats = await fetchMagazineCategories();
         const analisesCat = cats.find((c: any) => c.slug.includes('analise'));
 
+        // Busca apenas 10 posts, garantindo que a URL seja processada pelo magazineFetch resiliente
         const data = await fetchMagazinePosts({ 
             categories: analisesCat?.id, 
             perPage: 10 
@@ -25,12 +27,11 @@ const MagazineTicker: React.FC<MagazineTickerProps> = ({ onPostClick }) => {
         if (data.posts.length > 0) {
           setPosts(data.posts);
         } else {
-            // Fallback se não achar análise
             const latest = await fetchMagazinePosts({ perPage: 10 });
             setPosts(latest.posts);
         }
       } catch (e) {
-        console.error("Ticker fetch error", e);
+        console.error("Ticker fetch error:", e);
       } finally {
         setLoading(false);
       }

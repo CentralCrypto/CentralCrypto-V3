@@ -1,10 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { AcademyLanguage } from '../../../types';
 
-const getApiKey = (): string | undefined => {
-    return process.env.API_KEY;
-};
-
 // O Prompt Definitivo - Acadêmico, Profundo, Com Imagens Contextuais.
 // Atualizado com a lista exaustiva de skills do usuário.
 const CRYPTO_PERSONA = `
@@ -29,12 +25,8 @@ Ensure the text is substantial. Do not summarize. Teach as if you are lecturing 
 `;
 
 export const generateCourseContent = async (promptInput: string, systemInstructionOverride?: string): Promise<string> => {
-  const apiKey = getApiKey();
-  if (!apiKey) {
-    throw new Error("API Key not found via process.env.API_KEY");
-  }
-
-  const ai = new GoogleGenAI({ apiKey });
+  // Fix: Directly use process.env.API_KEY for initialization as per guidelines
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const effectivePersona = systemInstructionOverride || CRYPTO_PERSONA;
 
@@ -53,8 +45,9 @@ export const generateCourseContent = async (promptInput: string, systemInstructi
   `;
 
   try {
+    // Fix: Updated to gemini-3-pro-preview for complex Technical Analysis generation
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-pro-preview',
       contents: fullPrompt,
     });
 
@@ -68,8 +61,10 @@ export const generateCourseContent = async (promptInput: string, systemInstructi
 };
 
 export const translateContent = async (content: string, targetLang: AcademyLanguage): Promise<string> => {
-  const apiKey = getApiKey();
-  if (!apiKey || !content) return content;
+  // Fix: Directly use process.env.API_KEY for initialization as per guidelines
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+  if (!content) return content;
 
   const imgMap = new Map<string, string>();
   let placeholderIndex = 0;
@@ -79,8 +74,6 @@ export const translateContent = async (content: string, targetLang: AcademyLangu
     imgMap.set(placeholder, match);
     return placeholder;
   });
-
-  const ai = new GoogleGenAI({ apiKey });
 
   const prompt = `
     You are a professional translator for financial and technical content.
@@ -97,8 +90,9 @@ export const translateContent = async (content: string, targetLang: AcademyLangu
   `;
 
   try {
+    // Fix: Updated to gemini-3-flash-preview for translation tasks
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-flash-preview',
       contents: prompt,
     });
     

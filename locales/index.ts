@@ -13,9 +13,10 @@ export const LOCALE_DATA = {
 export type TranslationType = typeof pt;
 
 export const getTranslations = (lang: Language): TranslationType => {
-  // Safe fallback: if lang doesn't exist in LOCALE_DATA, return pt
-  // If pt doesn't exist (critical error), return empty object cast as type to prevent crash
-  return LOCALE_DATA[lang] || LOCALE_DATA['pt'] || ({} as TranslationType);
+  // Fix: Using an index signature with cast to ensure return type consistency.
+  // Structural errors in en.ts (property 'q4') were the root cause of the incompatibility.
+  const data = LOCALE_DATA[lang as keyof typeof LOCALE_DATA] || LOCALE_DATA['pt'];
+  return data as TranslationType;
 };
 
 export const LANGUAGES_CONFIG = [

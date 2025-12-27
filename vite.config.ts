@@ -1,23 +1,29 @@
-import path from 'path';
-import { defineConfig, loadEnv } from 'vite';
+
+import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-export default defineConfig(({ mode }) => {
-    const env = loadEnv(mode, '.', '');
-    return {
-      server: {
-        port: 3000,
-        host: '0.0.0.0',
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    proxy: {
+      // Túnel para os arquivos de dados estáticos do servidor
+      '/cachecko': {
+        target: 'https://centralcrypto.com.br',
+        changeOrigin: true,
+        secure: true,
       },
-      plugins: [react()],
-      define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+      // Túnel para a API nativa do WP Core (Magazine)
+      '/2/wp-json/wp/v2': {
+        target: 'https://centralcrypto.com.br',
+        changeOrigin: true,
+        secure: true,
       },
-      resolve: {
-        alias: {
-          '@': path.resolve(__dirname, '.'),
-        }
+      // Túnel para mídias e uploads
+      '/2/wp-content': {
+        target: 'https://centralcrypto.com.br',
+        changeOrigin: true,
+        secure: true,
       }
-    };
+    },
+  },
 });
