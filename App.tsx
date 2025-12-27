@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Header from './components/Header';
 import Footer from './components/Footer';
@@ -121,10 +120,20 @@ const App: React.FC = () => {
     }
   };
 
-  const showStatsBar = currentView === ViewMode.DASHBOARD;
-
   return (
     <div className="min-h-screen flex flex-col bg-tech-950 text-gray-200 selection:bg-tech-500 selection:text-white font-sans overflow-x-hidden transition-colors duration-300">
+      <style>{`
+        :root {
+          --color-success: #548f3f; /* Verde solicitado */
+          --color-danger: #CD534B;  /* Vermelho solicitado */
+        }
+        .text-tech-success, .text-green-500, .text-green-400 { color: var(--color-success) !important; }
+        .text-tech-danger, .text-red-500, .text-red-400 { color: var(--color-danger) !important; }
+        .bg-tech-success, .bg-green-500, .bg-green-600 { background-color: var(--color-success) !important; }
+        .bg-tech-danger, .bg-red-500, .bg-red-600 { background-color: var(--color-danger) !important; }
+        .border-tech-success, .border-green-500 { border-color: var(--color-success) !important; }
+        .border-tech-danger, .border-red-500 { border-color: var(--color-danger) !important; }
+      `}</style>
       
       <AuthModal 
         isOpen={isAuthModalOpen} 
@@ -136,71 +145,17 @@ const App: React.FC = () => {
         validationParams={authValidationParams}
       />
 
-      <TermsModal 
-        isOpen={isTermsOpen}
-        onClose={() => setTermsOpen(false)}
-      />
-
-      <PrivacyModal
-        isOpen={isPrivacyOpen}
-        onClose={() => setPrivacyOpen(false)}
-      />
-
-      <AnalystModal
-        isOpen={isAnalystOpen}
-        onClose={() => setAnalystOpen(false)}
-      />
-
-      {!isFullScreenIframe && (
-        <div className="fixed inset-0 pointer-events-none z-0">
-          <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-tech-500/5 dark:bg-tech-500/5 blur-[150px] rounded-full"></div>
-          <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-tech-600/5 dark:bg-tech-600/5 blur-[150px] rounded-full"></div>
-          <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] dark:opacity-[0.03]"></div>
-          <div className="absolute inset-0" 
-               style={{
-                 backgroundImage: 'linear-gradient(rgba(221, 153, 51, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(221, 153, 51, 0.03) 1px, transparent 1px)',
-                 backgroundSize: '50px 50px'
-               }}>
-          </div>
-        </div>
-      )}
+      <TermsModal isOpen={isTermsOpen} onClose={() => setTermsOpen(false)} />
+      <PrivacyModal isOpen={isPrivacyOpen} onClose={() => setPrivacyOpen(false)} />
+      <AnalystModal isOpen={isAnalystOpen} onClose={() => setAnalystOpen(false)} />
 
       <div className="relative z-10 flex flex-col min-h-screen">
-        <Header 
-          currentView={currentView} 
-          setView={setView} 
-          theme={theme} 
-          toggleTheme={toggleTheme}
-          user={user}
-          language={language}
-          onLanguageChange={setLanguage}
-          onLoginClick={() => setAuthModalOpen(true)}
-          onLogoutClick={handleLogout}
-          onSearch={handleSearch}
-        />
-        
+        <Header currentView={currentView} setView={setView} theme={theme} toggleTheme={toggleTheme} user={user} language={language} onLanguageChange={setLanguage} onLoginClick={() => setAuthModalOpen(true)} onLogoutClick={handleLogout} onSearch={handleSearch} />
         <div className="h-[152px] w-full shrink-0"></div>
-
-        {showStatsBar && (
-            <div className="w-full z-40 m-0 p-0 border-none shadow-none -mt-[10px]">
-                <GlobalStatsBar />
-            </div>
-        )}
-        
-        <main className={`flex-1 flex flex-col w-full ${isFullScreenIframe ? 'p-0' : ''}`}>
-          {renderView()}
-        </main>
-        
-        {!isFullScreenIframe && (
-          <Footer 
-            onTermsClick={() => setTermsOpen(true)} 
-            onPrivacyClick={() => setPrivacyOpen(true)}
-            onAnalystClick={() => setAnalystOpen(true)}
-            language={language}
-          />
-        )}
+        {currentView === ViewMode.DASHBOARD && <div className="w-full z-40 -mt-[10px]"><GlobalStatsBar /></div>}
+        <main className={`flex-1 flex flex-col w-full ${isFullScreenIframe ? 'p-0' : ''}`}>{renderView()}</main>
+        {!isFullScreenIframe && <Footer onTermsClick={() => setTermsOpen(true)} onPrivacyClick={() => setPrivacyOpen(true)} onAnalystClick={() => setAnalystOpen(true)} language={language} />}
       </div>
-
       <AIChatbot currentLang={language} />
     </div>
   );

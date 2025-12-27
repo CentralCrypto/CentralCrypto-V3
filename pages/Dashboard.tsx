@@ -29,11 +29,7 @@ interface DashboardProps {
 }
 
 const WorkspaceLink = ({ onClick }: { onClick: () => void }) => (
-    <button 
-        onClick={(e) => { e.stopPropagation(); onClick(); }} 
-        className="text-gray-500 hover:text-tech-accent transition-colors p-0.5 ml-2" 
-        title="Open in Workspace"
-    >
+    <button onClick={(e) => { e.stopPropagation(); onClick(); }} className="text-gray-500 hover:text-tech-accent transition-colors p-0.5 ml-2" title="Open in Workspace">
         <LayoutDashboard size={14} />
     </button>
 );
@@ -112,11 +108,9 @@ const FearAndGreedWidget = ({ language, onNavigate }: { language: Language; onNa
              <svg viewBox="0 0 200 135" className="w-full h-full overflow-visible" preserveAspectRatio="xMidYMax meet">
                <defs>
                  <linearGradient id="fngGradient" x1="0" y1="0" x2="1" y2="0">
-                   <stop offset="0%" stopColor="#E03A3E" />
-                   <stop offset="25%" stopColor="#F47C20" />
+                   <stop offset="0%" stopColor="#CD534B" />
                    <stop offset="50%" stopColor="#FFD700" />
-                   <stop offset="75%" stopColor="#7AC74F" />
-                   <stop offset="100%" stopColor="#009E4F" />
+                   <stop offset="100%" stopColor="#548f3f" />
                  </linearGradient>
                </defs>
                <path d={`M ${GAUGE_CX-GAUGE_R} ${GAUGE_CY} A ${GAUGE_R} ${GAUGE_RY} 0 0 1 ${GAUGE_CX+GAUGE_R} ${GAUGE_CY}`} fill="none" stroke="currentColor" className="text-tech-700" strokeWidth={GAUGE_STROKE} strokeLinecap="round" />
@@ -166,11 +160,9 @@ const RsiWidget = ({ language, onNavigate }: { language: Language; onNavigate: (
             <svg viewBox="0 0 200 125" className="w-full h-full overflow-visible" preserveAspectRatio="xMidYMax meet">
               <defs>
                 <linearGradient id="rsiGradient" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0%" stopColor="#009E4F" />
-                  <stop offset="25%" stopColor="#7AC74F" />
+                  <stop offset="0%" stopColor="#548f3f" />
                   <stop offset="50%" stopColor="#FFD700" />
-                  <stop offset="75%" stopColor="#F47C20" />
-                  <stop offset="100%" stopColor="#E03A3E" />
+                  <stop offset="100%" stopColor="#CD534B" />
                 </linearGradient>
               </defs>
               <path d={`M ${GAUGE_CX-GAUGE_R} ${GAUGE_CY} A ${GAUGE_R} ${GAUGE_RY} 0 0 1 ${GAUGE_CX+GAUGE_R} ${GAUGE_CY}`} fill="none" stroke="currentColor" className="text-tech-700" strokeWidth={GAUGE_STROKE} strokeLinecap="round" />
@@ -218,7 +210,7 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
         </div>
         <div className="flex-1 relative w-full flex justify-center items-end pb-1">
             <svg viewBox="0 0 200 125" className="w-full h-full overflow-visible" preserveAspectRatio="xMidYMax meet">
-                <defs><linearGradient id="lsrGradient" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#ef4444" /><stop offset="50%" stopColor="#eab308" /><stop offset="100%" stopColor="#22c55e" /></linearGradient></defs>
+                <defs><linearGradient id="lsrGradient" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#CD534B" /><stop offset="50%" stopColor="#eab308" /><stop offset="100%" stopColor="#548f3f" /></linearGradient></defs>
                 <path d={`M ${GAUGE_CX-GAUGE_R} ${GAUGE_CY} A ${GAUGE_R} ${GAUGE_RY} 0 0 1 ${GAUGE_CX+GAUGE_R} ${GAUGE_CY}`} fill="none" stroke="currentColor" className="text-tech-700" strokeWidth={GAUGE_STROKE} strokeLinecap="round" />
                 <path d={`M ${GAUGE_CX-GAUGE_R} ${GAUGE_CY} A ${GAUGE_R} ${GAUGE_RY} 0 0 1 ${GAUGE_CX+GAUGE_R} ${GAUGE_CY}`} fill="none" stroke="url(#lsrGradient)" strokeWidth={GAUGE_STROKE} strokeLinecap="round" />
                 <g transform={`rotate(${rotation} ${GAUGE_CX} ${GAUGE_CY})`}>
@@ -286,9 +278,9 @@ const MarketCapHistoryWidget = ({ language, onNavigate }: { language: Language; 
       <div className="relative flex-1 bg-tech-900/50 rounded-lg mb-1 overflow-hidden">
         <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data?.history || []}>
-                <defs><linearGradient id="colorMkt" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#22c55e" stopOpacity={0.3}/><stop offset="95%" stopColor="#22c55e" stopOpacity={0}/></linearGradient></defs>
-                <Tooltip content={<CustomTooltip language={language} prefix="$" />} cursor={{ stroke: '#22c55e', strokeWidth: 1 }} />
-                <Area type="monotone" dataKey="value" stroke="#22c55e" fill="url(#colorMkt)" strokeWidth={1} />
+                <defs><linearGradient id="colorMkt" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#548f3f" stopOpacity={0.3}/><stop offset="95%" stopColor="#548f3f" stopOpacity={0}/></linearGradient></defs>
+                <Tooltip content={<CustomTooltip language={language} prefix="$" />} cursor={{ stroke: '#548f3f', strokeWidth: 1 }} />
+                <Area type="monotone" dataKey="value" stroke="#548f3f" fill="url(#colorMkt)" strokeWidth={1} />
             </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -309,10 +301,10 @@ const EtfFlowWidget = ({ language, onNavigate }: { language: Language; onNavigat
                 <WorkspaceLink onClick={onNavigate} />
             </div>
             <div className="flex-1 flex flex-col items-center justify-center py-2">
-                <div className={`text-[11px] font-black uppercase tracking-widest ${data.net >= 0 ? 'text-green-500' : 'text-red-500'}`}>{t.netFlow}</div>
+                <div className={`text-[11px] font-black uppercase tracking-widest ${data.net >= 0 ? 'text-tech-success' : 'text-tech-danger'}`}>{t.netFlow}</div>
                 <div className="flex items-center gap-1">
-                    {data.net >= 0 ? <ArrowUp size={24} className="text-green-500"/> : <ArrowDown size={24} className="text-red-500"/>}
-                    <span className={`text-2xl font-mono font-black ${data.net >= 0 ? 'text-green-500' : 'text-red-500'}`}>{formatNet(data.net)}</span>
+                    {data.net >= 0 ? <ArrowUp size={24} className="text-tech-success"/> : <ArrowDown size={24} className="text-tech-danger"/>}
+                    <span className={`text-2xl font-mono font-black ${data.net >= 0 ? 'text-tech-success' : 'text-tech-danger'}`}>{formatNet(data.net)}</span>
                 </div>
             </div>
             <div className="grid grid-cols-2 gap-1 border-t border-tech-700/50 pt-2">
@@ -336,7 +328,7 @@ const TrumpOMeterWidget = ({ language, onNavigate }: { language: Language; onNav
                 <div className="text-left font-black text-base uppercase tracking-wider">{t.title}</div>
                 <WorkspaceLink onClick={onNavigate} />
             </div>
-            <div className="relative h-2 w-full rounded-full bg-gradient-to-r from-red-500 via-yellow-500 to-green-500 mt-4 mb-5">
+            <div className="relative h-2 w-full rounded-full bg-gradient-to-r from-[#CD534B] via-yellow-500 to-[#548f3f] mt-4 mb-5">
                 <div className="absolute w-0 h-0 border-l-[5px] border-r-[5px] border-b-[6px] border-b-tech-950 transition-all duration-700" style={{ left: `calc(${percent}% - 5px)`, top: '100%' }}></div>
             </div>
             <div className="text-center mb-1 shrink-0 text-[11px] font-black uppercase text-[#dd9933]">{data.sarcastic_label}</div>
@@ -357,8 +349,8 @@ const GainersLosersWidget = ({ language, onNavigate }: { language: Language; onN
     return (
         <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700">
             <div className="flex bg-tech-900 rounded p-1 mb-2">
-                <button onClick={() => setTab('gainers')} className={`flex-1 py-1 text-sm font-black uppercase rounded ${tab==='gainers'?'bg-green-500 text-black':'text-gray-500'}`}>{t.gainers}</button>
-                <button onClick={() => setTab('losers')} className={`flex-1 py-1 text-sm font-black uppercase rounded ${tab==='losers'?'bg-red-500 text-black':'text-gray-500'}`}>{t.losers}</button>
+                <button onClick={() => setTab('gainers')} className={`flex-1 py-1 text-sm font-black uppercase rounded ${tab==='gainers'?'bg-tech-success text-black':'text-gray-500'}`}>{t.gainers}</button>
+                <button onClick={() => setTab('losers')} className={`flex-1 py-1 text-sm font-black uppercase rounded ${tab==='losers'?'bg-tech-danger text-black':'text-gray-500'}`}>{t.losers}</button>
                 <WorkspaceLink onClick={onNavigate} />
             </div>
             <div className="flex-1 flex flex-col gap-1 overflow-y-auto custom-scrollbar">
@@ -368,7 +360,7 @@ const GainersLosersWidget = ({ language, onNavigate }: { language: Language; onN
                             <img src={coin.image} className="w-7 h-7 rounded-full" alt="" />
                             <div className="flex flex-col"><span className="text-lg font-black text-white leading-none">{coin.symbol?.toUpperCase()}</span><span className="text-[11px] text-gray-500 font-mono">${(coin.current_price ?? 0).toFixed(4)}</span></div>
                         </div>
-                        <div className={`text-lg font-black font-mono ${(coin.price_change_percentage_24h ?? 0) >=0 ?'text-green-400':'text-red-400'}`}>{(coin.price_change_percentage_24h ?? 0).toFixed(2)}%</div>
+                        <div className={`text-lg font-black font-mono ${(coin.price_change_percentage_24h ?? 0) >=0 ?'text-tech-success':'text-tech-danger'}`}>{(coin.price_change_percentage_24h ?? 0).toFixed(2)}%</div>
                     </div>
                 ))}
             </div>
@@ -394,7 +386,7 @@ const MarketCapWidget = ({ language, onNavigate }: { language: Language; onNavig
                         </div>
                         <div className="text-right">
                             <div className="text-lg font-black text-white font-mono">${(coin.current_price ?? 0).toLocaleString()}</div>
-                            <div className={`text-[11px] font-black font-mono ${(coin.price_change_percentage_24h ?? 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>{(coin.price_change_percentage_24h ?? 0).toFixed(2)}%</div>
+                            <div className={`text-[11px] font-black font-mono ${(coin.price_change_percentage_24h ?? 0) >= 0 ? 'text-tech-success' : 'text-tech-danger'}`}>{(coin.price_change_percentage_24h ?? 0).toFixed(2)}%</div>
                         </div>
                     </div>
                 ))}
@@ -417,7 +409,7 @@ const EconomicCalendarWidget = ({ language, onNavigate }: { language: Language; 
     }, []);
 
     const filteredEvents = events.filter(e => filter === 'ALL' || e.country === filter).slice(0, 15);
-    const getImpactColor = (imp: string) => imp === 'High' ? 'bg-red-500' : imp === 'Medium' ? 'bg-orange-500' : 'bg-yellow-500';
+    const getImpactColor = (imp: string) => imp === 'High' ? 'bg-tech-danger' : imp === 'Medium' ? 'bg-orange-500' : 'bg-yellow-500';
     const getFlag = (c: string) => c === 'BRL' ? "https://hatscripts.github.io/circle-flags/flags/br.svg" : "https://hatscripts.github.io/circle-flags/flags/us.svg";
 
     return (
