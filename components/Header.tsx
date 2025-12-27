@@ -26,6 +26,7 @@ import {
 import { ViewMode, Language } from '../types';
 import { UserData } from '../services/auth';
 import { getTranslations, LANGUAGES_CONFIG } from '../locales';
+import { fetchTopCoins } from '../pages/Workspace/services/api';
 
 const TICKER_COINS = [
   'BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'DOGE', 'ADA', 'AVAX', 'SHIB', 'DOT', 
@@ -35,14 +36,16 @@ const TICKER_COINS = [
 ];
 
 interface TickerData { p: string; rawPrice: number; c: number; v: string; }
-interface CoinMeta { name: string; supply: number; }
+interface CoinMeta { name: string; mcap: number; rank: number; }
+interface TooltipData { visible: boolean; x: number; y: number; symbol: string; data: TickerData | null; meta: CoinMeta | null; }
 
-const FALLBACK_META: Record<string, CoinMeta> = {
-  BTC: { name: 'Bitcoin', supply: 19688000 },
-  ETH: { name: 'Ethereum', supply: 120070000 },
+const formatUSD = (val: number) => {
+    if (!val) return "---";
+    if (val >= 1e12) return `$${(val / 1e12).toFixed(2)}T`;
+    if (val >= 1e9) return `$${(val / 1e9).toFixed(2)}B`;
+    if (val >= 1e6) return `$${(val / 1e6).toFixed(2)}M`;
+    return `$${val.toLocaleString()}`;
 };
-
-interface TooltipData { visible: boolean; x: number; y: number; symbol: string; data: TickerData; meta: CoinMeta; }
 
 const TickerItem: React.FC<{ symbol: string; data: TickerData; meta: CoinMeta; onHover: any; onLeave: any; }> = ({ symbol, data, meta, onHover, onLeave }) => {
   const { p, c } = data;
@@ -50,7 +53,12 @@ const TickerItem: React.FC<{ symbol: string; data: TickerData; meta: CoinMeta; o
   const isPositive = c >= 0;
   const iconUrl = `https://assets.coincap.io/assets/icons/${symbol.toLowerCase()}@2x.png`;
   return (
-    <div className="relative flex items-center h-full px-4 border-r border-transparent dark:border-tech-800/50 min-w-[200px] hover:bg-gray-100 dark:hover:bg-tech-800 transition-colors cursor-pointer select-none shrink-0 group/item" onMouseEnter={(e) => onHover(e, symbol, data, meta)} onMouseLeave={onLeave}>
+    <div 
+      className="relative flex items-center h-full px-4 border-r border-transparent dark:border-tech-800/50 min-w-[200px] hover:bg-gray-100 dark:hover:bg-tech-800 transition-colors cursor-pointer select-none shrink-0 group/item" 
+      onMouseEnter={(e) => onHover(e, symbol, data, meta)} 
+      onMouseMove={(e) => onHover(e, symbol, data, meta)}
+      onMouseLeave={onLeave}
+    >
         <img src={iconUrl} alt={symbol} className="w-6 h-6 rounded-full shrink-0 mr-2" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
         <div className="flex items-baseline gap-2 mr-auto">
             <span className="text-gray-900 dark:text-gray-200 font-bold text-sm tracking-tight">{symbol}</span>
@@ -77,20 +85,35 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [analysisExpanded, setAnalysisExpanded] = useState(false);
   const [isLangMenuOpen, setIsLangMenuOpen] = useState(false);
-  const [hoveredLangOption, setHoveredLangOption] = useState<string | null>(null);
   const [isUserMenuOpen, setUserMenuOpen] = useState(false);
   
-  const [tooltip, setTooltip] = useState<TooltipData>({ visible: false, x: 0, y: 0, symbol: '', data: { p: '', c: 0, v: '', rawPrice: 0 }, meta: { name: '', supply: 0 } });
+  const [tooltip, setTooltip] = useState<TooltipData>({ 
+    visible: false, x: 0, y: 0, symbol: '', 
+    data: null, 
+    meta: null 
+  });
 
   const userMenuRef = useRef<HTMLDivElement | null>(null);
   const langMenuRef = useRef<HTMLDivElement | null>(null);
   const langTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const closeTooltip = () => setTooltip(prev => ({ ...prev, visible: false }));
-
-  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && searchTerm.trim()) { onSearch(searchTerm.trim()); setIsMenuOpen(false); }
-  };
+  useEffect(() => {
+    fetchTopCoins().then(coins => {
+      if (coins && coins.length > 0) {
+        const meta: Record<string, CoinMeta> = {};
+        coins.forEach(c => {
+          if (c.symbol) {
+            meta[c.symbol.toUpperCase()] = {
+              name: c.name || c.symbol,
+              mcap: c.market_cap || 0,
+              rank: c.market_cap_rank || 0
+            };
+          }
+        });
+        setCoinMeta(meta);
+      }
+    });
+  }, []);
 
   useEffect(() => {
     const ws = new WebSocket('wss://stream.binance.com:9443/ws/!miniTicker@arr');
@@ -104,7 +127,12 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
               const symbol = t.s.replace('USDT', '');
               if (TICKER_COINS.includes(symbol)) {
                 const close = parseFloat(t.c), open = parseFloat(t.o);
-                updates[symbol] = { p: close < 1 ? close.toFixed(4) : close.toLocaleString('en-US', { style: 'currency', currency: 'USD' }), rawPrice: close, c: open > 0 ? ((close - open) / open) * 100 : 0, v: '$' + (parseFloat(t.q) / 1e6).toFixed(1) + 'M' };
+                updates[symbol] = { 
+                    p: close < 1 ? close.toFixed(4) : close.toLocaleString('en-US', { style: 'currency', currency: 'USD' }), 
+                    rawPrice: close, 
+                    c: open > 0 ? ((close - open) / open) * 100 : 0, 
+                    v: '$' + (parseFloat(t.q) / 1e6).toFixed(1) + 'M' 
+                };
               }
             }
           });
@@ -115,12 +143,22 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
     return () => ws.close();
   }, []);
 
-  const getLanguageTooltipText = (langCode: string) => {
-      if (langCode === 'pt') return "";
-      return langCode === 'en' 
-        ? "Original content is in Portuguese." 
-        : "El contenido original está en portugués.";
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && searchTerm.trim()) { onSearch(searchTerm.trim()); setIsMenuOpen(false); }
   };
+
+  const handleTickerHover = (e: React.MouseEvent, symbol: string, data: TickerData, meta: CoinMeta) => {
+    setTooltip({
+        visible: true,
+        x: e.clientX,
+        y: e.clientY + 20, 
+        symbol,
+        data,
+        meta: meta || { name: symbol, mcap: 0, rank: 0 }
+    });
+  };
+
+  const hideTooltip = () => setTooltip({ visible: false, x: 0, y: 0, symbol: '', data: null, meta: null });
 
   const menuAnalysis = [
     { label: t.cockpit, mode: ViewMode.COCKPIT, img: 'https://images.unsplash.com/photo-1640340434855-6084b1f4901c?auto=format&fit=crop&q=80&w=600' }, 
@@ -138,29 +176,73 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
   ];
 
   const handleLangEnter = () => { if (langTimeoutRef.current) clearTimeout(langTimeoutRef.current); setIsLangMenuOpen(true); };
-  const handleLangLeave = () => { langTimeoutRef.current = setTimeout(() => { setIsLangMenuOpen(false); setHoveredLangOption(null); }, 500); };
+  const handleLangLeave = () => { langTimeoutRef.current = setTimeout(() => { setIsLangMenuOpen(false); }, 500); };
 
   const TickerList = () => (
     <div className="flex items-center">
-      {TICKER_COINS.map(s => <TickerItem key={s} symbol={s} data={tickers[s] || { p: '---', c: 0, v: '-', rawPrice: 0 }} meta={coinMeta[s] || { name: s, supply: 0 }} onHover={(e:any, sym:any, d:any, m:any) => setTooltip({ visible: true, x: e.currentTarget.getBoundingClientRect().left + 100, y: e.currentTarget.getBoundingClientRect().bottom, symbol: sym, data: d, meta: m })} onLeave={closeTooltip} />)}
+      {TICKER_COINS.map(s => (
+        <TickerItem 
+          key={s} 
+          symbol={s} 
+          data={tickers[s] || { p: '---', c: 0, v: '-', rawPrice: 0 }} 
+          meta={coinMeta[s] || { name: s, mcap: 0, rank: 0 }} 
+          onHover={handleTickerHover} 
+          onLeave={hideTooltip} 
+        />
+      ))}
     </div>
   );
 
   return (
     <>
-      {/* GLOBAL TICKER TOOLTIP */}
-      <div className={`fixed z-[1100] pointer-events-none transition-opacity duration-200 ${tooltip.visible ? 'opacity-100' : 'opacity-0'}`} style={{ top: `${tooltip.y}px`, left: `${tooltip.x}px`, transform: 'translateX(-50%)' }}>
-         <div className="mt-2 w-64 bg-white dark:bg-tech-800 border border-gray-200 dark:border-tech-700 shadow-xl rounded-lg p-4">
-              <div className="flex items-center gap-3 mb-3 border-b border-gray-200 dark:border-tech-700 pb-2">
-                 <img src={`https://assets.coincap.io/assets/icons/${tooltip.symbol.toLowerCase()}@2x.png`} className="w-8 h-8 rounded-full" alt="" />
-                 <div className="text-sm font-bold text-gray-900 dark:text-gray-200">{tooltip.meta.name || tooltip.symbol}</div>
-              </div>
-              <div className="space-y-2">
-                 <div className="flex justify-between items-center"><span className="text-gray-500 text-[10px] uppercase">Preço</span><span className="font-bold font-mono">{tooltip.data.p}</span></div>
-                 <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-tech-700 mt-2"><span className="text-gray-500 text-[10px] uppercase">Variação</span><span className={`font-bold font-mono ${tooltip.data.c >= 0 ? 'text-tech-success' : 'text-tech-danger'}`}>{tooltip.data.c.toFixed(2)}%</span></div>
-              </div>
-         </div>
-      </div>
+      {/* ENRICHED TOOLTIP - FIXO E SEGUIDOR */}
+      {tooltip.visible && tooltip.data && (
+        <div 
+            className="fixed z-[9999] pointer-events-none animate-in fade-in zoom-in-95 duration-75" 
+            style={{ 
+                top: `${tooltip.y}px`, 
+                left: `${Math.min(window.innerWidth - 270, Math.max(10, tooltip.x - 128))}px` 
+            }}
+        >
+            <div className="w-64 bg-white dark:bg-[#1a1c1e] border border-gray-200 dark:border-tech-800 shadow-2xl rounded-xl p-4 overflow-hidden">
+                <div className="flex items-center gap-3 mb-3 border-b border-gray-100 dark:border-tech-800 pb-3">
+                    <div className="relative">
+                        <img src={`https://assets.coincap.io/assets/icons/${tooltip.symbol.toLowerCase()}@2x.png`} className="w-10 h-10 rounded-full bg-white p-0.5 border border-gray-100 dark:border-tech-700" alt="" />
+                        <span className="absolute -top-1 -right-1 bg-tech-accent text-black text-[8px] font-black w-4 h-4 flex items-center justify-center rounded-full shadow">#{tooltip.meta?.rank || '?'}</span>
+                    </div>
+                    <div className="flex flex-col">
+                        <div className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tighter leading-none">{tooltip.meta?.name || tooltip.symbol}</div>
+                        <div className="text-[10px] font-bold text-tech-accent uppercase mt-1">{tooltip.symbol}/USDT</div>
+                    </div>
+                </div>
+                <div className="grid grid-cols-2 gap-y-3 gap-x-4">
+                    <div className="flex flex-col">
+                        <span className="text-gray-500 dark:text-gray-500 text-[8px] font-black uppercase tracking-widest">Price</span>
+                        <span className="font-bold font-mono text-xs dark:text-white">{tooltip.data.p}</span>
+                    </div>
+                    <div className="flex flex-col text-right">
+                        <span className="text-gray-500 dark:text-gray-500 text-[8px] font-black uppercase tracking-widest">Change 24h</span>
+                        <span className={`font-bold font-mono text-xs ${tooltip.data.c >= 0 ? 'text-tech-success' : 'text-tech-danger'}`}>
+                            {tooltip.data.c >= 0 ? '+' : ''}{tooltip.data.c.toFixed(2)}%
+                        </span>
+                    </div>
+                    <div className="flex flex-col">
+                        <span className="text-gray-500 dark:text-gray-500 text-[8px] font-black uppercase tracking-widest">Market Cap</span>
+                        <span className="font-bold font-mono text-xs text-blue-400">{formatUSD(tooltip.meta?.mcap || 0)}</span>
+                    </div>
+                    <div className="flex flex-col text-right">
+                        <span className="text-gray-500 dark:text-gray-500 text-[8px] font-black uppercase tracking-widest">Volume (Daily)</span>
+                        <span className="font-bold font-mono text-xs text-[#dd9933]">{tooltip.data.v}</span>
+                    </div>
+                </div>
+                <div className="mt-3 pt-3 border-t border-gray-100 dark:border-tech-800 flex justify-center">
+                    <div className="text-[8px] font-black text-gray-400 dark:text-gray-600 uppercase tracking-[0.2em] flex items-center gap-1.5 animate-pulse">
+                        <span className="w-1.5 h-1.5 rounded-full bg-tech-success"></span> Live Binance Data
+                    </div>
+                </div>
+            </div>
+        </div>
+      )}
 
       {/* MOBILE DRAWER */}
       {isMenuOpen && (
@@ -199,7 +281,6 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
                      <button onClick={() => { setView(ViewMode.ACADEMY); setIsMenuOpen(false); }} className="w-full text-left text-2xl font-black text-gray-800 dark:text-gray-200 hover:text-[#dd9933] flex items-center gap-3 transition-colors"><BarChart3 size={24}/> {t.academy}</button>
                   </div>
                   
-                  {/* COMPACT SOCIAL LINE IN DRAWER */}
                   <div className="pt-6 border-t border-gray-100 dark:border-tech-800">
                       <p className="text-[10px] font-black uppercase text-gray-400 tracking-[0.2em] mb-4">Conecte-se</p>
                       <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
@@ -244,7 +325,10 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
       <header className="fixed top-0 left-0 right-0 z-[1000] w-full flex flex-col shadow-lg transition-all duration-700">
         
         {/* UPPER TICKER BAR */}
-        <div className="bg-white dark:bg-tech-950 border-b border-transparent dark:border-tech-800 h-14 flex items-center overflow-hidden w-full relative transition-colors duration-700 shadow-sm">
+        <div 
+          className="bg-white dark:bg-tech-950 border-b border-transparent dark:border-tech-800 h-14 flex items-center overflow-hidden w-full relative transition-colors duration-700 shadow-sm"
+          onMouseLeave={hideTooltip}
+        >
           <div className="animate-scroll flex items-center w-max will-change-transform"><TickerList /><TickerList /></div>
           <div className="absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-white dark:from-tech-950 to-transparent z-10 pointer-events-none"></div>
           <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-white dark:from-tech-950 to-transparent z-10 pointer-events-none"></div>
@@ -254,7 +338,6 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
         <div className="bg-[#f3f4f6] dark:bg-tech-900 relative z-20 transition-colors duration-700 h-24">
           <div className="container mx-auto px-4 h-full flex items-center justify-between relative">
             
-            {/* LOGO SECTION */}
             <div className="flex items-center z-30 md:absolute md:left-1/2 md:-translate-x-1/2 xl:relative xl:left-0 xl:translate-x-0">
               <div className="flex items-center cursor-pointer group" onClick={() => setView(ViewMode.DASHBOARD)}>
                 <img src="https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png" alt="Central Crypto" className="h-14 md:h-16 w-auto object-contain drop-shadow-[0_0_15px_rgba(221,153,51,0.2)]" />
@@ -264,7 +347,6 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
                 </div>
               </div>
 
-              {/* SOCIAL LEQUE (DESKTOP) */}
               <div className="hidden xl:flex items-center ml-8 gap-4">
                   <div className="h-12 w-px bg-gray-300 dark:bg-tech-800 mx-2"></div>
                   <div className="relative group z-50 w-12 h-12"> 
@@ -291,12 +373,10 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
               </div>
             </div>
 
-            {/* MOBILE MENU TRIGGER */}
             <div className="xl:hidden flex items-center z-40">
                 <button onClick={() => setIsMenuOpen(true)} className="p-3.5 bg-white dark:bg-tech-800 rounded-2xl text-tech-accent shadow-xl border border-gray-200 dark:border-tech-700 active:scale-90 transition-transform"><Menu size={26} /></button>
             </div>
 
-            {/* CENTER NAV (DESKTOP) */}
             <nav className="hidden xl:flex items-center absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 h-full z-10">
               <div className="relative group h-full flex items-center px-6 cursor-pointer">
                   <div onClick={() => setView(ViewMode.DASHBOARD)} className="flex items-center gap-2 text-xl font-black text-gray-800 dark:text-gray-300 hover:text-tech-accent transition-all tracking-widest uppercase">
@@ -318,10 +398,7 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
               <div onClick={() => setView(ViewMode.ACADEMY)} className="relative group h-full flex items-center px-6 cursor-pointer transition-all hover:scale-105"><div className="text-xl font-black text-gray-800 dark:text-gray-300 hover:text-tech-accent transition-all tracking-widest uppercase">{t.academy}</div></div>
             </nav>
 
-            {/* RIGHT TOOLS (DESKTOP) */}
             <div className="hidden xl:flex items-center gap-5 z-30">
-               
-               {/* EXPANDING SEARCH TO THE LEFT */}
                <div className="group/search flex items-center bg-gray-200/50 dark:bg-tech-800/80 border border-transparent dark:border-tech-700 rounded-full px-3 py-2 transition-all duration-500 shadow-inner hover:ring-2 hover:ring-[#dd9933]/20">
                  <input 
                     type="text" 
@@ -334,34 +411,24 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
                  <Search size={18} className="text-[#dd9933] cursor-pointer group-hover/search:scale-110 transition-transform order-2" onClick={() => onSearch(searchTerm)} />
                </div>
                
-               {/* LANGUAGE SELECTOR */}
                <div className="relative" onMouseEnter={handleLangEnter} onMouseLeave={handleLangLeave} ref={langMenuRef}>
                   <button className="bg-white hover:bg-gray-100 dark:bg-tech-800 dark:hover:bg-tech-700 p-2.5 rounded-full border border-transparent dark:border-tech-700 shadow-sm flex items-center justify-center transition-all hover:scale-110 active:scale-95"><Flag lang={language} /></button>
                   <div className={`absolute top-full right-0 mt-2 w-44 transition-all duration-300 origin-top-right transform ${isLangMenuOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'}`}>
                       <div className="bg-white dark:bg-tech-900 border border-gray-200 dark:border-tech-700 rounded-2xl shadow-2xl overflow-hidden py-1.5">
                           {LANGUAGES_CONFIG.map((config) => (
                               <div key={config.code} className="relative px-1">
-                                  <button onClick={() => { onLanguageChange(config.code); setIsLangMenuOpen(false); }} className={`flex items-center gap-3 px-4 py-2 text-xs w-full rounded-xl transition-colors ${language === config.code ? 'bg-[#dd9933]/10 font-black text-tech-accent' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-tech-800'}`} onMouseEnter={() => setHoveredLangOption(config.code)} onMouseLeave={() => setHoveredLangOption(null)}>
+                                  <button onClick={() => { onLanguageChange(config.code); setIsLangMenuOpen(false); }} className={`flex items-center gap-3 px-4 py-2 text-xs w-full rounded-xl transition-colors ${language === config.code ? 'bg-[#dd9933]/10 font-black text-tech-accent' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-tech-800'}`}>
                                       <img src={config.flag} className="w-5 h-5 rounded-full object-cover shadow-sm" />
                                       <span className="uppercase font-bold tracking-widest">{config.code}</span>
                                   </button>
-                                  {/* LANGUAGE TOOLTIP BALOON */}
-                                  {hoveredLangOption === config.code && config.code !== 'pt' && (
-                                      <div className="absolute right-full top-0 mr-4 w-48 p-3 bg-[#dd9933] text-black text-[10px] font-black leading-tight rounded-xl shadow-2xl animate-in fade-in slide-in-from-right-2 z-[60]">
-                                          {getLanguageTooltipText(config.code)}
-                                          <div className="absolute top-4 -right-1.5 w-3 h-3 bg-[#dd9933] rotate-45"></div>
-                                      </div>
-                                  )}
                               </div>
                           ))}
                       </div>
                   </div>
                </div>
 
-               {/* THEME TOGGLE */}
                <button onClick={toggleTheme} className="bg-white dark:bg-tech-800 text-tech-accent p-2.5 rounded-full border border-transparent dark:border-tech-700 shadow-md hover:scale-110 active:scale-95 transition-transform">{theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}</button>
 
-               {/* USER MENU */}
                <div className="flex items-center gap-3 border-l border-gray-300 dark:border-tech-800 pl-5">
                   {user ? (
                     <div className="relative" ref={userMenuRef}>
