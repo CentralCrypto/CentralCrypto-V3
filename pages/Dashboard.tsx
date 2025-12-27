@@ -18,11 +18,8 @@ import {
     fetchLongShortRatio,
     fetchEtfFlow,
     fetchMarketCapHistory,
-    MktCapHistoryData,
     fetchEconomicCalendar,
-    EconEvent,
-    fetchFearAndGreed,
-    FngData
+    fetchFearAndGreed
 } from './Workspace/services/api';
 
 interface DashboardProps {
@@ -62,17 +59,14 @@ const TEXT_LBL_Y = 118;
 const GAUGE_STROKE = 7; 
 
 const FearAndGreedWidget = ({ language, onNavigate }: { language: Language; onNavigate: () => void }) => {
-  const [data, setData] = useState<FngData[]>([]);
+  const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const t = getTranslations(language).dashboard.widgets.fng;
   const timeT = getTranslations(language).dashboard.widgets.time;
 
   useEffect(() => {
     fetchFearAndGreed().then(res => {
-      // Ajuste para lidar com a estrutura correta do array retornado pela API
-      if (res && Array.isArray(res)) {
-          setData(res);
-      }
+      if (res && Array.isArray(res)) setData(res);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
@@ -80,14 +74,13 @@ const FearAndGreedWidget = ({ language, onNavigate }: { language: Language; onNa
   const current = data[0];
   const val = current ? (parseInt(current.value) || 50) : 50;
   
-  // Lógica de classificação sarcástica centralizada
   const getSarcasticLabel = (v: number) => {
-    if (v <= 25) return t.s0; // Cagaço extremo
-    if (v <= 45) return t.s1; // Rebosteio
-    if (v <= 55) return t.s2; // Andando de lado
-    if (v <= 75) return t.s3; // Agora vai
-    if (v <= 94) return t.s4; // É luaaaa!
-    return t.s5; // Vende a mãe!
+    if (v <= 25) return t.s0; 
+    if (v <= 45) return t.s1; 
+    if (v <= 55) return t.s2; 
+    if (v <= 75) return t.s3; 
+    if (v <= 94) return t.s4; 
+    return t.s5; 
   };
 
   const classification = getSarcasticLabel(val);
@@ -126,11 +119,7 @@ const FearAndGreedWidget = ({ language, onNavigate }: { language: Language; onNa
            </div>
            <HorizontalHistoryRow 
              labels={[timeT.yesterday, timeT.d7, timeT.d30]} 
-             data={[
-                 data[1]?.value || '-', 
-                 data[7]?.value || '-', 
-                 data[29]?.value || '-'
-             ]} 
+             data={[data[1]?.value || '-', data[7]?.value || '-', data[29]?.value || '-']} 
            />
         </>
       )}
@@ -191,7 +180,7 @@ const RsiWidget = ({ language, onNavigate }: { language: Language; onNavigate: (
 const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; onNavigate: () => void }) => {
   const [symbol, setSymbol] = useState('BTCUSDT');
   const [period, setPeriod] = useState('5m');
-  const [data, setData] = useState<{lsr: number, longs: number, shorts: number} | null>(null);
+  const [data, setData] = useState<any>(null);
   const t = getTranslations(language).dashboard.widgets.lsr;
 
   useEffect(() => {
@@ -232,13 +221,19 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
 };
 
 const AltSeasonWidget = ({ language, onNavigate }: { language: Language; onNavigate: () => void }) => {
-  const [data, setData] = useState({ index: 50, yesterday: 50, lastWeek: 50, lastMonth: 50, history: [] });
+  const [data, setData] = useState({ index: 0, yesterday: 0, lastWeek: 0, lastMonth: 0, history: [] });
   const [loading, setLoading] = useState(true);
   const t = getTranslations(language).dashboard.widgets.altseason;
 
   useEffect(() => {
     Promise.all([fetchAltcoinSeason(), fetchAltcoinSeasonHistory()]).then(([curr, hist]) => {
-      if (curr) setData({ ...curr, history: (hist || []) as any });
+      if (curr) {
+          const mappedHist = (hist || []).map(p => ({
+              date: p.timestamp,
+              value: p.altcoinIndex
+          }));
+          setData({ ...curr, history: mappedHist as any });
+      }
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
@@ -249,9 +244,11 @@ const AltSeasonWidget = ({ language, onNavigate }: { language: Language; onNavig
         <div className="flex flex-col"><span className="font-bold text-[10px] text-gray-400 uppercase tracking-wider">{t.title}</span><span className="text-[10px] font-bold text-gray-200">Index</span></div>
         <div className="text-right flex items-start gap-2"><span className="text-2xl font-bold text-gray-200 font-mono">{data.index ?? 0}</span><WorkspaceLink onClick={onNavigate} /></div>
       </div>
-      <div className="relative flex-1 bg-tech-900/50 rounded-lg mb-1">
+      <div className="relative flex-1 bg-tech-900/50 rounded-lg mb-1 overflow-hidden">
         <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data.history}><Line type="monotone" dataKey="value" stroke="#dd9933" strokeWidth={2} dot={false} /></LineChart>
+            <LineChart data={data.history} margin={{top:5, right:5, left:5, bottom:5}}>
+                <Line type="monotone" dataKey="value" stroke="#dd9933" strokeWidth={1} dot={false} isAnimationActive={false} />
+            </LineChart>
         </ResponsiveContainer>
       </div>
       <HorizontalHistoryRow labels={[t.yesterday, t.week, t.month]} data={[data.yesterday ?? '-', data.lastWeek ?? '-', data.lastMonth ?? '-']} />
@@ -260,7 +257,7 @@ const AltSeasonWidget = ({ language, onNavigate }: { language: Language; onNavig
 };
 
 const MarketCapHistoryWidget = ({ language, onNavigate }: { language: Language; onNavigate: () => void }) => {
-  const [data, setData] = useState<MktCapHistoryData | null>(null);
+  const [data, setData] = useState<any>(null);
   const t = getTranslations(language).dashboard.widgets.mktcapHistory;
   useEffect(() => { fetchMarketCapHistory().then(setData).catch(() => setData(null)); }, []);
   const formatVal = (v?: number) => {
@@ -273,9 +270,9 @@ const MarketCapHistoryWidget = ({ language, onNavigate }: { language: Language; 
         <div className="flex flex-col"><span className="font-bold text-[10px] text-gray-400 uppercase tracking-wider">{t.title}</span><span className="text-[10px] font-bold text-gray-200">Global</span></div>
         <div className="text-right flex items-start gap-2"><span className="text-lg font-bold text-tech-accent font-mono">{data ? formatVal(data.current) : '---'}</span><WorkspaceLink onClick={onNavigate} /></div>
       </div>
-      <div className="relative flex-1 bg-tech-900/50 rounded-lg mb-1">
+      <div className="relative flex-1 bg-tech-900/50 rounded-lg mb-1 overflow-hidden">
         <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data?.history || []}><defs><linearGradient id="colorMkt" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#22c55e" stopOpacity={0.3}/><stop offset="95%" stopColor="#22c55e" stopOpacity={0}/></linearGradient></defs><Area type="monotone" dataKey="value" stroke="#22c55e" fill="url(#colorMkt)" strokeWidth={2} /></AreaChart>
+            <AreaChart data={data?.history || []}><defs><linearGradient id="colorMkt" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#22c55e" stopOpacity={0.3}/><stop offset="95%" stopColor="#22c55e" stopOpacity={0}/></linearGradient></defs><Area type="monotone" dataKey="value" stroke="#22c55e" fill="url(#colorMkt)" strokeWidth={1} /></AreaChart>
         </ResponsiveContainer>
       </div>
       <HorizontalHistoryRow labels={[t.yesterday, t.week, t.month]} data={[formatVal(data?.yesterday), formatVal(data?.lastWeek), formatVal(data?.lastMonth)]} />
@@ -312,9 +309,10 @@ const EtfFlowWidget = ({ language, onNavigate }: { language: Language; onNavigat
 const TrumpOMeterWidget = ({ language, onNavigate }: { language: Language; onNavigate: () => void }) => {
     const [data, setData] = useState<TrumpData | null>(null);
     const t = getTranslations(language).dashboard.widgets.trump;
-    useEffect(() => { fetchTrumpData().then(setData).catch(() => setData(null)); }, [language]);
+    useEffect(() => { fetchTrumpData().then(setData).catch(() => setData(null)); }, []);
     if (!data) return <div className="glass-panel p-4 rounded-xl h-full animate-pulse bg-tech-800 border-tech-700" />;
-    const percent = (data.impact_value ?? 0) + 50;
+    const percent = data.trump_rank_percent || 50;
+    const score = data.trump_rank_50 || 0;
     return (
         <div className="glass-panel p-2 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 relative">
             <div className="flex justify-between items-start mb-1 shrink-0">
@@ -324,13 +322,10 @@ const TrumpOMeterWidget = ({ language, onNavigate }: { language: Language; onNav
             <div className="relative h-2 w-full rounded-full bg-gradient-to-r from-red-500 via-yellow-500 to-green-500 mt-4 mb-5">
                 <div className="absolute w-0 h-0 border-l-[5px] border-r-[5px] border-b-[6px] border-b-tech-950 transition-all duration-700" style={{ left: `calc(${percent}% - 5px)`, top: '100%' }}></div>
             </div>
-            <div className="text-center mb-2 shrink-0 text-[10px] font-black uppercase" style={{ color: data.impact_color }}>{data.impact_label}</div>
-            <div className="flex-1 flex flex-col border border-dashed border-gray-600 rounded-lg p-1.5 bg-black/10 min-h-0 overflow-hidden" style={{ borderColor: data.impact_color }}>
-                <div className="flex items-center gap-2 mb-1 shrink-0">
-                    <img src={data.image_url} className="w-4 h-4 rounded-full" alt="" />
-                    <span className="text-[9px] font-bold text-gray-400 truncate">{data.author_name}</span>
-                </div>
-                <p className="text-[9px] text-gray-300 font-medium line-clamp-3">{data.post_text}</p>
+            <div className="text-center mb-1 shrink-0 text-[10px] font-black uppercase text-[#dd9933]">{data.sarcastic_label}</div>
+            <div className="text-center text-2xl font-black text-white leading-none mb-2">{score > 0 ? '+' : ''}{score}</div>
+            <div className="flex-1 flex flex-col border border-dashed border-gray-600 rounded-lg p-1.5 bg-black/10 min-h-0 overflow-hidden">
+                <p className="text-[9px] text-gray-300 font-medium line-clamp-3">{data.title}</p>
             </div>
         </div>
     );
@@ -392,7 +387,7 @@ const MarketCapWidget = ({ language, onNavigate }: { language: Language; onNavig
 };
 
 const EconomicCalendarWidget = ({ language, onNavigate }: { language: Language; onNavigate: () => void }) => {
-    const [events, setEvents] = useState<EconEvent[]>([]);
+    const [events, setEvents] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const t = getTranslations(language).dashboard.widgets.calendar;
     useEffect(() => { fetchEconomicCalendar().then(res => { if(res) setEvents(res.slice(0, 15)); setLoading(false); }).catch(() => setLoading(false)); }, []);

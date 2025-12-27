@@ -1,19 +1,17 @@
 
 /**
- * CENTRAL DE ENDPOINTS CCT - VERSÃO VPS
- * Configurado para buscar dados do domínio principal independente da origem do app.
+ * CENTRAL DE ENDPOINTS CCT - VERSÃO VPS (RELATIVE)
+ * Configurado para caminhos relativos que o Vite Proxy intercepta.
  */
-
-const BASE_ORIGIN = "https://centralcrypto.com.br"; 
 
 export const ENDPOINTS = {
   magazine: {
-    base: `${BASE_ORIGIN}/2`,
+    base: "/2",
     posts: "/wp-json/wp/v2/posts",
     categories: "/wp-json/wp/v2/categories"
   },
   cachecko: {
-    base: `${BASE_ORIGIN}/cachecko`,
+    base: "/cachecko",
     files: {
       global: "/cg_global.json",
       main: "/cachecko.json",

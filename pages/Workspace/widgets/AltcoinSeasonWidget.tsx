@@ -1,8 +1,8 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Loader2 } from 'lucide-react';
 import { ComposedChart, Area, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Brush } from 'recharts';
-import { AltSeasonData, fetchAltcoinSeason, fetchAltcoinSeasonHistory } from '../services/api';
+import { AltSeasonData, fetchAltcoinSeason, fetchAltcoinSeasonHistory, AltSeasonHistoryPoint } from '../services/api';
 import { DashboardItem, Language } from '../../../types';
 import { getTranslations } from '../../../locales';
 
@@ -16,21 +16,21 @@ const formatCompactNumber = (number: number) => {
   return shortValue + suffixes[suffixNum];
 };
 
-const CustomChartTooltip = ({ active, payload, labels }: any) => {
+const CustomChartTooltip = ({ active, payload, labels, language }: any) => {
     if (active && payload && payload.length) {
         const p = payload[0].payload;
         return (
-            <div className="bg-white dark:bg-[#2f3032] border border-gray-200 dark:border-slate-700 rounded-lg p-4 shadow-xl z-50">
-                <div className="text-sm text-gray-500 dark:text-gray-200 font-bold mb-2 border-b border-gray-200 dark:border-gray-600 pb-1">
-                    {new Date(p.date).toLocaleDateString(undefined, {year: 'numeric', month: 'long', day: 'numeric'})}
+            <div className="bg-white dark:bg-[#1a1c1e] border border-gray-200 dark:border-slate-700 rounded-lg p-4 shadow-xl z-50">
+                <div className="text-[10px] text-gray-500 dark:text-gray-400 font-black uppercase mb-2 border-b border-gray-100 dark:border-white/5 pb-1">
+                    {new Date(p.date).toLocaleDateString(language, {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'})}
                 </div>
                 {payload.map((entry: any) => (
                     <div key={entry.name} className="flex justify-between items-center gap-4 mb-1">
-                        <span className="text-sm text-gray-600 dark:text-gray-400 font-medium">
-                            {entry.name === 'value' ? `${labels.index}:` : `${labels.altsMcap}:`}
+                        <span className="text-[10px] text-gray-600 dark:text-gray-400 font-black uppercase">
+                            {entry.name === 'altcoinIndex' ? `${labels.index}:` : `${labels.altsMcap}:`}
                         </span>
-                        <span className="text-lg font-bold" style={{color: entry.color}}>
-                            {entry.name === 'value' ? entry.value : '$' + formatCompactNumber(entry.value)}
+                        <span className="text-base font-black" style={{color: entry.color}}>
+                            {entry.name === 'altcoinIndex' ? entry.value : '$' + formatCompactNumber(entry.value)}
                         </span>
                     </div>
                 ))}
@@ -42,7 +42,8 @@ const CustomChartTooltip = ({ active, payload, labels }: any) => {
 
 const AltcoinSeasonWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ item, language = 'pt' }) => {
     const [altSeason, setAltSeason] = useState<AltSeasonData | null>(null);
-    const [altHistory, setAltHistory] = useState<{date: number, value: number, marketCap?: number}[]>([]);
+    const [altHistory, setAltHistory] = useState<AltSeasonHistoryPoint[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
     const [showAsi, setShowAsi] = useState(true);
     const [showAltsMc, setShowAltsMc] = useState(true);
     
@@ -50,59 +51,61 @@ const AltcoinSeasonWidget: React.FC<{ item: DashboardItem, language?: Language }
     const tWs = getTranslations(language as Language).workspace.widgets.altseason;
 
     useEffect(() => {
-        fetchAltcoinSeason().then(setAltSeason);
-        if (item.isMaximized) {
-            fetchAltcoinSeasonHistory().then(setAltHistory);
-        }
-    }, [item.isMaximized]);
+        const load = async () => {
+            setIsLoading(true);
+            const [curr, hist] = await Promise.all([fetchAltcoinSeason(), fetchAltcoinSeasonHistory()]);
+            if (curr) setAltSeason(curr);
+            if (hist) setAltHistory(hist);
+            setIsLoading(false);
+        };
+        load();
+    }, []);
+
+    const chartSeries = useMemo(() => {
+        return altHistory.map(p => ({
+            date: p.timestamp * 1000,
+            altcoinIndex: p.altcoinIndex,
+            altcoinMarketcap: p.altcoinMarketcap
+        })).sort((a, b) => a.date - b.date);
+    }, [altHistory]);
 
     const Watermark = () => <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden opacity-[0.05] z-0"><img src="https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png" alt="watermark" className="w-3/4 h-auto grayscale filter" /></div>;
 
-    if (!altSeason) {
-        return <div className="flex items-center justify-center h-full text-gray-400 dark:text-slate-500"><Loader2 className="animate-spin" /></div>;
-    }
+    if (isLoading) return <div className="flex items-center justify-center h-full text-gray-400 dark:text-slate-500"><Loader2 className="animate-spin" /></div>;
+    if (!altSeason) return null;
 
     const asi = altSeason.index || 0;
-    let asiLabel = t.btcDomZone;
-    if (asi <= 25) asiLabel = t.bitcoinSeason;
-    else if (asi >= 75) asiLabel = t.altcoinSeason;
-    else if (asi > 45 && asi < 75) asiLabel = t.transition;
+    const seasonLabel = asi <= 25 ? t.bitcoinSeason : asi >= 75 ? t.altcoinSeason : t.transition;
 
     if (item.isMaximized) {
-        const dataToUse = altHistory.length > 0 
-            ? altHistory 
-            : [
-                { date: Date.now() - 30*24*3600*1000, value: altSeason?.lastMonth || 0, marketCap: 0 },
-                { date: Date.now() - 7*24*3600*1000, value: altSeason?.lastWeek || 0, marketCap: 0 },
-                { date: Date.now() - 24*3600*1000, value: altSeason?.yesterday || 0, marketCap: 0 },
-                { date: Date.now(), value: asi, marketCap: 0 }
-              ];
-
         return (
-            <div className="h-full flex flex-col p-4 relative bg-white dark:bg-[#2f3032]">
+            <div className="h-full flex flex-col p-4 relative bg-white dark:bg-[#1a1c1e]">
                 <Watermark />
-                <div className="z-10 mb-2 flex flex-col gap-2">
-                    <div className="w-full flex flex-col items-center justify-center">
-                        <div className="text-5xl font-black text-[#dd9933] text-center">{asi}</div>
-                        <div className="text-xl font-bold text-gray-900 dark:text-white uppercase text-center">{asiLabel}</div>
+                <div className="z-10 mb-2 flex flex-col items-start p-2">
+                    <div className="flex items-baseline gap-4">
+                        <span className="text-6xl font-black text-[#dd9933] leading-none font-mono">{asi}</span>
+                        <span className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-widest">{seasonLabel}</span>
                     </div>
-                    <div className="flex justify-end gap-4">
-                        <label className="flex items-center gap-2 text-sm text-gray-800 dark:text-white cursor-pointer select-none"><input type="checkbox" checked={showAsi} onChange={() => setShowAsi(!showAsi)} className="accent-[#dd9933]" />{tWs.index}</label>
-                        <label className="flex items-center gap-2 text-sm text-blue-500 dark:text-blue-400 cursor-pointer select-none"><input type="checkbox" checked={showAltsMc} onChange={() => setShowAltsMc(!showAltsMc)} className="accent-blue-500" />{tWs.altsMcap}</label>
+                    <div className="flex justify-between w-full mt-4 items-center">
+                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest border-l-2 border-[#dd9933] pl-2">Análise de Temporada de Altcoins (90d)</div>
+                        <div className="flex gap-4">
+                            <label className="flex items-center gap-2 text-xs font-bold text-gray-800 dark:text-gray-300 cursor-pointer"><input type="checkbox" checked={showAsi} onChange={() => setShowAsi(!showAsi)} className="accent-[#dd9933]" />{tWs.index}</label>
+                            <label className="flex items-center gap-2 text-xs font-bold text-blue-500 dark:text-blue-400 cursor-pointer"><input type="checkbox" checked={showAltsMc} onChange={() => setShowAltsMc(!showAltsMc)} className="accent-blue-500" />{tWs.altsMcap}</label>
+                        </div>
                     </div>
                 </div>
-                <div className="flex-1 min-h-0 w-full z-10">
+                <div className="flex-1 min-h-0 w-full z-10 mt-4">
                     <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart data={dataToUse} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                            <defs><linearGradient id="colorAlt" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#f97316" stopOpacity={0.8}/><stop offset="95%" stopColor="#3b82f6" stopOpacity={0.8}/></linearGradient></defs>
-                            <CartesianGrid strokeDasharray="3 3" className="stroke-gray-300 dark:stroke-slate-700" opacity={0.3} />
-                            <XAxis dataKey="date" type="number" domain={['dataMin', 'dataMax']} tick={{ fontSize: 12, fill: '#64748b' }} tickFormatter={(tick) => { const d = new Date(tick); const range = dataToUse[dataToUse.length-1].date - dataToUse[0].date; if (range > 365 * 24 * 3600 * 1000) return d.toLocaleDateString(undefined, {month: 'short', year: '2-digit'}); return d.toLocaleDateString(undefined, {month: 'short', day: 'numeric'}); }} scale="time" />
-                            <YAxis yAxisId="right" orientation="right" domain={[0, 100]} ticks={[0,25,50,75,100]} tick={{ fontSize: 12, fill: '#dd9933' }} stroke="#dd9933" hide={!showAsi} />
-                            <YAxis yAxisId="left" orientation="left" domain={['auto', 'auto']} tick={{ fontSize: 12, fill: '#60a5fa' }} tickFormatter={(val) => `$${formatCompactNumber(val)}`} stroke="#60a5fa" hide={!showAltsMc} />
-                            <Tooltip content={<CustomChartTooltip labels={tWs} />} cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '3 3' }} />
-                            {showAsi && (<Area yAxisId="right" type="monotone" dataKey="value" stroke="#dd9933" fill="url(#colorAlt)" strokeWidth={2} dot={false} name="value" />)}
-                            {showAltsMc && (<Line yAxisId="left" type="monotone" dataKey="marketCap" stroke="#60a5fa" strokeWidth={2} dot={false} name="marketCap" />)}
-                            <Brush dataKey="date" height={30} stroke="#dd9933" fill="transparent" tickFormatter={() => ''} opacity={0.5} />
+                        <ComposedChart data={chartSeries} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                            <defs><linearGradient id="colorAlt" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#dd9933" stopOpacity={0.4}/><stop offset="95%" stopColor="#dd9933" stopOpacity={0}/></linearGradient></defs>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-gray-100 dark:stroke-slate-800" vertical={false} />
+                            <XAxis dataKey="date" type="number" domain={['dataMin', 'dataMax']} hide />
+                            <YAxis yAxisId="right" orientation="right" domain={[0, 100]} ticks={[0,25,50,75,100]} tick={{ fontSize: 10, fill: '#dd9933', fontWeight: 'bold' }} stroke="#dd9933" axisLine={false} tickLine={false} hide={!showAsi} />
+                            <YAxis yAxisId="left" orientation="left" domain={['auto', 'auto']} tick={{ fontSize: 10, fill: '#3b82f6', fontWeight: 'bold' }} tickFormatter={(val) => `$${formatCompactNumber(val)}`} stroke="#3b82f6" axisLine={false} tickLine={false} hide={!showAltsMc} />
+                            <Tooltip content={<CustomChartTooltip labels={tWs} language={language} />} cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '3 3' }} />
+                            {showAsi && (<Area yAxisId="right" type="monotone" dataKey="altcoinIndex" stroke="#dd9933" fill="url(#colorAlt)" strokeWidth={1} dot={false} />)}
+                            {showAltsMc && (<Line yAxisId="left" type="monotone" dataKey="altcoinMarketcap" stroke="#3b82f6" strokeWidth={1} dot={false} strokeDasharray="5 5" />)}
+                            <Brush dataKey="date" height={30} stroke="#dd9933" fill="transparent" tickFormatter={() => ''} opacity={0.3} />
                         </ComposedChart>
                     </ResponsiveContainer>
                 </div>
@@ -125,7 +128,7 @@ const AltcoinSeasonWidget: React.FC<{ item: DashboardItem, language?: Language }
             </div>
             <div className="flex flex-col items-center mt-4 z-10">
                 <div className="text-4xl font-black text-[#dd9933] leading-none">{asi}</div>
-                <div className="text-sm font-bold text-gray-900 dark:text-white uppercase mt-1">{asiLabel}</div>
+                <div className="text-sm font-bold text-gray-900 dark:text-white uppercase mt-1">{seasonLabel}</div>
             </div>
             <div className="flex justify-around w-full mt-2 text-center z-10 border-t border-gray-200 dark:border-slate-700/30 pt-2 pb-2">
                 <div><div className="text-[10px] text-gray-500 dark:text-slate-500 font-bold uppercase">{t.yesterday}</div><div className="text-sm font-bold text-gray-800 dark:text-white">{altSeason.yesterday}</div></div>

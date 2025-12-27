@@ -1,8 +1,8 @@
 
 /**
- * Centralização definitiva das URLs do WordPress
+ * Centralização definitiva das URLs do WordPress em formato relativo.
  */
-const WP_BASE = "https://centralcrypto.com.br/2";
+const WP_BASE = "/2";
 
 export function getWpBaseUrl(): string {
   return WP_BASE;
@@ -13,7 +13,6 @@ export function getWpStaticBase(): string {
 }
 
 export const WP_PATHS = {
-  // Caminhos relativos ao WP_BASE
   academyStatic: "/wp-content/uploads/cct-cache/academy-topics-v1.json",
   academyApi: "/wp-json/central-academy/v1/topics",
   indicatorsStatic: "/wp-content/uploads/cct-cache/cct-indicators-v1.json",

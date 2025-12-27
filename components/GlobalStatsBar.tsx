@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import { fetchWithFallback } from '../pages/Workspace/services/api';
 
-// --- HELPER: FORMAT USD ---
 const formatUSD = (num: number) => {
   if (num > 1e12) return "$" + (num/1e12).toFixed(2) + "T";
   if (num > 1e9) return "$" + (num/1e9).toFixed(2) + "B";
@@ -12,18 +11,12 @@ const formatUSD = (num: number) => {
 
 const GlobalStatsBar = () => {
   const [stats, setStats] = useState({
-    coins: 0,
-    exchanges: 0,
-    mcap: 0,
-    mcapChange: 0,
-    vol24: 0,
-    btcDom: 0,
-    ethDom: 0
+    coins: 0, exchanges: 0, mcap: 0, mcapChange: 0, vol24: 0, btcDom: 0, ethDom: 0
   });
 
   useEffect(() => {
     const loadCGData = async () => {
-      const url = "https://centralcrypto.com.br/cachecko/cg_global.json";
+      const url = "/cachecko/cg_global.json";
       try {
         const json = await fetchWithFallback(url);
         if (json) {
@@ -40,15 +33,6 @@ const GlobalStatsBar = () => {
         }
       } catch (e) {
         console.error("GlobalStatsBar error", e);
-        setStats({
-          coins: 14230,
-          exchanges: 890,
-          mcap: 2450000000000,
-          mcapChange: 2.45,
-          vol24: 89000000000,
-          btcDom: 52.1,
-          ethDom: 17.4
-        });
       }
     };
     loadCGData();

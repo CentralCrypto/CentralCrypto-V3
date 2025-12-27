@@ -1,16 +1,15 @@
 
 import { Indicator, Testimonial, Language } from '../../types';
-import { pt } from '../../locales/pt'; // Import for fallback
+import { pt } from '../../locales/pt';
 
 export const LOGO_URL = 'https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png';
 
-export const WP_API_URL = 'https://centralcrypto.com.br/2/wp-json/cct/v1/indicators';
-export const WP_LOGIN_URL = 'https://centralcrypto.com.br/2/wp-json/cct/v1/login';
-export const WP_REORDER_URL = 'https://centralcrypto.com.br/2/wp-json/cct/v1/reorder';
-export const WP_SCRAPE_URL = 'https://centralcrypto.com.br/2/wp-json/cct/v1/scrape';
+export const WP_API_URL = '/2/wp-json/cct/v1/indicators';
+export const WP_LOGIN_URL = '/2/wp-json/cct/v1/login';
+export const WP_REORDER_URL = '/2/wp-json/cct/v1/reorder';
+export const WP_SCRAPE_URL = '/2/wp-json/cct/v1/scrape';
 export const API_SECRET = 'CCT_ADMIN_SECRET_2025'; 
 
-// --- FALLBACK DATA ---
 const FALLBACK_INDICATORS: Indicator[] = [
   {
     id: 'supertrade-2025',
@@ -45,19 +44,10 @@ export const getConstants = (lang: Language) => {
   return { indicators: FALLBACK_INDICATORS, testimonials: TESTIMONIALS_PT };
 };
 
-// --- COMPATIBILITY LAYER ---
-// Restore these exports to prevent crashes in files that haven't been fully migrated
 export const UI_TEXT = pt.indicators;
 export const LEGAL_TEXTS_DATA = pt.indicators.legal;
 
-export interface Comment {
-  id: number;
-  author: string;
-  text: string;
-  timeAgo: string;
-}
-
+export interface Comment { id: number; author: string; text: string; timeAgo: string; }
 export const MOCK_COMMENTS: Comment[] = [
-  { id: 1, author: "CryptoViking_99", text: "Esse indicador mudou meu jeito de operar o gráfico de 4H! Muito obrigado Central!", timeAgo: "2 horas atrás" },
-  { id: 2, author: "Ana_TraderBR", text: "A coloração dos candles facilita muito a visualização da tendência. Recomendo.", timeAgo: "5 horas atrás" },
+  { id: 1, author: "CryptoViking_99", text: "Esse indicador mudou meu jeito de operar o gráfico de 4H!", timeAgo: "2 horas atrás" },
 ];

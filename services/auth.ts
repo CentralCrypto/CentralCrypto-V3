@@ -1,3 +1,4 @@
+
 export interface UserData {
   id: number;
   token: string;
@@ -11,30 +12,23 @@ export interface UserData {
   description?: string;
 }
 
-const API_URL = 'https://centralcrypto.com.br/2/wp-json';
+const API_URL = '/2/wp-json';
 
 export const authService = {
   login: async (username: string, password: string): Promise<UserData> => {
     try {
       const res = await fetch(`${API_URL}/custom/v1/login`, {
         method: 'POST',
-        credentials: 'include', // cookie de sessão
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          username,
-          password,
-        }),
+        body: JSON.stringify({ username, password }),
       });
 
       const data = await res.json();
-      console.log('LOGIN RAW DATA ===>', data);
 
       if (!res.ok) {
-        if (data.code === 'invalid_auth') {
-          throw new Error('Credenciais inválidas.');
-        }
         throw new Error(data.message || 'Erro no login.');
       }
 
@@ -54,7 +48,6 @@ export const authService = {
       localStorage.setItem('central_user', JSON.stringify(user));
       return user;
     } catch (error: any) {
-      console.error('Login Error:', error);
       throw new Error(error.message || 'Erro de conexão com o servidor.');
     }
   },
@@ -68,10 +61,7 @@ export const authService = {
       });
 
       const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.message || 'Erro no registro. Verifique os dados.');
-      }
+      if (!res.ok) throw new Error(data.message || 'Erro no registro.');
       return data;
     } catch (error: any) {
       throw new Error(error.message || 'Falha no registro.');
@@ -88,17 +78,10 @@ export const authService = {
           redirect_url: window.location.origin,
         }),
       });
-
       const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.message || 'Erro ao solicitar reset.');
-      }
-
+      if (!res.ok) throw new Error(data.message || 'Erro ao solicitar reset.');
       return data;
-    } catch (error: any) {
-      throw error;
-    }
+    } catch (error: any) { throw error; }
   },
 
   validateEmail: async (userId: number, key: string): Promise<any> => {
@@ -106,18 +89,10 @@ export const authService = {
       const res = await fetch(`${API_URL}/custom/v1/validate-email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          u: userId,
-          k: key,
-        }),
+        body: JSON.stringify({ u: userId, k: key }),
       });
-
       const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.message || 'Erro ao validar conta.');
-      }
-
+      if (!res.ok) throw new Error(data.message || 'Erro ao validar conta.');
       return data;
     } catch (error: any) {
       throw new Error(error.message || 'Falha na validação.');

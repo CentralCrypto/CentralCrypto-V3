@@ -8,22 +8,6 @@ export type HttpError = {
 
 const DEFAULT_TIMEOUT = 15000; 
 
-/**
- * Detecta se precisamos de proxy para evitar CORS (quando em localhost ou preview)
- */
-const shouldProxy = () => {
-    if (typeof window === 'undefined') return false;
-    return !window.location.hostname.includes('centralcrypto.com.br');
-};
-
-/**
- * Transforma uma URL em uma requisição via Proxy CORS se necessário
- */
-const getFinalUrl = (url: string) => {
-    if (!shouldProxy() || !url.startsWith('http')) return url;
-    return `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-};
-
 export async function safeJson(res: Response): Promise<any> {
   try {
     const text = await res.text();
@@ -35,7 +19,8 @@ export async function safeJson(res: Response): Promise<any> {
 }
 
 /**
- * Wrapper de fetch robusto com política de proxy CORS e tempo esgotado
+ * Wrapper de fetch robusto utilizando caminhos relativos.
+ * O Vite proxy no VPS encaminha /2 e /cachecko para o destino correto.
  */
 async function httpRequest(url: string, init: RequestInit & { timeoutMs?: number; retries?: number } = {}): Promise<{ data: any; headers: Headers; url: string }> {
   const { timeoutMs = DEFAULT_TIMEOUT, retries = 1, ...fetchOpts } = init;
@@ -44,46 +29,43 @@ async function httpRequest(url: string, init: RequestInit & { timeoutMs?: number
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeoutMs);
 
-    const isProxy = shouldProxy() && url.startsWith('http');
-    const targetUrl = isProxy ? getFinalUrl(url) : url;
-
     try {
-      const response = await fetch(targetUrl, {
+      const response = await fetch(url, {
         ...fetchOpts,
         signal: controller.signal,
-        credentials: 'omit'
+        credentials: 'omit' // Evita conflitos de cookies em ambientes de dev
       });
 
       clearTimeout(id);
       
       if (!response.ok) {
-        if (remaining > 0) return attempt(remaining - 1);
+        // Backoff simples para erro 429 ou erros de rede temporários
+        if (response.status === 429 || response.status >= 500) {
+            if (remaining > 0) {
+                await new Promise(r => setTimeout(r, 2000));
+                return attempt(remaining - 1);
+            }
+        }
         const data = await safeJson(response);
         throw { status: response.status, url, data, message: `HTTP ${response.status}` } as HttpError;
       }
 
       const json = await response.json();
-      
-      // Se for proxy, os dados reais estão dentro de .contents
-      if (isProxy && json.contents) {
-          try {
-              const realData = JSON.parse(json.contents);
-              return { data: realData, headers: response.headers, url };
-          } catch(e) {
-              return { data: json.contents, headers: response.headers, url };
-          }
-      }
-
       return { data: json, headers: response.headers, url };
+      
     } catch (error: any) {
       clearTimeout(id);
-      if (remaining > 0 && error.name !== 'AbortError') {
+      
+      if (error.name === 'AbortError') {
+          throw { status: 0, url, data: null, message: 'Timeout' } as HttpError;
+      }
+
+      if (remaining > 0) {
           await new Promise(r => setTimeout(r, 1000));
           return attempt(remaining - 1);
       }
       
-      const msg = error.name === 'AbortError' ? 'Timeout' : 'Network Error';
-      throw { status: 0, url, data: null, message: msg } as HttpError;
+      throw { status: 0, url, data: null, message: 'Network Error' } as HttpError;
     }
   };
 

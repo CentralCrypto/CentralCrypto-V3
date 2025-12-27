@@ -12,7 +12,6 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
     const [error, setError] = useState(false);
     
     const t = getTranslations(language as Language).dashboard.widgets.fng;
-    const tWs = getTranslations(language as Language).workspace.widgets.fng;
     const tTime = getTranslations(language as Language).dashboard.widgets.time;
 
     useEffect(() => {
@@ -47,7 +46,7 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
 
     const CustomXAxisTick = ({ x, y, payload }: any) => { 
         const date = new Date(payload.value); 
-        return (<g transform={`translate(${x},${y})`}><text x={0} y={0} dy={10} textAnchor="middle" className="fill-gray-500 dark:fill-slate-400" fontSize={10}>{date.toLocaleDateString(undefined, {month:'short', day:'numeric'})}</text></g>); 
+        return (<g transform={`translate(${x},${y})`}><text x={0} y={0} dy={10} textAnchor="middle" className="fill-gray-500 dark:fill-slate-400" fontSize={10}>{date.toLocaleDateString(language, {month:'short', day:'numeric'})}</text></g>); 
     };
 
     const fgSeries = useMemo(() => {
@@ -56,7 +55,7 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
             value: parseInt(d.value, 10),
             label: getClassification(parseInt(d.value, 10))
         })).filter(p => !isNaN(p.date) && !isNaN(p.value)).sort((a, b) => a.date - b.date);
-    }, [fngData, language]);
+    }, [fngData, language, t]);
 
     const Watermark = () => <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden opacity-[0.05] z-0"><img src="https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png" alt="watermark" className="w-3/4 h-auto grayscale filter" /></div>;
 
@@ -72,27 +71,73 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
     const fgWeek = fngData[7]?.value || '--';
     const fgMonth = fngData[30]?.value || '--';
 
+    const isOnPage = item.id.includes('page');
+
     if (item.isMaximized) {
         return (
             <div className="h-full flex flex-col relative bg-white dark:bg-[#1a1c1e] overflow-hidden">
                 <Watermark />
-                {/* HEADER MAXIMIZADO - APENAS NRO E RANK */}
-                <div className="z-10 flex flex-col items-center justify-center p-8 shrink-0 animate-in fade-in slide-in-from-top-4 duration-700">
-                    <div className="text-9xl font-black text-[#dd9933] leading-none mb-4 drop-shadow-2xl font-mono">{fgValue}</div>
-                    <div className="text-3xl font-black text-gray-900 dark:text-white uppercase tracking-[0.3em]">{fgLabel}</div>
-                </div>
                 
-                {/* GRÁFICO - TOOLTIP MELHORADO */}
+                {isOnPage ? (
+                    /* LAYOUT FULL - PARA AS PAGES (DASHBOARD COMPLETO) */
+                    <div className="z-10 flex flex-col lg:flex-row items-center justify-center gap-12 p-6 mb-4 shrink-0 animate-in fade-in duration-500">
+                        <div className="w-full max-w-[240px] flex flex-col items-center">
+                            <svg viewBox="0 0 200 120" className="w-full overflow-visible">
+                                <defs>
+                                    <linearGradient id="fngGradFull" x1="0" y1="0" x2="1" y2="0">
+                                        <stop offset="0%" stopColor="#E03A3E" />
+                                        <stop offset="25%" stopColor="#F47C20" />
+                                        <stop offset="50%" stopColor="#FFD700" />
+                                        <stop offset="75%" stopColor="#7AC74F" />
+                                        <stop offset="100%" stopColor="#009E4F" />
+                                    </linearGradient>
+                                </defs>
+                                <path d="M 35 75 A 65 65 0 0 1 165 75" fill="none" stroke="currentColor" className="text-gray-200 dark:text-tech-800" strokeWidth={8} strokeLinecap="round" />
+                                <path d="M 35 75 A 65 65 0 0 1 165 75" fill="none" stroke="url(#fngGradFull)" strokeWidth={8} strokeLinecap="round" />
+                                <g transform={`rotate(${rotation} 100 75)`}>
+                                    <path d="M 100 75 L 100 15" className="stroke-gray-900 dark:stroke-white" strokeWidth="3" strokeLinecap="round" />
+                                    <circle cx={100} cy={75} r="5" className="fill-gray-900 dark:fill-white" />
+                                </g>
+                                <text x="100" y="105" textAnchor="middle" className="fill-gray-900 dark:fill-[#dd9933]" fontSize="32" fontWeight="900" fontFamily="monospace">{fgValue}</text>
+                                <text x="100" y="125" textAnchor="middle" className="fill-gray-600 dark:fill-gray-300" fontSize="14" fontWeight="900" letterSpacing="1">{fgLabel}</text>
+                            </svg>
+                        </div>
+                        <div className="flex flex-wrap justify-center gap-4">
+                            {[
+                                { label: tTime.yesterday, val: fgYesterday, sub: getClassification(parseInt(fgYesterday)) },
+                                { label: tTime.d7, val: fgWeek, sub: getClassification(parseInt(fgWeek)) },
+                                { label: tTime.d30, val: fgMonth, sub: getClassification(parseInt(fgMonth)) }
+                            ].map((card, i) => (
+                                <div key={i} className="bg-gray-50 dark:bg-tech-900 border border-gray-100 dark:border-tech-800 p-4 rounded-2xl w-36 text-center shadow-lg">
+                                    <div className="text-[10px] font-black text-gray-400 uppercase mb-1">{card.label}</div>
+                                    <div className="text-3xl font-black text-[#dd9933] mb-1">{card.val}</div>
+                                    <div className="text-[9px] font-bold text-gray-500 uppercase leading-tight">{card.sub}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ) : (
+                    /* LAYOUT DISCRETO - PARA GRID MAXIMIZADO (TOP-LEFT) */
+                    <div className="z-10 flex flex-col items-start p-6 pb-2 shrink-0 animate-in slide-in-from-left-4 duration-500">
+                        <div className="flex items-baseline gap-4">
+                            <span className="text-6xl font-black text-[#dd9933] leading-none font-mono">{fgValue}</span>
+                            <span className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-widest">{fgLabel}</span>
+                        </div>
+                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-2 border-l-2 border-[#dd9933] pl-2">Análise de Sentimento Macroeconômico</div>
+                    </div>
+                )}
+                
+                {/* GRÁFICO - ÁREA COMUM */}
                 <div className="flex-1 min-h-0 w-full z-10 relative">
                     <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={fgSeries} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                        <AreaChart data={fgSeries} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
                             <defs><linearGradient id="gradFg" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#dd9933" stopOpacity={0.4}/><stop offset="95%" stopColor="#dd9933" stopOpacity={0}/></linearGradient></defs>
-                            <ReferenceArea y1={0} y2={25} fill="#E03A3E" fillOpacity={0.04} />
-                            <ReferenceArea y1={25} y2={45} fill="#F47C20" fillOpacity={0.04} />
-                            <ReferenceArea y1={45} y2={55} fill="#FFD700" fillOpacity={0.03} />
-                            <ReferenceArea y1={55} y2={75} fill="#7AC74F" fillOpacity={0.04} />
-                            <ReferenceArea y1={75} y2={94} fill="#009E4F" fillOpacity={0.04} />
-                            <ReferenceArea y1={95} y2={100} fill="#00ffff" fillOpacity={0.08} />
+                            <ReferenceArea y1={0} y2={25} fill="#E03A3E" fillOpacity={0.06} />
+                            <ReferenceArea y1={25} y2={45} fill="#F47C20" fillOpacity={0.06} />
+                            <ReferenceArea y1={45} y2={55} fill="#FFD700" fillOpacity={0.04} />
+                            <ReferenceArea y1={55} y2={75} fill="#7AC74F" fillOpacity={0.06} />
+                            <ReferenceArea y1={75} y2={94} fill="#009E4F" fillOpacity={0.08} />
+                            <ReferenceArea y1={95} y2={100} fill="#00ffff" fillOpacity={0.12} />
                             <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-slate-700" opacity={0.15} />
                             <XAxis dataKey="date" type="number" domain={['dataMin', 'dataMax']} tick={<CustomXAxisTick />} minTickGap={50} hide />
                             <YAxis orientation="right" domain={[0, 100]} tick={<CustomFngTick />} ticks={[12, 35, 50, 65, 85, 97]} width={110} axisLine={false} tickLine={false} />
@@ -101,11 +146,13 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
                                     if (active && payload && payload.length) {
                                         const d = payload[0].payload;
                                         return (
-                                            <div className="bg-[#1a1c1e] border border-gray-700 p-4 rounded-xl shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-                                                <p className="text-gray-500 font-bold text-[10px] uppercase mb-2 border-b border-white/5 pb-1">{new Date(d.date).toLocaleDateString(undefined, {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'})}</p>
+                                            <div className="bg-white dark:bg-[#1a1c1e] border border-gray-200 dark:border-gray-700 p-4 rounded-xl shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+                                                <p className="text-gray-500 font-bold text-[10px] uppercase mb-2 border-b border-gray-100 dark:border-white/5 pb-1">
+                                                    {new Date(d.date).toLocaleDateString(language, {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'})}
+                                                </p>
                                                 <div className="flex items-end gap-3">
                                                     <span className="text-4xl font-black text-[#dd9933] leading-none">{d.value}</span>
-                                                    <span className="text-xs font-black uppercase text-white tracking-widest mb-1">{d.label}</span>
+                                                    <span className="text-xs font-black uppercase text-gray-900 dark:text-white tracking-widest mb-1">{d.label}</span>
                                                 </div>
                                             </div>
                                         );
@@ -113,7 +160,7 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
                                     return null;
                                 }}
                             />
-                            <Area type="monotone" dataKey="value" stroke="#dd9933" fill="url(#gradFg)" strokeWidth={1} activeDot={{ r: 6, fill: '#dd9933', stroke: '#fff', strokeWidth: 2 }} />
+                            <Area type="monotone" dataKey="value" stroke="#dd9933" fill="url(#gradFg)" strokeWidth={2} activeDot={{ r: 6, fill: '#dd9933', stroke: '#fff', strokeWidth: 2 }} />
                             <Brush dataKey="date" height={30} stroke="#dd9933" fill="transparent" tickFormatter={() => ''} />
                         </AreaChart>
                     </ResponsiveContainer>
@@ -123,6 +170,7 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
     }
     
     return (
+        /* LAYOUT MINIMIZADO PADRÃO (GRID NORMAL) */
         <div className="h-full flex flex-col justify-center gap-2 p-2 relative text-center bg-white dark:bg-[#2f3032]">
             <Watermark />
             <div className="flex items-center justify-center relative mt-6 z-10">

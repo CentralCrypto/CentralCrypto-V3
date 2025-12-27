@@ -40,20 +40,37 @@ const PageHeader = ({ title, description }: { title: string, description: string
 
 // --- FAQ COMPONENT ---
 
-const PageFaq = ({ language }: { language: Language }) => {
+const PageFaq = ({ language, pageType }: { language: Language, pageType: string }) => {
     const [openIndex, setOpenIndex] = useState<number | null>(null);
     const t = getTranslations(language).workspace.pages.faq;
+    
+    // Mapeia o tipo de página para a chave correta no objeto de tradução
+    const faqData = useMemo(() => {
+        switch(pageType) {
+            case 'FNG': return t.fng;
+            case 'RSI': return t.rsi;
+            case 'MACD': return t.macd;
+            case 'ALTSEASON': return t.altseason;
+            case 'ETF': return t.etf;
+            case 'LSR': return t.lsr;
+            case 'TRUMP': return t.trump;
+            case 'CALENDAR': return t.calendar;
+            case 'HEATMAP': return t.heatmap;
+            case 'BUBBLE_HEATMAP': return t.bubble;
+            default: return null;
+        }
+    }, [pageType, t]);
+
+    if (!faqData) return null;
 
     const items = [
-        { q: t.q1, a: t.a1 },
-        { q: t.q2, a: t.a2 },
-        { q: t.q3, a: t.a3 },
-        { q: t.q4, a: t.a4 }
+        { q: faqData.q1, a: faqData.a1 },
+        { q: faqData.q2, a: faqData.a2 }
     ];
 
     return (
         <div className="mt-8 mb-12 max-w-4xl mx-auto px-4">
-            <h3 className="text-xl font-black text-gray-800 dark:text-[#dd9933] uppercase tracking-widest text-center mb-8">{t.title}</h3>
+            <h3 className="text-xl font-black text-gray-800 dark:text-[#dd9933] uppercase tracking-widest text-center mb-8">Metodologia e FAQ</h3>
             <div className="space-y-3">
                 {items.map((item, i) => (
                     <div key={i} className="bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-tech-800 rounded-xl overflow-hidden shadow-sm transition-all duration-500">
@@ -64,7 +81,7 @@ const PageFaq = ({ language }: { language: Language }) => {
                             <span className={`font-bold text-sm transition-colors ${openIndex === i ? 'text-[#dd9933]' : 'text-gray-700 dark:text-gray-300'}`}>{item.q}</span>
                             <ChevronDown size={18} className={`text-gray-400 transition-transform duration-500 ${openIndex === i ? 'rotate-180 text-[#dd9933]' : ''}`} />
                         </button>
-                        <div className={`transition-all duration-500 ease-in-out ${openIndex === i ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
+                        <div className={`transition-all duration-500 ease-in-out ${openIndex === i ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}>
                             <div className="p-5 pt-0 text-sm text-gray-500 dark:text-slate-400 leading-relaxed border-t border-transparent dark:border-white/5">
                                 <div dangerouslySetInnerHTML={{ __html: item.a }} />
                             </div>
@@ -358,8 +375,8 @@ const IndicatorPage: React.FC<IndicatorPageProps> = ({ language, coinMap, userTi
                         )}
                     </div>
                     
-                    {/* FAQ SECTION */}
-                    <PageFaq language={language} />
+                    {/* FAQ SECTION DINÂMICO */}
+                    <PageFaq language={language} pageType={activePage} />
                 </div>
             </div>
         </div>
