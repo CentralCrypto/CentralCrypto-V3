@@ -28,7 +28,7 @@ export const pt = {
   },
   dashboard: {
     widgets: {
-      fng: { title: "Fear & Greed Index", s0: "Medo Extremo", s1: "Medo", s2: "Neutro", s3: "Ganância", s4: "Ganância Extrema", s5: "Euforia" },
+      fng: { title: "Fear & Greed Index", s0: "Cagaço extremo", s1: "Rebosteio", s2: "Andando de lado", s3: "Agora Vai", s4: "É luaaaa!", s5: "Vende a mãe!" },
       time: { yesterday: "Ontem", d7: "7 Dias", d30: "30 Dias" },
       rsi: { title: "Média RSI", overbought: "Sobrecompra", oversold: "Sobrevenda", neutral: "Neutro" },
       macd: { title: "Média MACD", bullish: "Bullish", bearish: "Bearish", neutral: "Neutro" },
@@ -36,7 +36,7 @@ export const pt = {
       altseason: { title: "Altcoin Season", btcDomZone: "BTC Dominance", bitcoinSeason: "Bitcoin Season", altcoinSeason: "Altcoin Season", transition: "Transição", yesterday: "Ontem", week: "Semana", month: "Mês" },
       mktcapHistory: { title: "Market Cap", yesterday: "Ontem", week: "Semana", month: "Mês" },
       etf: { title: "Fluxo ETF", netFlow: "Fluxo Líquido", btcEtf: "BTC ETFs", ethEtf: "ETH ETFs", last7d: "7 Dias", last30d: "30 Dias", last90d: "90 Dias", lastUpdate: "Atualizado em", dailyFlow: "Fluxo Diário" },
-      trump: { title: "Trump-o-Meter", viewPost: "Ver Post", sarcastic: { negativeSmall: "Impacto Irrelevante", negativeMedium: "Mercado em Alerta", negativeLarge: "TEMPESTADE NO X", positiveSmall: "Sinal de Força", positiveMedium: "BULLISH VIBES", positiveLarge: "A LUA É O LIMITE", neutral: "Silêncio Estratégico" } },
+      trump: { title: "Trump-o-Meter", viewPost: "Ver Post", sarcastic: { negativeSmall: "Impacto Irrelevante", negativeMedium: "Mercado em Alerta", negativeLarge: "TEMPESTADE NO X", positiveSmall: "Sinal de Força", positiveMedium: "BULLISH VIBES", positiveLarge: "A LUA É O LIMIT", neutral: "Silêncio Estratégico" } },
       gainers: { gainers: "Ganhadores", losers: "Perdedores" },
       calendar: { title: "Calendário Econômico", today: "HOJE", tomorrow: "AMANHÃ", previous: "Prev", forecast: "Proj", actual: "Atu" }
     },
@@ -74,24 +74,24 @@ export const pt = {
       marketcap: "Market Cap",
       topmovers: "Top Movers",
       faq: {
-        title: "Perguntas Frequentes",
-        q1: "Como este indicador calcula os dados?",
-        a1: "Nossos algoritmos processam dados em tempo real vindos diretamente da fonte Cachecko, filtrando volatilidade e volume para entregar métricas precisas.",
-        q2: "Onde devo utilizar estas informações?",
-        a2: "Estes indicadores são ferramentas de auxílio à decisão. Recomendamos o uso para confirmar tendências de mercado e identificar pontos de exaustão (medo ou ganância extrema).",
-        q3: "Quais fontes de dados são lidas?",
-        a3: "Leemos dados agregados das maiores exchanges (Binance, OKX, Bybit), redes sociais e fluxos institucionais on-chain.",
-        q4: "Com que frequência os dados são atualizados?",
-        a4: "A maioria das métricas analíticas (RSI, F&G, Altseason) é atualizada a cada 24 horas, enquanto preços e ordens são em tempo real."
+        title: "Metodologia e FAQ",
+        q1: "Como o Crypto Fear & Greed Index é calculado?",
+        a1: "O índice é uma análise de sentimento multifatorial. Processamos dados de cinco fontes principais: Volatilidade (25%), Momentum e Volume de Mercado (25%), Sentimento em Redes Sociais via NLP (15%), Dominância do Bitcoin (10%) e Tendências de Busca/Google Trends (10%). O resultado é um valor de 0 a 100 onde valores baixos indicam pânico e valores altos indicam euforia.",
+        q2: "O que significa cada faixa do índice?",
+        a2: "<ul class='space-y-2 font-mono text-xs'><li class='flex gap-2'><b class='text-red-500 w-16 shrink-0'>0-25:</b> <span><b>Cagaço extremo</b> (oportunidade histórica de compra)</span></li><li class='flex gap-2'><b class='text-orange-500 w-16 shrink-0'>26-45:</b> <span><b>Rebosteio</b> (medo presente no mercado)</span></li><li class='flex gap-2'><b class='text-yellow-500 w-16 shrink-0'>46-55:</b> <span><b>Andando de lado</b> (incerteza e falta de volume)</span></li><li class='flex gap-2'><b class='text-green-400 w-16 shrink-0'>56-75:</b> <span><b>Agora Vai</b> (ganância começando a dominar)</span></li><li class='flex gap-2'><b class='text-green-600 w-16 shrink-0'>76-94:</b> <span><b>É luaaaa!</b> (ganância extrema)</span></li><li class='flex gap-2'><b class='text-cyan-400 w-16 shrink-0'>95-100:</b> <span><b>Vende a mãe!</b> (euforia perigosa, correção iminente)</span></li></ul>",
+        q3: "Qual a frequência de atualização dos dados?",
+        a3: "O índice é atualizado a cada 24 horas, processando o fechamento diário global para garantir que ruídos de curto prazo não distorçam a percepção de sentimento macro.",
+        q4: "Este indicador pode ser usado para sinais de trade?",
+        a4: "Historicamente, o Medo Extremo marca fundos de mercado, enquanto a Ganância Extrema marca topos. Contudo, o mercado pode permanecer em estado de ganância por semanas antes de uma reversão."
       }
     },
     widgets: {
       fng: { title: "Fear & Greed Index", index: "Índice", desc: "Sentimento de mercado" },
       rsi: { title: "Média RSI", index: "RSI", desc: "Força Relativa Global", timeframe: "Timeframe", tooltip: { price: "Preço", mcap: "Market Cap", change: "Var 24h" } },
-      macd: { title: "Média MACD", avgLabel: "Média Global MACD", desc: "Tendência Global MACD", timeframe: "Timeframe", xAxis: "Eixo X", loading: "Carregando...", tooltip: { price: "Preço", mcap: "Mkt Cap", change: "Var", signal: "Signal", hist: "Hist" }, context: { mcap: "Visão por capitalização", priceChange: "Visão por variação" } },
+      macd: { title: "Média MACD", avgLabel: "Média Global MACD", desc: "Tendência Global MACD", timeframe: "Timeframe", xAxis: "Eixo X", loading: "Carregando...", tooltip: { price: "Preço", mcap: "Cap. Mercado", change: "Var", signal: "Signal", hist: "Hist" }, context: { mcap: "Visão por capitalização", priceChange: "Visão por variação" } },
       lsr: { title: "Long/Short Ratio", desc: "Proporção Long/Short", price: "Preço", size: "Tamanho", total: "Total", noData: "Sem dados" },
-      altseason: { title: "Altcoin Season", index: "Índice ASI", altsMcap: "Alts Market Cap", yesterday: "Ontem", week: "Semana", month: "Mês", desc: "Temporada de Altcoins" },
-      etf: { title: "Fluxo ETF", dailyFlow: "Fluxo Diário", btcEtf: "BTC ETFs", ethEtf: "ETH ETFs", last7d: "7 Dias", last30d: "30 Dias", last90d: "90 Dias", lastUpdate: "Última atualização", desc: "Fluxo institucional de ETFs" },
+      altseason: { title: "Altcoin Season", index: "Índice ASI", altsMcap: "Cap Alts", yesterday: "Ontem", week: "Semana", month: "Mês", desc: "Temporada de Altcoins" },
+      etf: { title: "Fluxo ETF", dailyFlow: "Fluxo Diário", btcEtf: "BTC ETFs", ethEtf: "ETH ETFs", last7d: "7 Días", last30d: "30 Dias", last90d: "90 Dias", lastUpdate: "Última atualização", desc: "Fluxo institucional de ETFs" },
       gainers: { title: "Top Movers", gainers: "Ganhadores", losers: "Perdedores", desc: "Principais variações do mercado" },
       trump: { title: "Trump-o-Meter", viewPost: "Ver Post", desc: "Impacto político no mercado" },
       calendar: { title: "Calendário Econômico", today: "HOJE", tomorrow: "AMANHÃ", previous: "Prev", forecast: "Proj", actual: "Atu", desc: "Eventos macroeconômicos" },

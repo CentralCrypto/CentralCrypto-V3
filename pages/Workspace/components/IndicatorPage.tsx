@@ -65,8 +65,8 @@ const PageFaq = ({ language }: { language: Language }) => {
                             <ChevronDown size={18} className={`text-gray-400 transition-transform duration-500 ${openIndex === i ? 'rotate-180 text-[#dd9933]' : ''}`} />
                         </button>
                         <div className={`transition-all duration-500 ease-in-out ${openIndex === i ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
-                            <div className="p-5 pt-0 text-sm text-gray-500 dark:text-slate-400 leading-relaxed border-t border-gray-50 dark:border-tech-900/50">
-                                {item.a}
+                            <div className="p-5 pt-0 text-sm text-gray-500 dark:text-slate-400 leading-relaxed border-t border-transparent dark:border-white/5">
+                                <div dangerouslySetInnerHTML={{ __html: item.a }} />
                             </div>
                         </div>
                     </div>

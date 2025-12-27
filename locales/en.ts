@@ -28,7 +28,7 @@ export const en = {
   },
   dashboard: {
     widgets: {
-      fng: { title: "Fear & Greed Index", s0: "Extreme Fear", s1: "Fear", s2: "Neutral", s3: "Greed", s4: "Extreme Greed", s5: "Euphoria" },
+      fng: { title: "Fear & Greed Index", s0: "Scared shitless", s1: "Oh shit mode", s2: "Sideways snooze", s3: "Here we go!", s4: "To the damn moon!", s5: "Sell your mom!" },
       time: { yesterday: "Yesterday", d7: "7 Days", d30: "30 Days" },
       rsi: { title: "RSI Average", overbought: "Overbought", oversold: "Oversold", neutral: "Neutral" },
       macd: { bullish: "Bullish", bearish: "Bearish", neutral: "Neutral" },
@@ -74,15 +74,15 @@ export const en = {
       marketcap: "Market Cap",
       topmovers: "Top Movers",
       faq: {
-        title: "Frequently Asked Questions",
-        q1: "How does this indicator calculate data?",
-        a1: "Our algorithms process real-time data directly from the Cachecko source, filtering volatility and volume to deliver precise metrics.",
-        q2: "Where should I use this information?",
-        a2: "These indicators are decision support tools. We recommend using them to confirm market trends and identify exhaustion points (extreme fear or greed).",
-        q3: "Which data sources are used?",
-        a3: "We read aggregated data from the largest exchanges (Binance, OKX, Bybit), social networks, and on-chain institutional flows.",
-        q4: "How often is the data updated?",
-        a4: "Most analytical metrics (RSI, F&G, Altseason) are updated every 24 hours, while prices and orders are in real-time."
+        title: "Metodologia e FAQ",
+        q1: "Como o Crypto Fear & Greed Index é calculado?",
+        a1: "O índice é uma análise de sentimento multifatorial. Processamos dados de cinco fontes principais: Volatilidade (25%), Momentum e Volume de Mercado (25%), Sentimento em Redes Sociais via NLP (15%), Dominância do Bitcoin (10%) e Tendências de Busca/Google Trends (10%). O resultado é um valor de 0 a 100 onde valores baixos indicam pânico e valores altos indicam euforia.",
+        q2: "O que significa cada faixa do índice?",
+        a2: "0-25: Medo Extremo (oportunidade histórica de compra); 26-45: Medo; 46-55: Neutro; 56-75: Ganância; 76-100: Ganância Extrema (alerta de correção iminente).",
+        q3: "Qual a frequência de atualização dos dados?",
+        a3: "O índice é atualizado a cada 24 horas, processando o fechamento diário global para garantir que ruídos de curto prazo não distorçam a percepção de sentimento macro.",
+        q4: "Este indicador pode ser usado para sinais de trade?",
+        a4: "Historicamente, o Medo Extremo marca fundos de mercado, enquanto a Ganância Extrema marca topos. Contudo, o mercado pode permanecer em estado de ganância por semanas antes de uma reversão."
       }
     },
     widgets: {

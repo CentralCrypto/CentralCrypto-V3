@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Loader2, AlertTriangle } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine, ReferenceArea, Brush } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceArea, Brush } from 'recharts';
 import { FngData, fetchFearAndGreed } from '../services/api';
 import { DashboardItem, Language } from '../../../types';
 import { getTranslations } from '../../../locales';
@@ -31,34 +31,30 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
         });
     }, []);
 
-    const getClassification = (point: FngData): string => {
-        return point?.value_classification_i18n?.[language] || point?.value_classification || '---';
-    };
-
-    const getLabelByValue = (val: number): string => {
-        if (val <= 25) return fngData[0]?.value_classification_i18n?.[language] || t.s0;
-        if (val <= 40) return t.s1;
-        if (val <= 60) return t.s2;
-        if (val <= 75) return t.s3;
-        if (val <= 95) return t.s4;
-        return t.s5;
+    const getClassification = (val: number): string => {
+        if (val <= 25) return t.s0; // Cagaço extremo
+        if (val <= 45) return t.s1; // Rebosteio
+        if (val <= 55) return t.s2; // Andando de lado
+        if (val <= 75) return t.s3; // Agora Vai
+        if (val <= 94) return t.s4; // É luaaaa!
+        return t.s5; // Vende a mãe!
     };
 
     const CustomFngTick = ({ x, y, payload }: any) => {
-        const label = getLabelByValue(payload.value);
-        return <text x={x} y={y} dy={4} textAnchor="start" className="fill-gray-500 dark:fill-slate-400" fontSize={10} fontWeight="bold">{label}</text>;
+        const label = getClassification(payload.value);
+        return <text x={x} y={y} dy={4} textAnchor="start" className="fill-gray-500 dark:fill-slate-400" fontSize={9} fontWeight="900" textTransform="uppercase">{label}</text>;
     };
 
     const CustomXAxisTick = ({ x, y, payload }: any) => { 
         const date = new Date(payload.value); 
-        return (<g transform={`translate(${x},${y})`}><text x={0} y={0} dy={10} textAnchor="middle" className="fill-gray-500 dark:fill-slate-400" fontSize={10}>{date.toLocaleDateString(undefined, {month:'short', day:'numeric'})}</text><text x={0} y={0} dy={22} textAnchor="middle" className="fill-gray-600 dark:fill-slate-500" fontSize={9} fontWeight="bold">{date.getFullYear()}</text></g>); 
+        return (<g transform={`translate(${x},${y})`}><text x={0} y={0} dy={10} textAnchor="middle" className="fill-gray-500 dark:fill-slate-400" fontSize={10}>{date.toLocaleDateString(undefined, {month:'short', day:'numeric'})}</text></g>); 
     };
 
     const fgSeries = useMemo(() => {
         return fngData.map(d => ({ 
             date: Number(d.timestamp) * 1000, 
             value: parseInt(d.value, 10),
-            label: getClassification(d)
+            label: getClassification(parseInt(d.value, 10))
         })).filter(p => !isNaN(p.date) && !isNaN(p.value)).sort((a, b) => a.date - b.date);
     }, [fngData, language]);
 
@@ -69,7 +65,7 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
 
     const currentPoint = fngData[0];
     const fgValue = parseInt(currentPoint.value);
-    const fgLabel = getClassification(currentPoint);
+    const fgLabel = getClassification(fgValue);
     const rotation = -90 + (fgValue / 100) * 180;
 
     const fgYesterday = fngData[1]?.value || '--';
@@ -78,54 +74,46 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
 
     if (item.isMaximized) {
         return (
-            <div className="h-full flex flex-col p-6 relative bg-white dark:bg-[#1a1c1e] overflow-hidden">
+            <div className="h-full flex flex-col relative bg-white dark:bg-[#1a1c1e] overflow-hidden">
                 <Watermark />
-                <div className="z-10 flex flex-col lg:flex-row items-center justify-center gap-12 mb-10 shrink-0">
-                    <div className="w-full max-w-[320px] flex flex-col items-center">
-                        <svg viewBox="0 0 200 120" className="w-full overflow-visible">
-                            <defs>
-                                <linearGradient id="fngGradMax" x1="0" y1="0" x2="1" y2="0">
-                                    <stop offset="0%" stopColor="#E03A3E" />
-                                    <stop offset="25%" stopColor="#F47C20" />
-                                    <stop offset="50%" stopColor="#FFD700" />
-                                    <stop offset="75%" stopColor="#7AC74F" />
-                                    <stop offset="100%" stopColor="#009E4F" />
-                                </linearGradient>
-                            </defs>
-                            <path d="M 35 75 A 65 65 0 0 1 165 75" fill="none" stroke="currentColor" className="text-gray-200 dark:text-tech-800" strokeWidth={8} strokeLinecap="round" />
-                            <path d="M 35 75 A 65 65 0 0 1 165 75" fill="none" stroke="url(#fngGradMax)" strokeWidth={8} strokeLinecap="round" />
-                            <g transform={`rotate(${rotation} 100 75)`}>
-                                <path d="M 100 75 L 100 15" className="stroke-gray-900 dark:stroke-white" strokeWidth="3" strokeLinecap="round" />
-                                <circle cx={100} cy={75} r="5" className="fill-gray-900 dark:fill-white" />
-                            </g>
-                            <text x="100" y="105" textAnchor="middle" className="fill-gray-900 dark:fill-[#dd9933]" fontSize="32" fontWeight="900" fontFamily="monospace">{fgValue}</text>
-                            <text x="100" y="125" textAnchor="middle" className="fill-gray-600 dark:fill-gray-300" fontSize="14" fontWeight="900" letterSpacing="1">{fgLabel}</text>
-                        </svg>
-                    </div>
-                    <div className="flex flex-wrap justify-center gap-4">
-                        {[
-                            { label: tTime.yesterday, val: fgYesterday, sub: getLabelByValue(parseInt(fgYesterday)) },
-                            { label: tTime.d7, val: fgWeek, sub: getLabelByValue(parseInt(fgWeek)) },
-                            { label: tTime.d30, val: fgMonth, sub: getLabelByValue(parseInt(fgMonth)) }
-                        ].map((card, i) => (
-                            <div key={i} className="bg-gray-50 dark:bg-tech-900 border border-gray-100 dark:border-tech-800 p-4 rounded-2xl w-36 text-center shadow-lg">
-                                <div className="text-[10px] font-black text-gray-400 uppercase mb-1">{card.label}</div>
-                                <div className="text-3xl font-black text-[#dd9933] mb-1">{card.val}</div>
-                                <div className="text-[9px] font-bold text-gray-500 uppercase leading-tight">{card.sub}</div>
-                            </div>
-                        ))}
-                    </div>
+                {/* HEADER MAXIMIZADO - APENAS NRO E RANK */}
+                <div className="z-10 flex flex-col items-center justify-center p-8 shrink-0 animate-in fade-in slide-in-from-top-4 duration-700">
+                    <div className="text-9xl font-black text-[#dd9933] leading-none mb-4 drop-shadow-2xl font-mono">{fgValue}</div>
+                    <div className="text-3xl font-black text-gray-900 dark:text-white uppercase tracking-[0.3em]">{fgLabel}</div>
                 </div>
-                <div className="flex-1 min-h-0 w-full z-10 border-t border-gray-100 dark:border-tech-800 pt-6">
+                
+                {/* GRÁFICO - TOOLTIP MELHORADO */}
+                <div className="flex-1 min-h-0 w-full z-10 relative">
                     <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={fgSeries} margin={{ top: 10, right: 100, left: 10, bottom: 0 }}>
-                            <defs><linearGradient id="gradFg" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#dd9933" stopOpacity={0.8}/><stop offset="95%" stopColor="#dd9933" stopOpacity={0}/></linearGradient></defs>
-                            <ReferenceArea y1={0} y2={25} fill="#E03A3E" fillOpacity={0.08} /><ReferenceArea y1={25} y2={40} fill="#F47C20" fillOpacity={0.08} /><ReferenceArea y1={40} y2={60} fill="#FFD700" fillOpacity={0.05} /><ReferenceArea y1={60} y2={75} fill="#7AC74F" fillOpacity={0.08} /><ReferenceArea y1={75} y2={100} fill="#009E4F" fillOpacity={0.08} />
-                            <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-slate-700" opacity={0.3} />
-                            <XAxis dataKey="date" type="number" domain={['dataMin', 'dataMax']} tick={<CustomXAxisTick />} minTickGap={50} />
-                            <YAxis orientation="right" domain={[0, 100]} tick={<CustomFngTick />} ticks={[12.5, 32.5, 50, 67.5, 85, 98]} width={100} />
-                            <Tooltip />
-                            <Area type="monotone" dataKey="value" stroke="#dd9933" fill="url(#gradFg)" strokeWidth={3} />
+                        <AreaChart data={fgSeries} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                            <defs><linearGradient id="gradFg" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#dd9933" stopOpacity={0.4}/><stop offset="95%" stopColor="#dd9933" stopOpacity={0}/></linearGradient></defs>
+                            <ReferenceArea y1={0} y2={25} fill="#E03A3E" fillOpacity={0.04} />
+                            <ReferenceArea y1={25} y2={45} fill="#F47C20" fillOpacity={0.04} />
+                            <ReferenceArea y1={45} y2={55} fill="#FFD700" fillOpacity={0.03} />
+                            <ReferenceArea y1={55} y2={75} fill="#7AC74F" fillOpacity={0.04} />
+                            <ReferenceArea y1={75} y2={94} fill="#009E4F" fillOpacity={0.04} />
+                            <ReferenceArea y1={95} y2={100} fill="#00ffff" fillOpacity={0.08} />
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-slate-700" opacity={0.15} />
+                            <XAxis dataKey="date" type="number" domain={['dataMin', 'dataMax']} tick={<CustomXAxisTick />} minTickGap={50} hide />
+                            <YAxis orientation="right" domain={[0, 100]} tick={<CustomFngTick />} ticks={[12, 35, 50, 65, 85, 97]} width={110} axisLine={false} tickLine={false} />
+                            <Tooltip 
+                                content={({ active, payload }) => {
+                                    if (active && payload && payload.length) {
+                                        const d = payload[0].payload;
+                                        return (
+                                            <div className="bg-[#1a1c1e] border border-gray-700 p-4 rounded-xl shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+                                                <p className="text-gray-500 font-bold text-[10px] uppercase mb-2 border-b border-white/5 pb-1">{new Date(d.date).toLocaleDateString(undefined, {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'})}</p>
+                                                <div className="flex items-end gap-3">
+                                                    <span className="text-4xl font-black text-[#dd9933] leading-none">{d.value}</span>
+                                                    <span className="text-xs font-black uppercase text-white tracking-widest mb-1">{d.label}</span>
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+                                    return null;
+                                }}
+                            />
+                            <Area type="monotone" dataKey="value" stroke="#dd9933" fill="url(#gradFg)" strokeWidth={1} activeDot={{ r: 6, fill: '#dd9933', stroke: '#fff', strokeWidth: 2 }} />
                             <Brush dataKey="date" height={30} stroke="#dd9933" fill="transparent" tickFormatter={() => ''} />
                         </AreaChart>
                     </ResponsiveContainer>

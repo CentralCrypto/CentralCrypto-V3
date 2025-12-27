@@ -69,14 +69,28 @@ const FearAndGreedWidget = ({ language, onNavigate }: { language: Language; onNa
 
   useEffect(() => {
     fetchFearAndGreed().then(res => {
-      if (res && Array.isArray(res)) setData(res);
+      // Ajuste para lidar com a estrutura correta do array retornado pela API
+      if (res && Array.isArray(res)) {
+          setData(res);
+      }
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
 
   const current = data[0];
   const val = current ? (parseInt(current.value) || 50) : 50;
-  const classification = current?.value_classification_i18n?.[language] || t.s2;
+  
+  // Lógica de classificação sarcástica centralizada
+  const getSarcasticLabel = (v: number) => {
+    if (v <= 25) return t.s0; // Cagaço extremo
+    if (v <= 45) return t.s1; // Rebosteio
+    if (v <= 55) return t.s2; // Andando de lado
+    if (v <= 75) return t.s3; // Agora vai
+    if (v <= 94) return t.s4; // É luaaaa!
+    return t.s5; // Vende a mãe!
+  };
+
+  const classification = getSarcasticLabel(val);
   const rotation = -90 + (val / 100) * 180;
 
   return (
@@ -110,7 +124,14 @@ const FearAndGreedWidget = ({ language, onNavigate }: { language: Language; onNa
                <text x={GAUGE_CX} y={TEXT_LBL_Y} textAnchor="middle" fill="var(--color-text-main)" fontSize="11" fontWeight="900" letterSpacing="0.5">{classification}</text>
              </svg>
            </div>
-           <HorizontalHistoryRow labels={[timeT.yesterday, timeT.d7, timeT.d30]} data={[data[1]?.value || '-', data[7]?.value || '-', data[29]?.value || '-']} />
+           <HorizontalHistoryRow 
+             labels={[timeT.yesterday, timeT.d7, timeT.d30]} 
+             data={[
+                 data[1]?.value || '-', 
+                 data[7]?.value || '-', 
+                 data[29]?.value || '-'
+             ]} 
+           />
         </>
       )}
     </div>
