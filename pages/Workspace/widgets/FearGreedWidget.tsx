@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceArea, Brush } from 'recharts';
@@ -41,7 +40,8 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
 
     const CustomFngTick = ({ x, y, payload }: any) => {
         const label = getClassification(payload.value);
-        return <text x={x} y={y} dy={4} textAnchor="start" className="fill-gray-500 dark:fill-slate-400" fontSize={12} fontStyle="italic" fontWeight="900" textTransform="uppercase">{label}</text>;
+        // Fix: Moved textTransform to style prop as it's not a valid SVG attribute
+        return <text x={x} y={y} dy={4} textAnchor="start" className="fill-gray-500 dark:fill-slate-400" fontSize={12} fontStyle="italic" fontWeight="900" style={{ textTransform: 'uppercase' }}>{label}</text>;
     };
 
     const CustomXAxisTick = ({ x, y, payload }: any) => { 
