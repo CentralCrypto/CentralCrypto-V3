@@ -1,0 +1,33 @@
+name: Guard index.html
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fail if importmap exists in index.html
+        run: |
+          if grep -q 'type="importmap"' index.html; then
+            echo "ERROR: index.html contains importmap. Remove it."
+            exit 1
+          fi
+
+      - name: Fail if Vite entry missing
+        run: |
+          if ! grep -q 'type="module" src="/index.tsx"' index.html; then
+            echo "ERROR: index.html missing Vite module entry: <script type=\"module\" src=\"/index.tsx\"></script>"
+            exit 1
+          fi
+
+      - name: Fail if duplicated Vite entry
+        run: |
+          count=$(grep -c 'type="module" src="/index.tsx"' index.html || true)
+          if [ "$count" -ne 1 ]; then
+            echo "ERROR: index.html must contain exactly ONE Vite entry script. Found: $count"
+            exit 1
+          fi
