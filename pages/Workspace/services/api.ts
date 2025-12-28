@@ -1,9 +1,14 @@
+
 import { ApiCoin } from '../../../types';
 import { httpGetJson } from '../../../services/http';
 import { getCacheckoUrl, ENDPOINTS } from '../../../services/endpoints';
 
 const STABLECOINS = ['USDT', 'USDC', 'DAI', 'FDUSD', 'TUSD', 'USDD', 'PYUSD', 'USDE', 'GUSD', 'USDP', 'BUSD'];
 
+/**
+ * Busca dados usando caminhos relativos e o utilitário robusto httpGetJson.
+ * O proxy interno do Vite resolve para o domínio principal.
+ */
 export const fetchWithFallback = async (url: string): Promise<any | null> => {
     try {
         const salt = Math.floor(Date.now() / 60000);
@@ -39,25 +44,21 @@ export const fetchTopCoins = async (): Promise<ApiCoin[]> => {
 
 export interface NewsItem { title: string; link: string; pubDate: string; source: string; description: string; thumbnail: string; }
 
-// Fix: Expanded EtfFlowData to include chartData and history for maximized views in EtfFlowWidget
 export interface EtfFlowData {
     btcValue: number;
     ethValue: number;
+    // Fix: Added netFlow to the interface to resolve type errors in Dashboard.tsx
     netFlow: number;
     timestamp: number;
-    points?: any[];
     chartDataBTC: any[];
     chartDataETH: any[];
-    history: {
-        lastWeek: number;
-        lastMonth: number;
-        last90d: number;
-    };
+    history: { lastWeek: number; lastMonth: number; last90d: number; };
+    solValue: number;
+    xrpValue: number;
 }
 
 export interface LsrData { lsr: number | null; longs: number | null; shorts: number | null; }
 
-// Fix: Added MacdAvgData and MacdTrackerPoint for MacdWidget build error
 export interface MacdAvgData { averageMacd: number; yesterday: number; days7Ago: number; days30Ago: number; }
 
 export interface MacdTrackerPoint {
@@ -73,7 +74,6 @@ export interface MacdTrackerPoint {
     macdNorm?: number;
 }
 
-// Fix: Added RsiTrackerPoint and missing RsiAvgData for RsiWidget build error
 export interface RsiAvgData { averageRsi: number; yesterday: number; days7Ago: number; days30Ago: number; }
 
 export interface RsiTrackerPoint {
@@ -90,7 +90,6 @@ export interface RsiTrackerPoint {
 
 export interface EconEvent { date: string; title: string; country: string; impact: string; previous?: string; forecast?: string; }
 
-// Fix: Added OrderBookData and FngData for widget build errors
 export interface OrderBookData { bids: { price: string; qty: string }[]; asks: { price: string; qty: string }[]; }
 
 export interface FngData { 
@@ -109,15 +108,12 @@ export interface TrumpData {
     trump_rank_50: number;
     trump_rank_percent: number;
     impact_semaforo?: string;
-    guid?: string;
 }
 
-// Fix: Added AltSeasonHistoryPoint for AltcoinSeasonWidget build error
 export interface AltSeasonHistoryPoint { timestamp: number; altcoinIndex: number; altcoinMarketcap: number; }
 
 export interface AltSeasonData { index: number; yesterday: number; lastWeek: number; lastMonth: number; history?: AltSeasonHistoryPoint[]; }
 
-// Fix: Added missing fetch functions required by workspace widgets
 export const fetchCryptoNews = async (symbol: string, coinName: string): Promise<NewsItem[]> => {
     const url = getCacheckoUrl(ENDPOINTS.cachecko.files.news);
     const finalUrl = `${url}?s=${symbol}&n=${encodeURIComponent(coinName)}`;
@@ -141,11 +137,7 @@ export const fetchAltcoinSeasonHistory = async (): Promise<AltSeasonHistoryPoint
 export const fetchTrumpData = async (): Promise<TrumpData | null> => {
     const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.trump));
     if (!data) return null;
-    const root = Array.isArray(data) ? data[0] : data;
-    return {
-        ...root,
-        link: root.guid || root.link
-    };
+    return Array.isArray(data) ? data[0] : data;
 };
 
 export const fetchFearAndGreed = async (): Promise<FngData[]> => {
@@ -156,42 +148,39 @@ export const fetchFearAndGreed = async (): Promise<FngData[]> => {
 };
 
 export const fetchRsiAverage = async (): Promise<RsiAvgData | null> => fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiAvg));
-
 export const fetchRsiTracker = async (): Promise<RsiTrackerPoint[]> => {
     const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTracker));
     return Array.isArray(data) ? data : [];
 };
-
 export const fetchMacdAverage = async (): Promise<MacdAvgData | null> => fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.macdAvg));
-
 export const fetchMacdTracker = async (): Promise<MacdTrackerPoint[]> => {
     const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.macdTracker));
     return Array.isArray(data) ? data : [];
 };
-
 export const fetchMarketCapHistory = async (): Promise<any | null> => fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.mktcapHist));
-
 export const fetchEconomicCalendar = async (): Promise<EconEvent[]> => {
     const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.calendar));
     return Array.isArray(data) ? data : [];
 };
-
 export const fetchEtfFlow = async (): Promise<EtfFlowData | null> => {
-    const res = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.etfNetFlow));
-    if (!res) return null;
-    
-    const root = Array.isArray(res) ? res[0] : res;
-    if (!root || !root.data) return null;
-
-    return {
-        btcValue: root.data.totalBtcValue || 0,
-        ethValue: root.data.totalEthValue || 0,
-        netFlow: root.data.total || 0,
-        timestamp: root.status?.timestamp ? new Date(root.status.timestamp).getTime() : Date.now(),
-        points: root.data.points || [],
-        chartDataBTC: root.data.chartDataBTC || [],
-        chartDataETH: root.data.chartDataETH || [],
-        history: root.data.history || { lastWeek: 0, lastMonth: 0, last90d: 0 }
+    const [btc, eth] = await Promise.all([
+        fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.etfBtc)),
+        fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.etfEth))
+    ]);
+    if (!btc && !eth) return null;
+    // Fix: Pre-calculate btc and eth values to determine netFlow correctly
+    const btcValue = btc?.net_flow || 0;
+    const ethValue = eth?.net_flow || 0;
+    return { 
+        btcValue, 
+        ethValue, 
+        netFlow: btcValue + ethValue,
+        timestamp: btc?.timestamp || eth?.timestamp || Date.now(), 
+        chartDataBTC: btc?.history || [], 
+        chartDataETH: eth?.history || [], 
+        history: btc?.aggregates || { lastWeek: 0, lastMonth: 0, last90d: 0 }, 
+        solValue: btc?.sol_net_flow || 0, 
+        xrpValue: btc?.xrp_net_flow || 0 
     };
 };
 
