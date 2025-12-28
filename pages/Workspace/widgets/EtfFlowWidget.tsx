@@ -205,7 +205,7 @@ const EtfFlowWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({
         return <div className="flex items-center justify-center h-full text-slate-500"><Loader2 className="animate-spin" /></div>;
     }
     
-    const totalFlow = (etfData.btcValue || 0) + (etfData.ethValue || 0);
+    const totalFlow = etfData.netFlow || 0;
     const FlowArrow = totalFlow >= 0 ? ArrowUp : ArrowDown;
     const arrowColor = totalFlow >= 0 ? 'text-green-400' : 'text-red-400';
 

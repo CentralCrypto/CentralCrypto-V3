@@ -173,7 +173,6 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
            <div className="flex-1 flex flex-col overflow-hidden relative">
              <AnimatePresence initial={false}>
               {visibleTrending.map((post, i) => {
-                const originalIndex = maisLidas.findIndex(p => p.id === post.id);
                 return (
                 <motion.div
                   key={post.id}
@@ -186,7 +185,7 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
                   className="flex-1 flex gap-4 bg-tech-900 border-b border-tech-800 last:border-b-0 hover:border-b-[#dd9933] p-3 cursor-pointer group items-center transition-colors"
                 >
                   <div className="flex-shrink-0 w-8 flex items-center justify-center">
-                    <span className="text-3xl font-black text-gray-800 dark:text-gray-700 transition-colors group-hover:text-[#dd9933]">{originalIndex !== -1 ? originalIndex + 1 : i + 1}</span>
+                    <span className="text-3xl font-black text-gray-800 dark:text-gray-700 transition-colors group-hover:text-[#dd9933]">{i + 1}</span>
                   </div>
                   <div className="relative w-28 h-full shrink-0 overflow-hidden rounded-md bg-black">
                      <img src={post.featuredImage} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 opacity-70 group-hover:opacity-100" alt=""/>
