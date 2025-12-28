@@ -317,17 +317,17 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
                     <path d={`M ${GAUGE_CX} ${GAUGE_CY} L ${GAUGE_CX} ${GAUGE_CY - MINI_GAUGE_RY + 2}`} stroke="var(--color-text-main)" strokeWidth="4" strokeLinecap="round" />
                     <circle cx={GAUGE_CX} cy={GAUGE_CY} r="5" fill="var(--color-text-main)" />
                 </g>
-                <text x={GAUGE_CX} y={TEXT_VAL_Y - 10} textAnchor="middle" fill="var(--color-gauge-val)" fontSize="22" fontWeight="900" fontFamily="monospace">{val.toFixed(2)}</text>
+                <text x={GAUGE_CX} y={TEXT_VAL_Y - 3} textAnchor="middle" fill="var(--color-gauge-val)" fontSize="22" fontWeight="900" fontFamily="monospace">{val.toFixed(2)}</text>
             </svg>
         </div>
-        <div className="flex justify-between px-2 pt-1 border-t border-tech-700/50 mt-1">
+        <div className="flex justify-between px-2 pt-1 border-t border-tech-700/50 mt+5">
             <div className="text-center">
-                <div className="text-[8px] text-gray-500 font-black uppercase tracking-tighter">Shorts</div>
-                <div className="text-xs font-mono font-black text-tech-danger">{data?.shorts ? `${data.shorts.toFixed(1)}%` : '--'}</div>
+                <div className="text-[9px] text-gray-500 font-black uppercase tracking-tighter">Shorts</div>
+                <div className="text-[11px] font-mono font-black text-tech-danger">{data?.shorts ? `${data.shorts.toFixed(1)}%` : '--'}</div>
             </div>
             <div className="text-center">
-                <div className="text-[8px] text-gray-500 font-black uppercase tracking-tighter">Longs</div>
-                <div className="text-xs font-mono font-black text-tech-success">{data?.longs ? `${data.longs.toFixed(1)}%` : '--'}</div>
+                <div className="text-[9px] text-gray-500 font-black uppercase tracking-tighter">Longs</div>
+                <div className="text-[11px] font-mono font-black text-tech-success">{data?.longs ? `${data.longs.toFixed(1)}%` : '--'}</div>
             </div>
         </div>
     </div>

@@ -6,7 +6,8 @@ import { getCacheckoUrl, ENDPOINTS } from '../../../services/endpoints';
 const STABLECOINS = ['USDT', 'USDC', 'DAI', 'FDUSD', 'TUSD', 'USDD', 'PYUSD', 'USDE', 'GUSD', 'USDP', 'BUSD'];
 
 /**
- * Common fetch with fallback and cache busting
+ * Busca dados usando caminhos relativos e o utilitário robusto httpGetJson.
+ * O proxy interno do Vite resolve para o domínio principal.
  */
 export const fetchWithFallback = async (url: string): Promise<any | null> => {
     try {
@@ -46,16 +47,14 @@ export interface NewsItem { title: string; link: string; pubDate: string; source
 export interface EtfFlowData {
     btcValue: number;
     ethValue: number;
+    // Fix: Added netFlow to the interface to resolve type errors in Dashboard.tsx
     netFlow: number;
     timestamp: number;
-    points?: any[];
     chartDataBTC: any[];
     chartDataETH: any[];
-    history: { 
-        lastWeek: number; 
-        lastMonth: number; 
-        last90d: number; 
-    };
+    history: { lastWeek: number; lastMonth: number; last90d: number; };
+    solValue: number;
+    xrpValue: number;
 }
 
 export interface LsrData { lsr: number | null; longs: number | null; shorts: number | null; }
@@ -109,7 +108,6 @@ export interface TrumpData {
     trump_rank_50: number;
     trump_rank_percent: number;
     impact_semaforo?: string;
-    guid?: string;
 }
 
 export interface AltSeasonHistoryPoint { timestamp: number; altcoinIndex: number; altcoinMarketcap: number; }
@@ -139,11 +137,7 @@ export const fetchAltcoinSeasonHistory = async (): Promise<AltSeasonHistoryPoint
 export const fetchTrumpData = async (): Promise<TrumpData | null> => {
     const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.trump));
     if (!data) return null;
-    const root = Array.isArray(data) ? data[0] : data;
-    return {
-        ...root,
-        link: root.guid || root.link
-    };
+    return Array.isArray(data) ? data[0] : data;
 };
 
 export const fetchFearAndGreed = async (): Promise<FngData[]> => {
@@ -168,30 +162,25 @@ export const fetchEconomicCalendar = async (): Promise<EconEvent[]> => {
     const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.calendar));
     return Array.isArray(data) ? data : [];
 };
-
 export const fetchEtfFlow = async (): Promise<EtfFlowData | null> => {
-    const res = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.etfNetFlow));
-    if (!res) return null;
-    
-    // Estrutura esperada: [{ data: { totalBtcValue, totalEthValue, total, history: {...} }, status: { timestamp } }]
-    const root = Array.isArray(res) ? res[0] : res;
-    if (!root || !root.data) return null;
-
-    const d = root.data;
-
-    return {
-        btcValue: d.totalBtcValue || 0,
-        ethValue: d.totalEthValue || 0,
-        netFlow: d.total || 0,
-        timestamp: root.status?.timestamp ? new Date(root.status.timestamp).getTime() : Date.now(),
-        points: d.points || [],
-        chartDataBTC: d.chartDataBTC || [],
-        chartDataETH: d.chartDataETH || [],
-        history: {
-            lastWeek: d.last7d || d.lastWeek || 0,
-            lastMonth: d.last30d || d.lastMonth || 0,
-            last90d: d.last90d || 0
-        }
+    const [btc, eth] = await Promise.all([
+        fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.etfBtc)),
+        fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.etfEth))
+    ]);
+    if (!btc && !eth) return null;
+    // Fix: Pre-calculate btc and eth values to determine netFlow correctly
+    const btcValue = btc?.net_flow || 0;
+    const ethValue = eth?.net_flow || 0;
+    return { 
+        btcValue, 
+        ethValue, 
+        netFlow: btcValue + ethValue,
+        timestamp: btc?.timestamp || eth?.timestamp || Date.now(), 
+        chartDataBTC: btc?.history || [], 
+        chartDataETH: eth?.history || [], 
+        history: btc?.aggregates || { lastWeek: 0, lastMonth: 0, last90d: 0 }, 
+        solValue: btc?.sol_net_flow || 0, 
+        xrpValue: btc?.xrp_net_flow || 0 
     };
 };
 
