@@ -104,32 +104,43 @@
       .group:hover .animate-scroll { animation-play-state: paused; }
       .animate-scroll { animation-timing-function: linear !important; will-change: transform; }
 
-      /* FAN MENU FIX - USANDO NTH-OF-TYPE PARA IGNORAR BRIDGE E BUTTON */
+      /* FAN MENU FIX - DEFINITIVO COM BLUR */
       .fan-item {
         transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         opacity: 0;
-        transform: translate(0, 0) scale(0.2);
+        transform: translate(0, 0) scale(0.1);
         pointer-events: none;
         position: absolute;
-        z-index: 10;
+        z-index: 60;
+        backdrop-filter: blur(12px) saturate(180%);
+        -webkit-backdrop-filter: blur(12px) saturate(180%);
+        background: rgba(255, 255, 255, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+      }
+      .dark .fan-item {
+        background: rgba(35, 37, 40, 0.85);
+        border: 1px solid rgba(221, 153, 51, 0.4);
+        box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.5);
       }
       .group:hover .fan-item {
         opacity: 1;
         pointer-events: auto;
       }
-      .group:hover a.fan-item:nth-of-type(1) { transform: translate(-85px, 40px) scale(1); }
-      .group:hover a.fan-item:nth-of-type(2) { transform: translate(-50px, 75px) scale(1); }
+      /* Distribuição em leque para 5 itens */
+      .group:hover a.fan-item:nth-of-type(1) { transform: translate(-105px, 25px) scale(1); }
+      .group:hover a.fan-item:nth-of-type(2) { transform: translate(-60px, 70px) scale(1); }
       .group:hover a.fan-item:nth-of-type(3) { transform: translate(0px, 90px) scale(1); }
-      .group:hover a.fan-item:nth-of-type(4) { transform: translate(50px, 75px) scale(1); }
-      .group:hover a.fan-item:nth-of-type(5) { transform: translate(85px, 40px) scale(1); }
+      .group:hover a.fan-item:nth-of-type(4) { transform: translate(60px, 70px) scale(1); }
+      .group:hover a.fan-item:nth-of-type(5) { transform: translate(105px, 25px) scale(1); }
       
       .fan-bridge {
         position: absolute;
-        top: -20px;
-        left: -100px;
-        right: -100px;
-        bottom: -120px;
-        z-index: 5;
+        top: -10px;
+        left: -110px;
+        right: -110px;
+        bottom: -110px;
+        z-index: 55;
         display: none;
       }
       .group:hover .fan-bridge { display: block; }

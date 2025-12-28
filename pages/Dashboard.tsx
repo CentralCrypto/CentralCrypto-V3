@@ -81,32 +81,38 @@ const MarketCapHistoryWidget = ({ language, onNavigate, theme }: { language: Lan
   
   const formatVal = (v?: number) => {
     if (v === undefined || v === null) return '-';
-    return v >= 1e12 ? `$${(v/1e12).toFixed(2)}T` : `$${(v/1e9).toFixed(2)}B`;
+    return v >= 1e12 ? `$${(v/1e12).toFixed(2)}T` : `$${(v/1e9).toFixed(1)}B`;
   };
 
   const strokeColor = theme === 'dark' ? '#548f3f' : '#1a1c1e';
   const fillColor = theme === 'dark' ? '#548f3f' : '#1a1c1e';
 
-  // Processamento simplificado dos pontos para evitar "NADA" na tela
+  // Processamento dos pontos 1Y baseados no JSON fornecido
   const chartPoints = useMemo(() => {
-    const rawData = Array.isArray(data) ? data[0] : data;
-    const history = rawData?.history || [];
-    if (!Array.isArray(history) || history.length === 0) return [];
+    const rawRoot = Array.isArray(data) ? data[0] : data;
+    const yearData = rawRoot?.['1Y'];
+    if (!yearData || !yearData.timestamps || !yearData.values) return [];
     
-    return history.map((val: number, i: number) => {
-        const d = new Date();
-        d.setDate(d.getDate() - (history.length - 1 - i));
-        return { date: d.getTime(), value: val };
-    });
+    return yearData.timestamps.map((ts: number, i: number) => ({
+        date: ts,
+        value: yearData.values[i]
+    }));
   }, [data]);
 
-  const rawData = Array.isArray(data) ? data[0] : data;
+  const rawRoot = Array.isArray(data) ? data[0] : data;
+  const latestValue = rawRoot?.['1Y']?.values?.slice(-1)[0];
 
   return (
     <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 relative overflow-hidden transition-all duration-700">
       <div className="shrink-0 flex justify-between items-start mb-1">
-        <div className="flex flex-col"><span className="font-black text-[11px] leading-tight text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t.title}</span><span className="text-[10px] font-bold text-gray-600 dark:text-gray-200">Global</span></div>
-        <div className="text-right flex items-start gap-2"><span className="text-lg font-bold text-tech-accent font-mono">{rawData ? formatVal(rawData.current || rawData.history?.slice(-1)[0]) : '---'}</span><WorkspaceLink onClick={onNavigate} /></div>
+        <div className="flex flex-col">
+            <span className="font-black text-[11px] leading-tight text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t.title}</span>
+            <span className="text-[10px] font-bold text-gray-600 dark:text-gray-200">Global 1Y</span>
+        </div>
+        <div className="text-right flex items-start gap-2">
+            <span className="text-lg font-bold text-tech-accent font-mono">{formatVal(latestValue)}</span>
+            <WorkspaceLink onClick={onNavigate} />
+        </div>
       </div>
       <div className="relative flex-1 bg-white/50 dark:bg-black/40 rounded-lg mb-1 overflow-hidden min-h-[110px] w-full">
         {loading ? (
@@ -115,15 +121,22 @@ const MarketCapHistoryWidget = ({ language, onNavigate, theme }: { language: Lan
             <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartPoints}>
                     <defs><linearGradient id="colorMkt" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={fillColor} stopOpacity={0.3}/><stop offset="95%" stopColor={fillColor} stopOpacity={0}/></linearGradient></defs>
-                    <Tooltip content={<CustomTooltip language={language} prefix="$" />} cursor={{ stroke: strokeColor, strokeWidth: 1 }} />
+                    {/* SEM TOOLTIP CONFORME SOLICITADO */}
                     <Area type="monotone" dataKey="value" stroke={strokeColor} fill="url(#colorMkt)" strokeWidth={2} dot={false} isAnimationActive={true} />
                 </AreaChart>
             </ResponsiveContainer>
         ) : (
-          <div className="flex items-center justify-center h-full text-[10px] text-gray-500 italic uppercase">Sem Dados de Histórico</div>
+          <div className="flex items-center justify-center h-full text-[10px] text-gray-500 italic uppercase">Sem Dados Históricos</div>
         )}
       </div>
-      <HorizontalHistoryRow labels={[t.yesterday, t.week, t.month]} data={[formatVal(rawData?.yesterday), formatVal(rawData?.lastWeek), formatVal(rawData?.lastMonth)]} />
+      <HorizontalHistoryRow 
+        labels={[t.yesterday, t.week, t.month]} 
+        data={[
+            formatVal(rawRoot?.['24H']?.values?.slice(-2)[0]), 
+            formatVal(rawRoot?.['7D']?.values?.slice(-2)[0]), 
+            formatVal(rawRoot?.['1M']?.values?.slice(-2)[0])
+        ]} 
+      />
     </div>
   );
 };
