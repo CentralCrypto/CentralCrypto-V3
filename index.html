@@ -8,7 +8,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     
-    <!-- TradingView Public Widget CDN (Substitui a necessidade de arquivos locais aqui no chat) -->
+    <!-- TradingView Public Widget CDN -->
     <script src="https://s3.tradingview.com/tv.js"></script>
 
     <!-- Highcharts Dependencies -->
@@ -51,7 +51,7 @@
             animation: {
               'spin-slow': 'spin 3s linear infinite',
               'scroll': 'scroll 320s linear infinite',
-              'magazine-scroll': 'magazine-scroll 300s linear infinite',
+              'magazine-scroll': 'magazine-scroll 600s linear infinite',
             },
             keyframes: {
               scroll: {
@@ -60,7 +60,7 @@
               },
               'magazine-scroll': {
                 '0%': { transform: 'translateX(0)' },
-                '100%': { transform: 'translateX(-100%)' },
+                '100%': { transform: 'translateX(-50%)' },
               }
             }
           }

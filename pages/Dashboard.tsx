@@ -292,6 +292,7 @@ const MarketCapHistoryWidget = ({ language, onNavigate, theme }: { language: Lan
   const [data, setData] = useState<any>(null);
   const t = getTranslations(language).dashboard.widgets.mktcapHistory;
   useEffect(() => { fetchMarketCapHistory().then(setData).catch(() => setData(null)); }, []);
+  
   const formatVal = (v?: number) => {
     if (v === undefined || v === null) return '-';
     return v >= 1e12 ? `$${(v/1e12).toFixed(2)}T` : `$${(v/1e9).toFixed(2)}B`;
@@ -300,20 +301,26 @@ const MarketCapHistoryWidget = ({ language, onNavigate, theme }: { language: Lan
   const strokeColor = theme === 'dark' ? '#548f3f' : '#1a1c1e';
   const fillColor = theme === 'dark' ? '#548f3f' : '#1a1c1e';
 
+  // Handling array wrapper [ { history: [...] } ]
   const chartPoints = useMemo(() => {
-    if (!data?.history) return [];
-    return data.history.map((val: number, i: number) => {
+    const rawData = Array.isArray(data) ? data[0] : data;
+    const historyArray = rawData?.history;
+    if (!historyArray || !Array.isArray(historyArray)) return [];
+    
+    return historyArray.map((val: number, i: number) => {
         const d = new Date();
-        d.setDate(d.getDate() - (data.history.length - 1 - i));
+        d.setDate(d.getDate() - (historyArray.length - 1 - i));
         return { date: d.getTime(), value: val };
     });
   }, [data]);
+
+  const rawData = Array.isArray(data) ? data[0] : data;
 
   return (
     <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 relative">
       <div className="shrink-0 flex justify-between items-start mb-1">
         <div className="flex flex-col"><span className="font-black text-[11px] leading-tight text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t.title}</span><span className="text-[10px] font-bold text-gray-600 dark:text-gray-200">Global</span></div>
-        <div className="text-right flex items-start gap-2"><span className="text-lg font-bold text-tech-accent font-mono">{data ? formatVal(data.current) : '---'}</span><WorkspaceLink onClick={onNavigate} /></div>
+        <div className="text-right flex items-start gap-2"><span className="text-lg font-bold text-tech-accent font-mono">{rawData ? formatVal(rawData.current || rawData.history?.slice(-1)[0]) : '---'}</span><WorkspaceLink onClick={onNavigate} /></div>
       </div>
       <div className="relative flex-1 bg-white/50 dark:bg-black/40 rounded-lg mb-1 overflow-hidden">
         <ResponsiveContainer width="100%" height="100%">
@@ -324,7 +331,7 @@ const MarketCapHistoryWidget = ({ language, onNavigate, theme }: { language: Lan
             </AreaChart>
         </ResponsiveContainer>
       </div>
-      <HorizontalHistoryRow labels={[t.yesterday, t.week, t.month]} data={[formatVal(data?.yesterday), formatVal(data?.lastWeek), formatVal(data?.lastMonth)]} />
+      <HorizontalHistoryRow labels={[t.yesterday, t.week, t.month]} data={[formatVal(rawData?.yesterday), formatVal(rawData?.lastWeek), formatVal(rawData?.lastMonth)]} />
     </div>
   );
 };

@@ -153,7 +153,7 @@ const App: React.FC = () => {
       <div className="relative z-10 flex flex-col min-h-screen">
         <Header currentView={currentView} setView={setView} theme={theme} toggleTheme={toggleTheme} user={user} language={language} onLanguageChange={setLanguage} onLoginClick={() => setAuthModalOpen(true)} onLogoutClick={handleLogout} onSearch={handleSearch} />
         <div className="h-[152px] w-full shrink-0"></div>
-        {currentView === ViewMode.DASHBOARD && <div className="w-full z-40 mt-[-5px]"><GlobalStatsBar /></div>}
+        {currentView === ViewMode.DASHBOARD && <div className="w-full z-40 mt-[0px]"><GlobalStatsBar /></div>}
         <main className={`flex-1 flex flex-col w-full ${isFullScreenIframe ? 'p-0' : ''}`}>{renderView()}</main>
         {!isFullScreenIframe && <Footer onTermsClick={() => setTermsOpen(true)} onPrivacyClick={() => setPrivacyOpen(true)} onAnalystClick={() => setAnalystOpen(true)} language={language} />}
       </div>

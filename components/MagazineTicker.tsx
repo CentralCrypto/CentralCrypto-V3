@@ -49,7 +49,7 @@ const MagazineTicker: React.FC<MagazineTickerProps> = ({ onPostClick }) => {
 
   if (!posts || posts.length === 0) return null;
 
-  // Renderiza três vezes para garantir que o loop cubra toda a largura da tela sem lacunas
+  // Renderiza dois conjuntos para o loop infinito de 50%
   const TickerSet = () => (
     <>
       {posts.map(post => (
@@ -72,14 +72,13 @@ const MagazineTicker: React.FC<MagazineTickerProps> = ({ onPostClick }) => {
   );
 
   return (
-    <div className="w-full my-4 overflow-hidden relative group py-2 border-y border-tech-800/30">
+    <div className="w-full my-4 overflow-hidden relative group py-3 bg-black/5 dark:bg-white/5 shadow-inner transition-colors">
       <div className="flex animate-magazine-scroll group-hover:[animation-play-state:paused] w-max">
         <TickerSet />
         <TickerSet />
-        <TickerSet />
       </div>
-       <div className="absolute left-0 top-0 bottom-0 w-24 bg-gradient-to-r from-tech-950 to-transparent z-10 pointer-events-none"></div>
-       <div className="absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-tech-950 to-transparent z-10 pointer-events-none"></div>
+       <div className="absolute left-0 top-0 bottom-0 w-24 bg-gradient-to-r from-[#eeeeee] dark:from-tech-950 to-transparent z-10 pointer-events-none"></div>
+       <div className="absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-[#eeeeee] dark:from-tech-950 to-transparent z-10 pointer-events-none"></div>
     </div>
   );
 };
