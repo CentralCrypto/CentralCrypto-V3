@@ -47,6 +47,11 @@ const MagazineTicker: React.FC<MagazineTickerProps> = ({ onPostClick }) => {
     return txt.value;
   };
 
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
+
   if (loading) {
     return (
         <div className="w-full h-16 my-4 bg-gray-200/20 dark:bg-tech-900/20 rounded-xl animate-pulse flex items-center justify-center">
@@ -67,22 +72,24 @@ const MagazineTicker: React.FC<MagazineTickerProps> = ({ onPostClick }) => {
           <div 
             key={`${post.id}-${idx}`} 
             onClick={() => onPostClick(post.id)} 
-            className="flex items-center gap-4 shrink-0 w-[320px] cursor-pointer group/tickeritem p-2 hover:bg-tech-accent/10 rounded-xl transition-all mx-3"
+            className="flex items-center gap-4 shrink-0 w-[350px] cursor-pointer group/tickeritem p-2 hover:bg-tech-accent/10 rounded-xl transition-all mx-3"
           >
             <div className="relative shrink-0">
                 <img 
                   src={post.featuredImage || 'https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png'} 
                   alt="" 
-                  className="w-12 h-12 object-cover rounded-lg border-2 border-transparent group-hover/tickeritem:border-tech-accent transition-all shadow-md bg-tech-800" 
+                  className="w-14 h-14 object-cover rounded-lg border-2 border-transparent group-hover/tickeritem:border-tech-accent transition-all shadow-md bg-tech-800" 
                 />
             </div>
             <div className="flex flex-col min-w-0">
-                <span className="text-xs font-black text-gray-700 dark:text-gray-200 group-hover/tickeritem:text-tech-accent line-clamp-2 leading-tight uppercase tracking-tight transition-colors">
+                <span className="text-sm font-bold text-tech-accent group-hover/tickeritem:text-white line-clamp-2 leading-tight uppercase tracking-tight transition-colors">
                   {decodeHTML(post.titleHtml)}
                 </span>
-                <span className="text-[8px] font-bold text-gray-400 dark:text-gray-500 mt-0.5 uppercase tracking-widest">
-                    {post.authorName || "Central Crypto"}
-                </span>
+                <div className="flex items-center gap-2 mt-1 text-[9px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
+                    <span>{post.authorName || "Central Crypto"}</span>
+                    <span className="opacity-50">•</span>
+                    <span className="text-gray-500">{formatDate(post.date)}</span>
+                </div>
             </div>
           </div>
         ))}
