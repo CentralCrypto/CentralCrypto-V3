@@ -87,7 +87,6 @@ const MarketCapHistoryWidget = ({ language, onNavigate, theme }: { language: Lan
   const strokeColor = theme === 'dark' ? '#548f3f' : '#1a1c1e';
   const fillColor = theme === 'dark' ? '#548f3f' : '#1a1c1e';
 
-  // Processamento dos pontos 1Y baseados no JSON fornecido
   const chartPoints = useMemo(() => {
     const rawRoot = Array.isArray(data) ? data[0] : data;
     const yearData = rawRoot?.['1Y'];
@@ -110,18 +109,17 @@ const MarketCapHistoryWidget = ({ language, onNavigate, theme }: { language: Lan
             <span className="text-[10px] font-bold text-gray-600 dark:text-gray-200">Global 1Y</span>
         </div>
         <div className="text-right flex items-start gap-2">
-            <span className="text-lg font-bold text-tech-accent font-mono">{formatVal(latestValue)}</span>
+            <span className="text-base font-bold text-tech-accent font-mono">{formatVal(latestValue)}</span>
             <WorkspaceLink onClick={onNavigate} />
         </div>
       </div>
-      <div className="relative flex-1 bg-white/50 dark:bg-black/40 rounded-lg mb-1 overflow-hidden min-h-[110px] w-full">
+      <div className="relative flex-1 bg-white/50 dark:bg-black/40 rounded-lg mb-1 overflow-hidden min-h-[90px] w-full">
         {loading ? (
             <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-[#dd9933]" size={16} /></div>
         ) : chartPoints.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartPoints}>
                     <defs><linearGradient id="colorMkt" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={fillColor} stopOpacity={0.3}/><stop offset="95%" stopColor={fillColor} stopOpacity={0}/></linearGradient></defs>
-                    {/* SEM TOOLTIP CONFORME SOLICITADO */}
                     <Area type="monotone" dataKey="value" stroke={strokeColor} fill="url(#colorMkt)" strokeWidth={2} dot={false} isAnimationActive={true} />
                 </AreaChart>
             </ResponsiveContainer>
@@ -350,10 +348,9 @@ const AltSeasonWidget = ({ language, onNavigate, theme }: { language: Language; 
         <div className="flex flex-col"><span className="font-black text-[11px] leading-tight text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t.title}</span><span className="text-[10px] font-bold text-gray-600 dark:text-gray-200">Index</span></div>
         <div className="text-right flex items-start gap-2"><span className="text-2xl font-bold text-gray-800 dark:text-gray-200 font-mono">{data.index ?? 0}</span><WorkspaceLink onClick={onNavigate} /></div>
       </div>
-      <div className="relative flex-1 bg-white/50 dark:bg-black/40 rounded-lg mb-1 overflow-hidden">
+      <div className="relative flex-1 bg-white/50 dark:bg-black/40 rounded-lg mb-1 overflow-hidden min-h-[90px]">
         <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data.history} margin={{top:5, right:5, left:5, bottom:5}}>
-                {/* TOOLTIP REMOVIDO PARA DASHBOARD CONFORME SOLICITADO */}
                 <Line type="monotone" dataKey="value" stroke={strokeColor} strokeWidth={1} dot={false} isAnimationActive={false} />
             </LineChart>
         </ResponsiveContainer>
@@ -457,7 +454,7 @@ const GainersLosersWidget = ({ language, onNavigate }: { language: Language; onN
     useEffect(() => { fetchGainersLosers().then(setData).catch(() => {}); }, []);
     const list = tab === 'gainers' ? data.gainers : data.losers;
     return (
-        <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 transition-colors">
+        <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 transition-colors overflow-hidden">
             <div className="flex bg-gray-100 dark:bg-tech-900 rounded p-1 mb-2 border border-transparent dark:border-tech-700">
                 <button onClick={() => setTab('gainers')} className={`flex-1 py-1 text-sm font-black uppercase rounded transition-all ${tab==='gainers'?'bg-tech-success text-white shadow':'text-gray-500'}`}>{t.gainers}</button>
                 <button onClick={() => setTab('losers')} className={`flex-1 py-1 text-sm font-black uppercase rounded transition-all ${tab==='losers'?'bg-tech-danger text-white shadow':'text-gray-500'}`}>{t.losers}</button>
@@ -482,7 +479,7 @@ const MarketCapWidget = ({ language, onNavigate }: { language: Language; onNavig
     const [list, setList] = useState<any[]>([]);
     useEffect(() => { fetchTopCoins().then(data => setList(data.slice(0, 10))).catch(() => {}); }, []);
     return (
-        <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 transition-colors">
+        <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 transition-colors overflow-hidden">
             <div className="flex justify-between items-center mb-2">
                 <div className="font-black text-gray-500 dark:text-gray-400 text-[11px] leading-tight uppercase tracking-wider">TOP 10 MARKET CAP</div>
                 <WorkspaceLink onClick={onNavigate} />
@@ -523,7 +520,7 @@ const EconomicCalendarWidget = ({ language, onNavigate }: { language: Language; 
     const getFlag = (c: string) => c === 'BRL' ? "https://hatscripts.github.io/circle-flags/flags/br.svg" : "https://hatscripts.github.io/circle-flags/flags/us.svg";
 
     return (
-        <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700">
+        <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 overflow-hidden">
              <div className="flex justify-between items-center mb-2">
                 <div className="font-black text-[11px] leading-tight uppercase tracking-wider text-gray-500 dark:text-gray-400">{t.title}</div>
                 <div className="flex items-center gap-3">
