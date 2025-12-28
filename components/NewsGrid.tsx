@@ -172,7 +172,9 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
            <div className="text-lg font-bold uppercase tracking-widest text-gray-200 border-b-2 border-[#dd9933] pb-2 mb-6 text-right shrink-0">{t.trendingTopics}</div>
            <div className="flex-1 flex flex-col overflow-hidden relative">
              <AnimatePresence initial={false}>
-              {visibleTrending.map((post, i) => (
+              {visibleTrending.map((post, i) => {
+                const originalIndex = maisLidas.findIndex(p => p.id === post.id);
+                return (
                 <motion.div
                   key={post.id}
                   layout
@@ -184,17 +186,18 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
                   className="flex-1 flex gap-4 bg-tech-900 border-b border-tech-800 last:border-b-0 hover:border-b-[#dd9933] p-3 cursor-pointer group items-center transition-colors"
                 >
                   <div className="flex-shrink-0 w-8 flex items-center justify-center">
-                    <span className="text-3xl font-black text-gray-800 dark:text-gray-700 transition-colors group-hover:text-[#dd9933]">{i + 1}</span>
+                    <span className="text-3xl font-black text-gray-800 dark:text-gray-700 transition-colors group-hover:text-[#dd9933]">{originalIndex !== -1 ? originalIndex + 1 : i + 1}</span>
                   </div>
                   <div className="relative w-28 h-full shrink-0 overflow-hidden rounded-md bg-black">
                      <img src={post.featuredImage} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 opacity-70 group-hover:opacity-100" alt=""/>
                   </div>
                   <div className="flex flex-col justify-center flex-1 min-w-0">
-                     <h5 className="text-base font-bold text-gray-200 dark:text-[#dd9933] leading-tight line-clamp-3 group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors mb-1">{decodeHTML(post.titleHtml)}</h5>
-                     <div className="text-xs text-gray-500 font-mono"><span>{new Date(post.date).toLocaleDateString(currentLocale)}</span></div>
+                     <h5 className="text-[17px] font-extrabold text-gray-200 dark:text-[#dd9933] leading-snug line-clamp-3 group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors mb-1">{decodeHTML(post.titleHtml)}</h5>
+                     <div className="text-[13px] text-gray-500 font-mono"><span>{new Date(post.date).toLocaleDateString(currentLocale)}</span></div>
                   </div>
                 </motion.div>
-              ))}
+                );
+              })}
              </AnimatePresence>
           </div>
         </div>
