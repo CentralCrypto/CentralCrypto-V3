@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Loader2, ExternalLink } from 'lucide-react';
 import { TrumpData, fetchTrumpData } from '../services/api';
@@ -98,18 +97,18 @@ const TrumpMeterWidget: React.FC<{ item: DashboardItem, language?: Language }> =
             </div>
             
             <div className="relative h-1.5 w-full bg-gray-100 dark:bg-tech-950 rounded-full mb-3 overflow-hidden">
-                <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-red-500 via-yellow-500 to-green-500 w-full opacity-30"></div>
+                <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-[#CD534B] via-yellow-500 to-[#548f3f] w-full opacity-30"></div>
                 <div className="absolute top-0 bottom-0 w-1 bg-white shadow-[0_0_8px_rgba(255,255,255,1)] transition-all duration-1000 z-10" style={{left: `${impactPercent}%`}}></div>
             </div>
 
             <div className="text-center mb-1">
-                 <span className="text-4xl font-black tracking-tighter" style={{color: impactColor}}>
+                 <span className="text-[24px] font-black tracking-tighter" style={{color: impactColor}}>
                     {animatedImpact > 0 ? '+' : ''}{animatedImpact}
                  </span>
             </div>
             
             <div className="text-center mb-2 px-1">
-                 <div className="text-[10px] font-black uppercase text-gray-900 dark:text-white truncate" style={{color: impactColor}}>
+                 <div className="text-[8px] font-black uppercase text-gray-900 dark:text-white truncate" style={{color: impactColor}}>
                     {trumpData.sarcastic_label}
                  </div>
             </div>

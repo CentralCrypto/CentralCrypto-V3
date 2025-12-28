@@ -5,7 +5,7 @@ import CryptoWidget from './CryptoWidget';
 import { 
   BarChart2, TrendingUp, Activity, PieChart, ArrowUpRight, 
   Calendar, ChevronsUpDown, List, Loader2, 
-  LayoutGrid, CircleDashed, Search, RefreshCw, Lock, ChevronDown
+  LayoutGrid, CircleDashed, Search, RefreshCw, Lock, ChevronDown, User
 } from 'lucide-react';
 import { fetchTopCoins } from '../services/api';
 import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts';
@@ -249,7 +249,7 @@ interface IndicatorPageProps {
   userTier: UserTier;
 }
 
-type PageType = 'MARKETCAP' | 'RSI' | 'MACD' | 'FNG' | 'LSR' | 'ALTSEASON' | 'ETF' | 'GAINERS' | 'HEATMAP' | 'BUBBLE_HEATMAP' | 'CALENDAR';
+type PageType = 'MARKETCAP' | 'RSI' | 'MACD' | 'FNG' | 'LSR' | 'ALTSEASON' | 'ETF' | 'GAINERS' | 'HEATMAP' | 'BUBBLE_HEATMAP' | 'CALENDAR' | 'TRUMP';
 
 const IndicatorPage: React.FC<IndicatorPageProps> = ({ language, coinMap, userTier }) => {
     const [activePage, setActivePage] = useState<PageType>('MARKETCAP');
@@ -273,6 +273,7 @@ const IndicatorPage: React.FC<IndicatorPageProps> = ({ language, coinMap, userTi
         { title: 'Sentiment', items: [ 
             { id: 'FNG' as PageType, label: tWs.fng.title, icon: <PieChart size={18} /> }, 
             { id: 'ALTSEASON' as PageType, label: tWs.altseason.title, icon: <Activity size={18} /> }, 
+            { id: 'TRUMP' as PageType, label: "Trump-o-Meter", icon: <User size={18} /> },
         ] }
     ];
     
@@ -355,6 +356,11 @@ const IndicatorPage: React.FC<IndicatorPageProps> = ({ language, coinMap, userTi
                         {activePage === 'CALENDAR' && (
                             <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
                                 <CryptoWidget item={{ id: 'cal-page', type: WidgetType.CALENDAR, title: 'Calendar', symbol: 'CAL', isMaximized: true }} language={language} />
+                            </div>
+                        )}
+                        {activePage === 'TRUMP' && (
+                            <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
+                                <CryptoWidget item={{ id: 'trump-page', type: WidgetType.TRUMP_METER, title: 'Trump-o-Meter', symbol: 'SENTIMENT', isMaximized: true }} language={language} />
                             </div>
                         )}
                         {activePage === 'LSR' && (

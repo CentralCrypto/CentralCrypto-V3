@@ -91,7 +91,7 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
                                 <circle cx={100} cy={75} r="6" className="fill-gray-900 dark:fill-white" />
                             </g>
                             <text x={100} y={105} textAnchor="middle" className="fill-gray-900 dark:fill-[#dd9933]" fontSize="38" fontWeight="1000" fontFamily="monospace">{fgValue}</text>
-                            <text x={100} y={122} textAnchor="middle" className="fill-gray-600 dark:fill-gray-300" fontSize="6.5" fontWeight="1000" letterSpacing="1" style={{ textTransform: 'uppercase' }}>{fgLabel}</text>
+                            <text x={100} y={122} textAnchor="middle" className="fill-gray-600 dark:fill-gray-300" fontSize="8" fontWeight="1000" letterSpacing="1" style={{ textTransform: 'uppercase' }}>{fgLabel}</text>
                         </svg>
                     </div>
                     <div className="flex flex-wrap justify-center gap-6">
@@ -159,8 +159,8 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
                 </svg>
             </div>
             <div className="flex flex-col items-center mt-2 z-10">
-                <div className="text-[14px] font-black text-[#dd9933] leading-none">{fgValue}</div>
-                <div className="text-[10px] font-black text-gray-900 dark:text-white uppercase mt-1 tracking-wider">{fgLabel}</div>
+                <div className="text-[24px] font-black text-[#dd9933] leading-none">{fgValue}</div>
+                <div className="text-[8px] font-black text-gray-900 dark:text-white uppercase mt-1 tracking-wider">{fgLabel}</div>
             </div>
             <div className="flex justify-around w-full mt-2 text-center z-10 border-t border-gray-200 dark:border-slate-700/30 pt-2 pb-2">
                 <div><div className="text-[10px] text-gray-500 dark:text-slate-500 font-bold uppercase">{tTime.yesterday}</div><div className="text-sm font-bold text-gray-800 dark:text-white">{fgYesterday}</div></div>

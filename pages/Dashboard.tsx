@@ -194,7 +194,8 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
   }, [symbol, period]);
 
   const val = data?.lsr ?? 1;
-  const rotation = -90 + (Math.min(Math.max(val, 0), 3) / 3) * 180;
+  const clampedVal = Math.min(Math.max(val, 1), 5);
+  const rotation = -90 + ((clampedVal - 1) / 4) * 180;
   const label = val > 1.1 ? t.longs : val < 0.9 ? t.shorts : t.neutral;
 
   return (
@@ -212,10 +213,22 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
             </select>
         </div>
         <div className="flex-1 relative w-full flex justify-center items-end pb-1">
-            <svg viewBox="0 0 200 125" className="w-full h-full overflow-visible" preserveAspectRatio="xMidYMax meet">
+            <svg viewBox="0 0 200 135" className="w-full h-full overflow-visible" preserveAspectRatio="xMidYMax meet">
                 <defs><linearGradient id="lsrGradient" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#CD534B" /><stop offset="50%" stopColor="#eab308" /><stop offset="100%" stopColor="#548f3f" /></linearGradient></defs>
                 <path d={`M ${GAUGE_CX-GAUGE_R} ${GAUGE_CY} A ${GAUGE_R} ${GAUGE_RY} 0 0 1 ${GAUGE_CX+GAUGE_R} ${GAUGE_CY}`} fill="none" stroke="currentColor" className="text-gray-200 dark:text-tech-700" strokeWidth={GAUGE_STROKE} strokeLinecap="round" />
+                
+                {[1, 2, 3, 4, 5].map(v => {
+                    const angle = ((v - 1) / 4) * 180;
+                    const rad = (angle - 180) * (Math.PI / 180);
+                    const tx = GAUGE_CX + (GAUGE_R + 12) * Math.cos(rad);
+                    const ty = GAUGE_CY + (GAUGE_R + 12) * Math.sin(rad);
+                    return (
+                        <text key={v} x={tx} y={ty} textAnchor="middle" fill="currentColor" className="text-gray-500 font-black" fontSize="9">{v}</text>
+                    );
+                })}
+
                 <path d={`M ${GAUGE_CX-GAUGE_R} ${GAUGE_CY} A ${GAUGE_R} ${GAUGE_RY} 0 0 1 ${GAUGE_CX+GAUGE_R} ${GAUGE_CY}`} fill="none" stroke="url(#lsrGradient)" strokeWidth={GAUGE_STROKE} strokeLinecap="round" />
+                
                 <g transform={`rotate(${rotation} ${GAUGE_CX} ${GAUGE_CY})`}>
                     <path d={`M ${GAUGE_CX} ${GAUGE_CY} L ${GAUGE_CX} ${GAUGE_CY - GAUGE_RY + 2}`} stroke="var(--color-text-main)" strokeWidth="4" strokeLinecap="round" />
                     <circle cx={GAUGE_CX} cy={GAUGE_CY} r="5" fill="var(--color-text-main)" />
@@ -327,7 +340,7 @@ const TrumpOMeterWidget = ({ language, onNavigate }: { language: Language; onNav
     const percent = data.trump_rank_percent || 50;
     const score = data.trump_rank_50 || 0;
     return (
-        <div className="glass-panel p-2 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 relative">
+        <div className="glass-panel p-2 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 relative overflow-hidden">
             <div className="flex justify-between items-start mb-1 shrink-0">
                 <div className="text-left font-black text-base uppercase tracking-wider text-gray-500 dark:text-gray-400">{t.title}</div>
                 <WorkspaceLink onClick={onNavigate} />
@@ -335,8 +348,8 @@ const TrumpOMeterWidget = ({ language, onNavigate }: { language: Language; onNav
             <div className="relative h-2 w-full rounded-full bg-gradient-to-r from-[#CD534B] via-yellow-500 to-[#548f3f] mt-4 mb-5">
                 <div className="absolute w-0 h-0 border-l-[5px] border-r-[5px] border-b-[6px] border-b-gray-800 dark:border-b-tech-950 transition-all duration-700" style={{ left: `calc(${percent}% - 5px)`, top: '100%' }}></div>
             </div>
-            <div className="text-center mb-1 shrink-0 text-[11px] font-black uppercase text-[#dd9933]">{data.sarcastic_label}</div>
-            <div className="text-center text-3xl font-black text-gray-900 dark:text-white leading-none mb-2">{score > 0 ? '+' : ''}{score}</div>
+            <div className="text-center mb-1 shrink-0 text-[8px] font-black uppercase text-[#dd9933]">{data.sarcastic_label}</div>
+            <div className="text-center text-[24px] font-black text-gray-900 dark:text-white leading-none mb-2">{score > 0 ? '+' : ''}{score}</div>
             <div className="flex-1 flex flex-col border border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-1.5 bg-black/5 dark:bg-black/10 min-h-0 overflow-hidden">
                 <p className="text-[10px] text-gray-700 dark:text-gray-300 font-medium line-clamp-3 italic">"{data.title}"</p>
             </div>

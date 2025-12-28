@@ -12,18 +12,6 @@ const LSR_SYMBOLS = [
 const LSR_INTERVALS = ['5m', '15m', '30m', '1h', '2h', '4h', '6h', '12h', '1D'];
 const STABLECOINS = ['USDT', 'USDC', 'DAI', 'FDUSD', 'TUSD', 'USDD', 'PYUSD', 'USDE', 'GUSD'];
 
-interface LsrTableRow {
-    rank: number;
-    symbol: string;
-    price: number;
-    priceChangePercent: number;
-    lsr30m?: number;
-    lsr4h?: number;
-    lsr12h?: number;
-    lsr24h?: number;
-    image?: string;
-}
-
 const FlashCell = ({ value, formatter, isPercent, isPrice }: { value: number, formatter: (v:number) => string, isPercent?: boolean, isPrice?: boolean }) => {
     const prevValue = useRef(value);
     const [flashClass, setFlashClass] = useState('');
@@ -59,12 +47,11 @@ const LsrWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ ite
     const [lsrPeriod, setLsrPeriod] = useState('5m');
     const [displayLsr, setDisplayLsr] = useState(0);
 
-    const [maximizedTickers, setMaximizedTickers] = useState<LsrTableRow[]>([]);
+    const [maximizedTickers, setMaximizedTickers] = useState<any[]>([]);
     const [isLoadingTable, setIsLoadingTable] = useState(false);
     const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
 
     const t = getTranslations(language as Language).dashboard.widgets.lsr;
-    const tWs = getTranslations(language as Language).workspace.widgets.lsr;
 
     useEffect(() => {
         if (item.isMaximized) return;
@@ -152,7 +139,7 @@ const LsrWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ ite
     }
 
     const lsrVal = displayLsr || 0;
-    const lsrAngle = (Math.min(Math.max(lsrVal, 0), 5) / 5) * 180;
+    const lsrAngle = ((Math.min(Math.max(lsrVal, 1), 5) - 1) / 4) * 180;
 
     return (
         <div className="h-full flex flex-col items-center justify-center relative bg-white dark:bg-[#2f3032] p-4 text-center">
@@ -167,14 +154,31 @@ const LsrWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ ite
             </div>
             {isLoading ? <Loader2 className="animate-spin text-slate-500" /> : (
                 <>
-                <div className="mt-6 w-[80%] max-w-[240px]">
-                    <svg viewBox="0 0 200 110">
+                <div className="mt-6 w-[80%] max-w-[240px] overflow-visible">
+                    <svg viewBox="0 0 200 110" className="overflow-visible">
+                        {/* Escala Externa (1-5) */}
+                        {[1, 2, 3, 4, 5].map(v => {
+                            const angle = ((v - 1) / 4) * 180;
+                            const rad = (angle - 180) * (Math.PI / 180);
+                            const tx = 100 + 80 * Math.cos(rad);
+                            const ty = 100 + 80 * Math.sin(rad);
+                            return (
+                                <text key={v} x={tx} y={ty} textAnchor="middle" fill="currentColor" className="text-gray-400 font-black" fontSize="9">{v}</text>
+                            );
+                        })}
+
                         <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" className="stroke-gray-100 dark:stroke-slate-800" strokeWidth="18" strokeLinecap="round" />
                         <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" stroke="#dd9933" strokeWidth="18" strokeDasharray={`${(lsrAngle/180)*283} 283`} strokeLinecap="round" />
-                        <g transform={`rotate(${lsrAngle - 90} 100 100)`}><path d="M 100 100 L 100 20" className="stroke-gray-800 dark:stroke-white" strokeWidth="3" /><circle cx={100} cy={100} r="5" className="fill-gray-800 dark:fill-white" /></g>
+                        <g transform={`rotate(${lsrAngle - 90} 100 100)`}>
+                            <path d="M 100 100 L 100 20" className="stroke-gray-800 dark:stroke-white" strokeWidth="3" />
+                            <circle cx={100} cy={100} r="5" className="fill-gray-800 dark:fill-white" />
+                        </g>
                     </svg>
                 </div>
-                <div className="mt-2"><div className="text-4xl font-black text-[#dd9933] leading-none">{lsrVal.toFixed(2)}</div><div className="text-[10px] font-black text-gray-900 dark:text-white uppercase mt-1 tracking-widest" style={{ fontSize: '6.5px' }}>{lsrVal > 1.1 ? t.longs : lsrVal < 0.9 ? t.shorts : t.neutral}</div></div>
+                <div className="mt-2">
+                    <div className="text-[24px] font-black text-[#dd9933] leading-none">{lsrVal.toFixed(2)}</div>
+                    <div className="text-[8px] font-black text-gray-900 dark:text-white uppercase mt-1 tracking-widest">{lsrVal > 1.1 ? t.longs : lsrVal < 0.9 ? t.shorts : t.neutral}</div>
+                </div>
                 </>
             )}
         </div>

@@ -282,8 +282,8 @@ const RsiWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ ite
                 <div className="z-10 flex justify-between items-start mb-4">
                     <div>
                         <div className="text-[10px] text-gray-500 dark:text-slate-400 font-bold uppercase tracking-wider">Média Global RSI</div>
-                        <div className="text-4xl font-black text-[#dd9933]">{rsiVal.toFixed(1)}</div>
-                        <div className="text-[10px] font-black text-gray-900 dark:text-white uppercase tracking-widest" style={{ fontSize: '6.5px' }}>{label}</div>
+                        <div className="text-[24px] font-black text-[#dd9933]">{rsiVal.toFixed(1)}</div>
+                        <div className="text-[8px] font-black text-gray-900 dark:text-white uppercase tracking-widest">{label}</div>
                     </div>
                     
                     <div className="flex flex-col items-end gap-2">
@@ -321,7 +321,10 @@ const RsiWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ ite
                 <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" stroke="#dd9933" strokeWidth="18" strokeDasharray={`${(rsiVal/100)*283} 283`} strokeLinecap="round" />
                 <g transform={`rotate(${(rsiVal/100)*180 - 90} 100 100)`}><path d="M 100 100 L 100 20" className="stroke-gray-800 dark:stroke-white" strokeWidth="3" /><circle cx={100} cy={100} r="5" className="fill-gray-800 dark:fill-white" /></g>
             </svg>
-            <div className="mt-4"><div className="text-4xl font-black text-[#dd9933]">{rsiAvgData?.averageRsi.toFixed(0)}</div><div className="text-[10px] font-black text-gray-900 dark:text-white uppercase tracking-widest mt-1">{label}</div></div>
+            <div className="mt-4">
+                <div className="text-[24px] font-black text-[#dd9933]">{rsiAvgData?.averageRsi.toFixed(0)}</div>
+                <div className="text-[8px] font-black text-gray-900 dark:text-white uppercase tracking-widest mt-1">{label}</div>
+            </div>
             <div className="flex justify-around mt-4 pt-2 border-t border-gray-100 dark:border-slate-700">
                 <div><div className="text-[10px] text-gray-400 uppercase">Ontem</div><div className="font-bold text-sm text-gray-900 dark:text-white">{rsiAvgData?.yesterday.toFixed(0)}</div></div>
                 <div><div className="text-[10px] text-gray-400 uppercase">7D</div><div className="font-bold text-sm text-gray-900 dark:text-white">{rsiAvgData?.days7Ago.toFixed(0)}</div></div>
