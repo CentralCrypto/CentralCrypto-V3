@@ -132,15 +132,15 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
 
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6 h-full relative z-10 w-full">
         <div className="md:col-span-3 flex flex-col h-full">
-          <div className="text-base font-bold uppercase tracking-widest text-gray-200 border-b-2 border-[#dd9933] pb-2 mb-4 shrink-0">{t.recentStudies}</div>
+          <div className="text-lg font-bold uppercase tracking-widest text-gray-200 border-b-2 border-[#dd9933] pb-2 mb-4 shrink-0">{t.recentStudies}</div>
           <div className="flex-1 flex flex-col gap-4">
             {estudos.map((post) => (
                <div onClick={() => onPostClick(post.id)} key={post.id} className="relative group cursor-pointer overflow-hidden rounded-lg flex-1 border border-tech-700 hover:border-[#dd9933] transition-colors shadow-lg bg-black">
                   <img src={post.featuredImage} alt="" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-70 group-hover:opacity-100" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-transparent"></div>
                   <div className="absolute bottom-0 left-0 right-0 p-5">
-                     <h4 className="text-white dark:text-[#dd9933] font-bold text-xl leading-tight drop-shadow-md mb-2 line-clamp-2 group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors">{decodeHTML(post.titleHtml)}</h4>
-                     <div className="flex items-center text-[10px] text-gray-300 gap-2 font-mono border-t border-gray-600/50 pt-2">
+                     <h4 className="text-white dark:text-[#dd9933] font-bold text-2xl leading-tight drop-shadow-md mb-2 line-clamp-2 group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors">{decodeHTML(post.titleHtml)}</h4>
+                     <div className="flex items-center text-xs text-gray-300 gap-2 font-mono border-t border-gray-600/50 pt-2">
                         <span className="font-bold text-[#dd9933] uppercase truncate">{post.authorName}</span>
                         <span className="shrink-0">{new Date(post.date).toLocaleDateString(currentLocale)}</span>
                      </div>
@@ -151,14 +151,14 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
         </div>
 
         <div className="md:col-span-6 flex flex-col h-full">
-          <div className="text-base font-bold uppercase tracking-widest text-gray-200 border-b-2 border-[#dd9933] pb-2 mb-6 text-center shrink-0">Últimas Análises</div>
+          <div className="text-lg font-bold uppercase tracking-widest text-gray-200 border-b-2 border-[#dd9933] pb-2 mb-6 text-center shrink-0">Últimas Análises</div>
           {currentHero ? (
             <div onClick={() => onPostClick(currentHero.id)} className="relative flex-1 overflow-hidden rounded-lg group cursor-pointer shadow-[0_0_30px_rgba(0,0,0,0.5)] border border-tech-700 hover:border-[#dd9933] transition-all bg-tech-800">
                <img key={currentHero.id} src={currentHero.featuredImage} alt="" className="w-full h-full object-cover animate-in fade-in duration-700 absolute inset-0 opacity-80 group-hover:opacity-100 transition-opacity" />
                <div className="absolute inset-0 bg-gradient-to-t from-tech-950 via-tech-950/50 to-transparent opacity-100"></div>
                <div className="absolute bottom-0 left-0 right-0 p-8 md:p-10">
                   <div className="bg-[#dd9933] text-black text-xs font-black px-3 py-1 inline-block mb-4 rounded-sm uppercase tracking-wider shadow-lg transform -skew-x-12">ANÁLISE</div>
-                  <h2 className="text-gray-200 dark:text-[#dd9933] font-black text-3xl md:text-4xl leading-none mb-6 drop-shadow-xl shadow-black group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors">{decodeHTML(currentHero.titleHtml)}</h2>
+                  <h2 className="text-gray-200 dark:text-[#dd9933] font-black text-2xl md:text-3xl leading-none mb-6 drop-shadow-xl shadow-black group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors">{decodeHTML(currentHero.titleHtml)}</h2>
                   <div className="flex items-center text-base text-gray-200 gap-6 font-mono border-t border-gray-500/50 pt-6">
                       <span className="flex items-center gap-2 font-bold text-[#dd9933]"><span className="w-2.5 h-2.5 rounded-full bg-[#dd9933] animate-pulse"></span>{currentHero.authorName}</span>
                       <span className="hidden sm:inline">{new Date(currentHero.date).toLocaleDateString(currentLocale, { weekday: 'long', day: 'numeric', month: 'long' })}</span>
@@ -169,26 +169,29 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
         </div>
 
         <div className="md:col-span-3 flex flex-col h-full">
-           <div className="text-base font-bold uppercase tracking-widest text-gray-200 border-b-2 border-[#dd9933] pb-2 mb-6 text-right shrink-0">{t.trendingTopics}</div>
-           <div className="flex-1 flex flex-col gap-3 overflow-hidden relative">
+           <div className="text-lg font-bold uppercase tracking-widest text-gray-200 border-b-2 border-[#dd9933] pb-2 mb-6 text-right shrink-0">{t.trendingTopics}</div>
+           <div className="flex-1 flex flex-col overflow-hidden relative">
              <AnimatePresence initial={false}>
-              {visibleTrending.map((post) => (
+              {visibleTrending.map((post, i) => (
                 <motion.div
                   key={post.id}
                   layout
-                  initial={{ opacity: 0, y: 40, scale: 0.98 }}
+                  initial={{ opacity: 0, y: 50, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -40, scale: 0.98 }}
-                  transition={{ type: 'spring', stiffness: 350, damping: 35 }}
+                  exit={{ opacity: 0, y: -50, scale: 0.95 }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                   onClick={() => onPostClick(post.id)} 
-                  className="flex gap-3 bg-tech-900 border border-tech-800 hover:border-[#dd9933] p-2 rounded-lg shadow-lg cursor-pointer group items-center transition-colors"
+                  className="flex-1 flex gap-4 bg-tech-900 border-b border-tech-800 last:border-b-0 hover:border-b-[#dd9933] p-3 cursor-pointer group items-center transition-colors"
                 >
-                  <div className="relative w-20 h-full shrink-0 overflow-hidden rounded-md bg-black">
+                  <div className="flex-shrink-0 w-8 flex items-center justify-center">
+                    <span className="text-3xl font-black text-gray-800 dark:text-gray-700 transition-colors group-hover:text-[#dd9933]">{i + 1}</span>
+                  </div>
+                  <div className="relative w-28 h-full shrink-0 overflow-hidden rounded-md bg-black">
                      <img src={post.featuredImage} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 opacity-70 group-hover:opacity-100" alt=""/>
                   </div>
                   <div className="flex flex-col justify-center flex-1 min-w-0">
-                     <h5 className="text-sm font-bold text-gray-200 dark:text-[#dd9933] leading-tight line-clamp-2 group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors mb-1">{decodeHTML(post.titleHtml)}</h5>
-                     <div className="text-[9px] text-gray-500 font-mono"><span>{new Date(post.date).toLocaleDateString(currentLocale)}</span></div>
+                     <h5 className="text-base font-bold text-gray-200 dark:text-[#dd9933] leading-tight line-clamp-3 group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors mb-1">{decodeHTML(post.titleHtml)}</h5>
+                     <div className="text-xs text-gray-500 font-mono"><span>{new Date(post.date).toLocaleDateString(currentLocale)}</span></div>
                   </div>
                 </motion.div>
               ))}

@@ -478,10 +478,10 @@ const TrumpOMeterWidget = ({ language, onNavigate }: { language: Language; onNav
                 <div className="text-center mt-2 mb-1 shrink-0 text-[10px] font-black uppercase tracking-tighter" style={{ color: impactColor }}>{data.sarcastic_label}</div>
             </div>
             <div 
-                className="flex-1 flex flex-col border-2 border-dashed rounded-lg p-1.5 bg-black/5 dark:bg-black/10 min-h-0 overflow-visible group/post relative" 
+                className="flex-1 flex flex-col border-2 border-dashed rounded-lg p-1.5 bg-black/5 dark:bg-black/10 min-h-0 overflow-hidden group/post relative" 
                 style={{ borderColor: impactColor }}
             >
-                <p className="text-[10px] text-gray-700 dark:text-gray-300 font-bold line-clamp-3 italic leading-snug">"{data.title}"</p>
+                <p className="text-xs text-gray-700 dark:text-gray-300 font-bold line-clamp-4 italic leading-normal">"{data.title}"</p>
                 
                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 w-[260px] bg-white dark:bg-[#1a1c1e] opacity-0 group-hover/post:opacity-100 transition-all p-3 shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-tech-700 rounded-xl pointer-events-none group-hover/post:pointer-events-auto z-[100] translate-y-2 group-hover/post:translate-y-0">
                     <div className="flex items-center gap-2 mb-2 border-b border-gray-100 dark:border-white/5 pb-2">
