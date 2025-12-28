@@ -83,17 +83,28 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
 
   useEffect(() => {
     if (maisLidas.length <= 5) return;
-    const maxStartIndex = maisLidas.length - 5;
+    const numPosts = maisLidas.length;
     const interval = setInterval(() => {
-        setTrendingStartIndex(prev => (prev >= maxStartIndex ? 0 : prev + 1));
+        setTrendingStartIndex(prev => (prev + 1) % numPosts);
     }, 4000);
     return () => clearInterval(interval);
   }, [maisLidas.length]);
 
   const visibleTrending = useMemo(() => {
     if (maisLidas.length === 0) return [];
-    if (maisLidas.length <= 5) return maisLidas;
-    return maisLidas.slice(trendingStartIndex, trendingStartIndex + 5);
+    const numPosts = maisLidas.length;
+    const numVisible = 5;
+
+    if (numPosts <= numVisible) return maisLidas;
+
+    const endIndex = trendingStartIndex + numVisible;
+    if (endIndex <= numPosts) {
+        return maisLidas.slice(trendingStartIndex, endIndex);
+    } else {
+        const part1 = maisLidas.slice(trendingStartIndex);
+        const part2 = maisLidas.slice(0, endIndex % numPosts);
+        return [...part1, ...part2];
+    }
   }, [maisLidas, trendingStartIndex]);
 
   const currentHero = analises[heroIndex];
@@ -173,7 +184,7 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
                   exit={{ opacity: 0, y: -50, scale: 0.95 }}
                   transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                   onClick={() => onPostClick(post.id)} 
-                  className="flex-1 flex gap-4 bg-tech-900 border-b border-tech-800 last:border-b-0 hover:border-b-[#dd9933] p-3 cursor-pointer group items-center transition-colors"
+                  className="h-[20%] shrink-0 flex gap-4 bg-tech-900 border-b border-tech-800 last:border-b-0 hover:border-b-[#dd9933] p-3 cursor-pointer group items-center transition-colors"
                 >
                   <div className="flex-shrink-0 w-8 flex items-center justify-center">
                     <span className="text-3xl font-black text-gray-800 dark:text-gray-700 transition-colors group-hover:text-[#dd9933]">{originalIndex + 1}</span>
@@ -183,7 +194,7 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
                   </div>
                   <div className="flex flex-col justify-center flex-1 min-w-0">
                      <h5 className="text-[17px] font-extrabold text-gray-200 dark:text-[#dd9933] leading-snug line-clamp-3 group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors mb-1">{decodeHTML(post.titleHtml)}</h5>
-                     <div className="text-[13px] text-gray-500 dark:text-gray-300 font-mono"><span>{new Date(post.date).toLocaleDateString(currentLocale)}</span></div>
+                     <div className="text-[13px] text-gray-500 dark:text-gray-200 font-mono"><span>{new Date(post.date).toLocaleDateString(currentLocale)}</span></div>
                   </div>
                 </motion.div>
                 );
