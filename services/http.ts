@@ -65,7 +65,7 @@ async function httpRequest(url: string, init: RequestInit & { timeoutMs?: number
           return attempt(remaining - 1);
       }
       
-      throw { status: 0, url, data: null, message: 'Network Error' } as HttpError;
+      throw { status: 0, url, data: null, message: error.message || 'Network Error' } as HttpError;
     }
   };
 

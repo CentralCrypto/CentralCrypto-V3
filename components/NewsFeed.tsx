@@ -108,19 +108,19 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ onPostClick, language }) => {
   );
 
   return (
-    <div className="flex flex-col gap-10">
+    <div className="flex flex-col gap-10 w-full">
         {/* BLOCO DE ESPAÇAMENTO PARA ADS (ENTRE GRIDS) */}
         <div className="w-full min-h-[100px] flex items-center justify-center border border-dashed border-tech-800 rounded-xl bg-tech-900/10">
             <span className="text-[10px] font-black text-gray-700 uppercase tracking-[0.3em]">Espaço Publicitário</span>
         </div>
 
         <div className="w-full h-full bg-tech-950 border border-tech-800 p-6 rounded-xl shadow-2xl transition-colors">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 w-full">
                 <div className="lg:col-span-3 flex flex-col gap-6">
                     <div className="border-b-2 border-[#dd9933] pb-2 mb-2">
                         <h3 className="text-gray-200 font-bold uppercase tracking-widest text-sm">{t.dailyNews}</h3>
                     </div>
-                    {loadingSpecifics ? <div className="animate-pulse space-y-4"><div className="h-40 bg-tech-800 rounded"></div></div> : (
+                    {loadingSpecifics ? <div className="animate-pulse space-y-4 w-full"><div className="h-40 bg-tech-800 rounded"></div></div> : (
                     dailyNews.slice(0, 2).map(post => (
                         <div onClick={() => onPostClick(post.id)} key={post.id} className="group cursor-pointer">
                             <div className="aspect-video w-full overflow-hidden rounded-md border border-tech-700 group-hover:border-[#dd9933] relative mb-3">
@@ -135,8 +135,8 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ onPostClick, language }) => {
                     )}
                 </div>
 
-                <div className="lg:col-span-6 flex flex-col">
-                    <div className="mb-10">
+                <div className="lg:col-span-6 flex flex-col flex-1">
+                    <div className="mb-10 w-full">
                         <div className="flex justify-between items-center border-b-2 border-[#dd9933] pb-2 mb-4">
                             <h3 className="text-gray-200 font-bold uppercase tracking-widest text-sm">Estudos e Escolhas</h3>
                         </div>
@@ -158,10 +158,10 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ onPostClick, language }) => {
                         )}
                     </div>
 
-                    <div id="main-feed-anchor" className="flex flex-col gap-6">
-                        {loadingMain ? <div className="py-20 flex justify-center"><Loader2 className="animate-spin text-[#dd9933]" size={32}/></div> : (
+                    <div id="main-feed-anchor" className="flex flex-col gap-6 w-full">
+                        {loadingMain ? <div className="py-20 flex justify-center w-full"><Loader2 className="animate-spin text-[#dd9933]" size={32}/></div> : (
                             mainFeed.map(post => (
-                                <div onClick={() => onPostClick(post.id)} key={post.id} className="flex flex-col md:flex-row gap-4 border-b border-tech-800/50 pb-6 group cursor-pointer">
+                                <div onClick={() => onPostClick(post.id)} key={post.id} className="flex flex-col md:flex-row gap-4 border-b border-tech-800/50 pb-6 group cursor-pointer w-full">
                                     <div className="w-full md:w-48 h-32 shrink-0 rounded-lg overflow-hidden border border-tech-800 group-hover:border-[#dd9933] transition-colors relative bg-black">
                                         <img src={post.featuredImage} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" alt="" />
                                     </div>
@@ -177,7 +177,7 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ onPostClick, language }) => {
                         )}
                     </div>
                     {mainFeed.length > 0 && (
-                        <div className="flex justify-between items-center mt-10 border-t border-tech-800 pt-6">
+                        <div className="flex justify-between items-center mt-10 border-t border-tech-800 pt-6 w-full">
                             <button disabled={page === 1} onClick={() => setPage(p => Math.max(1, p - 1))} className="text-xs font-bold text-gray-400 hover:text-white disabled:opacity-30 uppercase tracking-wider flex items-center gap-2 transition-colors px-4 py-2 border border-tech-800 rounded hover:bg-tech-800">← {tPag.prev}</button>
                             <span className="text-xs font-mono text-[#dd9933]">{tPag.page} {page}</span>
                             <button onClick={() => setPage(p => p + 1)} className="text-xs font-bold text-gray-400 hover:text-white uppercase tracking-wider flex items-center gap-2 transition-colors px-4 py-2 border border-tech-800 rounded hover:bg-tech-800">{tPag.next} →</button>
@@ -185,7 +185,7 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ onPostClick, language }) => {
                     )}
                 </div>
 
-                <div className="lg:col-span-3">
+                <div className="lg:col-span-3 w-full">
                     <div className="border-b-2 border-[#dd9933] pb-2 mb-4">
                         <h3 className="text-gray-200 font-bold uppercase tracking-widest text-sm">{t.miniBulletins}</h3>
                     </div>

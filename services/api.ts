@@ -14,8 +14,8 @@ export const fetchWithFallback = async (url: string): Promise<any | null> => {
         const finalUrl = url.includes('?') ? `${url}&_cb=${salt}` : `${url}?_cb=${salt}`;
         const { data } = await httpGetJson(finalUrl, { timeoutMs: 10000, retries: 2 });
         return data;
-    } catch (e) {
-        console.error(`[API] Erro ao buscar ${url}:`, e);
+    } catch (e: any) {
+        console.error(`[API] Erro ao buscar ${url}: ${e.message || JSON.stringify(e)}`);
     }
     return null;
 };
@@ -166,7 +166,6 @@ export const fetchEtfFlow = async (): Promise<EtfFlowData | null> => {
     const res = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.etfNetFlow));
     if (!res) return null;
     
-    // O JSON é retornado dentro de uma array [ { data: { ... }, status: { ... } } ]
     const root = Array.isArray(res) ? res[0] : res;
     if (!root || !root.data) return null;
 
@@ -188,7 +187,9 @@ export const fetchLongShortRatio = async (symbol: string, period: string): Promi
             const point = data[0];
             return { lsr: parseFloat(point.longShortRatio), longs: parseFloat(point.longAccount) * 100, shorts: parseFloat(point.shortAccount) * 100 };
         }
-    } catch (e) {}
+    } catch (e: any) {
+        console.error(`[LSR API] Erro: ${e.message}`);
+    }
     return { lsr: null, longs: null, shorts: null };
 };
 
@@ -208,6 +209,8 @@ export const fetchOrderBook = async (symbol: string): Promise<OrderBookData | nu
         if (data && data.bids && data.asks) {
             return { bids: data.bids.map((b: any) => ({ price: b[0], qty: b[1] })), asks: data.asks.map((a: any) => ({ price: a[0], qty: a[1] })) };
         }
-    } catch (e) {}
+    } catch (e: any) {
+        console.error(`[OrderBook API] Erro: ${e.message}`);
+    }
     return null;
 };

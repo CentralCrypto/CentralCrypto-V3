@@ -41,11 +41,11 @@ const SearchResults: React.FC<SearchResultsProps> = ({ query, onPostClick }) => 
   }, [query]);
 
   if (!query) {
-    return <div className="container mx-auto px-4 py-12 text-center text-gray-500">Digite algo para buscar...</div>;
+    return <div className="max-w-[90%] mx-auto px-4 py-12 text-center text-gray-500">Digite algo para buscar...</div>;
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-screen">
+    <div className="max-w-[90%] mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-screen">
       <div className="mb-8 border-b border-tech-700 pb-4">
         <h2 className="text-2xl font-bold text-gray-200">
             Resultados da busca: <span className="text-[#dd9933]">"{query}"</span>

@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { MOCK_COINS } from '../constants';
 import { LineChart, Line, ResponsiveContainer } from 'recharts';
@@ -5,7 +6,7 @@ import { Search } from '../components/Icons';
 
 const Market: React.FC = () => {
   return (
-    <div className="container mx-auto px-4 py-8 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="max-w-[90%] mx-auto px-4 py-8 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
        <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold text-white tracking-tight">Visão de Mercado</h2>

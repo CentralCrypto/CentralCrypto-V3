@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import { 
   Share2, 
@@ -286,7 +285,7 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
         </div>
 
         <div className="bg-[#f3f4f6] dark:bg-tech-900 relative z-20 transition-colors duration-700 h-24" onMouseEnter={hideTooltip}>
-          <div className="container mx-auto px-4 h-full flex items-center justify-between relative">
+          <div className="max-w-[90%] mx-auto px-4 h-full flex items-center justify-between relative">
             <div className="flex items-center z-30 md:absolute md:left-1/2 md:-translate-x-1/2 xl:relative xl:left-0 xl:translate-x-0">
               <div className="flex items-center cursor-pointer group" onClick={() => setView(ViewMode.DASHBOARD)}>
                 <img src="https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png" alt="Central Crypto" className="h-14 md:h-16 w-auto object-contain drop-shadow-[0_0_15px_rgba(221,153,51,0.2)]" />
@@ -312,6 +311,7 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
               </div>
             </div>
             <div className="xl:hidden flex items-center z-40">
+                {/* Fix: replaced non-existent setIsMobileMenuOpen with setIsMenuOpen */}
                 <button onClick={() => setIsMenuOpen(true)} className="p-3.5 bg-white dark:bg-tech-800 rounded-2xl text-tech-accent shadow-xl border border-gray-200 dark:border-tech-700 active:scale-90 transition-transform"><Menu size={26} /></button>
             </div>
             <nav className="hidden xl:flex items-center absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 h-full z-10">

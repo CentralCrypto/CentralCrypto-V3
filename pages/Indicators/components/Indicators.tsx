@@ -1,3 +1,4 @@
+
 import React, { useState, useRef } from 'react';
 import { ExternalLink, Lock, Unlock, ThumbsUp, MessageCircle, Star, Crown, Search, GripVertical, Save, Loader2 } from 'lucide-react';
 import { getConstants } from '../constants';
@@ -88,7 +89,7 @@ export const Indicators: React.FC<IndicatorsProps> = ({
 
   return (
     <section id="indicadores" className="py-20 bg-gray-50 dark:bg-tech-950 relative transition-colors duration-300">
-      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-[90%] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-left mb-8 border-b border-transparent dark:border-tech-800 pb-4 flex flex-col md:flex-row md:justify-between md:items-end gap-4">
           <div className="flex-1">
             <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">{t.title}</h2>

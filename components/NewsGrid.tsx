@@ -102,7 +102,7 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
     <div className="w-full h-full bg-tech-950 border border-tech-800 p-6 rounded-xl flex flex-col gap-6 shadow-2xl relative overflow-hidden transition-colors">
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#dd9933]/5 blur-[120px] rounded-full pointer-events-none"></div>
 
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 h-full relative z-10">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 h-full relative z-10 w-full">
         <div className="md:col-span-3 flex flex-col h-full">
           <div className="text-base font-bold uppercase tracking-widest text-gray-200 border-b-2 border-[#dd9933] pb-2 mb-4 shrink-0">{t.recentStudies}</div>
           <div className="flex-1 flex flex-col gap-4">

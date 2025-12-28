@@ -109,7 +109,7 @@ const PostView: React.FC<PostViewProps> = ({ postId, onBack, onPostClick }) => {
     </div>
   );
 
-  if (!post) return <div className="container mx-auto px-4 py-20 text-center min-h-screen"><h2 className="text-2xl text-tech-danger font-bold mb-4">Post não encontrado</h2><button onClick={onBack} className="text-white bg-tech-800 px-6 py-2 rounded">Voltar</button></div>;
+  if (!post) return <div className="max-w-[90%] mx-auto px-4 py-20 text-center min-h-screen"><h2 className="text-2xl text-tech-danger font-bold mb-4">Post não encontrado</h2><button onClick={onBack} className="text-white bg-tech-800 px-6 py-2 rounded">Voltar</button></div>;
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-8 duration-500 bg-tech-950 w-full transition-colors">
@@ -141,7 +141,7 @@ const PostView: React.FC<PostViewProps> = ({ postId, onBack, onPostClick }) => {
          </div>
       </div>
 
-      <div className="container mx-auto px-4"><MagazineTicker onPostClick={(id) => onPostClick && onPostClick(id)} /></div>
+      <div className="max-w-[90%] mx-auto px-4"><MagazineTicker onPostClick={(id) => onPostClick && onPostClick(id)} /></div>
 
       <div className="w-full px-4 md:px-8 mt-12 mb-20">
         <div className="grid grid-cols-1 xl:grid-cols-[380px_1fr_380px] gap-8 max-w-[2400px] mx-auto">

@@ -56,7 +56,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <nav className="fixed top-[147px] w-full z-40 bg-gray-50 dark:bg-[#1a1c1e] border-b border-transparent dark:border-tech-800 shadow-sm transition-colors duration-700 ease-in-out">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-[90%] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center gap-3 w-1/4">
             {isDetailsPage && onNavigateHome ? (
@@ -84,7 +84,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <button onClick={onNavigateHome} className="text-gray-700 dark:text-gray-300 hover:text-tech-accent dark:hover:text-tech-accent hover:bg-black/5 dark:hover:bg-white/5 px-3 py-2 rounded-md text-sm font-medium transition-colors">{t.backList}</button>
                 )}
                 <div className="relative" onMouseEnter={handleLegalEnter} onMouseLeave={handleLegalLeave}>
-                    <button className="text-gray-700 dark:text-gray-300 hover:text-tech-accent dark:hover:text-tech-accent hover:bg-black/5 dark:hover:bg-white/5 px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1">
+                    <button className="text-gray-700 dark:text-gray-300 hover:text-tech-accent dark:hover:text-tech-accent hover:bg-black/5 dark:hover:bg-white/5 px-3 py-2 rounded-md text-sm font-medium flex items-center gap-1">
                         {t.legal} <ChevronDown className="w-3 h-3" />
                     </button>
                     <div className={`absolute top-full left-1/2 -translate-x-1/2 mt-0 pt-2 w-48 transition-all duration-300 origin-top transform ${isLegalMenuOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'}`}>

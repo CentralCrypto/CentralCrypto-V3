@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Zap, Shield, MousePointer2, RefreshCcw } from 'lucide-react';
 import { LOGO_URL } from '../constants';
@@ -47,7 +48,7 @@ export const Features: React.FC<FeaturesProps> = ({ currentLang }) => {
         }}
       />
 
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="relative z-10 max-w-[90%] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
           <h2 className="text-4xl font-black text-gray-900 dark:text-white uppercase tracking-tighter">{t.title}</h2>
           <div className="h-1.5 w-24 bg-tech-accent mx-auto mt-4 rounded-full"></div>

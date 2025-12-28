@@ -23,7 +23,7 @@ const Footer: React.FC<FooterProps> = ({ onTermsClick, onPrivacyClick, onAnalyst
 
   return (
     <footer className="bg-tech-950 border-t border-tech-800 pt-12 pb-8 text-gray-300 font-sans relative z-20 transition-colors duration-700">
-      <div className="container mx-auto px-4">
+      <div className="max-w-[90%] mx-auto px-4">
         <div className="flex flex-col md:flex-row justify-between items-center gap-8 md:gap-4 relative">
           
           <div className="flex flex-col gap-4 text-center md:text-left w-full md:w-1/3">

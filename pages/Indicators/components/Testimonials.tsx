@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { Quote, ChevronLeft, ChevronRight } from 'lucide-react';
-import { getConstants } from '../constants';
-import { Language } from '../../../types';
 import { getTranslations } from '../../../locales';
+import { Language } from '../../../types';
+import { getConstants } from '../constants';
 
 interface TestimonialsProps {
     currentLang: Language;
@@ -43,7 +43,6 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ currentLang }) => {
 
   return (
     <section id="depoimentos" className="relative py-24 bg-gray-50 dark:bg-tech-950 transition-colors duration-300 overflow-hidden scroll-mt-[200px]">
-      {/* Background Image requested by user */}
       <div 
         className="absolute inset-0 z-0 pointer-events-none opacity-[0.07] grayscale"
         style={{
@@ -55,7 +54,7 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ currentLang }) => {
         }}
       />
 
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="relative z-10 max-w-[90%] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center mb-12">
             <h2 className="text-3xl font-bold text-gray-900 dark:text-white uppercase tracking-widest">{t.title}</h2>
             

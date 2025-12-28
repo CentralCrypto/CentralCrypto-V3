@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { BarChart2, Database, Zap, ShieldCheck, Terminal, Cpu, Layers, Activity, ExternalLink } from 'lucide-react';
 import { Language } from '../../../types';
@@ -58,7 +59,7 @@ export const Hero: React.FC<HeroProps> = ({ currentLang }) => {
         }}
       />
 
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center mb-20">
+      <div className="relative z-10 max-w-[90%] mx-auto px-4 sm:px-6 lg:px-8 text-center mb-20">
         <div className="inline-flex items-center px-4 py-2 rounded-full bg-white dark:bg-tech-900 border border-transparent dark:border-tech-800 text-sm text-tech-accent dark:text-green-400 font-medium mb-8 animate-fade-in-up shadow-sm transition-colors duration-700">
           <Database className="w-4 h-4 mr-2" />
           {t.badge}
