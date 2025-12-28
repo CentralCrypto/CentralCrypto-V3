@@ -49,7 +49,7 @@ const MagazineTicker: React.FC<MagazineTickerProps> = ({ onPostClick }) => {
 
   if (loading) {
     return (
-        <div className="w-full h-20 my-6 bg-gray-200/20 dark:bg-tech-900/20 rounded-xl animate-pulse flex items-center justify-center">
+        <div className="w-full h-16 my-4 bg-gray-200/20 dark:bg-tech-900/20 rounded-xl animate-pulse flex items-center justify-center">
             <span className="text-xs font-black text-gray-500 uppercase tracking-widest">Sincronizando Magazine...</span>
         </div>
     );
@@ -61,26 +61,26 @@ const MagazineTicker: React.FC<MagazineTickerProps> = ({ onPostClick }) => {
   const tickerItems = [...posts, ...posts, ...posts, ...posts];
 
   return (
-    <div className="w-full my-6 overflow-hidden relative group py-5 bg-gray-200/40 dark:bg-white/5 shadow-inner rounded-xl transition-all duration-700">
+    <div className="w-full my-4 overflow-hidden relative group py-2 bg-gray-200/40 dark:bg-white/5 shadow-inner rounded-xl transition-all duration-700">
       <div className="flex animate-magazine-scroll group-hover:[animation-play-state:paused] w-max">
         {tickerItems.map((post, idx) => (
           <div 
             key={`${post.id}-${idx}`} 
             onClick={() => onPostClick(post.id)} 
-            className="flex items-center gap-4 shrink-0 w-[350px] cursor-pointer group/tickeritem p-3 hover:bg-tech-accent/10 rounded-xl transition-all mx-4"
+            className="flex items-center gap-4 shrink-0 w-[320px] cursor-pointer group/tickeritem p-2 hover:bg-tech-accent/10 rounded-xl transition-all mx-3"
           >
             <div className="relative shrink-0">
                 <img 
                   src={post.featuredImage || 'https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png'} 
                   alt="" 
-                  className="w-14 h-14 object-cover rounded-lg border-2 border-transparent group-hover/tickeritem:border-tech-accent transition-all shadow-md bg-tech-800" 
+                  className="w-12 h-12 object-cover rounded-lg border-2 border-transparent group-hover/tickeritem:border-tech-accent transition-all shadow-md bg-tech-800" 
                 />
             </div>
             <div className="flex flex-col min-w-0">
-                <span className="text-sm font-black text-gray-700 dark:text-gray-200 group-hover/tickeritem:text-tech-accent line-clamp-2 leading-tight uppercase tracking-tight transition-colors">
+                <span className="text-xs font-black text-gray-700 dark:text-gray-200 group-hover/tickeritem:text-tech-accent line-clamp-2 leading-tight uppercase tracking-tight transition-colors">
                   {decodeHTML(post.titleHtml)}
                 </span>
-                <span className="text-[9px] font-bold text-gray-400 dark:text-gray-500 mt-1 uppercase tracking-widest">
+                <span className="text-[8px] font-bold text-gray-400 dark:text-gray-500 mt-0.5 uppercase tracking-widest">
                     {post.authorName || "Central Crypto"}
                 </span>
             </div>

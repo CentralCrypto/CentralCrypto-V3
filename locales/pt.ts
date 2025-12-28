@@ -1,3 +1,4 @@
+
 export const pt = {
   common: {
     search: "Buscar",
@@ -37,7 +38,8 @@ export const pt = {
       etf: { title: "Fluxo ETF", netFlow: "Fluxo Líquido", btcEtf: "BTC ETFs", ethEtf: "ETH ETFs", last7d: "7 Dias", last30d: "30 Dias", last90d: "90 Dias", lastUpdate: "Atualizado em", dailyFlow: "Fluxo Diário" },
       trump: { title: "Trump-o-Meter", viewPost: "Ver Post", sarcastic: { negativeSmall: "Impacto Irrelevante", negativeMedium: "Mercado em Alerta", negativeLarge: "TEMPESTADE NO X", positiveSmall: "Sinal de Força", positiveMedium: "BULLISH VIBES", positiveLarge: "A LUA É O LIMIT", neutral: "Silêncio Estratégico" } },
       gainers: { gainers: "Ganhadores", losers: "Perdedores" },
-      calendar: { title: "Calendário Econômico", today: "HOJE", tomorrow: "AMANHÃ", previous: "Prev", forecast: "Proj", actual: "Atu" }
+      // Fix: Added missing yesterday translation key for the economic calendar widget
+      calendar: { title: "Calendário Econômico", today: "HOJE", tomorrow: "AMANHÃ", yesterday: "ONTEM", previous: "Prev", forecast: "Proj", actual: "Atu" }
     },
     magazine: {
       recentStudies: "Estudos Recentes",
@@ -58,7 +60,7 @@ export const pt = {
   indicators: {
     nav: { features: "Recursos", testimonials: "Depoimentos", backList: "Voltar para Lista", backHome: "Início", legal: "Legal" },
     hero: { badge: "Tecnologia de Ponta", title1: "Indicadores Profissionais", subtitle: "Aumente sua assertividade com ferramentas exclusivas.", btnView: "Ver Scripts", btnSub: "Assinar" },
-    list: { title: "Nossos Indicadores", subtitle: "Scripts otimizados para TradingView.", searchPlaceholder: "Buscar indicadores...", strategy: "Estratégia", indicator: "Indicator", emptyTitle: "Nenhum resultado", emptyDesc: "Tente outro termo", clearFilter: "Limpar", loadMore: "Carregar Mais" },
+    list: { title: "Nossos Indicadores", subtitle: "Scripts otimizados para TradingView.", searchPlaceholder: "Buscar indicadores...", strategy: "Estratégia", indicator: "Indicator", emptyTitle: "Nenhum resultado", emptyDesc: "Try another term", clearFilter: "Limpar", loadMore: "Carregar Mais" },
     details: { back: "Voltar", strategy: "Estratégia", indicator: "Indicador", updated: "Atualizado", openTv: "Abrir no", disclaimerTitle: "Aviso", disclaimerText: "Investir envolve risco.", boosts: "Boosts", boostThanks: "Obrigado!", boostLink: "Ver no TV", type: "Tipo", version: "Versão", access: "Access", getAccess: "Obter Acesso", addFavDesc: "Adicione aos favoritos no", btnAddFav: "Favoritar no TV" },
     vipModal: { title: "Acesso VIP", successTitle: "Sucesso!", successDesc: "Seu pedido foi enviado.", btnGo: "Ir para TV", labelName: "Nome", placeholderName: "Seu nome", labelUser: "Usuário TV", placeholderUser: "@usuario", btnSending: "Enviando...", btnSubmit: "Solicitar" },
     features: { title: "Arquitetura e Performance", f1: { title: "Latência Zero", desc: "Sinais processados em tempo real sem atrasos no carregamento dos candles." }, f2: { title: "Native Pine Script V6", desc: "Desenvolvimento puro usando as funções mais modernas e eficientes da engine TradingView." }, f3: { title: "UX Premium", desc: "Interface visual limpa, focada em não poluir o gráfico enquanto entrega dados vitais." }, f4: { title: "Algoritmos Adaptativos", desc: "Lógica interna que se ajusta automaticamente à volatilidade de cada ativo e timeframe." } },
@@ -72,7 +74,11 @@ export const pt = {
       q3: "Posso automatizar as entradas via Webhook?", 
       a3: "Sim. Todos os nossos indicadores são 'Alert-Ready'. Cada sinal de compra ou venda possui tags de evento específicas que podem ser conectadas ao 3Commas, Wunderbit ou seu próprio bot via Webhook." 
     },
-    legal: { terms: "Termos...", privacy: "Privacidade...", disclaimer: "Risco..." },
+    legal: { 
+        terms: "Termos de Uso\n\n1. Uso da Plataforma: Ao utilizar nosso site, você concorda em cumprir todas as leis aplicáveis.\n2. Indicadores Técnicos: As ferramentas são disponibilizadas para auxiliar seus estudos. Nenhum indicador constitui aconselhamento financeiro.\n3. Pagamentos: Assinantes têm 7 dias de teste.\n4. Propriedade Intelectual: Todo o conteúdo é protegido por direitos autorais.\n5. Limitações: Não nos responsabilizamos por perdas financeiras.", 
+        privacy: "Política de Privacidade\n\nColetamos dados básicos de navegação e e-mail para autenticação. Não compartilhamos seus dados com terceiros para fins de marketing. Utilizamos cookies para melhorar sua experiência de acesso.", 
+        disclaimer: "Aviso de Risco\n\nO mercado de criptoativos é altamente volátil. O uso de alavancagem aumenta significativamente o risco de perda total de capital. Nossos indicadores são ferramentas de auxílio visual e estatístico, e não garantem lucro." 
+    },
     chat: { welcome: "Olá!", error: "Erro no chat", typing: "Digitando...", limitTitle: "Limite atingido", limit: "Contate o suporte", placeholder: "Pratique algo..." }
   },
   workspace: {
@@ -140,7 +146,7 @@ export const pt = {
           q1: "O que o Bubble Chart mostra?",
           a1: "É uma visão volumétrica e dinâmica dos Top Movers. Bolhas maiores representam ativos com maior volume ou variação percentual no dia.",
           q2: "Para que servem as cores?",
-          a2: "As cores classificam o sentimento: de Bearish extremo a Bullish extremo, permitindo visualizar para onde o fluxo de capital está indo."
+          a2: "As cores classificam o sentimento: de Bearish extremo a Bullish extremo, lo que permite visualizar para onde o fluxo de capital está indo."
         }
       }
     },
@@ -153,10 +159,10 @@ export const pt = {
       etf: { title: "Fluxo ETF", dailyFlow: "Fluxo Diário", btcEtf: "BTC ETFs", ethEtf: "ETH ETFs", last7d: "7 Días", last30d: "30 Dias", last90d: "90 Dias", lastUpdate: "Atualizado em", desc: "Fluxo institucional de ETFs" },
       gainers: { title: "Top Movers", gainers: "Ganhadores", losers: "Perdedores", desc: "Principais variações do mercado" },
       trump: { title: "Trump-o-Meter", viewPost: "Ver Post", desc: "Impacto político no mercado" },
-      calendar: { title: "Calendário Econômico", today: "HOJE", tomorrow: "AMANHÃ", previous: "Prev", forecast: "Proj", actual: "Atu", desc: "Eventos macroeconômicos" },
+      calendar: { title: "Calendário Econômico", today: "HOJE", tomorrow: "AMANHÃ", yesterday: "ONTEM", previous: "Prev", forecast: "Proj", actual: "Atu", desc: "Eventos macroeconômicos" },
       price: { price: "Preço", volEst: "Vol Est", mcap: "Mkt Cap", change24h: "24h %", noData: "Sem dados", desc: "Preço e variação" },
       volume: { vol24h: "Vol 24h", desc: "Volume negociado" },
-      trend: { bullish: "Alta", bearish: "Baixa", neutral: "Neutro", strength: "Força", basedOn: "Baseado em", desc: "Análise de tendência" },
+      trend: { bullish: "Alta", bearish: "Baixa", neutral: "Neutro", strength: "Force", basedOn: "Baseado em", desc: "Análise de tendência" },
       sentiment: { extremeGreed: "Extrema Ganância", greed: "Ganância", extremeFear: "Extremo Medo", fear: "Medo", neutralBiasUp: "Neutro (Alta)", neutralBiasDown: "Neutro (Baixa)", strong: "Forte", weak: "Fraco", consistent: "Consistente", easing: "Diminuindo", recovering: "Recuperando", desc: "Sentimento técnico" },
       orderbook: { price: "Preço", size: "Tamanho", total: "Total", noData: "Sem ordens", desc: "Livro de ofertas" },
       news: { noNews: "Sem notícias", tryAnother: "Tente outro ativo", desc: "Notícias vinculadas" }

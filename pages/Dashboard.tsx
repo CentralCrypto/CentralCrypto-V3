@@ -277,7 +277,6 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
   const val = data?.lsr ?? 1;
   const clampedVal = Math.min(Math.max(val, 1), 5);
   const rotation = -90 + ((clampedVal - 1) / 4) * 180;
-  const label = val > 1.1 ? t.longs : val < 0.9 ? t.shorts : t.neutral;
 
   return (
     <div className="glass-panel p-2 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 hover:border-[#dd9933]/50 transition-all relative">
@@ -315,8 +314,17 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
                     <circle cx={GAUGE_CX} cy={GAUGE_CY} r="5" fill="var(--color-text-main)" />
                 </g>
                 <text x={GAUGE_CX} y={TEXT_VAL_Y} textAnchor="middle" fill="var(--color-gauge-val)" fontSize="24" fontWeight="900" fontFamily="monospace">{val.toFixed(2)}</text>
-                <text x={GAUGE_CX} y={TEXT_LBL_Y} textAnchor="middle" fill="var(--color-text-main)" fontSize="12" fontWeight="900" letterSpacing="1" className="uppercase">{label}</text>
             </svg>
+        </div>
+        <div className="flex justify-between px-2 pt-1 border-t border-tech-700/50 mt-1">
+            <div className="text-center">
+                <div className="text-[9px] text-gray-500 font-black uppercase">Shorts</div>
+                <div className="text-sm font-mono font-black text-tech-danger">{data?.shorts ? `${data.shorts.toFixed(1)}%` : '--'}</div>
+            </div>
+            <div className="text-center">
+                <div className="text-[9px] text-gray-500 font-black uppercase">Longs</div>
+                <div className="text-sm font-mono font-black text-tech-success">{data?.longs ? `${data.longs.toFixed(1)}%` : '--'}</div>
+            </div>
         </div>
     </div>
   );
@@ -363,7 +371,11 @@ const AltSeasonWidget = ({ language, onNavigate, theme }: { language: Language; 
 const EtfFlowWidget = ({ language, onNavigate }: { language: Language; onNavigate: () => void }) => {
     const [data, setData] = useState({ btc: 0, eth: 0, net: 0 });
     const t = getTranslations(language as Language).dashboard.widgets.etf;
-    useEffect(() => { fetchEtfFlow().then(res => { if(res) setData({ btc: res.btcValue, eth: res.ethValue, net: res.btcValue + res.ethValue }); }).catch(() => {}); }, []);
+    useEffect(() => { 
+        fetchEtfFlow().then(res => { 
+            if(res) setData({ btc: res.btcValue, eth: res.ethValue, net: res.netFlow }); 
+        }).catch(() => {}); 
+    }, []);
     const formatNet = (v: number) => `$${(Math.abs(v) / 1e6).toFixed(1)}M`;
     return (
         <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 relative">
@@ -506,6 +518,7 @@ const EconomicCalendarWidget = ({ language, onNavigate }: { language: Language; 
     const [events, setEvents] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState<'ALL' | 'USD' | 'BRL'>('ALL');
+    const [dateFilter, setDateFilter] = useState<'ALL' | 'YESTERDAY' | 'TODAY' | 'TOMORROW'>('ALL');
     const t = getTranslations(language as Language).dashboard.widgets.calendar;
 
     useEffect(() => { 
@@ -515,16 +528,55 @@ const EconomicCalendarWidget = ({ language, onNavigate }: { language: Language; 
         }).catch(() => setLoading(false)); 
     }, []);
 
-    const filteredEvents = events.filter(e => filter === 'ALL' || e.country === filter).slice(0, 15);
+    const filteredEvents = useMemo(() => {
+        let list = events.filter(e => filter === 'ALL' || e.country === filter);
+        
+        const now = new Date();
+        const todayStr = now.toDateString();
+        const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
+        const yesterdayStr = yesterday.toDateString();
+        const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
+        const tomorrowStr = tomorrow.toDateString();
+
+        if (dateFilter !== 'ALL') {
+            list = list.filter(e => {
+                const d = new Date(e.date).toDateString();
+                if (dateFilter === 'TODAY') return d === todayStr;
+                if (dateFilter === 'YESTERDAY') return d === yesterdayStr;
+                if (dateFilter === 'TOMORROW') return d === tomorrowStr;
+                return true;
+            });
+        }
+
+        return list.slice(0, 15);
+    }, [events, filter, dateFilter]);
+
     const getImpactColor = (imp: string) => imp === 'High' ? 'bg-tech-danger' : imp === 'Medium' ? 'bg-orange-500' : 'bg-yellow-500';
     const getFlag = (c: string) => c === 'BRL' ? "https://hatscripts.github.io/circle-flags/flags/br.svg" : "https://hatscripts.github.io/circle-flags/flags/us.svg";
+
+    const formatDateStr = (date: Date) => {
+        const d = String(date.getDate()).padStart(2, '0');
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const y = date.getFullYear();
+        return language === 'en' ? `${m}.${d}.${y}` : `${d}/${m}/${y}`;
+    };
 
     return (
         <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 overflow-hidden">
              <div className="flex justify-between items-center mb-2">
                 <div className="font-black text-[11px] leading-tight uppercase tracking-wider text-gray-500 dark:text-gray-400">{t.title}</div>
                 <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-1.5">
+                    <select 
+                        value={dateFilter} 
+                        onChange={(e) => setDateFilter(e.target.value as any)}
+                        className="bg-gray-100 dark:bg-tech-900 text-gray-700 dark:text-gray-300 text-[10px] font-black uppercase rounded px-2 py-1 outline-none border border-transparent dark:border-tech-700"
+                    >
+                        <option value="ALL">{language === 'en' ? 'ALL' : 'TODOS'}</option>
+                        <option value="YESTERDAY">{t.yesterday || 'ONTEM'}</option>
+                        <option value="TODAY">{t.today || 'HOJE'}</option>
+                        <option value="TOMORROW">{t.tomorrow || 'AMANHÃ'}</option>
+                    </select>
+                    <div className="flex items-center gap-1.5 border-l border-gray-200 dark:border-tech-700 pl-3">
                         <button onClick={() => setFilter('BRL')} className={`transition-all ${filter==='BRL'?'ring-2 ring-[#dd9933] rounded-full':'opacity-40 grayscale'}`}><img src={getFlag('BRL')} className="w-5 h-5 rounded-full" /></button>
                         <button onClick={() => setFilter('USD')} className={`transition-all ${filter==='USD'?'ring-2 ring-[#dd9933] rounded-full':'opacity-40 grayscale'}`}><img src={getFlag('USD')} className="w-5 h-5 rounded-full" /></button>
                         <button onClick={() => setFilter('ALL')} className={`text-[10px] font-black uppercase ${filter==='ALL'?'text-[#dd9933]':'text-gray-500'}`}>ALL</button>
@@ -533,8 +585,8 @@ const EconomicCalendarWidget = ({ language, onNavigate }: { language: Language; 
                 </div>
             </div>
             
-            <div className="grid grid-cols-[80px_2px_1fr_180px] gap-3 px-2 py-1 mb-1 border-b border-gray-200 dark:border-white/10 text-[9px] font-black text-gray-500 uppercase tracking-widest">
-                <span>Horário</span><span></span><span>Evento</span>
+            <div className="grid grid-cols-[100px_2px_1fr_180px] gap-3 px-2 py-1 mb-1 border-b border-gray-200 dark:border-white/10 text-[9px] font-black text-gray-500 uppercase tracking-widest">
+                <span>Data/Hora</span><span></span><span>Evento</span>
                 <div className="grid grid-cols-3 gap-2 text-right">
                     <span>{t.previous}</span><span>{t.forecast}</span><span>{t.actual}</span>
                 </div>
@@ -545,9 +597,9 @@ const EconomicCalendarWidget = ({ language, onNavigate }: { language: Language; 
                     const date = new Date(e.date);
                     return (
                         <div key={i} className="flex items-center gap-3 p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded transition-colors group">
-                            <div className="w-16 flex flex-col shrink-0">
+                            <div className="w-20 flex flex-col shrink-0">
                                 <span className="text-base font-black text-gray-900 dark:text-gray-200 leading-none">{date.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-                                <span className="text-[9px] font-bold text-gray-500 uppercase">{date.toLocaleDateString([], {day:'2-digit', month:'short'})}</span>
+                                <span className="text-[9px] font-bold text-gray-500 mt-1">{formatDateStr(date)}</span>
                             </div>
                             <div className={`w-1 h-8 rounded-full shrink-0 ${getImpactColor(e.impact)}`} />
                             <div className="flex-1 flex items-center gap-2 min-w-0">

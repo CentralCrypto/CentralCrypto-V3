@@ -27,6 +27,7 @@ export const ENDPOINTS = {
       heatmap: "/heatmap.json",
       etfBtc: "/spot-btc-etf-flows.json",
       etfEth: "/spot-eth-etf-flows.json",
+      etfNetFlow: "/etfnetflow.json",
       news: "/news.php"
     }
   }

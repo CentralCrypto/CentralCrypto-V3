@@ -47,6 +47,8 @@ export interface NewsItem { title: string; link: string; pubDate: string; source
 export interface EtfFlowData {
     btcValue: number;
     ethValue: number;
+    // Fix: Added netFlow to the interface to resolve type errors in Dashboard.tsx
+    netFlow: number;
     timestamp: number;
     chartDataBTC: any[];
     chartDataETH: any[];
@@ -166,7 +168,20 @@ export const fetchEtfFlow = async (): Promise<EtfFlowData | null> => {
         fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.etfEth))
     ]);
     if (!btc && !eth) return null;
-    return { btcValue: btc?.net_flow || 0, ethValue: eth?.net_flow || 0, timestamp: btc?.timestamp || eth?.timestamp || Date.now(), chartDataBTC: btc?.history || [], chartDataETH: eth?.history || [], history: btc?.aggregates || { lastWeek: 0, lastMonth: 0, last90d: 0 }, solValue: btc?.sol_net_flow || 0, xrpValue: btc?.xrp_net_flow || 0 };
+    // Fix: Pre-calculate btc and eth values to determine netFlow correctly
+    const btcValue = btc?.net_flow || 0;
+    const ethValue = eth?.net_flow || 0;
+    return { 
+        btcValue, 
+        ethValue, 
+        netFlow: btcValue + ethValue,
+        timestamp: btc?.timestamp || eth?.timestamp || Date.now(), 
+        chartDataBTC: btc?.history || [], 
+        chartDataETH: eth?.history || [], 
+        history: btc?.aggregates || { lastWeek: 0, lastMonth: 0, last90d: 0 }, 
+        solValue: btc?.sol_net_flow || 0, 
+        xrpValue: btc?.xrp_net_flow || 0 
+    };
 };
 
 export const fetchLongShortRatio = async (symbol: string, period: string): Promise<LsrData> => {

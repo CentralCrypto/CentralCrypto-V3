@@ -38,7 +38,8 @@ export const en = {
       etf: { title: "ETF Flow", netFlow: "Net Flow", btcEtf: "BTC ETFs", ethEtf: "ETH ETFs", last7d: "7 Days", last30d: "30 Days", last90d: "90 Days", lastUpdate: "Updated on", dailyFlow: "Daily Flow" },
       trump: { title: "Trump-o-Meter", viewPost: "View Post", sarcastic: { negativeSmall: "Irrelevant Impact", negativeMedium: "Market Alert", negativeLarge: "STORM ON X", positiveSmall: "Strength Signal", positiveMedium: "BULLISH VIBES", positiveLarge: "THE MOON IS THE LIMIT", neutral: "Strategic Silence" } },
       gainers: { gainers: "Gainers", losers: "Losers" },
-      calendar: { title: "Economic Calendar", today: "TODAY", tomorrow: "TOMORROW", previous: "Prev", forecast: "Fore", actual: "Actu" }
+      // Fix: Added missing yesterday key to calendar object for structural consistency
+      calendar: { title: "Economic Calendar", today: "TODAY", tomorrow: "TOMORROW", yesterday: "YESTERDAY", previous: "Prev", forecast: "Fore", actual: "Actu" }
     },
     magazine: {
       recentStudies: "Recent Studies",
@@ -64,8 +65,12 @@ export const en = {
     vipModal: { title: "VIP Access", successTitle: "Success!", successDesc: "Your request has been sent.", btnGo: "Go to TV", labelName: "Name", placeholderName: "Your name", labelUser: "TV Username", placeholderUser: "@username", btnSending: "Sending...", btnSubmit: "Submit" },
     features: { title: "Exclusive Features", f1: { title: "Fast", desc: "Instant signals" }, f2: { title: "Safe", desc: "Audited" }, f3: { title: "Easy", desc: "Clean interface" }, f4: { title: "Updated", desc: "Always evolving" } },
     testimonials: { title: "What Traders Say" },
-    faq: { title: "FAQ", q1: "What is it?", a1: "Analysis tool", q2: "How to use?", a2: "On TradingView", q3: "Is it free?", a3: "Some are" },
-    legal: { terms: "Terms...", privacy: "Privacy...", disclaimer: "Risk..." },
+    faq: { title: "CCT Intelligence", q1: "What makes CCT indicators different?", a1: "Our scripts are developed in Pine Script V6, using high-fidelity momentum calculations and noise filters that eliminate false signals.", q2: "Do they work for Scalp or Swing Trade?", a2: "The logic is multi-timeframe (MTF). The algorithm detects structural patterns in both 1-minute charts and daily trends.", q3: "Can I automate entries via Webhook?", a3: "Yes. All our indicators are Alert-Ready and compatible with 3Commas or Wunderbit." },
+    legal: { 
+        terms: "Terms of Use\n\n1. Platform usage: By accessing our site, you agree to comply with all applicable laws.\n2. Technical Indicators: Tools are for study purposes. No indicator constitutes financial advice.\n3. Payments: 7-day trial period.\n4. IP: All content is protected by copyright.", 
+        privacy: "Privacy Policy\n\nWe collect basic navigation data and email for authentication. We do not share your data with third parties for marketing. We use cookies to improve your experience.", 
+        disclaimer: "Risk Warning\n\nThe crypto market is highly volatile. Leverage significantly increases the risk of capital loss. Our indicators are statistical aid tools and do not guarantee profit." 
+    },
     chat: { welcome: "Hello!", error: "Chat error", typing: "Typing...", limitTitle: "Limit reached", limit: "Contact support", placeholder: "Ask anything..." }
   },
   workspace: {

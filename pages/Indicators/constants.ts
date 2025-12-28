@@ -19,7 +19,7 @@ const FALLBACK_INDICATORS: Indicator[] = [
     description_en: 'The definitive trend following system. Combines adaptive moving averages with volatility filters.',
     fullDescription_en: '### CCT SuperTrade 2025\nOriginal combination of two well-established methodologies to identify entry and exit opportunities.\n\n### Features\n- **Hi-Lo Activator:** Monitors market contraction.\n- **Holy Grail:** Identifies pullbacks in strong trends.\n- **Scoring:** Unique score system for entries.',
     description_es: 'El sistema definitivo de seguimiento de tendencias. Combina medias móviles adaptativas con filtros de volatilidad.',
-    fullDescription_es: '### CCT SuperTrade 2025\nCombinación original de dos metodologías bien establecidas para identificar oportunidades de entrada y salida.\n\n### Funcionalidades\n- **Hi-Lo Activator:** Monitorea la contracción del mercado.\n- **Holy Grail:** Identifica retrocesos en tendencias fuertes.\n- **Puntuación:** Sistema único de puntuación para entradas.',
+    fullDescription_es: '### CCT SuperTrade 2025\nCombinación original de dos metodologías bien establecidas para identificar oportunidades de entrada e salida.\n\n### Funcionalidades\n- **Hi-Lo Activator:** Monitorea la contracción del mercado.\n- **Holy Grail:** Identifica retrocesos en tendencias fuertes.\n- **Puntuación:** Sistema único de puntuación para entradas.',
     price: 'Script Protegido',
     tags: ['Trend', 'SuperTrend', 'Swing', 'VIP'],
     imageUrl: 'https://s3.tradingview.com/b/bIwMp5oI_mid.webp?v=1747966679',
@@ -36,6 +36,12 @@ const TESTIMONIALS_PT: Testimonial[] = [
   { id: 't1', name: 'Trader_Visionario', role: 'Premium User', content: 'Simplesmente incrível. A assertividade das divergências no RSI Tracker mudou meu operacional. Ferramenta indispensável.', avatarUrl: 'https://ui-avatars.com/api/?name=Trader+Visionario&background=random' },
   { id: 't2', name: 'LucasM_Crypto', role: 'Comunidade TV', content: 'Parabéns pelo trabalho, Central Crypto! O filtro de cores facilita muito a leitura rápida do gráfico. Top demais!', avatarUrl: 'https://ui-avatars.com/api/?name=Lucas+M&background=random' },
   { id: 't3', name: 'AnaS_Invest', role: 'Analista Técnica', content: 'Gosto muito da limpeza visual. A maioria dos scripts polui a tela, mas os da CCT são muito clean e diretos ao ponto.', avatarUrl: 'https://ui-avatars.com/api/?name=Ana+S&background=random' },
+  { id: 't4', name: 'Carlos_Quant', role: 'Full-time Trader', content: 'O SMC Indicator é surreal. Consigo identificar as zonas de supply e demand com uma precisão que nunca vi em scripts grátis.', avatarUrl: 'https://ui-avatars.com/api/?name=Carlos+Quant&background=random' },
+  { id: 't5', name: 'Crypto_Girl_88', role: 'Swing Trader', content: 'Acompanho a Central há anos e os indicadores de 2025 estão em outro patamar. O suporte técnico também é nota 10!', avatarUrl: 'https://ui-avatars.com/api/?name=Crypto+Girl&background=random' },
+  { id: 't6', name: 'Master_Trend', role: 'TradingView Pro', content: 'Uso o SuperTrade no gráfico de 12H para filtrar ruído e é impressionante como ele evita falsas entradas em laterais.', avatarUrl: 'https://ui-avatars.com/api/?name=Master+Trend&background=random' },
+  { id: 't7', name: 'Bitcoin_Maxi_BR', role: 'HODLer & Trader', content: 'Ferramentas indispensáveis para quem leva o mercado a sério. O dashboard integrado com os scripts do TV é sensacional.', avatarUrl: 'https://ui-avatars.com/api/?name=Bitcoin+Maxi&background=random' },
+  { id: 't8', name: 'Scalper_Pro', role: 'Day Trader', content: 'O RSI Tracker é o meu braço direito. Identificar exaustão de tendência ficou muito mais visual e rápido.', avatarUrl: 'https://ui-avatars.com/api/?name=Scalper+Pro&background=random' },
+  { id: 't9', name: 'Invest_Certo', role: 'Investidor', content: 'Interface limpa, lógica sólida e sinais confiáveis. Recomendo para todos os meus alunos de análise técnica.', avatarUrl: 'https://ui-avatars.com/api/?name=Invest+Certo&background=random' },
 ];
 
 export const INDICATORS = FALLBACK_INDICATORS; 

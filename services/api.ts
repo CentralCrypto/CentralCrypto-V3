@@ -1,3 +1,4 @@
+
 import { ApiCoin } from '../types';
 import { httpGetJson } from './http';
 import { getCacheckoUrl, ENDPOINTS } from './endpoints';
@@ -7,7 +8,6 @@ const STABLECOINS = ['USDT', 'USDC', 'DAI', 'FDUSD', 'TUSD', 'USDD', 'PYUSD', 'U
 /**
  * Common fetch with fallback and cache busting
  */
-// Added fetchWithFallback implementation to fix missing name error
 export const fetchWithFallback = async (url: string): Promise<any | null> => {
     try {
         const salt = Math.floor(Date.now() / 60000);
@@ -46,12 +46,9 @@ export interface NewsItem { title: string; link: string; pubDate: string; source
 export interface EtfFlowData {
     btcValue: number;
     ethValue: number;
+    netFlow: number;
     timestamp: number;
-    chartDataBTC: any[];
-    chartDataETH: any[];
-    history: { lastWeek: number; lastMonth: number; last90d: number; };
-    solValue: number;
-    xrpValue: number;
+    points?: any[];
 }
 
 export interface LsrData { lsr: number | null; longs: number | null; shorts: number | null; }
@@ -96,7 +93,6 @@ export interface FngData {
     value_classification_i18n?: { pt: string; en: string; es: string; };
 }
 
-// Added TrumpData interface to fix missing name error
 export interface TrumpData {
     title: string;
     link: string;
@@ -133,15 +129,10 @@ export const fetchAltcoinSeasonHistory = async (): Promise<AltSeasonHistoryPoint
     return Array.isArray(root.history) ? root.history : [];
 };
 
-/**
- * Fetches and processes Trump impact data with guid mapping
- */
-// Applied updated fetchTrumpData part logic and fixed missing name errors
 export const fetchTrumpData = async (): Promise<TrumpData | null> => {
     const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.trump));
     if (!data) return null;
     const root = Array.isArray(data) ? data[0] : data;
-    // Map guid to link as requested
     return {
         ...root,
         link: root.guid || root.link
@@ -170,13 +161,22 @@ export const fetchEconomicCalendar = async (): Promise<EconEvent[]> => {
     const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.calendar));
     return Array.isArray(data) ? data : [];
 };
+
 export const fetchEtfFlow = async (): Promise<EtfFlowData | null> => {
-    const [btc, eth] = await Promise.all([
-        fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.etfBtc)),
-        fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.etfEth))
-    ]);
-    if (!btc && !eth) return null;
-    return { btcValue: btc?.net_flow || 0, ethValue: eth?.net_flow || 0, timestamp: btc?.timestamp || eth?.timestamp || Date.now(), chartDataBTC: btc?.history || [], chartDataETH: eth?.history || [], history: btc?.aggregates || { lastWeek: 0, lastMonth: 0, last90d: 0 }, solValue: btc?.sol_net_flow || 0, xrpValue: btc?.xrp_net_flow || 0 };
+    const res = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.etfNetFlow));
+    if (!res) return null;
+    
+    // O JSON é retornado dentro de uma array [ { data: { ... }, status: { ... } } ]
+    const root = Array.isArray(res) ? res[0] : res;
+    if (!root || !root.data) return null;
+
+    return {
+        btcValue: root.data.totalBtcValue || 0,
+        ethValue: root.data.totalEthValue || 0,
+        netFlow: root.data.total || 0,
+        timestamp: root.status?.timestamp ? new Date(root.status.timestamp).getTime() : Date.now(),
+        points: root.data.points || []
+    };
 };
 
 export const fetchLongShortRatio = async (symbol: string, period: string): Promise<LsrData> => {

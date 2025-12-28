@@ -36,9 +36,10 @@ export const es = {
       altseason: { title: "Temporada de Altcoins", btcDomZone: "Dominancia BTC", bitcoinSeason: "Temporada de Bitcoin", altcoinSeason: "Temporada de Altcoins", transition: "Transición", yesterday: "Ayer", week: "Semana", month: "Mes" },
       mktcapHistory: { title: "Market Cap", yesterday: "Ayer", week: "Semana", month: "Mes" },
       etf: { title: "Flujo ETF", netFlow: "Flujo Neto", btcEtf: "BTC ETFs", ethEtf: "ETH ETFs", last7d: "7 Días", last30d: "30 Dias", last90d: "90 Días", lastUpdate: "Actualizado en", dailyFlow: "Flujo Diario" },
-      trump: { title: "Trump-o-Meter", viewPost: "Ver Post", sarcastic: { negativeSmall: "Impacto Irrelevante", negativeMedium: "Mercado en Alerta", negativeLarge: "TORMENTA EN X", positiveSmall: "Señal de Fuerza", positiveMedium: "VIBRAS ALCISTAS", positiveLarge: "EL CIELO ES EL LÍMITE", neutral: "Silencio Estratégico" } },
+      trump: { title: "Trump-o-Meter", viewPost: "Ver Post", sarcastic: { negativeSmall: "Impacto Irrelevante", negativeMedium: "Mercado em Alerta", negativeLarge: "TORMENTA EN X", positiveSmall: "Señal de Fuerza", positiveMedium: "VIBRAS ALCISTAS", positiveLarge: "EL CIELO ES EL LÍMITE", neutral: "Silêncio Estratégico" } },
       gainers: { gainers: "Ganadores", losers: "Perdedores" },
-      calendar: { title: "Calendario Econômico", today: "HOY", tomorrow: "MAÑANA", previous: "Prev", forecast: "Fore", actual: "Actu" }
+      // Fix: Added missing yesterday key to calendar object for structural consistency
+      calendar: { title: "Calendario Econômico", today: "HOY", tomorrow: "MAÑANA", yesterday: "AYER", previous: "Prev", forecast: "Fore", actual: "Actu" }
     },
     magazine: {
       recentStudies: "Estudios Recientes",
@@ -59,13 +60,17 @@ export const es = {
   indicators: {
     nav: { features: "Recursos", testimonials: "Testimonios", backList: "Volver a la Lista", backHome: "Inicio", legal: "Legal" },
     hero: { badge: "Tecnología Punta", title1: "Indicadores Profesionales", subtitle: "Aumenta tu precisión con herramientas exclusivas.", btnView: "Ver Scripts", btnSub: "Suscribirse" },
-    list: { title: "Nuestros Indicadores", subtitle: "Scripts optimizados para TradingView.", searchPlaceholder: "Buscar indicadores...", strategy: "Estratégia", indicator: "Indicador", emptyTitle: "Sin resultados", emptyDesc: "Intenta otro término", clearFilter: "Limpiar", loadMore: "Cargar Mais" },
+    list: { title: "Nuestros Indicadores", subtitle: "Scripts optimizados para TradingView.", searchPlaceholder: "Buscar indicadores...", strategy: "Estratégia", indicator: "Indicador", emptyTitle: "Sin resultados", emptyDesc: "Intenta otro término", clearFilter: "Limpar", loadMore: "Cargar Mais" },
     details: { back: "Voltar", strategy: "Estratégia", indicator: "Indicador", updated: "Atualizado", openTv: "Abrir en", disclaimerTitle: "Aviso", disclaimerText: "Invertir implica riesgo.", boosts: "Boosts", boostThanks: "¡Gracias!", boostLink: "Ver en TV", type: "Tipo", version: "Versão", access: "Acceso", getAccess: "Obtener Acceso", addFavDesc: "Añadir a favoritos en", btnAddFav: "Añadir Favorito" },
     vipModal: { title: "Acesso VIP", successTitle: "¡Éxito!", successDesc: "Tu solicitud ha sido enviada.", btnGo: "Ir a TV", labelName: "Nombre", placeholderName: "Tu nombre", labelUser: "Usuario TV", placeholderUser: "@usuario", btnSending: "Enviando...", btnSubmit: "Solicitar" },
     features: { title: "Recursos Exclusivos", f1: { title: "Rápido", desc: "Señales instantáneas" }, f2: { title: "Seguro", desc: "Auditado" }, f3: { title: "Fácil", desc: "Interfaz limpia" }, f4: { title: "Atualizado", desc: "Siempre evolucionando" } },
     testimonials: { title: "Lo que dicen los Traders" },
-    faq: { title: "FAQ", q1: "¿Qué es?", a1: "Herramienta de análisis", q2: "¿Cómo usar?", a2: "En TradingView", q3: "¿Es gratis?", a3: "Algunos sí" },
-    legal: { terms: "Términos...", privacy: "Privacidad...", disclaimer: "Riesgo..." },
+    faq: { title: "Inteligencia CCT", q1: "¿Qué diferencia a los indicadores CCT?", a1: "Nuestros scripts están desarrollados en Pine Script V6, utilizando cálculos de impulso de alta fidelidad y filtros de ruido que eliminan señales falsas.", q2: "¿Funcionan para Scalp o Swing Trade?", a2: "La lógica es multi-timeframe (MTF). El algoritmo detecta patrones estructurales tanto en gráficos de 1 minuto como en tendencias diarias.", q3: "¿Puedo automatizar las entradas vía Webhook?", a3: "Sí. Todos nuestros indicadores estão preparados para alertas y son compatibles con 3Commas o Wunderbit." },
+    legal: { 
+        terms: "Términos de Uso\n\n1. Uso de la Plataforma: Al utilizar nuestro sitio, usted acepta cumplir con todas las leyes aplicables.\n2. Indicadores Técnicos: Las herramientas son para fines de estudio. Ningún indicador constituye asesoramiento financiero.\n3. Pagos: Periodo de prueba de 7 días.\n4. Propiedad Intelectual: Todo el contenido está protegido por derechos de autor.", 
+        privacy: "Política de Privacidad\n\nRecopilamos datos básicos de navegación y correo electrónico para la autenticación. No compartimos sus datos con terceros para fines de marketing. Utilizamos cookies para mejorar su experiencia.", 
+        disclaimer: "Aviso de Riesgo\n\nEl mercado de criptoativos es altamente volátil. El uso de apalancamiento aumenta significativamente el riesgo de pérdida total de capital. Nuestros indicadores son herramientas de ayuda estadística y no garantizan ganancias." 
+    },
     chat: { welcome: "¡Hola!", error: "Error en el chat", typing: "Escribiendo...", limitTitle: "Límite alcanzado", limit: "Contacta al soporte", placeholder: "Pregunta algo..." }
   },
   workspace: {
@@ -74,17 +79,17 @@ export const es = {
       marketcap: "Cap de Mercado",
       topmovers: "Más Movimientos",
       faq: {
-        title: "Metodología y FAQ",
+        title: "Metodologia y FAQ",
         fng: {
           q1: "¿Cómo se calcula el Fear & Greed Index?",
           a1: "El índice es un análisis de sentimiento multifactorial. Procesamos datos de volatilidad, volumen de mercado, sentimiento en redes sociales y dominancia de Bitcoin para generar un valor de 0 a 100.",
           q2: "¿Qué significa cada rango del índice?",
-          a2: "<ul class='space-y-2 font-mono text-xs'><li class='flex gap-2'><b class='text-red-500 w-16 shrink-0'>0-25:</b> <span><b>Miedo Extremo</b> (oportunidad histórica de compra)</span></li><li class='flex gap-2'><b class='text-orange-500 w-16 shrink-0'>26-45:</b> <span><b>Miedo</b> (miedo presente en el mercado)</span></li><li class='flex gap-2'><b class='text-yellow-500 w-16 shrink-0'>46-55:</b> <span><b>Neutro</b> (incertidumbre y falta de volumen)</span></li><li class='flex gap-2'><b class='text-green-400 w-16 shrink-0'>56-75:</b> <span><b>Codicia</b> (la codicia comienza a dominar)</span></li><li class='flex gap-2'><b class='text-green-600 w-16 shrink-0'>76-94:</b> <span><b>Codicia Extrema</b> (codicia extrema)</span></li><li class='flex gap-2'><b class='text-cyan-400 w-16 shrink-0'>95-100:</b> <span><b>Euforia</b> (euforia peligrosa, corrección inminente)</span></li></ul>"
+          a2: "<ul class='space-y-2 font-mono text-xs'><li class='flex gap-2'><b class='text-red-500 w-16 shrink-0'>0-25:</b> <span><b>Miedo Extremo</b> (oportunidad histórica de compra)</span></li><li class='flex gap-2'><b class='text-orange-500 w-16 shrink-0'>26-45:</b> <span><b>Miedo</b> (miedo presente en el mercado)</span></li><li class='flex gap-2'><b class='text-yellow-500 w-16 shrink-0'>46-55:</b> <span><b>Neutro</b> (incertidumbre y falta de volume)</span></li><li class='flex gap-2'><b class='text-green-400 w-16 shrink-0'>56-75:</b> <span><b>Codicia</b> (la codicia comienza a dominar)</span></li><li class='flex gap-2'><b class='text-green-600 w-16 shrink-0'>76-94:</b> <span><b>Codicia Extrema</b> (codicia extrema)</span></li><li class='flex gap-2'><b class='text-cyan-400 w-16 shrink-0'>95-100:</b> <span><b>Euforia</b> (euforia peligrosa, corrección inminente)</span></li></ul>"
         },
         rsi: {
           q1: "¿Qué es el Promedio Global de RSI?",
           a1: "Es el promedio aritmético del Índice de Fuerza Relativa de las 100 principales criptomonedas por capitalización. Ayuda a identificar cuando el mercado en su conjunto está en zonas macro de sobrecompra o sobreventa.",
-          q2: "¿Cómo interpretar los valores?",
+          q2: "¿Como interpretar los valores?",
           a2: "Por encima de 70 indica que la mayoría de los activos están estirados (sobrecomprados). Por debajo de 30 indica que el mercado está en pánico vendedor (sobrevendido)."
         },
         macd: {
@@ -146,10 +151,10 @@ export const es = {
       etf: { title: "Flujo ETF", dailyFlow: "Flujo Diario", btcEtf: "BTC ETFs", ethEtf: "ETH ETFs", last7d: "7 Días", last30d: "30 Dias", last90d: "90 Días", lastUpdate: "Última actualización", desc: "Flujos institucionales de ETFs" },
       gainers: { title: "Más Movimientos", gainers: "Ganadores", losers: "Perdedores", desc: "Principais variaciones" },
       trump: { title: "Trump-o-Meter", viewPost: "Ver Post", desc: "Impacto político" },
-      calendar: { title: "Calendario Económico", today: "HOY", tomorrow: "MAÑANA", previous: "Prev", forecast: "Fore", actual: "Actu", desc: "Eventos macroeconómicos" },
+      calendar: { title: "Calendario Económico", today: "HOY", tomorrow: "MAÑANA", yesterday: "AYER", previous: "Prev", forecast: "Fore", actual: "Actu", desc: "Eventos macroeconómicos" },
       price: { price: "Precio", volEst: "Vol Est", mcap: "Cap. Mercado", change24h: "24h %", noData: "Sin datos", desc: "Precio y variación" },
       volume: { vol24h: "Vol 24h", desc: "Volumen negociado" },
-      trend: { bullish: "Alcista", bearish: "Bajista", neutral: "Neutro", strength: "Fuerza", basedOn: "Basado em", desc: "Análisis de tendencia" },
+      trend: { bullish: "Alcista", bearish: "Bajista", neutral: "Neutro", strength: "Force", basedOn: "Basado em", desc: "Análisis de tendencia" },
       sentiment: { extremeGreed: "Codicia Extrema", greed: "Codicia", extremeFear: "Miedo Extremo", fear: "Miedo", neutralBiasUp: "Neutro (Alza)", neutralBiasDown: "Neutro (Baja)", strong: "Forte", weak: "Débil", consistent: "Consistente", easing: "Disminuyendo", recovering: "Recuperando", desc: "Sentimento técnico" },
       orderbook: { price: "Precio", size: "Tamaño", total: "Total", noData: "Sin órdenes", desc: "Libro de órdenes" },
       news: { noNews: "Sin noticias", tryAnother: "Prueba otro activo", desc: "Noticias vinculadas" }

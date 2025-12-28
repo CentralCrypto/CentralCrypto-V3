@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Quote, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getConstants } from '../constants';
@@ -34,14 +35,14 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ currentLang }) => {
   useEffect(() => {
     const interval = setInterval(() => {
       nextSlide();
-    }, 5000);
+    }, 8000);
     return () => clearInterval(interval);
   }, [testimonials.length]);
 
   const visibleTestimonials = testimonials.slice(currentIndex, currentIndex + itemsPerPage);
 
   return (
-    <section id="depoimentos" className="relative py-20 bg-gray-50 dark:bg-tech-950 transition-colors duration-300 overflow-hidden">
+    <section id="depoimentos" className="relative py-24 bg-gray-50 dark:bg-tech-950 transition-colors duration-300 overflow-hidden scroll-mt-[200px]">
       {/* Background Image requested by user */}
       <div 
         className="absolute inset-0 z-0 pointer-events-none opacity-[0.07] grayscale"
@@ -56,29 +57,29 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ currentLang }) => {
 
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center mb-12">
-            <h2 className="text-3xl font-bold text-gray-900 dark:text-white">{t.title}</h2>
+            <h2 className="text-3xl font-bold text-gray-900 dark:text-white uppercase tracking-widest">{t.title}</h2>
             
             <div className="flex gap-2">
                 <button 
                     onClick={prevSlide}
-                    className="p-2 rounded-full bg-gray-200 dark:bg-tech-800 hover:bg-gray-300 dark:hover:bg-tech-700 text-gray-700 dark:text-white transition-colors shadow-sm"
+                    className="p-3 rounded-full bg-white dark:bg-tech-800 hover:bg-tech-accent hover:text-black text-gray-700 dark:text-white transition-all shadow-md active:scale-90"
                     aria-label="Anterior"
                 >
-                    <ChevronLeft className="w-5 h-5" />
+                    <ChevronLeft className="w-6 h-6" />
                 </button>
                 <button 
                     onClick={nextSlide}
-                    className="p-2 rounded-full bg-gray-200 dark:bg-tech-800 hover:bg-gray-300 dark:hover:bg-tech-700 text-gray-700 dark:text-white transition-colors shadow-sm"
+                    className="p-3 rounded-full bg-white dark:bg-tech-800 hover:bg-tech-accent hover:text-black text-gray-700 dark:text-white transition-all shadow-md active:scale-90"
                     aria-label="Próximo"
                 >
-                    <ChevronRight className="w-5 h-5" />
+                    <ChevronRight className="w-6 h-6" />
                 </button>
             </div>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {visibleTestimonials.map((testimonial) => (
-            <div key={testimonial.id} className="bg-white dark:bg-[#16181a] p-8 rounded-2xl border border-gray-100 dark:border-slate-800 relative animate-fade-in h-full flex flex-col shadow-xl hover:shadow-2xl dark:shadow-[0_10px_40px_-15px_rgba(0,0,0,0.7)] transition-all duration-500 transform hover:-translate-y-2">
+            <div key={testimonial.id} className="bg-white dark:bg-[#16181a] p-8 rounded-2xl border border-gray-100 dark:border-slate-800 relative animate-in fade-in slide-in-from-right duration-500 h-full flex flex-col shadow-xl hover:shadow-2xl dark:shadow-[0_10px_40px_-15px_rgba(0,0,0,0.7)] transition-all transform hover:-translate-y-2">
               <Quote className="w-12 h-12 text-[#dd9933]/10 dark:text-[#dd9933]/5 absolute top-6 right-6" />
               
               <div className="flex-grow">
