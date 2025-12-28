@@ -14,20 +14,17 @@ const MagazineTicker: React.FC<MagazineTickerProps> = ({ onPostClick }) => {
     const fetchTickerPosts = async () => {
       try {
         setLoading(true);
-        // Busca leve das categorias
         const cats = await fetchMagazineCategories();
         const analisesCat = cats.find((c: any) => c.slug.includes('analise'));
-
-        // Busca apenas 10 posts, garantindo que a URL seja processada pelo magazineFetch resiliente
         const data = await fetchMagazinePosts({ 
             categories: analisesCat?.id, 
-            perPage: 10 
+            perPage: 15 
         });
         
         if (data.posts.length > 0) {
           setPosts(data.posts);
         } else {
-            const latest = await fetchMagazinePosts({ perPage: 10 });
+            const latest = await fetchMagazinePosts({ perPage: 15 });
             setPosts(latest.posts);
         }
       } catch (e) {
@@ -52,20 +49,21 @@ const MagazineTicker: React.FC<MagazineTickerProps> = ({ onPostClick }) => {
 
   if (!posts || posts.length === 0) return null;
 
-  const TickerContent = () => (
+  // Renderiza três vezes para garantir que o loop cubra toda a largura da tela sem lacunas
+  const TickerSet = () => (
     <>
       {posts.map(post => (
         <div 
-          key={post.id} 
+          key={`${post.id}-${Math.random()}`} 
           onClick={() => onPostClick(post.id)} 
-          className="flex items-center gap-3 shrink-0 w-80 cursor-pointer group/tickeritem p-1 hover:bg-tech-accent/10 rounded-lg transition-colors"
+          className="flex items-center gap-3 shrink-0 w-80 cursor-pointer group/tickeritem p-1 hover:bg-tech-accent/10 rounded-lg transition-colors mx-4"
         >
           <img 
             src={post.featuredImage || 'https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png'} 
             alt="" 
-            className="w-12 h-12 object-cover rounded-md border border-tech-800 group-hover/tickeritem:border-tech-accent transition-colors" 
+            className="w-12 h-12 object-cover rounded-md border border-tech-800 group-hover/tickeritem:border-tech-accent transition-colors shadow-sm" 
           />
-          <span className="text-base font-bold text-gray-300 group-hover/tickeritem:text-tech-accent line-clamp-2 leading-tight">
+          <span className="text-sm font-black text-gray-400 group-hover/tickeritem:text-tech-accent line-clamp-2 leading-tight uppercase tracking-tight">
             {decodeHTML(post.titleHtml)}
           </span>
         </div>
@@ -74,13 +72,14 @@ const MagazineTicker: React.FC<MagazineTickerProps> = ({ onPostClick }) => {
   );
 
   return (
-    <div className="w-full my-2 overflow-hidden relative group">
+    <div className="w-full my-4 overflow-hidden relative group py-2 border-y border-tech-800/30">
       <div className="flex animate-magazine-scroll group-hover:[animation-play-state:paused] w-max">
-        <div className="flex items-center gap-4 pr-4"><TickerContent /></div>
-        <div className="flex items-center gap-4 pr-4"><TickerContent /></div>
+        <TickerSet />
+        <TickerSet />
+        <TickerSet />
       </div>
-       <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-tech-950 to-transparent z-10 pointer-events-none"></div>
-       <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-tech-950 to-transparent z-10 pointer-events-none"></div>
+       <div className="absolute left-0 top-0 bottom-0 w-24 bg-gradient-to-r from-tech-950 to-transparent z-10 pointer-events-none"></div>
+       <div className="absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-tech-950 to-transparent z-10 pointer-events-none"></div>
     </div>
   );
 };

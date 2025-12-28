@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Loader2, ExternalLink } from 'lucide-react';
 import { TrumpData, fetchTrumpData } from '../services/api';
@@ -29,21 +30,44 @@ const TrumpMeterWidget: React.FC<{ item: DashboardItem, language?: Language }> =
         return <div className="flex items-center justify-center h-full text-gray-400 dark:text-slate-500"><Loader2 className="animate-spin" /></div>;
     }
 
-    const impactPercent = trumpData.trump_rank_percent || 50;
     const impactScore = trumpData.trump_rank_50 || 0;
+    const impactPercent = ((impactScore + 50) / 100) * 100;
     const impactColor = impactPercent > 60 ? '#009E4F' : impactPercent < 40 ? '#E03A3E' : '#dd9933';
     const ticks = [-50, -30, -15, 0, 15, 30, 50];
+
+    const getTickColor = (tick: number) => {
+        if (tick <= -30) return '#E03A3E';
+        if (tick < 0) return '#eda05d';
+        if (tick === 0) return '#FFD700';
+        if (tick <= 30) return '#a4bd29';
+        return '#009E4F';
+    };
 
     const ScaleRow = ({ score }: { score: number }) => (
         <div className="relative h-4 w-full mt-2 flex justify-between px-0.5">
             {ticks.map(tick => {
-                const isHighlighted = Math.abs(score - tick) < 10;
+                const isHighlighted = Math.abs(score - tick) < 8;
                 return (
-                    <span key={tick} className={`text-[8px] font-black font-mono transition-all duration-500 ${isHighlighted ? 'text-white scale-125' : 'text-gray-600 opacity-40'}`}>
+                    <span key={tick} className={`text-[8px] font-black font-mono transition-all duration-500 ${isHighlighted ? 'scale-125' : 'opacity-40'}`} style={{ color: getTickColor(tick) }}>
                         {tick > 0 ? '+' : ''}{tick}
                     </span>
                 );
             })}
+        </div>
+    );
+
+    const CustomTooltipBox = () => (
+        <div className="absolute inset-0 bg-white dark:bg-[#1a1c1e] opacity-0 group-hover/post:opacity-100 transition-all p-4 overflow-y-auto custom-scrollbar z-[70] shadow-2xl border border-tech-700 rounded-lg translate-y-3 group-hover/post:translate-y-0 duration-300">
+            <div className="flex items-center gap-3 mb-3 border-b border-gray-100 dark:border-white/5 pb-2">
+                <img src={OFFICIAL_TRUMP_AVATAR} className="w-6 h-6 rounded-full border border-[#dd9933]/50 shadow-md" alt="Trump" />
+                <div className="flex flex-col">
+                    <span className="text-[10px] font-black text-[#dd9933] uppercase tracking-[0.2em] leading-none">Truth Social Intelligence</span>
+                    <span className="text-[8px] text-gray-500 font-bold uppercase tracking-widest mt-1">Official Post Analysis</span>
+                </div>
+            </div>
+            <p className="text-xs font-bold text-gray-800 dark:text-gray-100 leading-relaxed italic border-l-2 border-[#dd9933] pl-3 py-1">
+                "{trumpData.title}"
+            </p>
         </div>
     );
 
@@ -79,7 +103,7 @@ const TrumpMeterWidget: React.FC<{ item: DashboardItem, language?: Language }> =
                         <ScaleRow score={animatedImpact} />
                     </div>
 
-                    <div className="text-[70px] leading-none font-black tracking-tighter drop-shadow-2xl transition-colors duration-500 mb-2" style={{color: impactColor}}>
+                    <div className="text-[60px] leading-none font-black tracking-tighter drop-shadow-2xl transition-colors duration-500 mb-2" style={{color: impactColor}}>
                             {animatedImpact > 0 ? '+' : ''}{animatedImpact}
                     </div>
 
@@ -87,11 +111,12 @@ const TrumpMeterWidget: React.FC<{ item: DashboardItem, language?: Language }> =
                         {trumpData.sarcastic_label}
                     </div>
 
-                    <div className="w-full max-w-3xl p-6 border-2 border-dashed rounded-2xl bg-gray-50/50 dark:bg-black/20 relative flex-1 min-h-0 overflow-y-auto" style={{ borderColor: impactColor }}>
+                    <div className="w-full max-w-3xl p-6 border-2 border-dashed rounded-2xl bg-gray-50/50 dark:bg-black/20 relative flex-1 min-h-0 overflow-y-auto group/post" style={{ borderColor: impactColor }}>
                         <div className="absolute top-0 left-1/2 -translate-x-1/2 bg-white dark:bg-[#1a1c1e] px-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.3em]">Official Post Text</div>
                         <p className="text-center text-lg text-gray-800 dark:text-slate-200 font-bold leading-relaxed italic">
                             "{trumpData.title}"
                         </p>
+                        <CustomTooltipBox />
                     </div>
                 </div>
             </div>
@@ -103,16 +128,18 @@ const TrumpMeterWidget: React.FC<{ item: DashboardItem, language?: Language }> =
             <Watermark />
             <div className="flex justify-between items-center z-10 mb-2">
                 <div className="flex items-center gap-2">
-                    <img src={OFFICIAL_TRUMP_AVATAR} className="w-5 h-5 rounded-full border border-[#dd9933]/50" />
-                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Sentiment Impact</span>
+                    <img src={OFFICIAL_TRUMP_AVATAR} className="w-5 h-5 rounded-full border border-[#dd9933]/50 shadow-sm" />
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">Sentiment Impact</span>
                 </div>
                 <a href={trumpData.link} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-[#dd9933] transition-colors"><ExternalLink size={12} /></a>
             </div>
             
-            <div className="px-2 mt-4">
+            <div className="px-2 mt-4 relative">
                 <div className="relative h-2 w-full bg-gray-100 dark:bg-tech-950 rounded-full mb-1 overflow-hidden">
                     <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-[#E03A3E] via-yellow-500 to-[#009E4F] w-full opacity-30"></div>
-                    <div className="absolute top-0 bottom-0 w-1 bg-white shadow-[0_0_8px_rgba(255,255,255,1)] transition-all duration-1000 z-10" style={{left: `${impactPercent}%`}}></div>
+                    <div className="absolute top-[-8px] transition-all duration-1000 ease-out z-20" style={{ left: `calc(${impactPercent}% - 5px)` }}>
+                         <div className="w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[8px] border-t-gray-800 dark:border-t-white drop-shadow-sm"></div>
+                    </div>
                 </div>
                 <ScaleRow score={animatedImpact} />
             </div>
@@ -121,16 +148,14 @@ const TrumpMeterWidget: React.FC<{ item: DashboardItem, language?: Language }> =
                  <div className="text-[11px] font-black uppercase tracking-tight" style={{color: impactColor}}>
                     {trumpData.sarcastic_label}
                  </div>
-                 <div className="text-[24px] font-black tracking-tighter" style={{color: impactColor}}>
+                 <div className="text-[20px] font-black tracking-tighter" style={{color: impactColor}}>
                     {animatedImpact > 0 ? '+' : ''}{animatedImpact}
                  </div>
             </div>
 
             <div className="flex-1 min-h-0 relative border border-dashed border-gray-200 dark:border-slate-700/50 rounded-lg p-2 bg-gray-50/50 dark:bg-black/10 overflow-hidden group/post">
                 <p className="text-[11px] text-gray-600 dark:text-slate-300 font-bold leading-snug line-clamp-3 italic">"{trumpData.title}"</p>
-                <div className="absolute inset-0 bg-tech-900/95 opacity-0 group-hover/post:opacity-100 transition-opacity p-2 overflow-y-auto custom-scrollbar z-50 text-[9px] font-medium text-white leading-relaxed">
-                    {trumpData.title}
-                </div>
+                <CustomTooltipBox />
             </div>
         </div>
     );

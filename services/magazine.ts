@@ -76,7 +76,9 @@ function normalizePost(post: any): MagazinePost {
     };
 }
 
-export async function fetchMagazinePosts(params: { search?: string; page?: number; perPage?: number; categories?: number }): Promise<{ posts: MagazinePost[]; total: number; totalPages: number }> {
+// Updated fetchMagazinePosts parameter type for categories to allow string (comma-separated list)
+// This fix addresses Type 'string' is not assignable to type 'number' errors in NewsGrid.tsx and NewsFeed.tsx
+export async function fetchMagazinePosts(params: { search?: string; page?: number; perPage?: number; categories?: number | string }): Promise<{ posts: MagazinePost[]; total: number; totalPages: number }> {
     try {
         const query = { 
             _embed: 1, 

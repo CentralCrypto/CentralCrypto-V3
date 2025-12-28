@@ -13,6 +13,7 @@ interface NewsGridProps {
 const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
   const [estudos, setEstudos] = useState<MagazinePost[]>([]);
   const [analises, setAnalises] = useState<MagazinePost[]>([]);
+  const [maisLidas, setMaisLidas] = useState<MagazinePost[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [heroIndex, setHeroIndex] = useState(0);
@@ -40,15 +41,20 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
       const cats = await fetchMagazineCategories();
       const estudosCat = cats.find(c => c.slug?.includes('estudo'));
       const analisesCat = cats.find(c => c.slug?.includes('analise'));
+      const editorCat = cats.find(c => c.slug?.includes('editor'));
 
-      // Requisição local rápida: Exatamente o que cada coluna precisa
-      const [resEstudos, resAnalises] = await Promise.all([
+      const [resEstudos, resAnalises, resMaisLidas] = await Promise.all([
           fetchMagazinePosts({ categories: estudosCat?.id, perPage: 2 }).catch(() => ({ posts: [] })),
-          fetchMagazinePosts({ categories: analisesCat?.id, perPage: 5 }).catch(() => ({ posts: [] }))
+          fetchMagazinePosts({ categories: analisesCat?.id, perPage: 5 }).catch(() => ({ posts: [] })),
+          fetchMagazinePosts({ 
+            categories: [analisesCat?.id, editorCat?.id].filter(Boolean).join(','), 
+            perPage: 5 
+          }).catch(() => ({ posts: [] }))
       ]);
 
       setEstudos(resEstudos.posts);
       setAnalises(resAnalises.posts);
+      setMaisLidas(resMaisLidas.posts);
 
       if (resEstudos.posts.length === 0 && resAnalises.posts.length === 0) {
           setError('O Banco de Dados está vazio ou inacessível.');
@@ -72,7 +78,6 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
     return () => clearInterval(interval);
   }, [analises]);
 
-  const trending = [...analises].reverse();
   const currentHero = analises[heroIndex];
 
   if (loading && estudos.length === 0 && analises.length === 0) return (
@@ -86,9 +91,7 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
     <div className="w-full h-[500px] flex flex-col items-center justify-center bg-tech-900 rounded-xl border border-red-500/20 p-12 text-center shadow-2xl">
         <WifiOff size={32} className="text-red-500 mb-6 opacity-80" />
         <h3 className="text-gray-200 font-bold text-xl mb-2">Central Inacessível</h3>
-        <p className="text-gray-400 font-mono text-xs max-w-sm mb-8">
-            Verifique as permissões da pasta /2 no seu servidor.
-        </p>
+        <p className="text-gray-400 font-mono text-xs max-w-sm mb-8">Verifique as permissões do servidor.</p>
         <button onClick={fetchNews} className="flex items-center justify-center gap-2 bg-[#dd9933] hover:bg-amber-600 text-black font-black uppercase text-xs px-6 py-3 rounded-lg transition-all">
             <RefreshCw size={14} /> Tentar Agora
         </button>
@@ -120,20 +123,19 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
         </div>
 
         <div className="md:col-span-6 flex flex-col h-full">
-          <div className="text-base font-bold uppercase tracking-widest text-gray-200 border-b-2 border-[#dd9933] pb-2 mb-6 text-center shrink-0">{t.featuredAnalysis}</div>
+          <div className="text-base font-bold uppercase tracking-widest text-gray-200 border-b-2 border-[#dd9933] pb-2 mb-6 text-center shrink-0">Últimas Análises</div>
           {currentHero ? (
             <div onClick={() => onPostClick(currentHero.id)} className="relative flex-1 overflow-hidden rounded-lg group cursor-pointer shadow-[0_0_30px_rgba(0,0,0,0.5)] border border-tech-700 hover:border-[#dd9933] transition-all bg-tech-800">
                <img key={currentHero.id} src={currentHero.featuredImage} alt="" className="w-full h-full object-cover animate-in fade-in duration-700 absolute inset-0 opacity-80 group-hover:opacity-100 transition-opacity" />
                <div className="absolute inset-0 bg-gradient-to-t from-tech-950 via-tech-950/50 to-transparent opacity-100"></div>
                <div className="absolute bottom-0 left-0 right-0 p-8 md:p-10">
-                  <div className="bg-[#dd9933] text-black text-xs font-black px-3 py-1 inline-block mb-4 rounded-sm uppercase tracking-wider shadow-lg transform -skew-x-12">{t.highlight}</div>
+                  <div className="bg-[#dd9933] text-black text-xs font-black px-3 py-1 inline-block mb-4 rounded-sm uppercase tracking-wider shadow-lg transform -skew-x-12">ANÁLISE</div>
                   <h2 className="text-gray-200 dark:text-[#dd9933] font-black text-3xl md:text-5xl leading-none mb-6 drop-shadow-xl shadow-black group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors">{decodeHTML(currentHero.titleHtml)}</h2>
                   <div className="flex items-center text-base text-gray-200 gap-6 font-mono border-t border-gray-500/50 pt-6">
                       <span className="flex items-center gap-2 font-bold text-[#dd9933]"><span className="w-2.5 h-2.5 rounded-full bg-[#dd9933] animate-pulse"></span>{currentHero.authorName}</span>
-                      <span className="hidden sm:inline">{new Date(currentHero.date).toLocaleDateString(currentLocale, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                      <span className="hidden sm:inline">{new Date(currentHero.date).toLocaleDateString(currentLocale, { weekday: 'long', day: 'numeric', month: 'long' })}</span>
                   </div>
                </div>
-               <div className="absolute top-0 left-0 h-1.5 bg-[#dd9933] z-20 animate-[progress_8s_linear_infinite]" style={{ width: '100%' }}></div>
             </div>
           ) : null}
         </div>
@@ -141,22 +143,21 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
         <div className="md:col-span-3 flex flex-col h-full">
            <div className="text-base font-bold uppercase tracking-widest text-gray-200 border-b-2 border-[#dd9933] pb-2 mb-6 text-right shrink-0">{t.trendingTopics}</div>
            <div className="flex-1 flex flex-col gap-3 overflow-hidden relative">
-             {trending.map((post, i) => (
-               <div onClick={() => onPostClick(post.id)} key={`${post.id}-${i}`} className="flex gap-3 bg-tech-900 border border-tech-800 hover:border-[#dd9933] transition-all p-2 rounded-lg shadow-lg cursor-pointer flex-1 animate-in slide-in-from-bottom-2 duration-500 group items-center">
+             {maisLidas.map((post, i) => (
+               <div onClick={() => onPostClick(post.id)} key={`${post.id}-${i}`} className="flex gap-3 bg-tech-900 border border-tech-800 hover:border-[#dd9933] p-2 rounded-lg shadow-lg cursor-pointer flex-1 group items-center transition-all">
                   <div className="relative w-20 h-full shrink-0 overflow-hidden rounded-md bg-black">
                      <img src={post.featuredImage} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 opacity-70 group-hover:opacity-100" alt=""/>
                      <div className="absolute top-0 left-0 bg-[#dd9933] text-black text-[10px] font-black px-1.5 py-0.5 shadow-md z-10">{i + 1}</div>
                   </div>
                   <div className="flex flex-col justify-center flex-1 min-w-0">
                      <h5 className="text-xs font-bold text-gray-200 dark:text-[#dd9933] leading-tight line-clamp-2 group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors mb-1">{decodeHTML(post.titleHtml)}</h5>
-                     <div className="text-[9px] text-gray-500 font-mono flex items-center gap-2"><span>{new Date(post.date).toLocaleDateString(currentLocale)}</span></div>
+                     <div className="text-[9px] text-gray-500 font-mono"><span>{new Date(post.date).toLocaleDateString(currentLocale)}</span></div>
                   </div>
                </div>
              ))}
           </div>
         </div>
       </div>
-      <style>{`@keyframes progress { 0% { width: 0% } 100% { width: 100% } }`}</style>
     </div>
   );
 };

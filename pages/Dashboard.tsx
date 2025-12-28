@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ArrowUpRight, Zap, Eye, EyeOff, ArrowDownRight, Activity, Loader2, ChevronDown, ExternalLink, ArrowUp, ArrowDown, LayoutDashboard, Calendar, Server, RefreshCw, Search, Clock } from '../components/Icons';
 import NewsGrid from '../components/NewsGrid';
 import NewsFeed from '../components/NewsFeed';
@@ -37,10 +38,17 @@ const WorkspaceLink = ({ onClick }: { onClick: () => void }) => (
 const CustomTooltip = ({ active, payload, label, prefix = "", suffix = "", language = 'pt' }: any) => {
   if (active && payload && payload.length) {
     const date = new Date(payload[0].payload.date || payload[0].payload.timestamp || label);
+    const dayName = date.toLocaleDateString(language, { weekday: 'long' });
+    const fullDate = date.toLocaleDateString(language, { day: '2-digit', month: 'short', year: 'numeric' });
+    
     return (
-      <div className="bg-tech-900 border border-tech-700 p-3 rounded-lg shadow-2xl font-mono">
-        <p className="text-[10px] text-gray-500 uppercase mb-1">{date.toLocaleDateString(language, { day: '2-digit', month: 'short', year: 'numeric' })}</p>
-        <p className="text-sm font-black text-[#dd9933]">{prefix}{payload[0].value.toLocaleString()}{suffix}</p>
+      <div className="bg-white dark:bg-[#1e2022] border border-gray-200 dark:border-tech-700 p-4 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.3)] font-sans min-w-[180px]">
+        <p className="text-[10px] text-[#dd9933] font-black uppercase tracking-[0.2em] mb-1">{dayName}</p>
+        <p className="text-[11px] text-gray-500 dark:text-gray-400 font-bold mb-3 border-b border-gray-100 dark:border-white/5 pb-2 uppercase tracking-widest">{fullDate}</p>
+        <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-tech-success"></div>
+            <p className="text-base font-black text-gray-900 dark:text-white font-mono">{prefix}{payload[0].value.toLocaleString()}{suffix}</p>
+        </div>
       </div>
     );
   }
@@ -292,6 +300,15 @@ const MarketCapHistoryWidget = ({ language, onNavigate, theme }: { language: Lan
   const strokeColor = theme === 'dark' ? '#548f3f' : '#1a1c1e';
   const fillColor = theme === 'dark' ? '#548f3f' : '#1a1c1e';
 
+  const chartPoints = useMemo(() => {
+    if (!data?.history) return [];
+    return data.history.map((val: number, i: number) => {
+        const d = new Date();
+        d.setDate(d.getDate() - (data.history.length - 1 - i));
+        return { date: d.getTime(), value: val };
+    });
+  }, [data]);
+
   return (
     <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 relative">
       <div className="shrink-0 flex justify-between items-start mb-1">
@@ -300,10 +317,10 @@ const MarketCapHistoryWidget = ({ language, onNavigate, theme }: { language: Lan
       </div>
       <div className="relative flex-1 bg-white/50 dark:bg-black/40 rounded-lg mb-1 overflow-hidden">
         <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data?.history || []}>
+            <AreaChart data={chartPoints}>
                 <defs><linearGradient id="colorMkt" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={fillColor} stopOpacity={0.3}/><stop offset="95%" stopColor={fillColor} stopOpacity={0}/></linearGradient></defs>
                 <Tooltip content={<CustomTooltip language={language} prefix="$" />} cursor={{ stroke: strokeColor, strokeWidth: 1 }} />
-                <Area type="monotone" dataKey="value" stroke={strokeColor} fill="url(#colorMkt)" strokeWidth={1} />
+                <Area type="monotone" dataKey="value" stroke={strokeColor} fill="url(#colorMkt)" strokeWidth={1} dot={false} />
             </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -345,10 +362,18 @@ const TrumpOMeterWidget = ({ language, onNavigate }: { language: Language; onNav
     
     if (!data) return <div className="glass-panel p-4 rounded-xl h-full animate-pulse bg-tech-800 border-tech-700" />;
     
-    const percent = data.trump_rank_percent || 50;
     const score = data.trump_rank_50 || 0;
+    const percent = ((score + 50) / 100) * 100;
     const impactColor = percent > 60 ? '#009E4F' : percent < 40 ? '#E03A3E' : '#dd9933';
     const ticks = [-50, -30, -15, 0, 15, 30, 50];
+
+    const getTickColor = (tick: number) => {
+        if (tick <= -30) return '#E03A3E';
+        if (tick < 0) return '#eda05d';
+        if (tick === 0) return '#FFD700';
+        if (tick <= 30) return '#a4bd29';
+        return '#009E4F';
+    };
 
     return (
         <div className="glass-panel p-2 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 relative overflow-hidden">
@@ -358,7 +383,7 @@ const TrumpOMeterWidget = ({ language, onNavigate }: { language: Language; onNav
             </div>
             <div className="flex-1 flex flex-col justify-center px-2">
                 <div className="relative h-2 w-full rounded-full bg-gradient-to-r from-[#E03A3E] via-yellow-500 to-[#009E4F] mt-4">
-                    <div className="absolute top-[-8px] transition-all duration-700" style={{ left: `calc(${percent}% - 6px)` }}>
+                    <div className="absolute top-[-8px] transition-all duration-700 ease-out z-20" style={{ left: `calc(${percent}% - 6px)` }}>
                         <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[10px] border-t-gray-800 dark:border-t-white drop-shadow-md"></div>
                     </div>
                 </div>
@@ -366,7 +391,7 @@ const TrumpOMeterWidget = ({ language, onNavigate }: { language: Language; onNav
                     {ticks.map(tick => {
                         const isHighlighted = Math.abs(score - tick) < 8;
                         return (
-                            <span key={tick} className={`text-[8px] font-black font-mono transition-colors duration-500 ${isHighlighted ? 'text-white' : 'text-gray-600'}`}>
+                            <span key={tick} className={`text-[8px] font-black font-mono transition-all duration-500 ${isHighlighted ? 'scale-125' : 'opacity-40'}`} style={{ color: getTickColor(tick) }}>
                                 {tick > 0 ? '+' : ''}{tick}
                             </span>
                         );
@@ -377,11 +402,14 @@ const TrumpOMeterWidget = ({ language, onNavigate }: { language: Language; onNav
             <div 
                 className="flex-1 flex flex-col border-2 border-dashed rounded-lg p-1.5 bg-black/5 dark:bg-black/10 min-h-0 overflow-hidden group/post relative" 
                 style={{ borderColor: impactColor }}
-                title={data.title}
             >
                 <p className="text-[10px] text-gray-700 dark:text-gray-300 font-bold line-clamp-3 italic leading-snug">"{data.title}"</p>
-                <div className="absolute inset-0 bg-tech-900/95 opacity-0 group-hover/post:opacity-100 transition-opacity p-2 overflow-y-auto custom-scrollbar z-50 text-[9px] font-medium text-white leading-relaxed">
-                    {data.title}
+                <div className="absolute inset-0 bg-white dark:bg-[#1a1c1e] opacity-0 group-hover/post:opacity-100 transition-all p-3 overflow-y-auto custom-scrollbar z-[60] shadow-2xl border border-tech-700 rounded-lg translate-y-2 group-hover/post:translate-y-0">
+                    <div className="flex items-center gap-2 mb-2 border-b border-gray-100 dark:border-white/5 pb-2">
+                        <img src="https://static-assets-1.truthsocial.com/tmtg:prime-ts-assets/accounts/avatars/107/780/257/626/128/497/original/454286ac07a6f6e6.jpeg" className="w-5 h-5 rounded-full" alt="Trump" />
+                        <span className="text-[9px] font-black text-[#dd9933] uppercase tracking-widest">Trump Social Intelligence</span>
+                    </div>
+                    <p className="text-[11px] font-medium text-gray-800 dark:text-gray-200 leading-relaxed italic">"{data.title}"</p>
                 </div>
             </div>
         </div>
