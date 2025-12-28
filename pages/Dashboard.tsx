@@ -742,13 +742,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onPostClick, language = 'pt' as L
 
         {showStats && (
             <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-[repeat(7,minmax(0,1fr))] gap-3 animate-in fade-in slide-in-from-top-4 duration-700 w-full">
-                <div className="h-[230px]"><FearAndGreedWidget language={language} onNavigate={navigateToWorkspace} /></div>
-                <div className="h-[230px]"><RsiWidget language={language} onNavigate={navigateToWorkspace} /></div>
-                <div className="h-[230px]"><LongShortRatioWidget language={language} onNavigate={navigateToWorkspace} /></div>
-                <div className="h-[230px]"><AltSeasonWidget language={language} onNavigate={navigateToWorkspace} theme={theme} /></div>
-                <div className="h-[230px]"><MarketCapHistoryWidget language={language} onNavigate={navigateToWorkspace} theme={theme} /></div>
-                <div className="h-[230px]"><EtfFlowWidget language={language} onNavigate={navigateToWorkspace} /></div>
-                <div className="h-[230px]"><TrumpOMeterWidget language={language} onNavigate={navigateToWorkspace} /></div>
+                <div className="h-[250px]"><FearAndGreedWidget language={language} onNavigate={navigateToWorkspace} /></div>
+                <div className="h-[250px]"><RsiWidget language={language} onNavigate={navigateToWorkspace} /></div>
+                <div className="h-[250px]"><LongShortRatioWidget language={language} onNavigate={navigateToWorkspace} /></div>
+                <div className="h-[250px]"><AltSeasonWidget language={language} onNavigate={navigateToWorkspace} theme={theme} /></div>
+                <div className="h-[250px]"><MarketCapHistoryWidget language={language} onNavigate={navigateToWorkspace} theme={theme} /></div>
+                <div className="h-[250px]"><EtfFlowWidget language={language} onNavigate={navigateToWorkspace} /></div>
+                <div className="h-[250px]"><TrumpOMeterWidget language={language} onNavigate={navigateToWorkspace} /></div>
                 
                 <div className="h-[340px] md:col-span-1 xl:col-span-2"><GainersLosersWidget language={language} onNavigate={navigateToWorkspace} /></div>
                 <div className="h-[340px] md:col-span-2 xl:col-span-2"><MarketCapWidget language={language} onNavigate={navigateToWorkspace} /></div>
@@ -774,3 +774,4 @@ const Dashboard: React.FC<DashboardProps> = ({ onPostClick, language = 'pt' as L
 };
 
 export default Dashboard;
+    
