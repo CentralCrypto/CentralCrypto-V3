@@ -5,9 +5,6 @@ import { getCacheckoUrl, ENDPOINTS } from './endpoints';
 
 const STABLECOINS = ['USDT', 'USDC', 'DAI', 'FDUSD', 'TUSD', 'USDD', 'PYUSD', 'USDE', 'GUSD', 'USDP', 'BUSD'];
 
-/**
- * Common fetch with fallback and cache busting
- */
 export const fetchWithFallback = async (url: string): Promise<any | null> => {
     try {
         const salt = Math.floor(Date.now() / 60000);
@@ -15,7 +12,8 @@ export const fetchWithFallback = async (url: string): Promise<any | null> => {
         const { data } = await httpGetJson(finalUrl, { timeoutMs: 10000, retries: 2 });
         return data;
     } catch (e: any) {
-        console.error(`[API] Erro ao buscar ${url}: ${e.message || JSON.stringify(e)}`);
+        // Corrigido para não exibir [object Object]
+        console.error(`[API] Erro ao buscar ${url}:`, e.message || e);
     }
     return null;
 };
@@ -119,20 +117,22 @@ export const fetchCryptoNews = async (symbol: string, coinName: string): Promise
 export const fetchAltcoinSeason = async (): Promise<AltSeasonData | null> => {
     const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.altseason));
     if (!data) return null;
-    return Array.isArray(data) ? data[0] : data;
+    const root = Array.isArray(data) ? data[0] : data;
+    return root || null;
 };
 
 export const fetchAltcoinSeasonHistory = async (): Promise<AltSeasonHistoryPoint[]> => {
     const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.altseason));
     if (!data) return [];
     const root = Array.isArray(data) ? data[0] : data;
-    return Array.isArray(root.history) ? root.history : [];
+    return root && Array.isArray(root.history) ? root.history : [];
 };
 
 export const fetchTrumpData = async (): Promise<TrumpData | null> => {
     const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.trump));
     if (!data) return null;
     const root = Array.isArray(data) ? data[0] : data;
+    if (!root) return null;
     return {
         ...root,
         link: root.guid || root.link
@@ -147,16 +147,21 @@ export const fetchFearAndGreed = async (): Promise<FngData[]> => {
 };
 
 export const fetchRsiAverage = async (): Promise<RsiAvgData | null> => fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiAvg));
+
 export const fetchRsiTracker = async (): Promise<RsiTrackerPoint[]> => {
     const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTracker));
     return Array.isArray(data) ? data : [];
 };
+
 export const fetchMacdAverage = async (): Promise<MacdAvgData | null> => fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.macdAvg));
+
 export const fetchMacdTracker = async (): Promise<MacdTrackerPoint[]> => {
     const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.macdTracker));
     return Array.isArray(data) ? data : [];
 };
+
 export const fetchMarketCapHistory = async (): Promise<any | null> => fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.mktcapHist));
+
 export const fetchEconomicCalendar = async (): Promise<EconEvent[]> => {
     const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.calendar));
     return Array.isArray(data) ? data : [];

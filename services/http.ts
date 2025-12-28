@@ -18,10 +18,6 @@ export async function safeJson(res: Response): Promise<any> {
   }
 }
 
-/**
- * Wrapper de fetch robusto utilizando caminhos relativos.
- * O Vite proxy no VPS encaminha /2 e /cachecko para o destino correto.
- */
 async function httpRequest(url: string, init: RequestInit & { timeoutMs?: number; retries?: number } = {}): Promise<{ data: any; headers: Headers; url: string }> {
   const { timeoutMs = DEFAULT_TIMEOUT, retries = 1, ...fetchOpts } = init;
   
@@ -33,13 +29,12 @@ async function httpRequest(url: string, init: RequestInit & { timeoutMs?: number
       const response = await fetch(url, {
         ...fetchOpts,
         signal: controller.signal,
-        credentials: 'omit' // Evita conflitos de cookies em ambientes de dev
+        credentials: 'omit'
       });
 
       clearTimeout(id);
       
       if (!response.ok) {
-        // Backoff simples para erro 429 ou erros de rede temporários
         if (response.status === 429 || response.status >= 500) {
             if (remaining > 0) {
                 await new Promise(r => setTimeout(r, 2000));
@@ -47,7 +42,7 @@ async function httpRequest(url: string, init: RequestInit & { timeoutMs?: number
             }
         }
         const data = await safeJson(response);
-        throw { status: response.status, url, data, message: `HTTP ${response.status}` } as HttpError;
+        throw { status: response.status, url, data, message: `Erro HTTP ${response.status}` } as HttpError;
       }
 
       const json = await response.json();
@@ -57,7 +52,7 @@ async function httpRequest(url: string, init: RequestInit & { timeoutMs?: number
       clearTimeout(id);
       
       if (error.name === 'AbortError') {
-          throw { status: 0, url, data: null, message: 'Timeout' } as HttpError;
+          throw { status: 0, url, data: null, message: 'Tempo de resposta excedido (Timeout)' } as HttpError;
       }
 
       if (remaining > 0) {
@@ -65,7 +60,7 @@ async function httpRequest(url: string, init: RequestInit & { timeoutMs?: number
           return attempt(remaining - 1);
       }
       
-      throw { status: 0, url, data: null, message: error.message || 'Network Error' } as HttpError;
+      throw { status: 0, url, data: null, message: error.message || 'Erro de conexão' } as HttpError;
     }
   };
 
