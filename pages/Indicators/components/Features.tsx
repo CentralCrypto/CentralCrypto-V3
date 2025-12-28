@@ -57,7 +57,7 @@ export const Features: React.FC<FeaturesProps> = ({ currentLang }) => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-12">
           {features.map((feature, index) => (
             <div key={index} className="flex flex-col items-center text-center group p-8 rounded-3xl hover:bg-gray-50 dark:hover:bg-tech-900 transition-all duration-300 border border-transparent hover:border-gray-100 dark:hover:border-tech-800">
-              <div className="mb-6 bg-gray-100 dark:bg-tech-800/80 w-20 h-20 rounded-2xl flex items-center justify-center shadow-inner group-hover:shadow-xl transition-all">
+              <div className="mb-6 bg-gray-100 dark:bg-tech-900 w-20 h-20 rounded-2xl flex items-center justify-center shadow-inner group-hover:shadow-xl transition-all">
                 {feature.icon}
               </div>
               <h3 className="text-xl font-black text-gray-900 dark:text-white mb-4 uppercase tracking-widest group-hover:text-tech-accent transition-colors">{feature.title}</h3>

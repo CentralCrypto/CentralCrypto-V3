@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useRef } from 'react';
 import { 
   Share2, 
@@ -93,7 +94,21 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
 
   const userMenuRef = useRef<HTMLDivElement | null>(null);
   const langMenuRef = useRef<HTMLDivElement | null>(null);
-  const langTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
+      if (langMenuRef.current && !langMenuRef.current.contains(event.target as Node)) {
+        setIsLangMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   useEffect(() => {
     fetchTopCoins().then(coins => {
@@ -172,9 +187,6 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
     { href: "https://t.me/+80XjLzFScH0yMWQx", icon: <Send size={18} /> },
     { href: "https://www.tiktok.com/@centralcrypto323", icon: <TikTok size={18} /> },
   ];
-
-  const handleLangEnter = () => { if (langTimeoutRef.current) clearTimeout(langTimeoutRef.current); setIsLangMenuOpen(true); };
-  const handleLangLeave = () => { langTimeoutRef.current = setTimeout(() => { setIsLangMenuOpen(false); }, 500); };
 
   const TickerList = () => (
     <div className="flex items-center">
@@ -339,6 +351,39 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
                  <input type="text" placeholder={common.search.toUpperCase()} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onKeyDown={handleSearchKeyDown} className="bg-transparent border-none outline-none text-sm w-0 opacity-0 group-hover/search:w-48 group-hover/search:opacity-100 group-hover/search:ml-2 focus:w-48 focus:opacity-100 focus:ml-2 transition-all duration-500 font-mono font-bold uppercase text-gray-800 dark:text-gray-200 order-1" />
                  <Search size={18} className="text-[#dd9933] cursor-pointer group-hover/search:scale-110 transition-transform order-2" onClick={() => onSearch(searchTerm)} />
                </div>
+                <div className="relative" ref={langMenuRef}>
+                    <button 
+                        onClick={() => setIsLangMenuOpen(!isLangMenuOpen)}
+                        className="flex items-center gap-2 bg-white dark:bg-tech-800 p-2.5 rounded-full border border-transparent dark:border-tech-700 shadow-md hover:scale-110 transition-transform"
+                    >
+                        <Flag lang={language} />
+                        <ChevronDown size={14} className={`text-gray-500 transition-transform duration-300 ${isLangMenuOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {isLangMenuOpen && (
+                        <div className="absolute top-full right-0 mt-3 w-56 bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-white/5 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 p-2">
+                        {LANGUAGES_CONFIG.map((lang) => (
+                            <div key={lang.code} className="relative group/langitem">
+                            <button
+                                onClick={() => {
+                                onLanguageChange(lang.code);
+                                setIsLangMenuOpen(false);
+                                }}
+                                className="w-full text-left flex items-center gap-4 px-4 py-3 text-xs font-black text-gray-700 dark:text-gray-300 hover:bg-[#dd9933]/10 hover:text-[#dd9933] rounded-xl transition-all uppercase tracking-[0.15em]"
+                            >
+                                <Flag lang={lang.code} />
+                                <span>{lang.label}</span>
+                            </button>
+                            {(lang.code === 'en' || lang.code === 'es') && (
+                                <div className="absolute right-full mr-3 top-1/2 -translate-y-1/2 bg-gray-800 text-white text-[10px] font-bold rounded-lg py-1.5 px-3 opacity-0 group-hover/langitem:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-lg">
+                                Os posts estão disponíveis apenas em Português.
+                                <div className="absolute top-1/2 -translate-y-1/2 left-full w-2 h-2 bg-gray-800 transform rotate-45 -ml-1"></div>
+                                </div>
+                            )}
+                            </div>
+                        ))}
+                        </div>
+                    )}
+                </div>
                <button onClick={toggleTheme} className="bg-white dark:bg-tech-800 text-tech-accent p-2.5 rounded-full border border-transparent dark:border-tech-700 shadow-md hover:scale-110 transition-transform">{theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}</button>
                <div className="flex items-center gap-3 border-l border-gray-300 dark:border-tech-800 pl-5">
                   {user ? (

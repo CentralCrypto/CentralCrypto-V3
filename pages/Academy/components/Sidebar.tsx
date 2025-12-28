@@ -1,7 +1,8 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Topic, AcademyLanguage } from '../../../types';
+import { Topic, AcademyLanguage, Language } from '../../../types';
 import { ChevronDown, PlusCircle, Edit2, Trash2, GraduationCap, Loader2, CloudLightning, Database, CloudOff, RefreshCw, GripVertical } from 'lucide-react';
+import { getTranslations } from '../../../locales';
 
 interface SidebarProps {
   topics: Topic[];
@@ -30,11 +31,14 @@ interface SidebarItemProps {
   onMoveTopic?: (draggedId: string, targetId: string) => void;
 }
 
-const TIER_MAP: { [key in Topic['tier']]: { label: string; color: string; textColor: string; } } = {
-  0: { label: 'Público', color: '#22ab94', textColor: 'text-white' },
-  1: { label: 'Básico', color: '#5b9cf6', textColor: 'text-white' },
-  2: { label: 'Intermediário', color: '#dd9933', textColor: 'text-black' },
-  3: { label: 'Avançado', color: '#9575cd', textColor: 'text-white' },
+const getTierMap = (language: Language) => {
+    const t = getTranslations(language).academy.tierMap;
+    return {
+      0: { label: t.public, color: '#22ab94', textColor: 'text-white' },
+      1: { label: t.basic, color: '#5b9cf6', textColor: 'text-white' },
+      2: { label: t.intermediate, color: '#dd9933', textColor: 'text-black' },
+      3: { label: t.advanced, color: '#9575cd', textColor: 'text-white' },
+    };
 };
 
 const SidebarItem: React.FC<SidebarItemProps> = ({ 
@@ -98,14 +102,14 @@ const SidebarItem: React.FC<SidebarItemProps> = ({
           onMoveTopic(draggedId, topic.id);
       }
   };
-
+  
+  const TIER_MAP = getTierMap(currentLanguage as Language);
   const displayTitle = topic.displayTitle?.[currentLanguage] || topic.title;
   const tierInfo = TIER_MAP[topic.tier];
   
   const baseTextColor = "text-gray-700 dark:text-gray-300";
   const hoverTextColor = "hover:text-black dark:hover:text-white";
   const selectedTextColor = "text-tech-500 dark:text-tech-500";
-  // Updated selected background for dark mode to be lighter (#2f3032) instead of black/40
   const selectedBgColor = "bg-gray-100 dark:bg-[#2f3032]";
 
   return (
@@ -161,7 +165,6 @@ const SidebarItem: React.FC<SidebarItemProps> = ({
             </div>
         )}
 
-        {/* Action Buttons - Fixed Dark Mode Background to be darker (#1a1c1e) */}
         {isAdmin && (
             <div className="hidden group-hover/item:flex items-center gap-1 ml-auto bg-gray-100 dark:bg-[#1a1c1e] rounded px-1 absolute right-2 z-30 shadow-md border border-gray-200 dark:border-tech-700">
                 <button onClick={(e) => { e.stopPropagation(); onEditTopic(topic); }} className="p-1 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-500 dark:text-blue-400 rounded" title="Editar Tópico"><Edit2 size={12} /></button>
@@ -182,11 +185,11 @@ const SidebarItem: React.FC<SidebarItemProps> = ({
 const Sidebar: React.FC<SidebarProps> = ({ 
   topics, selectedTopicId, currentLanguage, isAdmin, apiStatus, isSaving, onSelectTopic, onOpenAddModal, onEditTopic, onDeleteTopic, onReload, onMoveTopic
 }) => {
+  const TIER_MAP = getTierMap(currentLanguage as Language);
+  
   return (
-    // Removed borders, added subtle shadow
     <aside className="w-[370px] md:w-[434px] bg-white dark:bg-[#1a1c1e] flex flex-col h-full shadow-lg z-10 transition-colors duration-300 shrink-0">
       
-      {/* Header - Fixed colors */}
       <div className="p-5 text-center shrink-0 bg-gray-50 dark:bg-[#1a1c1e]">
         <div className="flex items-center justify-center gap-3 mb-4">
             <img 
@@ -197,7 +200,6 @@ const Sidebar: React.FC<SidebarProps> = ({
             <h3 className="font-bold text-lg text-gray-800 dark:text-gray-200">Central Academy</h3>
         </div>
         
-        {/* Legend Box - Fixed Dark Mode Color */}
         <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-3 text-xs justify-items-start pl-10 bg-white dark:bg-[#2f3032] p-3 rounded-lg shadow-sm">
             {Object.values(TIER_MAP).map(tier => (
             <div key={tier.label} className="flex items-center gap-2">

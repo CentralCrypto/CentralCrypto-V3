@@ -190,7 +190,7 @@ const FearAndGreedWidget = ({ language, onNavigate }: { language: Language; onNa
         <div className="flex-1 flex items-center justify-center text-xs text-gray-500 animate-pulse">Loading...</div>
       ) : (
         <>
-           <div className="flex-1 relative w-full flex justify-center items-end pb-1 mt-4">
+           <div className="flex-1 relative w-full flex justify-center items-center pb-1 mt-4">
              <svg viewBox="0 0 200 135" className="w-full h-full overflow-visible" preserveAspectRatio="xMidYMax meet">
                <defs>
                  <linearGradient id="fngGradient" x1="0" y1="0" x2="1" y2="0">
@@ -243,7 +243,7 @@ const RsiWidget = ({ language, onNavigate }: { language: Language; onNavigate: (
           <div className="flex-1 flex items-center justify-center text-xs text-gray-500 animate-pulse">Loading...</div>
       ) : (
       <>
-          <div className="flex-1 relative w-full flex justify-center items-end pb-1 mt-4">
+          <div className="flex-1 relative w-full flex justify-center items-center pb-1 mt-4">
             <svg viewBox="0 0 200 125" className="w-full h-full overflow-visible" preserveAspectRatio="xMidYMax meet">
               <defs>
                 <linearGradient id="rsiGradient" x1="0" y1="0" x2="1" y2="0">
@@ -300,7 +300,7 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
                 <option value="5m">5m</option><option value="1h">1h</option><option value="1D">1D</option>
             </select>
         </div>
-        <div className="flex-1 relative w-full flex justify-center items-end pb-1 overflow-visible">
+        <div className="flex-1 relative w-full flex justify-center items-center pb-1 overflow-visible">
             <svg viewBox="0 0 200 110" className="w-full h-full overflow-visible" preserveAspectRatio="xMidYMax meet">
                 <defs><linearGradient id="lsrGradient" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#CD534B" /><stop offset="50%" stopColor="#eab308" /><stop offset="100%" stopColor="#548f3f" /></linearGradient></defs>
                 <path d={`M ${GAUGE_CX-MINI_GAUGE_R} ${GAUGE_CY} A ${MINI_GAUGE_R} ${MINI_GAUGE_RY} 0 0 1 ${GAUGE_CX+GAUGE_R} ${GAUGE_CY}`} fill="none" stroke="currentColor" className="text-gray-200 dark:text-tech-700" strokeWidth={GAUGE_STROKE} strokeLinecap="round" />
@@ -742,13 +742,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onPostClick, language = 'pt' as L
 
         {showStats && (
             <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-[repeat(7,minmax(0,1fr))] gap-3 animate-in fade-in slide-in-from-top-4 duration-700 w-full">
-                <div className="h-[270px]"><FearAndGreedWidget language={language} onNavigate={navigateToWorkspace} /></div>
-                <div className="h-[270px]"><RsiWidget language={language} onNavigate={navigateToWorkspace} /></div>
-                <div className="h-[270px]"><LongShortRatioWidget language={language} onNavigate={navigateToWorkspace} /></div>
-                <div className="h-[270px]"><AltSeasonWidget language={language} onNavigate={navigateToWorkspace} theme={theme} /></div>
-                <div className="h-[270px]"><MarketCapHistoryWidget language={language} onNavigate={navigateToWorkspace} theme={theme} /></div>
-                <div className="h-[270px]"><EtfFlowWidget language={language} onNavigate={navigateToWorkspace} /></div>
-                <div className="h-[270px]"><TrumpOMeterWidget language={language} onNavigate={navigateToWorkspace} /></div>
+                <div className="h-[250px] md:h-[260px] xl:h-[270px]"><FearAndGreedWidget language={language} onNavigate={navigateToWorkspace} /></div>
+                <div className="h-[250px] md:h-[260px] xl:h-[270px]"><RsiWidget language={language} onNavigate={navigateToWorkspace} /></div>
+                <div className="h-[250px] md:h-[260px] xl:h-[270px]"><LongShortRatioWidget language={language} onNavigate={navigateToWorkspace} /></div>
+                <div className="h-[250px] md:h-[260px] xl:h-[270px]"><AltSeasonWidget language={language} onNavigate={navigateToWorkspace} theme={theme} /></div>
+                <div className="h-[250px] md:h-[260px] xl:h-[270px]"><MarketCapHistoryWidget language={language} onNavigate={navigateToWorkspace} theme={theme} /></div>
+                <div className="h-[250px] md:h-[260px] xl:h-[270px]"><EtfFlowWidget language={language} onNavigate={navigateToWorkspace} /></div>
+                <div className="h-[250px] md:h-[260px] xl:h-[270px]"><TrumpOMeterWidget language={language} onNavigate={navigateToWorkspace} /></div>
                 
                 <div className="h-[340px] md:col-span-1 xl:col-span-2"><GainersLosersWidget language={language} onNavigate={navigateToWorkspace} /></div>
                 <div className="h-[340px] md:col-span-2 xl:col-span-2"><MarketCapWidget language={language} onNavigate={navigateToWorkspace} /></div>

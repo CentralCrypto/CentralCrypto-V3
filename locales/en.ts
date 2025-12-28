@@ -38,7 +38,6 @@ export const en = {
       etf: { title: "ETF Flow", netFlow: "Net Flow", btcEtf: "BTC ETFs", ethEtf: "ETH ETFs", last7d: "7 Days", last30d: "30 Days", last90d: "90 Days", lastUpdate: "Updated on", dailyFlow: "Daily Flow" },
       trump: { title: "Trump-o-Meter", viewPost: "View Post", sarcastic: { negativeSmall: "Irrelevant Impact", negativeMedium: "Market Alert", negativeLarge: "STORM ON X", positiveSmall: "Strength Signal", positiveMedium: "BULLISH VIBES", positiveLarge: "THE MOON IS THE LIMIT", neutral: "Strategic Silence" } },
       gainers: { gainers: "Gainers", losers: "Losers" },
-      // Fix: Added missing yesterday key to calendar object for structural consistency
       calendar: { title: "Economic Calendar", today: "TODAY", tomorrow: "TOMORROW", yesterday: "YESTERDAY", previous: "Prev", forecast: "Fore", actual: "Actu" }
     },
     magazine: {
@@ -159,5 +158,64 @@ export const en = {
       orderbook: { price: "Price", size: "Size", total: "Total", noData: "No orders", desc: "Order book" },
       news: { noNews: "No news", tryAnother: "Try another asset", desc: "Linked news" }
     }
+  },
+  academy: {
+    tierMap: {
+        public: "Public",
+        basic: "Basic",
+        intermediate: "Intermediate",
+        advanced: "Advanced"
+    }
+  },
+  authModal: {
+    login: "Login",
+    register: "Register",
+    almostThere: "Almost there!",
+    accountCreated: "Your account has been created. We've sent a confirmation email to",
+    checkYourEmail: "Check your email",
+    clickToActivate: "Click the link in the email to activate your account. Check your spam folder if necessary.",
+    backToLogin: "Back to Login",
+    accountActivated: "Account Activated!",
+    accountActivatedSuccess: "Your account has been successfully activated! You can now log in.",
+    doLogin: "Login",
+    error: "Error",
+    validationFailed: "Failed to validate account.",
+    close: "Close",
+    validating: "Validating...",
+    activatingAccount: "We are activating your account.",
+    recoverPassword: "Recover Password",
+    recoverPasswordInstruction: "Enter your email to receive the link.",
+    registeredEmail: "Registered Email",
+    linkSentSuccess: "Link Sent Successfully!",
+    checkInboxAndSpam: "Check your inbox and spam folder.",
+    sendLink: "Send Link",
+    userOrEmail: "Username or Email",
+    email: "Email",
+    password: "Password",
+    confirmPassword: "Confirm Password",
+    iAgreeToTerms: "I have read and agree to the",
+    termsOfUse: "Terms of Use",
+    privacyPolicy: "Privacy Policy",
+    orLoginWith: "Or log in with",
+    byLoggingInYouAgree: "By logging in, you agree to our",
+    termsShort: "Terms",
+    policyShort: "Policy",
+    forgotPassword: "Forgot password?",
+    fillAllFields: "Please fill in all fields.",
+    accountNotActivated: "Your account has not been activated yet.",
+    tempEmailsNotAllowed: "Temporary emails are not allowed.",
+    fillRequiredFields: "Please fill in all required fields.",
+    passwordsDoNotMatch: "Passwords do not match.",
+    passwordNotStrongEnough: "The password needs to be stronger.",
+    acceptTheTerms: "You must accept the terms.",
+    min8Chars: "Min. 8 characters",
+    oneUppercase: "1 Uppercase",
+    numbers: "Numbers",
+    symbols: "Symbols",
+    didNotReceiveRequestManually: "Didn't receive it? Request Manually",
+    termsTitle: "Terms of Use",
+    privacyTitle: "Privacy Policy",
+    pendingAccount: "Pending Account",
+    pendingAccountDesc: "We've sent a confirmation link to your email. Please check your inbox and spam folder."
   }
 };

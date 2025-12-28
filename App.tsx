@@ -144,10 +144,11 @@ const App: React.FC = () => {
         }} 
         onLoginSuccess={handleLoginSuccess}
         validationParams={authValidationParams}
+        language={language}
       />
 
-      <TermsModal isOpen={isTermsOpen} onClose={() => setTermsOpen(false)} />
-      <PrivacyModal isOpen={isPrivacyOpen} onClose={() => setPrivacyOpen(false)} />
+      <TermsModal isOpen={isTermsOpen} onClose={() => setTermsOpen(false)} language={language} />
+      <PrivacyModal isOpen={isPrivacyOpen} onClose={() => setPrivacyOpen(false)} language={language} />
       <AnalystModal isOpen={isAnalystOpen} onClose={() => setAnalystOpen(false)} />
 
       <div className="relative z-10 flex flex-col min-h-screen">
@@ -155,7 +156,7 @@ const App: React.FC = () => {
         <div className="h-[152px] w-full shrink-0"></div>
         {currentView === ViewMode.DASHBOARD && <div className="w-full z-40 mt-[-1px]"><GlobalStatsBar /></div>}
         <main className={`flex-1 flex flex-col w-full ${isFullScreenIframe ? 'p-0' : ''}`}>{renderView()}</main>
-        {!isFullScreenIframe && <Footer onTermsClick={() => setTermsOpen(true)} onPrivacyClick={() => setPrivacyOpen(true)} onAnalystClick={() => setAnalystOpen(true)} language={language} />}
+        {!isFullScreenIframe && <Footer onTermsClick={() => setTermsOpen(true)} onPrivacyClick={() => setPrivacyOpen(false)} onAnalystClick={() => setAnalystOpen(true)} language={language} />}
       </div>
       <AIChatbot currentLang={language} />
     </div>

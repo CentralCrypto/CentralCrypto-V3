@@ -38,7 +38,6 @@ export const es = {
       etf: { title: "Flujo ETF", netFlow: "Flujo Neto", btcEtf: "BTC ETFs", ethEtf: "ETH ETFs", last7d: "7 Días", last30d: "30 Dias", last90d: "90 Días", lastUpdate: "Actualizado en", dailyFlow: "Flujo Diario" },
       trump: { title: "Trump-o-Meter", viewPost: "Ver Post", sarcastic: { negativeSmall: "Impacto Irrelevante", negativeMedium: "Mercado em Alerta", negativeLarge: "TORMENTA EN X", positiveSmall: "Señal de Fuerza", positiveMedium: "VIBRAS ALCISTAS", positiveLarge: "EL CIELO ES EL LÍMITE", neutral: "Silêncio Estratégico" } },
       gainers: { gainers: "Ganadores", losers: "Perdedores" },
-      // Fix: Added missing yesterday key to calendar object for structural consistency
       calendar: { title: "Calendario Econômico", today: "HOY", tomorrow: "MAÑANA", yesterday: "AYER", previous: "Prev", forecast: "Fore", actual: "Actu" }
     },
     magazine: {
@@ -159,5 +158,64 @@ export const es = {
       orderbook: { price: "Precio", size: "Tamaño", total: "Total", noData: "Sin órdenes", desc: "Libro de órdenes" },
       news: { noNews: "Sin noticias", tryAnother: "Prueba otro activo", desc: "Noticias vinculadas" }
     }
+  },
+  academy: {
+    tierMap: {
+        public: "Público",
+        basic: "Básico",
+        intermediate: "Intermedio",
+        advanced: "Avanzado"
+    }
+  },
+  authModal: {
+    login: "Entrar",
+    register: "Registrarse",
+    almostThere: "¡Casi listo!",
+    accountCreated: "Tu cuenta ha sido creada. Hemos enviado un correo de confirmación a",
+    checkYourEmail: "Verifica tu correo electrónico",
+    clickToActivate: "Haz clic en el enlace del correo para activar tu cuenta. Revisa tu carpeta de spam si es necesario.",
+    backToLogin: "Volver a Iniciar Sesión",
+    accountActivated: "¡Cuenta Activada!",
+    accountActivatedSuccess: "¡Tu cuenta ha sido activada con éxito! Ahora puedes iniciar sesión.",
+    doLogin: "Iniciar Sesión",
+    error: "Error",
+    validationFailed: "No se pudo validar la cuenta.",
+    close: "Cerrar",
+    validating: "Validando...",
+    activatingAccount: "Estamos activando tu cuenta.",
+    recoverPassword: "Recuperar Contraseña",
+    recoverPasswordInstruction: "Introduce tu correo para recibir el enlace.",
+    registeredEmail: "Correo Registrado",
+    linkSentSuccess: "¡Enlace Enviado con Éxito!",
+    checkInboxAndSpam: "Revisa tu bandeja de entrada y spam.",
+    sendLink: "Enviar Enlace",
+    userOrEmail: "Usuario o Correo",
+    email: "Correo Electrónico",
+    password: "Contraseña",
+    confirmPassword: "Confirmar Contraseña",
+    iAgreeToTerms: "He leído y acepto los",
+    termsOfUse: "Términos de Uso",
+    privacyPolicy: "Política de Privacidad",
+    orLoginWith: "O inicia sesión con",
+    byLoggingInYouAgree: "Al iniciar sesión, aceptas nuestros",
+    termsShort: "Términos",
+    policyShort: "Política",
+    forgotPassword: "¿Olvidaste tu contraseña?",
+    fillAllFields: "Por favor, completa todos los campos.",
+    accountNotActivated: "Tu cuenta aún no ha sido activada.",
+    tempEmailsNotAllowed: "No se permiten correos temporales.",
+    fillRequiredFields: "Por favor, completa todos los campos obligatorios.",
+    passwordsDoNotMatch: "Las contraseñas no coinciden.",
+    passwordNotStrongEnough: "La contraseña debe ser más segura.",
+    acceptTheTerms: "Debes aceptar los términos.",
+    min8Chars: "Mín. 8 caracteres",
+    oneUppercase: "1 Mayúscula",
+    numbers: "Números",
+    symbols: "Símbolos",
+    didNotReceiveRequestManually: "¿No lo recibiste? Solicitar Manualmente",
+    termsTitle: "Términos de Uso",
+    privacyTitle: "Política de Privacidad",
+    pendingAccount: "Cuenta Pendiente",
+    pendingAccountDesc: "Hemos enviado un enlace de confirmación a tu correo. Revisa tu bandeja de entrada y spam."
   }
 };

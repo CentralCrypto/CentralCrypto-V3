@@ -44,10 +44,37 @@ const TESTIMONIALS_PT: Testimonial[] = [
   { id: 't9', name: 'Invest_Certo', role: 'Investidor', content: 'Interface limpa, lógica sólida e sinais confiáveis. Recomendo para todos os meus alunos de análise técnica.', avatarUrl: 'https://ui-avatars.com/api/?name=Invest+Certo&background=random' },
 ];
 
+const TESTIMONIALS_EN: Testimonial[] = [
+  { id: 't1', name: 'Trader_Visionario', role: 'Premium User', content: 'Simply incredible. The accuracy of the divergences in the RSI Tracker has changed my trading operations. An indispensable tool.', avatarUrl: 'https://ui-avatars.com/api/?name=Trader+Visionario&background=random' },
+  { id: 't2', name: 'LucasM_Crypto', role: 'TV Community', content: 'Congratulations on the work, Central Crypto! The color filter makes reading the chart quickly much easier. Awesome!', avatarUrl: 'https://ui-avatars.com/api/?name=Lucas+M&background=random' },
+  { id: 't3', name: 'AnaS_Invest', role: 'Technical Analyst', content: "I really like the visual cleanliness. Most scripts clutter the screen, but CCT's are very clean and to the point.", avatarUrl: 'https://ui-avatars.com/api/?name=Ana+S&background=random' },
+  { id: 't4', name: 'Carlos_Quant', role: 'Full-time Trader', content: "The SMC Indicator is surreal. I can identify supply and demand zones with a precision I've never seen in free scripts.", avatarUrl: 'https://ui-avatars.com/api/?name=Carlos+Quant&background=random' },
+  { id: 't5', name: 'Crypto_Girl_88', role: 'Swing Trader', content: "I've been following Central for years, and the 2025 indicators are on another level. The technical support is also top-notch!", avatarUrl: 'https://ui-avatars.com/api/?name=Crypto+Girl&background=random' },
+  { id: 't6', name: 'Master_Trend', role: 'TradingView Pro', content: 'I use SuperTrade on the 12H chart to filter out noise, and it\'s impressive how it avoids false entries in sideways markets.', avatarUrl: 'https://ui-avatars.com/api/?name=Master+Trend&background=random' },
+  { id: 't7', name: 'Bitcoin_Maxi_BR', role: 'HODLer & Trader', content: 'Indispensable tools for those who take the market seriously. The integrated dashboard with the TV scripts is sensational.', avatarUrl: 'https://ui-avatars.com/api/?name=Bitcoin+Maxi&background=random' },
+  { id: 't8', name: 'Scalper_Pro', role: 'Day Trader', content: 'The RSI Tracker is my right hand. Identifying trend exhaustion has become much more visual and faster.', avatarUrl: 'https://ui-avatars.com/api/?name=Scalper+Pro&background=random' },
+  { id: 't9', name: 'Invest_Certo', role: 'Investor', content: 'Clean interface, solid logic, and reliable signals. I recommend it to all my technical analysis students.', avatarUrl: 'https://ui-avatars.com/api/?name=Invest+Certo&background=random' },
+];
+
+const TESTIMONIALS_ES: Testimonial[] = [
+  { id: 't1', name: 'Trader_Visionario', role: 'Usuario Premium', content: 'Simplemente increíble. La precisión de las divergencias en el RSI Tracker ha cambiado mi operativa. Una herramienta indispensable.', avatarUrl: 'https://ui-avatars.com/api/?name=Trader+Visionario&background=random' },
+  { id: 't2', name: 'LucasM_Crypto', role: 'Comunidad TV', content: '¡Felicitaciones por el trabajo, Central Crypto! El filtro de colores facilita mucho la lectura rápida del gráfico. ¡Genial!', avatarUrl: 'https://ui-avatars.com/api/?name=Lucas+M&background=random' },
+  { id: 't3', name: 'AnaS_Invest', role: 'Analista Técnica', content: "Me gusta mucho la limpieza visual. La mayoría de los scripts ensucian la pantalla, pero los de CCT son muy limpios y directos.", avatarUrl: 'https://ui-avatars.com/api/?name=Ana+S&background=random' },
+  { id: 't4', name: 'Carlos_Quant', role: 'Trader a tiempo completo', content: "El Indicador SMC es surrealista. Puedo identificar las zonas de oferta y demanda con una precisión que nunca he visto en scripts gratuitos.", avatarUrl: 'https://ui-avatars.com/api/?name=Carlos+Quant&background=random' },
+  { id: 't5', name: 'Crypto_Girl_88', role: 'Swing Trader', content: "Sigo a Central desde hace años y los indicadores de 2025 están a otro nivel. ¡El soporte técnico también es de primera!", avatarUrl: 'https://ui-avatars.com/api/?name=Crypto+Girl&background=random' },
+  { id: 't6', name: 'Master_Trend', role: 'TradingView Pro', content: 'Uso el SuperTrade en el gráfico de 12H para filtrar el ruido y es impresionante cómo evita las entradas falsas en mercados laterales.', avatarUrl: 'https://ui-avatars.com/api/?name=Master+Trend&background=random' },
+  { id: 't7', name: 'Bitcoin_Maxi_BR', role: 'HODLer & Trader', content: 'Herramientas indispensables para quienes se toman el mercado en serio. El panel de control integrado con los scripts de TV es sensacional.', avatarUrl: 'https://ui-avatars.com/api/?name=Bitcoin+Maxi&background=random' },
+  { id: 't8', name: 'Scalper_Pro', role: 'Day Trader', content: 'El RSI Tracker es mi mano derecha. Identificar el agotamiento de la tendencia se ha vuelto mucho más visual y rápido.', avatarUrl: 'https://ui-avatars.com/api/?name=Scalper+Pro&background=random' },
+  { id: 't9', name: 'Invest_Certo', role: 'Inversor', content: 'Interfaz limpia, lógica sólida y señales confiables. Se lo recomiendo a todos mis estudiantes de análisis técnico.', avatarUrl: 'https://ui-avatars.com/api/?name=Invest+Certo&background=random' },
+];
+
 export const INDICATORS = FALLBACK_INDICATORS; 
 
 export const getConstants = (lang: Language) => {
-  return { indicators: FALLBACK_INDICATORS, testimonials: TESTIMONIALS_PT };
+  let testimonials = TESTIMONIALS_PT;
+  if (lang === 'en') testimonials = TESTIMONIALS_EN;
+  if (lang === 'es') testimonials = TESTIMONIALS_ES;
+  return { indicators: FALLBACK_INDICATORS, testimonials };
 };
 
 export const UI_TEXT = pt.indicators;
