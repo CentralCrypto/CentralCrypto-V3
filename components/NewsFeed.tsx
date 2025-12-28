@@ -128,7 +128,7 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ onPostClick, language }) => {
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
                                 <div className="absolute bottom-2 left-3 right-3 text-[10px] text-[#dd9933] font-bold uppercase">{post.authorName}</div>
                             </div>
-                            <h4 className="text-gray-200 dark:text-[#dd9933] font-bold text-base leading-tight group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors">{decodeHTML(post.titleHtml)}</h4>
+                            <h4 className="text-gray-200 dark:text-[#dd9933] font-bold text-lg leading-tight group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors">{decodeHTML(post.titleHtml)}</h4>
                             <div className="flex items-center gap-2 mt-2 text-xs text-gray-500 font-mono"><Clock size={12} /> {new Date(post.date).toLocaleDateString(currentLocale)}</div>
                         </div>
                     ))
@@ -166,9 +166,9 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ onPostClick, language }) => {
                                         <img src={post.featuredImage} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" alt="" />
                                     </div>
                                     <div className="flex-1 flex flex-col justify-center">
-                                        <h3 className="text-lg font-bold text-gray-200 dark:text-[#dd9933] group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors leading-tight mb-2">{decodeHTML(post.titleHtml)}</h3>
-                                        <div className="text-xs text-gray-400 line-clamp-2 mb-3 leading-relaxed">{post.excerptText}</div>
-                                        <div className="flex items-center gap-3 text-[10px] text-gray-500 font-mono uppercase">
+                                        <h3 className="text-xl font-bold text-gray-200 dark:text-[#dd9933] group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors leading-tight mb-2">{decodeHTML(post.titleHtml)}</h3>
+                                        <div className="text-sm text-gray-400 line-clamp-2 mb-3 leading-relaxed">{post.excerptText}</div>
+                                        <div className="flex items-center gap-3 text-xs text-gray-500 font-mono uppercase">
                                             <span className="text-[#dd9933] font-bold">{post.authorName}</span><span>•</span><span>{new Date(post.date).toLocaleDateString(currentLocale)}</span>
                                         </div>
                                     </div>
@@ -190,14 +190,20 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ onPostClick, language }) => {
                         <h3 className="text-gray-200 font-bold uppercase tracking-widest text-sm">{t.miniBulletins}</h3>
                     </div>
                     <div className="flex flex-col gap-4">
-                        {bulletins.map(post => (
-                        <div onClick={() => onPostClick(post.id)} key={post.id} className="group cursor-pointer bg-tech-900 border border-tech-800 hover:border-[#dd9933] p-3 rounded-lg shadow-lg transition-all hover:-translate-y-1">
-                            <div className="h-24 w-full rounded overflow-hidden mb-3 border border-tech-950">
-                                <img src={post.featuredImage} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" alt="" />
+                        {bulletins.map((post, i) => (
+                           <div 
+                              onClick={() => onPostClick(post.id)} 
+                              key={post.id} 
+                              className={`group cursor-pointer flex items-center gap-4 bg-tech-900 border border-tech-800 hover:border-[#dd9933] p-3 rounded-lg shadow-lg transition-all hover:-translate-y-1 ${i % 2 !== 0 ? 'flex-row-reverse' : ''}`}
+                            >
+                                <div className="w-24 h-24 shrink-0 rounded-md overflow-hidden border border-tech-700">
+                                    <img src={post.featuredImage} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" alt="" />
+                                </div>
+                                <div className="flex-1 flex flex-col justify-center">
+                                    <h4 className="text-gray-200 dark:text-[#dd9933] font-bold text-base leading-tight group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors mb-2 line-clamp-3">{decodeHTML(post.titleHtml)}</h4>
+                                    <div className="flex items-center text-xs text-gray-500 gap-1.5"><User size={12} /> {post.authorName}</div>
+                                </div>
                             </div>
-                            <h4 className="text-gray-200 dark:text-[#dd9933] font-bold text-xs leading-snug group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors mb-2">{decodeHTML(post.titleHtml)}</h4>
-                            <div className="flex items-center text-[10px] text-gray-500 gap-1"><User size={10} /> {post.authorName}</div>
-                        </div>
                         ))}
                     </div>
                 </div>

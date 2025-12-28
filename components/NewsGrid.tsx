@@ -1,9 +1,10 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getTranslations } from '../locales';
 import { Language } from '../types';
 import { fetchMagazinePosts, fetchMagazineCategories, MagazinePost } from '../services/magazine';
 import { RefreshCw, Loader2, WifiOff } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface NewsGridProps {
   onPostClick: (postId: number) => void;
@@ -14,6 +15,9 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
   const [estudos, setEstudos] = useState<MagazinePost[]>([]);
   const [analises, setAnalises] = useState<MagazinePost[]>([]);
   const [maisLidas, setMaisLidas] = useState<MagazinePost[]>([]);
+  const [visibleTrending, setVisibleTrending] = useState<MagazinePost[]>([]);
+  const nextTrendingIndex = useRef(5);
+  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [heroIndex, setHeroIndex] = useState(0);
@@ -48,7 +52,7 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
           fetchMagazinePosts({ categories: analisesCat?.id, perPage: 5 }).catch(() => ({ posts: [] })),
           fetchMagazinePosts({ 
             categories: [analisesCat?.id, editorCat?.id].filter(Boolean).join(','), 
-            perPage: 5 
+            perPage: 10 
           }).catch(() => ({ posts: [] }))
       ]);
 
@@ -77,6 +81,30 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
     }, 8000);
     return () => clearInterval(interval);
   }, [analises]);
+
+  useEffect(() => {
+    if (maisLidas.length < 6) { // Need at least 6 to rotate
+        setVisibleTrending(maisLidas);
+        return;
+    }
+
+    setVisibleTrending(maisLidas.slice(0, 5));
+    nextTrendingIndex.current = 5;
+
+    const interval = setInterval(() => {
+        setVisibleTrending(current => {
+            if (maisLidas.length === 0) return [];
+            const nextPost = maisLidas[nextTrendingIndex.current];
+            const newVisible = [...current.slice(1), nextPost];
+            
+            nextTrendingIndex.current = (nextTrendingIndex.current + 1) % maisLidas.length;
+            
+            return newVisible;
+        });
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [maisLidas]);
 
   const currentHero = analises[heroIndex];
 
@@ -111,7 +139,7 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
                   <img src={post.featuredImage} alt="" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-70 group-hover:opacity-100" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-transparent"></div>
                   <div className="absolute bottom-0 left-0 right-0 p-5">
-                     <h4 className="text-white dark:text-[#dd9933] font-bold text-lg leading-tight drop-shadow-md mb-2 line-clamp-2 group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors">{decodeHTML(post.titleHtml)}</h4>
+                     <h4 className="text-white dark:text-[#dd9933] font-bold text-xl leading-tight drop-shadow-md mb-2 line-clamp-2 group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors">{decodeHTML(post.titleHtml)}</h4>
                      <div className="flex items-center text-[10px] text-gray-300 gap-2 font-mono border-t border-gray-600/50 pt-2">
                         <span className="font-bold text-[#dd9933] uppercase truncate">{post.authorName}</span>
                         <span className="shrink-0">{new Date(post.date).toLocaleDateString(currentLocale)}</span>
@@ -130,7 +158,7 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
                <div className="absolute inset-0 bg-gradient-to-t from-tech-950 via-tech-950/50 to-transparent opacity-100"></div>
                <div className="absolute bottom-0 left-0 right-0 p-8 md:p-10">
                   <div className="bg-[#dd9933] text-black text-xs font-black px-3 py-1 inline-block mb-4 rounded-sm uppercase tracking-wider shadow-lg transform -skew-x-12">ANÁLISE</div>
-                  <h2 className="text-gray-200 dark:text-[#dd9933] font-black text-3xl md:text-5xl leading-none mb-6 drop-shadow-xl shadow-black group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors">{decodeHTML(currentHero.titleHtml)}</h2>
+                  <h2 className="text-gray-200 dark:text-[#dd9933] font-black text-3xl md:text-4xl leading-none mb-6 drop-shadow-xl shadow-black group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors">{decodeHTML(currentHero.titleHtml)}</h2>
                   <div className="flex items-center text-base text-gray-200 gap-6 font-mono border-t border-gray-500/50 pt-6">
                       <span className="flex items-center gap-2 font-bold text-[#dd9933]"><span className="w-2.5 h-2.5 rounded-full bg-[#dd9933] animate-pulse"></span>{currentHero.authorName}</span>
                       <span className="hidden sm:inline">{new Date(currentHero.date).toLocaleDateString(currentLocale, { weekday: 'long', day: 'numeric', month: 'long' })}</span>
@@ -143,18 +171,28 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
         <div className="md:col-span-3 flex flex-col h-full">
            <div className="text-base font-bold uppercase tracking-widest text-gray-200 border-b-2 border-[#dd9933] pb-2 mb-6 text-right shrink-0">{t.trendingTopics}</div>
            <div className="flex-1 flex flex-col gap-3 overflow-hidden relative">
-             {maisLidas.map((post, i) => (
-               <div onClick={() => onPostClick(post.id)} key={`${post.id}-${i}`} className="flex gap-3 bg-tech-900 border border-tech-800 hover:border-[#dd9933] p-2 rounded-lg shadow-lg cursor-pointer flex-1 group items-center transition-all">
+             <AnimatePresence initial={false}>
+              {visibleTrending.map((post) => (
+                <motion.div
+                  key={post.id}
+                  layout
+                  initial={{ opacity: 0, y: 40, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -40, scale: 0.98 }}
+                  transition={{ type: 'spring', stiffness: 350, damping: 35 }}
+                  onClick={() => onPostClick(post.id)} 
+                  className="flex gap-3 bg-tech-900 border border-tech-800 hover:border-[#dd9933] p-2 rounded-lg shadow-lg cursor-pointer group items-center transition-colors"
+                >
                   <div className="relative w-20 h-full shrink-0 overflow-hidden rounded-md bg-black">
                      <img src={post.featuredImage} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 opacity-70 group-hover:opacity-100" alt=""/>
-                     <div className="absolute top-0 left-0 bg-[#dd9933] text-black text-[10px] font-black px-1.5 py-0.5 shadow-md z-10">{i + 1}</div>
                   </div>
                   <div className="flex flex-col justify-center flex-1 min-w-0">
-                     <h5 className="text-xs font-bold text-gray-200 dark:text-[#dd9933] leading-tight line-clamp-2 group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors mb-1">{decodeHTML(post.titleHtml)}</h5>
+                     <h5 className="text-sm font-bold text-gray-200 dark:text-[#dd9933] leading-tight line-clamp-2 group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors mb-1">{decodeHTML(post.titleHtml)}</h5>
                      <div className="text-[9px] text-gray-500 font-mono"><span>{new Date(post.date).toLocaleDateString(currentLocale)}</span></div>
                   </div>
-               </div>
-             ))}
+                </motion.div>
+              ))}
+             </AnimatePresence>
           </div>
         </div>
       </div>
