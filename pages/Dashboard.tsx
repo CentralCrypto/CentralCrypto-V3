@@ -97,7 +97,7 @@ const FearAndGreedWidget = ({ language, onNavigate }: { language: Language; onNa
   return (
     <div className="glass-panel p-2 rounded-xl flex flex-col h-full relative overflow-hidden bg-tech-800 border-tech-700 hover:border-[#dd9933]/50 transition-all">
       <div className="flex justify-between items-start absolute top-2 left-2 right-2 z-10">
-          <span className="text-base text-gray-500 dark:text-gray-400 font-black uppercase tracking-wider truncate">{t.title}</span>
+          <span className="text-[11px] leading-tight text-gray-500 dark:text-gray-400 font-black uppercase tracking-wider truncate">{t.title}</span>
           <WorkspaceLink onClick={onNavigate} />
       </div>
       {loading ? (
@@ -120,7 +120,7 @@ const FearAndGreedWidget = ({ language, onNavigate }: { language: Language; onNa
                  <circle cx={GAUGE_CX} cy={GAUGE_CY} r="5" fill="var(--color-text-main)" />
                </g>
                <text x={GAUGE_CX} y={TEXT_VAL_Y} textAnchor="middle" fill="var(--color-gauge-val)" fontSize="24" fontWeight="900" fontFamily="monospace">{val}</text>
-               <text x={GAUGE_CX} y={TEXT_LBL_Y} textAnchor="middle" fill="var(--color-text-main)" fontSize="8" fontWeight="900" letterSpacing="1" style={{ textTransform: 'uppercase' }}>{classification}</text>
+               <text x={GAUGE_CX} y={TEXT_LBL_Y} textAnchor="middle" fill="var(--color-text-main)" fontSize="12" fontWeight="900" letterSpacing="1" style={{ textTransform: 'uppercase' }}>{classification}</text>
              </svg>
            </div>
            <HorizontalHistoryRow 
@@ -150,7 +150,7 @@ const RsiWidget = ({ language, onNavigate }: { language: Language; onNavigate: (
   return (
     <div className="glass-panel p-2 rounded-xl flex flex-col h-full relative overflow-hidden bg-tech-800 border-tech-700 hover:border-[#dd9933]/50 transition-all">
       <div className="flex justify-between items-start absolute top-2 left-2 right-2 z-10">
-          <span className="text-base text-gray-500 dark:text-gray-400 font-black uppercase tracking-wider truncate">RSI Tracker</span>
+          <span className="text-[11px] leading-tight text-gray-500 dark:text-gray-400 font-black uppercase tracking-wider truncate">RSI Tracker</span>
           <WorkspaceLink onClick={onNavigate} />
       </div>
       {loading ? (
@@ -173,7 +173,7 @@ const RsiWidget = ({ language, onNavigate }: { language: Language; onNavigate: (
                 <circle cx={GAUGE_CX} cy={GAUGE_CY} r="5" fill="var(--color-text-main)" />
               </g>
               <text x={GAUGE_CX} y={TEXT_VAL_Y} textAnchor="middle" fill="var(--color-gauge-val)" fontSize="24" fontWeight="900" fontFamily="monospace">{(rsiVal).toFixed(0)}</text>
-              <text x={GAUGE_CX} y={TEXT_LBL_Y} textAnchor="middle" fill="var(--color-text-main)" fontSize="8" fontWeight="900" letterSpacing="1" className="uppercase">{label}</text>
+              <text x={GAUGE_CX} y={TEXT_LBL_Y} textAnchor="middle" fill="var(--color-text-main)" fontSize="12" fontWeight="900" letterSpacing="1" className="uppercase">{label}</text>
             </svg>
           </div>
           <HorizontalHistoryRow labels={[timeT.yesterday, timeT.d7, timeT.d30]} data={[(data.yesterday ?? 0).toFixed(0), (data.days7Ago ?? 0).toFixed(0), (data.days30Ago ?? 0).toFixed(0)]} />
@@ -201,7 +201,7 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
   return (
     <div className="glass-panel p-2 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 hover:border-[#dd9933]/50 transition-all relative">
         <div className="w-full flex justify-between items-center mb-1">
-            <span className="text-base text-gray-500 dark:text-gray-400 uppercase tracking-wider font-black ml-1">{t.title}</span>
+            <span className="text-[11px] leading-tight text-gray-500 dark:text-gray-400 uppercase tracking-wider font-black ml-1">{t.title}</span>
             <WorkspaceLink onClick={onNavigate} />
         </div>
         <div className="flex justify-center gap-1 mb-1">
@@ -234,14 +234,14 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
                     <circle cx={GAUGE_CX} cy={GAUGE_CY} r="5" fill="var(--color-text-main)" />
                 </g>
                 <text x={GAUGE_CX} y={TEXT_VAL_Y} textAnchor="middle" fill="var(--color-gauge-val)" fontSize="24" fontWeight="900" fontFamily="monospace">{val.toFixed(2)}</text>
-                <text x={GAUGE_CX} y={TEXT_LBL_Y} textAnchor="middle" fill="var(--color-text-main)" fontSize="8" fontWeight="900" letterSpacing="1" className="uppercase">{label}</text>
+                <text x={GAUGE_CX} y={TEXT_LBL_Y} textAnchor="middle" fill="var(--color-text-main)" fontSize="12" fontWeight="900" letterSpacing="1" className="uppercase">{label}</text>
             </svg>
         </div>
     </div>
   );
 };
 
-const AltSeasonWidget = ({ language, onNavigate }: { language: Language; onNavigate: () => void }) => {
+const AltSeasonWidget = ({ language, onNavigate, theme }: { language: Language; onNavigate: () => void; theme: 'dark' | 'light' }) => {
   const [data, setData] = useState({ index: 0, yesterday: 0, lastWeek: 0, lastMonth: 0, history: [] });
   const [loading, setLoading] = useState(true);
   const t = getTranslations(language).dashboard.widgets.altseason;
@@ -259,17 +259,19 @@ const AltSeasonWidget = ({ language, onNavigate }: { language: Language; onNavig
     }).catch(() => setLoading(false));
   }, []);
 
+  const strokeColor = theme === 'dark' ? '#dd9933' : '#1a1c1e';
+
   return (
     <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 relative">
       <div className="shrink-0 flex justify-between items-start mb-1">
-        <div className="flex flex-col"><span className="font-black text-base text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t.title}</span><span className="text-[10px] font-bold text-gray-600 dark:text-gray-200">Index</span></div>
+        <div className="flex flex-col"><span className="font-black text-[11px] leading-tight text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t.title}</span><span className="text-[10px] font-bold text-gray-600 dark:text-gray-200">Index</span></div>
         <div className="text-right flex items-start gap-2"><span className="text-2xl font-bold text-gray-800 dark:text-gray-200 font-mono">{data.index ?? 0}</span><WorkspaceLink onClick={onNavigate} /></div>
       </div>
-      <div className="relative flex-1 bg-gray-50 dark:bg-tech-900/50 rounded-lg mb-1 overflow-hidden">
+      <div className="relative flex-1 bg-white/50 dark:bg-black/40 rounded-lg mb-1 overflow-hidden">
         <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data.history} margin={{top:5, right:5, left:5, bottom:5}}>
-                <Tooltip content={<CustomTooltip language={language} suffix=" Index" />} cursor={{ stroke: '#dd9933', strokeWidth: 1 }} />
-                <Line type="monotone" dataKey="value" stroke="#dd9933" strokeWidth={1} dot={false} isAnimationActive={false} />
+                <Tooltip content={<CustomTooltip language={language} suffix=" Index" />} cursor={{ stroke: strokeColor, strokeWidth: 1 }} />
+                <Line type="monotone" dataKey="value" stroke={strokeColor} strokeWidth={1} dot={false} isAnimationActive={false} />
             </LineChart>
         </ResponsiveContainer>
       </div>
@@ -278,7 +280,7 @@ const AltSeasonWidget = ({ language, onNavigate }: { language: Language; onNavig
   );
 };
 
-const MarketCapHistoryWidget = ({ language, onNavigate }: { language: Language; onNavigate: () => void }) => {
+const MarketCapHistoryWidget = ({ language, onNavigate, theme }: { language: Language; onNavigate: () => void; theme: 'dark' | 'light' }) => {
   const [data, setData] = useState<any>(null);
   const t = getTranslations(language).dashboard.widgets.mktcapHistory;
   useEffect(() => { fetchMarketCapHistory().then(setData).catch(() => setData(null)); }, []);
@@ -286,18 +288,22 @@ const MarketCapHistoryWidget = ({ language, onNavigate }: { language: Language; 
     if (v === undefined || v === null) return '-';
     return v >= 1e12 ? `$${(v/1e12).toFixed(2)}T` : `$${(v/1e9).toFixed(2)}B`;
   };
+
+  const strokeColor = theme === 'dark' ? '#548f3f' : '#1a1c1e';
+  const fillColor = theme === 'dark' ? '#548f3f' : '#1a1c1e';
+
   return (
     <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 relative">
       <div className="shrink-0 flex justify-between items-start mb-1">
-        <div className="flex flex-col"><span className="font-black text-base text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t.title}</span><span className="text-[10px] font-bold text-gray-600 dark:text-gray-200">Global</span></div>
+        <div className="flex flex-col"><span className="font-black text-[11px] leading-tight text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t.title}</span><span className="text-[10px] font-bold text-gray-600 dark:text-gray-200">Global</span></div>
         <div className="text-right flex items-start gap-2"><span className="text-lg font-bold text-tech-accent font-mono">{data ? formatVal(data.current) : '---'}</span><WorkspaceLink onClick={onNavigate} /></div>
       </div>
-      <div className="relative flex-1 bg-gray-50 dark:bg-tech-900/50 rounded-lg mb-1 overflow-hidden">
+      <div className="relative flex-1 bg-white/50 dark:bg-black/40 rounded-lg mb-1 overflow-hidden">
         <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data?.history || []}>
-                <defs><linearGradient id="colorMkt" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#548f3f" stopOpacity={0.3}/><stop offset="95%" stopColor="#548f3f" stopOpacity={0}/></linearGradient></defs>
-                <Tooltip content={<CustomTooltip language={language} prefix="$" />} cursor={{ stroke: '#548f3f', strokeWidth: 1 }} />
-                <Area type="monotone" dataKey="value" stroke="#548f3f" fill="url(#colorMkt)" strokeWidth={1} />
+                <defs><linearGradient id="colorMkt" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={fillColor} stopOpacity={0.3}/><stop offset="95%" stopColor={fillColor} stopOpacity={0}/></linearGradient></defs>
+                <Tooltip content={<CustomTooltip language={language} prefix="$" />} cursor={{ stroke: strokeColor, strokeWidth: 1 }} />
+                <Area type="monotone" dataKey="value" stroke={strokeColor} fill="url(#colorMkt)" strokeWidth={1} />
             </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -314,10 +320,10 @@ const EtfFlowWidget = ({ language, onNavigate }: { language: Language; onNavigat
     return (
         <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 relative">
             <div className="flex justify-between items-center mb-1">
-                <div className="font-black text-gray-500 dark:text-gray-400 text-base uppercase tracking-wider">{t.title}</div>
+                <div className="font-black text-gray-500 dark:text-gray-400 text-[11px] leading-tight uppercase tracking-wider">{t.title}</div>
                 <WorkspaceLink onClick={onNavigate} />
             </div>
-            <div className="flex-1 flex flex-col items-center justify-center py-2">
+            <div className="flex-1 flex-col flex items-center justify-center py-2">
                 <div className={`text-[11px] font-black uppercase tracking-widest ${data.net >= 0 ? 'text-tech-success' : 'text-tech-danger'}`}>{t.netFlow}</div>
                 <div className="flex items-center gap-1">
                     {data.net >= 0 ? <ArrowUp size={24} className="text-tech-success"/> : <ArrowDown size={24} className="text-tech-danger"/>}
@@ -336,22 +342,47 @@ const TrumpOMeterWidget = ({ language, onNavigate }: { language: Language; onNav
     const [data, setData] = useState<TrumpData | null>(null);
     const t = getTranslations(language).dashboard.widgets.trump;
     useEffect(() => { fetchTrumpData().then(setData).catch(() => setData(null)); }, []);
+    
     if (!data) return <div className="glass-panel p-4 rounded-xl h-full animate-pulse bg-tech-800 border-tech-700" />;
+    
     const percent = data.trump_rank_percent || 50;
     const score = data.trump_rank_50 || 0;
+    const impactColor = percent > 60 ? '#009E4F' : percent < 40 ? '#E03A3E' : '#dd9933';
+    const ticks = [-50, -30, -15, 0, 15, 30, 50];
+
     return (
         <div className="glass-panel p-2 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 relative overflow-hidden">
             <div className="flex justify-between items-start mb-1 shrink-0">
-                <div className="text-left font-black text-base uppercase tracking-wider text-gray-500 dark:text-gray-400">{t.title}</div>
+                <div className="text-left font-black text-[11px] leading-tight uppercase tracking-wider text-gray-500 dark:text-gray-400">{t.title}</div>
                 <WorkspaceLink onClick={onNavigate} />
             </div>
-            <div className="relative h-2 w-full rounded-full bg-gradient-to-r from-[#CD534B] via-yellow-500 to-[#548f3f] mt-4 mb-5">
-                <div className="absolute w-0 h-0 border-l-[5px] border-r-[5px] border-b-[6px] border-b-gray-800 dark:border-b-tech-950 transition-all duration-700" style={{ left: `calc(${percent}% - 5px)`, top: '100%' }}></div>
+            <div className="flex-1 flex flex-col justify-center px-2">
+                <div className="relative h-2 w-full rounded-full bg-gradient-to-r from-[#E03A3E] via-yellow-500 to-[#009E4F] mt-4">
+                    <div className="absolute top-[-8px] transition-all duration-700" style={{ left: `calc(${percent}% - 6px)` }}>
+                        <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[10px] border-t-gray-800 dark:border-t-white drop-shadow-md"></div>
+                    </div>
+                </div>
+                <div className="relative h-4 w-full mt-1 flex justify-between px-0.5">
+                    {ticks.map(tick => {
+                        const isHighlighted = Math.abs(score - tick) < 8;
+                        return (
+                            <span key={tick} className={`text-[8px] font-black font-mono transition-colors duration-500 ${isHighlighted ? 'text-white' : 'text-gray-600'}`}>
+                                {tick > 0 ? '+' : ''}{tick}
+                            </span>
+                        );
+                    })}
+                </div>
+                <div className="text-center mt-2 mb-1 shrink-0 text-[10px] font-black uppercase tracking-tighter" style={{ color: impactColor }}>{data.sarcastic_label}</div>
             </div>
-            <div className="text-center mb-1 shrink-0 text-[8px] font-black uppercase text-[#dd9933]">{data.sarcastic_label}</div>
-            <div className="text-center text-[24px] font-black text-gray-900 dark:text-white leading-none mb-2">{score > 0 ? '+' : ''}{score}</div>
-            <div className="flex-1 flex flex-col border border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-1.5 bg-black/5 dark:bg-black/10 min-h-0 overflow-hidden">
-                <p className="text-[10px] text-gray-700 dark:text-gray-300 font-medium line-clamp-3 italic">"{data.title}"</p>
+            <div 
+                className="flex-1 flex flex-col border-2 border-dashed rounded-lg p-1.5 bg-black/5 dark:bg-black/10 min-h-0 overflow-hidden group/post relative" 
+                style={{ borderColor: impactColor }}
+                title={data.title}
+            >
+                <p className="text-[10px] text-gray-700 dark:text-gray-300 font-bold line-clamp-3 italic leading-snug">"{data.title}"</p>
+                <div className="absolute inset-0 bg-tech-900/95 opacity-0 group-hover/post:opacity-100 transition-opacity p-2 overflow-y-auto custom-scrollbar z-50 text-[9px] font-medium text-white leading-relaxed">
+                    {data.title}
+                </div>
             </div>
         </div>
     );
@@ -391,7 +422,7 @@ const MarketCapWidget = ({ language, onNavigate }: { language: Language; onNavig
     return (
         <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 transition-colors">
             <div className="flex justify-between items-center mb-2">
-                <div className="font-black text-gray-500 dark:text-gray-400 text-base uppercase tracking-wider">TOP 10 MARKET CAP</div>
+                <div className="font-black text-gray-500 dark:text-gray-400 text-[11px] leading-tight uppercase tracking-wider">TOP 10 MARKET CAP</div>
                 <WorkspaceLink onClick={onNavigate} />
             </div>
             <div className="flex-1 overflow-y-auto flex flex-col gap-1 custom-scrollbar">
@@ -432,7 +463,7 @@ const EconomicCalendarWidget = ({ language, onNavigate }: { language: Language; 
     return (
         <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700">
              <div className="flex justify-between items-center mb-2">
-                <div className="font-black text-base uppercase tracking-wider text-gray-500 dark:text-gray-400">{t.title}</div>
+                <div className="font-black text-[11px] leading-tight uppercase tracking-wider text-gray-500 dark:text-gray-400">{t.title}</div>
                 <div className="flex items-center gap-3">
                     <div className="flex items-center gap-1.5">
                         <button onClick={() => setFilter('BRL')} className={`transition-all ${filter==='BRL'?'ring-2 ring-[#dd9933] rounded-full':'opacity-40 grayscale'}`}><img src={getFlag('BRL')} className="w-5 h-5 rounded-full" /></button>
@@ -504,8 +535,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onPostClick, language = 'pt' as L
                 <div className="h-[210px]"><FearAndGreedWidget language={language} onNavigate={navigateToWorkspace} /></div>
                 <div className="h-[210px]"><RsiWidget language={language} onNavigate={navigateToWorkspace} /></div>
                 <div className="h-[210px]"><LongShortRatioWidget language={language} onNavigate={navigateToWorkspace} /></div>
-                <div className="h-[210px]"><AltSeasonWidget language={language} onNavigate={navigateToWorkspace} /></div>
-                <div className="h-[210px]"><MarketCapHistoryWidget language={language} onNavigate={navigateToWorkspace} /></div>
+                <div className="h-[210px]"><AltSeasonWidget language={language} onNavigate={navigateToWorkspace} theme={theme} /></div>
+                <div className="h-[210px]"><MarketCapHistoryWidget language={language} onNavigate={navigateToWorkspace} theme={theme} /></div>
                 <div className="h-[210px]"><EtfFlowWidget language={language} onNavigate={navigateToWorkspace} /></div>
                 <div className="h-[210px]"><TrumpOMeterWidget language={language} onNavigate={navigateToWorkspace} /></div>
                 

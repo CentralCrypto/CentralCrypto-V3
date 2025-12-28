@@ -193,7 +193,7 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
 
   return (
     <>
-      {/* IMPROVED STYLISH TOOLTIP - THEME ADJUSTED */}
+      {/* IMPROVED STYLISH TOOLTIP - SOFTENED LAYOUT */}
       {tooltip.visible && tooltip.data && (
         <div 
             className="fixed z-[9999] pointer-events-none animate-in fade-in zoom-in-95 duration-150" 
@@ -202,11 +202,11 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
                 left: `${Math.min(window.innerWidth - 270, Math.max(10, tooltip.x - 128))}px` 
             }}
         >
-            <div className="w-68 bg-white dark:bg-[#1a1c1e] backdrop-blur-xl border border-gray-200 dark:border-white/10 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] rounded-2xl p-5 overflow-hidden">
+            <div className="w-68 bg-white dark:bg-[#1e2022] backdrop-blur-xl border border-gray-100 dark:border-white/5 shadow-[0_20px_50px_rgba(0,0,0,0.3)] rounded-2xl p-5 overflow-hidden">
                 <div className="flex items-center gap-4 mb-4 border-b border-gray-100 dark:border-white/5 pb-4">
                     <div className="relative">
                         <img src={`https://assets.coincap.io/assets/icons/${tooltip.symbol.toLowerCase()}@2x.png`} className="w-12 h-12 rounded-full bg-white p-1 shadow-md" alt="" />
-                        <span className="absolute -top-1 -right-1 bg-[#dd9933] text-black text-[10px] font-black w-6 h-6 flex items-center justify-center rounded-full shadow-lg border-2 border-white dark:border-[#1a1c1e]">#{tooltip.meta?.rank || '?'}</span>
+                        <span className="absolute -top-1 -right-1 bg-[#dd9933] text-black text-[10px] font-black w-6 h-6 flex items-center justify-center rounded-full shadow-lg border-2 border-white dark:border-[#1e2022]">#{tooltip.meta?.rank || '?'}</span>
                     </div>
                     <div className="flex flex-col">
                         <div className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-tighter leading-none">{tooltip.meta?.name || tooltip.symbol}</div>
@@ -233,16 +233,12 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
                         <span className="font-bold font-mono text-sm text-[#dd9933]/80">{tooltip.data.v}</span>
                     </div>
                 </div>
-                <div className="mt-4 pt-4 border-t border-gray-100 dark:border-white/5 flex justify-center">
-                    <div className="text-[8px] font-black text-gray-400 dark:text-gray-600 uppercase tracking-[0.3em] flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-tech-success animate-pulse"></span> Network Active
-                    </div>
-                </div>
             </div>
         </div>
       )}
-
-      {/* MOBILE DRAWER */}
+      
+      {/* (Rest of Header code remains same) */}
+      {/* ... MOBILE DRAWER ... */}
       {isMenuOpen && (
         <div className="fixed inset-0 z-[2000] xl:hidden flex">
            <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsMenuOpen(false)}></div>
@@ -322,7 +318,7 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
       {/* DESKTOP HEADER */}
       <header className="fixed top-0 left-0 right-0 z-[1000] w-full flex flex-col shadow-lg transition-all duration-700">
         
-        {/* UPPER TICKER BAR - IMPROVED MOUSE LEAVE */}
+        {/* UPPER TICKER BAR */}
         <div 
           className="bg-white dark:bg-tech-950 border-b border-transparent dark:border-white/5 h-14 flex items-center overflow-hidden w-full relative transition-colors duration-700 shadow-sm"
           onMouseLeave={hideTooltip}
@@ -381,7 +377,7 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
                     {t.analysisCenter} <ChevronDown size={14} className="group-hover:rotate-180 transition-transform duration-300" />
                   </div>
                   <div className="absolute top-[80%] left-1/2 -translate-x-1/2 w-[600px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-500 transform translate-y-4 group-hover:translate-y-0 z-50 pt-4">
-                    <div className="relative rounded-2xl overflow-hidden shadow-[0_30px_70px_rgba(0,0,0,0.6)] border border-gray-200 dark:border-tech-700 bg-white dark:bg-tech-950 p-6">
+                    <div className="relative rounded-2xl overflow-hidden shadow-[0_30px_70px_rgba(0,0,0,0.4)] border border-gray-100 dark:border-white/5 bg-white dark:bg-[#1a1c1e] p-6">
                       <div className="grid grid-cols-2 gap-4">
                         {menuAnalysis.map((item, idx) => (
                           <div key={idx} onClick={() => setView(item.mode)} className="relative h-28 rounded-xl border border-gray-100 dark:border-tech-800 hover:border-tech-accent overflow-hidden cursor-pointer group/box transition-all bg-white dark:bg-black shadow-md">
@@ -412,7 +408,7 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
                <div className="relative" onMouseEnter={handleLangEnter} onMouseLeave={handleLangLeave} ref={langMenuRef}>
                   <button className="bg-white hover:bg-gray-100 dark:bg-tech-800 dark:hover:bg-tech-700 p-2.5 rounded-full border border-transparent dark:border-tech-700 shadow-sm flex items-center justify-center transition-all hover:scale-110 active:scale-95"><Flag lang={language} /></button>
                   <div className={`absolute top-full right-0 mt-2 w-44 transition-all duration-300 origin-top-right transform ${isLangMenuOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'}`}>
-                      <div className="bg-white dark:bg-tech-900 border border-gray-200 dark:border-tech-700 rounded-2xl shadow-2xl overflow-hidden py-1.5">
+                      <div className="bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-white/5 rounded-2xl shadow-2xl overflow-hidden py-1.5">
                           {LANGUAGES_CONFIG.map((config) => (
                               <div key={config.code} className="relative px-1">
                                   <button onClick={() => { onLanguageChange(config.code); setIsLangMenuOpen(false); }} className={`flex items-center gap-3 px-4 py-2 text-xs w-full rounded-xl transition-colors ${language === config.code ? 'bg-[#dd9933]/10 font-black text-tech-accent' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-tech-800'}`}>
@@ -436,8 +432,8 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
                             <ChevronDown size={14} className={`text-gray-500 transition-transform duration-300 ${isUserMenuOpen ? 'rotate-180' : ''}`} />
                          </button>
                          {isUserMenuOpen && (
-                             <div className="absolute top-full right-0 mt-3 w-64 bg-white dark:bg-tech-900 border border-gray-200 dark:border-tech-700 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2">
-                                 <div className="p-5 border-b border-gray-100 dark:border-tech-800 bg-gray-50 dark:bg-tech-950/50 flex items-center gap-4">
+                             <div className="absolute top-full right-0 mt-3 w-64 bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-white/5 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2">
+                                 <div className="p-5 border-b border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-[#1e2022] flex items-center gap-4">
                                      <div className="w-11 h-11 rounded-full bg-gray-200 dark:bg-tech-950 flex items-center justify-center border-2 border-tech-accent overflow-hidden shadow-sm">{user.avatar_url ? <img src={user.avatar_url} className="w-full h-full object-cover" /> : <span className="text-tech-accent font-bold text-xs">{user.user_display_name?.substring(0,2).toUpperCase()}</span>}</div>
                                      <div className="flex flex-col min-w-0"><p className="text-gray-900 dark:text-white font-black text-sm truncate">{user.user_display_name}</p><p className="text-gray-500 text-[10px] truncate">{user.user_email}</p></div>
                                  </div>
@@ -445,7 +441,7 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
                                      <button onClick={() => { setView(ViewMode.PROFILE); setUserMenuOpen(false); }} className="w-full text-left flex items-center gap-4 px-4 py-3 text-xs font-black text-gray-700 dark:text-gray-300 hover:bg-[#dd9933]/10 hover:text-[#dd9933] rounded-xl transition-all uppercase tracking-[0.15em]"><User size={18}/> {t.profile}</button>
                                      <button onClick={() => { setView(ViewMode.PROFILE); setUserMenuOpen(false); }} className="w-full text-left flex items-center gap-4 px-4 py-3 text-xs font-black text-gray-700 dark:text-gray-300 hover:bg-[#dd9933]/10 hover:text-[#dd9933] rounded-xl transition-all uppercase tracking-[0.15em]"><CreditCard size={18}/> {t.subscription}</button>
                                  </div>
-                                 <div className="p-2.5 border-t border-gray-100 dark:border-tech-800"><button onClick={() => { setUserMenuOpen(false); onLogoutClick(); }} className="w-full text-left flex items-center gap-4 px-4 py-3 text-xs font-black text-red-500 hover:bg-red-500/10 rounded-xl transition-all uppercase tracking-[0.2em]"><Power size={18}/> {t.logout}</button></div>
+                                 <div className="p-2.5 border-t border-gray-100 dark:border-white/5"><button onClick={() => { setUserMenuOpen(false); onLogoutClick(); }} className="w-full text-left flex items-center gap-4 px-4 py-3 text-xs font-black text-red-500 hover:bg-red-500/10 rounded-xl transition-all uppercase tracking-[0.2em]"><Power size={18}/> {t.logout}</button></div>
                              </div>
                          )}
                     </div>
