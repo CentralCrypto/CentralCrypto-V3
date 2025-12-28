@@ -51,7 +51,7 @@
             animation: {
               'spin-slow': 'spin 3s linear infinite',
               'scroll': 'scroll 320s linear infinite',
-              'magazine-scroll': 'magazine-scroll 600s linear infinite',
+              'magazine-scroll': 'magazine-scroll 180s linear infinite',
             },
             keyframes: {
               scroll: {
@@ -113,22 +113,6 @@
       }
       .group:hover .animate-scroll { animation-play-state: paused; }
       .animate-scroll { animation-timing-function: linear !important; will-change: transform; }
-      .fan-item {
-        transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-        opacity: 0;
-        transform: translate(0, 0) scale(0.5);
-        pointer-events: none;
-        z-index: 0;
-        position: absolute;
-      }
-      .group:hover .fan-item { opacity: 1; pointer-events: auto; cursor: pointer; }
-      .group:hover .fan-item:nth-child(1) { transform: translate(-90px, 45px) scale(1); z-index: 6; transition-delay: 0.05s; }
-      .group:hover .fan-item:nth-child(2) { transform: translate(-55px, 80px) scale(1); z-index: 5; transition-delay: 0.1s; }
-      .group:hover .fan-item:nth-child(3) { transform: translate(0px, 95px) scale(1); z-index: 4; transition-delay: 0.15s; }
-      .group:hover .fan-item:nth-child(4) { transform: translate(55px, 80px) scale(1); z-index: 3; transition-delay: 0.2s; }
-      .group:hover .fan-item:nth-child(5) { transform: translate(90px, 45px) scale(1); z-index: 2; transition-delay: 0.25s; }
-      .fan-bridge { position: absolute; top: -40px; left: -120px; right: -120px; bottom: -150px; z-index: 1; display: none; }
-      .group:hover .fan-bridge { display: block; }
     </style>
     <script type="importmap">
 {
@@ -142,7 +126,7 @@
     "framer-motion": "https://aistudiocdn.com/framer-motion@^12.23.24",
     "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
     "react-markdown": "https://aistudiocdn.com/react-markdown@^10.1.0",
-    "react-grid-layout": "https://aistudiocdn.com/react-grid-layout@^1.5.2",
+    "react-grid-layout": "https://aistudiocdn.com/react-grid-layout@^1.5.0",
     "uuid": "https://aistudiocdn.com/uuid@^13.0.0",
     "vite": "https://esm.sh/vite@^7.3.0",
     "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"

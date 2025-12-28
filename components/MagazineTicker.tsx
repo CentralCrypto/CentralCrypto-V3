@@ -44,41 +44,38 @@ const MagazineTicker: React.FC<MagazineTickerProps> = ({ onPostClick }) => {
   };
 
   if (loading) {
-    return <div className="h-16 bg-tech-900/50 rounded animate-pulse my-2"></div>;
+    return <div className="h-20 bg-tech-900/20 rounded animate-pulse my-4"></div>;
   }
 
   if (!posts || posts.length === 0) return null;
 
-  // Renderiza dois conjuntos para o loop infinito de 50%
-  const TickerSet = () => (
-    <>
-      {posts.map(post => (
-        <div 
-          key={`${post.id}-${Math.random()}`} 
-          onClick={() => onPostClick(post.id)} 
-          className="flex items-center gap-3 shrink-0 w-80 cursor-pointer group/tickeritem p-1 hover:bg-tech-accent/10 rounded-lg transition-colors mx-4"
-        >
-          <img 
-            src={post.featuredImage || 'https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png'} 
-            alt="" 
-            className="w-12 h-12 object-cover rounded-md border border-tech-800 group-hover/tickeritem:border-tech-accent transition-colors shadow-sm" 
-          />
-          <span className="text-sm font-black text-gray-400 group-hover/tickeritem:text-tech-accent line-clamp-2 leading-tight uppercase tracking-tight">
-            {decodeHTML(post.titleHtml)}
-          </span>
-        </div>
-      ))}
-    </>
-  );
+  // Duplicamos o conjunto de posts para criar o efeito de loop infinito sem saltos
+  const items = [...posts, ...posts];
 
   return (
-    <div className="w-full my-4 overflow-hidden relative group py-3 bg-black/5 dark:bg-white/5 shadow-inner transition-colors">
+    <div className="w-full my-6 overflow-hidden relative group py-5 bg-gray-200/40 dark:bg-white/5 shadow-inner rounded-xl transition-all duration-700">
       <div className="flex animate-magazine-scroll group-hover:[animation-play-state:paused] w-max">
-        <TickerSet />
-        <TickerSet />
+        {items.map((post, idx) => (
+          <div 
+            key={`${post.id}-${idx}`} 
+            onClick={() => onPostClick(post.id)} 
+            className="flex items-center gap-4 shrink-0 w-80 cursor-pointer group/tickeritem p-2 hover:bg-tech-accent/10 rounded-xl transition-all mx-5"
+          >
+            <div className="relative shrink-0">
+                <img 
+                  src={post.featuredImage || 'https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png'} 
+                  alt="" 
+                  className="w-14 h-14 object-cover rounded-lg border-2 border-transparent group-hover/tickeritem:border-tech-accent transition-all shadow-md" 
+                />
+            </div>
+            <span className="text-sm font-black text-gray-600 dark:text-gray-300 group-hover/tickeritem:text-tech-accent line-clamp-2 leading-tight uppercase tracking-tight transition-colors">
+              {decodeHTML(post.titleHtml)}
+            </span>
+          </div>
+        ))}
       </div>
-       <div className="absolute left-0 top-0 bottom-0 w-24 bg-gradient-to-r from-[#eeeeee] dark:from-tech-950 to-transparent z-10 pointer-events-none"></div>
-       <div className="absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-[#eeeeee] dark:from-tech-950 to-transparent z-10 pointer-events-none"></div>
+       <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-gray-100 dark:from-tech-950 to-transparent z-10 pointer-events-none"></div>
+       <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-gray-100 dark:from-tech-950 to-transparent z-10 pointer-events-none"></div>
     </div>
   );
 };
