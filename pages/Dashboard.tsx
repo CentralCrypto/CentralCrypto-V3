@@ -69,7 +69,7 @@ const HorizontalHistoryRow = ({ data, labels }: { data: (string | number)[], lab
 const MarketCapHistoryWidget = ({ language, onNavigate, theme }: { language: Language; onNavigate: () => void; theme: 'dark' | 'light' }) => {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const t = getTranslations(language).dashboard.widgets.mktcapHistory;
+  const t = getTranslations(language as Language).dashboard.widgets.mktcapHistory;
 
   useEffect(() => { 
     setLoading(true);
@@ -87,14 +87,15 @@ const MarketCapHistoryWidget = ({ language, onNavigate, theme }: { language: Lan
   const strokeColor = theme === 'dark' ? '#548f3f' : '#1a1c1e';
   const fillColor = theme === 'dark' ? '#548f3f' : '#1a1c1e';
 
+  // Processamento simplificado dos pontos para evitar "NADA" na tela
   const chartPoints = useMemo(() => {
     const rawData = Array.isArray(data) ? data[0] : data;
-    const historyArray = rawData?.history;
-    if (!historyArray || !Array.isArray(historyArray)) return [];
+    const history = rawData?.history || [];
+    if (!Array.isArray(history) || history.length === 0) return [];
     
-    return historyArray.map((val: number, i: number) => {
+    return history.map((val: number, i: number) => {
         const d = new Date();
-        d.setDate(d.getDate() - (historyArray.length - 1 - i));
+        d.setDate(d.getDate() - (history.length - 1 - i));
         return { date: d.getTime(), value: val };
     });
   }, [data]);
@@ -107,10 +108,10 @@ const MarketCapHistoryWidget = ({ language, onNavigate, theme }: { language: Lan
         <div className="flex flex-col"><span className="font-black text-[11px] leading-tight text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t.title}</span><span className="text-[10px] font-bold text-gray-600 dark:text-gray-200">Global</span></div>
         <div className="text-right flex items-start gap-2"><span className="text-lg font-bold text-tech-accent font-mono">{rawData ? formatVal(rawData.current || rawData.history?.slice(-1)[0]) : '---'}</span><WorkspaceLink onClick={onNavigate} /></div>
       </div>
-      <div className="relative flex-1 bg-white/50 dark:bg-black/40 rounded-lg mb-1 overflow-hidden min-h-[100px] w-full">
+      <div className="relative flex-1 bg-white/50 dark:bg-black/40 rounded-lg mb-1 overflow-hidden min-h-[110px] w-full">
         {loading ? (
             <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-[#dd9933]" size={16} /></div>
-        ) : (
+        ) : chartPoints.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartPoints}>
                     <defs><linearGradient id="colorMkt" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={fillColor} stopOpacity={0.3}/><stop offset="95%" stopColor={fillColor} stopOpacity={0}/></linearGradient></defs>
@@ -118,6 +119,8 @@ const MarketCapHistoryWidget = ({ language, onNavigate, theme }: { language: Lan
                     <Area type="monotone" dataKey="value" stroke={strokeColor} fill="url(#colorMkt)" strokeWidth={2} dot={false} isAnimationActive={true} />
                 </AreaChart>
             </ResponsiveContainer>
+        ) : (
+          <div className="flex items-center justify-center h-full text-[10px] text-gray-500 italic uppercase">Sem Dados de Histórico</div>
         )}
       </div>
       <HorizontalHistoryRow labels={[t.yesterday, t.week, t.month]} data={[formatVal(rawData?.yesterday), formatVal(rawData?.lastWeek), formatVal(rawData?.lastMonth)]} />
@@ -136,8 +139,8 @@ const GAUGE_STROKE = 10;
 const FearAndGreedWidget = ({ language, onNavigate }: { language: Language; onNavigate: () => void }) => {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const t = getTranslations(language).dashboard.widgets.fng;
-  const timeT = getTranslations(language).dashboard.widgets.time;
+  const t = getTranslations(language as Language).dashboard.widgets.fng;
+  const timeT = getTranslations(language as Language).dashboard.widgets.time;
 
   useEffect(() => {
     fetchFearAndGreed().then(res => {
@@ -254,7 +257,7 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
   const [symbol, setSymbol] = useState('BTCUSDT');
   const [period, setPeriod] = useState('5m');
   const [data, setData] = useState<any>(null);
-  const t = getTranslations(language).dashboard.widgets.lsr;
+  const t = getTranslations(language as Language).dashboard.widgets.lsr;
 
   useEffect(() => {
     fetchLongShortRatio(symbol, period).then(setData).catch(() => setData(null));
@@ -311,7 +314,7 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
 const AltSeasonWidget = ({ language, onNavigate, theme }: { language: Language; onNavigate: () => void; theme: 'dark' | 'light' }) => {
   const [data, setData] = useState({ index: 0, yesterday: 0, lastWeek: 0, lastMonth: 0, history: [] });
   const [loading, setLoading] = useState(true);
-  const t = getTranslations(language).dashboard.widgets.altseason;
+  const t = getTranslations(language as Language).dashboard.widgets.altseason;
 
   useEffect(() => {
     Promise.all([fetchAltcoinSeason(), fetchAltcoinSeasonHistory()]).then(([curr, hist]) => {
@@ -337,7 +340,7 @@ const AltSeasonWidget = ({ language, onNavigate, theme }: { language: Language; 
       <div className="relative flex-1 bg-white/50 dark:bg-black/40 rounded-lg mb-1 overflow-hidden">
         <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data.history} margin={{top:5, right:5, left:5, bottom:5}}>
-                <Tooltip content={<CustomTooltip language={language} suffix=" Index" />} cursor={{ stroke: strokeColor, strokeWidth: 1 }} />
+                {/* TOOLTIP REMOVIDO PARA DASHBOARD CONFORME SOLICITADO */}
                 <Line type="monotone" dataKey="value" stroke={strokeColor} strokeWidth={1} dot={false} isAnimationActive={false} />
             </LineChart>
         </ResponsiveContainer>
@@ -349,7 +352,7 @@ const AltSeasonWidget = ({ language, onNavigate, theme }: { language: Language; 
 
 const EtfFlowWidget = ({ language, onNavigate }: { language: Language; onNavigate: () => void }) => {
     const [data, setData] = useState({ btc: 0, eth: 0, net: 0 });
-    const t = getTranslations(language).dashboard.widgets.etf;
+    const t = getTranslations(language as Language).dashboard.widgets.etf;
     useEffect(() => { fetchEtfFlow().then(res => { if(res) setData({ btc: res.btcValue, eth: res.ethValue, net: res.btcValue + res.ethValue }); }).catch(() => {}); }, []);
     const formatNet = (v: number) => `$${(Math.abs(v) / 1e6).toFixed(1)}M`;
     return (
@@ -375,7 +378,7 @@ const EtfFlowWidget = ({ language, onNavigate }: { language: Language; onNavigat
 
 const TrumpOMeterWidget = ({ language, onNavigate }: { language: Language; onNavigate: () => void }) => {
     const [data, setData] = useState<TrumpData | null>(null);
-    const t = getTranslations(language).dashboard.widgets.trump;
+    const t = getTranslations(language as Language).dashboard.widgets.trump;
     useEffect(() => { fetchTrumpData().then(setData).catch(() => setData(null)); }, []);
     
     if (!data) return <div className="glass-panel p-4 rounded-xl h-full animate-pulse bg-tech-800 border-tech-700" />;
@@ -437,7 +440,7 @@ const TrumpOMeterWidget = ({ language, onNavigate }: { language: Language; onNav
 const GainersLosersWidget = ({ language, onNavigate }: { language: Language; onNavigate: () => void }) => {
     const [data, setData] = useState({ gainers: [], losers: [] });
     const [tab, setTab] = useState('gainers');
-    const t = getTranslations(language).dashboard.widgets.gainers;
+    const t = getTranslations(language as Language).dashboard.widgets.gainers;
     useEffect(() => { fetchGainersLosers().then(setData).catch(() => {}); }, []);
     const list = tab === 'gainers' ? data.gainers : data.losers;
     return (
@@ -493,7 +496,7 @@ const EconomicCalendarWidget = ({ language, onNavigate }: { language: Language; 
     const [events, setEvents] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState<'ALL' | 'USD' | 'BRL'>('ALL');
-    const t = getTranslations(language).dashboard.widgets.calendar;
+    const t = getTranslations(language as Language).dashboard.widgets.calendar;
 
     useEffect(() => { 
         fetchEconomicCalendar().then(res => { 
@@ -600,7 +603,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onPostClick, language = 'pt' as L
             <div className="h-px bg-tech-600 flex-1 opacity-20 dark:opacity-100"></div>
         </div>
         <div className="flex flex-col gap-5">
-            <div><MagazineTicker onPostClick={onPostClick} /></div>
+            {/* TICKER DA MAGAZINE GARANTIDO AQUI */}
+            <div className="min-h-[100px]"><MagazineTicker onPostClick={onPostClick} /></div>
             <div className="min-h-[600px]"><NewsGrid onPostClick={onPostClick} language={language} /></div>
             <div className="w-full"><NewsFeed onPostClick={onPostClick} language={language} /></div>
         </div>

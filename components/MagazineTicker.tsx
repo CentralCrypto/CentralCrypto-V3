@@ -17,7 +17,7 @@ const MagazineTicker: React.FC<MagazineTickerProps> = ({ onPostClick }) => {
         const cats = await fetchMagazineCategories();
         const analisesCat = cats.find((c: any) => c.slug.includes('analise'));
         const data = await fetchMagazinePosts({ 
-            categories: analisesCat?.id, 
+            categories: analisesCat?.id || '', 
             perPage: 15 
         });
         
@@ -44,18 +44,22 @@ const MagazineTicker: React.FC<MagazineTickerProps> = ({ onPostClick }) => {
   };
 
   if (loading) {
-    return <div className="h-20 bg-tech-900/20 rounded animate-pulse my-4"></div>;
+    return (
+        <div className="w-full h-20 my-6 bg-gray-200/20 dark:bg-tech-900/20 rounded-xl animate-pulse flex items-center justify-center">
+            <span className="text-xs font-black text-gray-500 uppercase tracking-widest">Sincronizando Magazine...</span>
+        </div>
+    );
   }
 
   if (!posts || posts.length === 0) return null;
 
-  // Duplicamos o conjunto de posts para criar o efeito de loop infinito sem saltos
-  const items = [...posts, ...posts];
+  // Duplicar posts para garantir o loop 360 fluido
+  const tickerItems = [...posts, ...posts, ...posts];
 
   return (
     <div className="w-full my-6 overflow-hidden relative group py-5 bg-gray-200/40 dark:bg-white/5 shadow-inner rounded-xl transition-all duration-700">
       <div className="flex animate-magazine-scroll group-hover:[animation-play-state:paused] w-max">
-        {items.map((post, idx) => (
+        {tickerItems.map((post, idx) => (
           <div 
             key={`${post.id}-${idx}`} 
             onClick={() => onPostClick(post.id)} 
@@ -74,8 +78,8 @@ const MagazineTicker: React.FC<MagazineTickerProps> = ({ onPostClick }) => {
           </div>
         ))}
       </div>
-       <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-gray-100 dark:from-tech-950 to-transparent z-10 pointer-events-none"></div>
-       <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-gray-100 dark:from-tech-950 to-transparent z-10 pointer-events-none"></div>
+       <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-[#eeeeee] dark:from-tech-950 to-transparent z-10 pointer-events-none"></div>
+       <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-[#eeeeee] dark:from-tech-950 to-transparent z-10 pointer-events-none"></div>
     </div>
   );
 };
