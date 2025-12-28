@@ -54,7 +54,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   return (
-    <nav className="fixed top-[152px] w-full z-40 bg-gray-50 dark:bg-[#1a1c1e] border-b border-transparent dark:border-tech-800 shadow-sm transition-colors duration-700 ease-in-out">
+    <nav className="fixed top-[132px] w-full z-40 bg-gray-50 dark:bg-[#1a1c1e] border-b border-transparent dark:border-tech-800 shadow-sm transition-colors duration-700 ease-in-out">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center gap-3 w-1/4">

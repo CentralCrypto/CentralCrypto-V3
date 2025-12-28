@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Trash2, Save, RotateCcw, Layout, Search, ChevronDown, Filter, FileText, Minus } from 'lucide-react';
 import { Dashboard, ApiCoin, UserTier, WidgetType, Language } from '../../../types';
@@ -145,7 +144,6 @@ const Toolbar: React.FC<ToolbarProps> = ({
   };
 
   const handleDelete = (e: React.MouseEvent, id: string) => {
-      // Critical: Stop propagation to prevent board switching
       e.stopPropagation();
       e.preventDefault();
       onRemoveDashboard(id);
@@ -154,7 +152,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
   const FILTER_OPTIONS = ['ALL', 'MARKET', 'GLOBAL', 'SENTIMENT'];
 
   return (
-    <div className="bg-white dark:bg-[#1a1c1e] border-b border-gray-200 dark:border-slate-700/50 p-2 fixed top-[152px] -mt-[19px] left-0 right-0 z-[900] shadow-sm transition-colors">
+    <div className="bg-white dark:bg-[#1a1c1e] p-2 fixed top-[152px] -mt-[19px] left-0 right-0 z-[900] shadow-sm transition-colors">
       <div className="max-w-[1920px] mx-auto flex flex-col gap-2">
 
         {/* ROW 1: Tier, Save, Reset (Right Aligned) */}

@@ -1,4 +1,3 @@
-
 export const pt = {
   common: {
     search: "Buscar",
@@ -60,11 +59,19 @@ export const pt = {
     nav: { features: "Recursos", testimonials: "Depoimentos", backList: "Voltar para Lista", backHome: "Início", legal: "Legal" },
     hero: { badge: "Tecnologia de Ponta", title1: "Indicadores Profissionais", subtitle: "Aumente sua assertividade com ferramentas exclusivas.", btnView: "Ver Scripts", btnSub: "Assinar" },
     list: { title: "Nossos Indicadores", subtitle: "Scripts otimizados para TradingView.", searchPlaceholder: "Buscar indicadores...", strategy: "Estratégia", indicator: "Indicator", emptyTitle: "Nenhum resultado", emptyDesc: "Tente outro termo", clearFilter: "Limpar", loadMore: "Carregar Mais" },
-    details: { back: "Voltar", strategy: "Estratégia", indicator: "Indicador", updated: "Atualizado", openTv: "Abrir no", disclaimerTitle: "Aviso", disclaimerText: "Investir envolve risco.", boosts: "Boosts", boostThanks: "Obrigado!", boostLink: "Ver no TV", type: "Tipo", version: "Versão", access: "Acesso", getAccess: "Obter Acesso", addFavDesc: "Adicione aos favoritos no", btnAddFav: "Favoritar no TV" },
+    details: { back: "Voltar", strategy: "Estratégia", indicator: "Indicador", updated: "Atualizado", openTv: "Abrir no", disclaimerTitle: "Aviso", disclaimerText: "Investir envolve risco.", boosts: "Boosts", boostThanks: "Obrigado!", boostLink: "Ver no TV", type: "Tipo", version: "Versão", access: "Access", getAccess: "Obter Acesso", addFavDesc: "Adicione aos favoritos no", btnAddFav: "Favoritar no TV" },
     vipModal: { title: "Acesso VIP", successTitle: "Sucesso!", successDesc: "Seu pedido foi enviado.", btnGo: "Ir para TV", labelName: "Nome", placeholderName: "Seu nome", labelUser: "Usuário TV", placeholderUser: "@usuario", btnSending: "Enviando...", btnSubmit: "Solicitar" },
-    features: { title: "Recursos Exclusivos", f1: { title: "Rápido", desc: "Sinais instantâneos" }, f2: { title: "Seguro", desc: "Auditado" }, f3: { title: "Fácil", desc: "Interface limpa" }, f4: { title: "Atualizado", desc: "Sempre evoluindo" } },
+    features: { title: "Arquitetura e Performance", f1: { title: "Latência Zero", desc: "Sinais processados em tempo real sem atrasos no carregamento dos candles." }, f2: { title: "Native Pine Script V6", desc: "Desenvolvimento puro usando as funções mais modernas e eficientes da engine TradingView." }, f3: { title: "UX Premium", desc: "Interface visual limpa, focada em não poluir o gráfico enquanto entrega dados vitais." }, f4: { title: "Algoritmos Adaptativos", desc: "Lógica interna que se ajusta automaticamente à volatilidade de cada ativo e timeframe." } },
     testimonials: { title: "O que dizem os Traders" },
-    faq: { title: "FAQ", q1: "O que é?", a1: "Ferramenta de análise", q2: "Como usar?", a2: "No TradingView", q3: "É grátis?", a3: "Alguns sim" },
+    faq: { 
+      title: "Inteligência CCT", 
+      q1: "O que torna os indicadores CCT diferentes?", 
+      a1: "Nossos scripts não são apenas indicadores de média; são ecossistemas complexos desenvolvidos em Pine Script V6. Utilizamos cálculos de momentum de alta fidelidade e filtros de ruído que eliminam sinais falsos comuns em scripts gratuitos.", 
+      q2: "Eles funcionam para Scalp ou Swing Trade?", 
+      a2: "A lógica é multi-timeframe (MTF). O algoritmo detecta padrões estruturais de mercado tanto no gráfico de 1 minuto para operações rápidas quanto no diário para tendências de longo prazo, mantendo a consistência estatística.", 
+      q3: "Posso automatizar as entradas via Webhook?", 
+      a3: "Sim. Todos os nossos indicadores são 'Alert-Ready'. Cada sinal de compra ou venda possui tags de evento específicas que podem ser conectadas ao 3Commas, Wunderbit ou seu próprio bot via Webhook." 
+    },
     legal: { terms: "Termos...", privacy: "Privacidade...", disclaimer: "Risco..." },
     chat: { welcome: "Olá!", error: "Erro no chat", typing: "Digitando...", limitTitle: "Limite atingido", limit: "Contate o suporte", placeholder: "Pratique algo..." }
   },
@@ -109,7 +116,7 @@ export const pt = {
           q1: "O que é o Long/Short Ratio?",
           a1: "Representa a proporção entre apostas de alta (Longs) e baixa (Shorts) no mercado de futuros das principais exchanges.",
           q2: "Como interpretar?",
-          a2: "Um ratio muito alto (ex: 3.0) costuma ser um sinal contrário, indicando que há muitos traders 'comprados', o que facilita cascatas de liquidação."
+          a2: "Um ratio muito alto (ex: 3.0) coustuma ser um sinal contrário, indicando que há muitos traders 'comprados', o que facilita cascatas de liquidação."
         },
         trump: {
           q1: "O que o Trump-o-Meter mede?",
@@ -143,7 +150,7 @@ export const pt = {
       macd: { title: "Média MACD", avgLabel: "Média Global MACD", desc: "Tendência Global MACD", timeframe: "Timeframe", xAxis: "Eixo X", loading: "Carregando...", tooltip: { price: "Preço", mcap: "Cap. Mercado", change: "Var", signal: "Signal", hist: "Hist" }, context: { mcap: "Visão por capitalização", priceChange: "Visão por variação" } },
       lsr: { title: "Long/Short Ratio", desc: "Proporção Long/Short", price: "Preço", size: "Tamanho", total: "Total", noData: "Sem dados" },
       altseason: { title: "Altcoin Season", index: "Índice ASI", altsMcap: "Cap Alts", yesterday: "Ontem", week: "Semana", month: "Mês", desc: "Temporada de Altcoins" },
-      etf: { title: "Fluxo ETF", dailyFlow: "Fluxo Diário", btcEtf: "BTC ETFs", ethEtf: "ETH ETFs", last7d: "7 Días", last30d: "30 Dias", last90d: "90 Dias", lastUpdate: "Última atualização", desc: "Fluxo institucional de ETFs" },
+      etf: { title: "Fluxo ETF", dailyFlow: "Fluxo Diário", btcEtf: "BTC ETFs", ethEtf: "ETH ETFs", last7d: "7 Días", last30d: "30 Dias", last90d: "90 Dias", lastUpdate: "Atualizado em", desc: "Fluxo institucional de ETFs" },
       gainers: { title: "Top Movers", gainers: "Ganhadores", losers: "Perdedores", desc: "Principais variações do mercado" },
       trump: { title: "Trump-o-Meter", viewPost: "Ver Post", desc: "Impacto político no mercado" },
       calendar: { title: "Calendário Econômico", today: "HOJE", tomorrow: "AMANHÃ", previous: "Prev", forecast: "Proj", actual: "Atu", desc: "Eventos macroeconômicos" },

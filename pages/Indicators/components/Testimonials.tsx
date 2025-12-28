@@ -41,22 +41,34 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ currentLang }) => {
   const visibleTestimonials = testimonials.slice(currentIndex, currentIndex + itemsPerPage);
 
   return (
-    <section id="depoimentos" className="py-20 bg-gray-50 dark:bg-tech-950 transition-colors duration-300">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section id="depoimentos" className="relative py-20 bg-gray-50 dark:bg-tech-950 transition-colors duration-300 overflow-hidden">
+      {/* Background Image requested by user */}
+      <div 
+        className="absolute inset-0 z-0 pointer-events-none opacity-[0.07] grayscale"
+        style={{
+            backgroundImage: `url('https://centralcrypto.com.br/2/wp-content/uploads/2025/09/2025-09-27_23-14-23.png')`,
+            backgroundAttachment: 'fixed',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+            backgroundSize: 'cover'
+        }}
+      />
+
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center mb-12">
             <h2 className="text-3xl font-bold text-gray-900 dark:text-white">{t.title}</h2>
             
             <div className="flex gap-2">
                 <button 
                     onClick={prevSlide}
-                    className="p-2 rounded-full bg-gray-200 dark:bg-tech-800 hover:bg-gray-300 dark:hover:bg-tech-700 text-gray-700 dark:text-white transition-colors"
+                    className="p-2 rounded-full bg-gray-200 dark:bg-tech-800 hover:bg-gray-300 dark:hover:bg-tech-700 text-gray-700 dark:text-white transition-colors shadow-sm"
                     aria-label="Anterior"
                 >
                     <ChevronLeft className="w-5 h-5" />
                 </button>
                 <button 
                     onClick={nextSlide}
-                    className="p-2 rounded-full bg-gray-200 dark:bg-tech-800 hover:bg-gray-300 dark:hover:bg-tech-700 text-gray-700 dark:text-white transition-colors"
+                    className="p-2 rounded-full bg-gray-200 dark:bg-tech-800 hover:bg-gray-300 dark:hover:bg-tech-700 text-gray-700 dark:text-white transition-colors shadow-sm"
                     aria-label="Próximo"
                 >
                     <ChevronRight className="w-5 h-5" />
@@ -66,34 +78,34 @@ export const Testimonials: React.FC<TestimonialsProps> = ({ currentLang }) => {
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {visibleTestimonials.map((testimonial) => (
-            <div key={testimonial.id} className="bg-white dark:bg-tech-900 p-8 rounded-xl border-0 dark:border dark:border-tech-800 relative animate-fade-in h-full flex flex-col shadow-sm hover:shadow-md dark:shadow-none transition-colors duration-300">
-              <Quote className="w-10 h-10 text-gray-300 dark:text-gray-700 absolute top-6 right-6" />
+            <div key={testimonial.id} className="bg-white dark:bg-[#16181a] p-8 rounded-2xl border border-gray-100 dark:border-slate-800 relative animate-fade-in h-full flex flex-col shadow-xl hover:shadow-2xl dark:shadow-[0_10px_40px_-15px_rgba(0,0,0,0.7)] transition-all duration-500 transform hover:-translate-y-2">
+              <Quote className="w-12 h-12 text-[#dd9933]/10 dark:text-[#dd9933]/5 absolute top-6 right-6" />
               
               <div className="flex-grow">
-                <p className="text-gray-700 dark:text-gray-300 mb-6 relative z-10 italic">"{testimonial.content}"</p>
+                <p className="text-gray-700 dark:text-slate-300 mb-8 relative z-10 italic font-medium leading-relaxed text-base">"{testimonial.content}"</p>
               </div>
               
-              <div className="flex items-center mt-4 pt-4 border-t border-gray-200 dark:border-tech-800/50">
+              <div className="flex items-center mt-6 pt-6 border-t border-gray-100 dark:border-slate-800">
                 <img 
                   src={testimonial.avatarUrl} 
                   alt={testimonial.name} 
-                  className="w-12 h-12 rounded-full object-cover mr-4 border-2 border-tech-accent"
+                  className="w-14 h-14 rounded-full object-cover mr-4 border-2 border-tech-accent shadow-lg"
                 />
                 <div>
-                  <h4 className="font-bold text-gray-900 dark:text-white">{testimonial.name}</h4>
-                  <span className="text-xs text-gray-500 uppercase">{testimonial.role}</span>
+                  <h4 className="font-black text-gray-900 dark:text-white text-lg leading-tight">{testimonial.name}</h4>
+                  <span className="text-[11px] font-black text-tech-accent uppercase tracking-[0.2em]">{testimonial.role}</span>
                 </div>
               </div>
             </div>
           ))}
         </div>
 
-        <div className="mt-8 flex justify-center gap-2">
+        <div className="mt-12 flex justify-center gap-3">
             {Array.from({ length: totalPages }).map((_, idx) => (
                 <button 
                     key={idx}
                     onClick={() => setCurrentIndex(idx * itemsPerPage)}
-                    className={`h-2 rounded-full transition-all duration-300 ${Math.floor(currentIndex / itemsPerPage) === idx ? 'bg-tech-accent w-8' : 'bg-gray-300 dark:bg-tech-700 w-2 hover:bg-gray-400 dark:hover:bg-tech-600'}`}
+                    className={`h-2.5 rounded-full transition-all duration-500 ${Math.floor(currentIndex / itemsPerPage) === idx ? 'bg-tech-accent w-10 shadow-[0_0_10px_rgba(221,153,51,0.5)]' : 'bg-gray-300 dark:bg-slate-800 w-2.5 hover:bg-gray-400 dark:hover:bg-slate-700'}`}
                     aria-label={`Ir para página ${idx + 1}`}
                 />
             ))}

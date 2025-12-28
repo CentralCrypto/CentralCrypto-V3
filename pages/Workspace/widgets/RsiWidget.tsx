@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import { RsiAvgData, RsiTrackerPoint, fetchRsiAverage, fetchRsiTracker } from '../services/api';
@@ -284,7 +283,7 @@ const RsiWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ ite
                     <div>
                         <div className="text-[10px] text-gray-500 dark:text-slate-400 font-bold uppercase tracking-wider">Média Global RSI</div>
                         <div className="text-4xl font-black text-[#dd9933]">{rsiVal.toFixed(1)}</div>
-                        <div className="text-sm font-bold text-gray-900 dark:text-white uppercase">{label}</div>
+                        <div className="text-[10px] font-black text-gray-900 dark:text-white uppercase tracking-widest" style={{ fontSize: '6.5px' }}>{label}</div>
                     </div>
                     
                     <div className="flex flex-col items-end gap-2">
@@ -320,9 +319,9 @@ const RsiWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ ite
             <svg viewBox="0 0 200 110" className="w-[85%] mx-auto">
                 <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" className="stroke-[#eeeeee] dark:stroke-[#333]" strokeWidth="18" strokeLinecap="round"/>
                 <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" stroke="#dd9933" strokeWidth="18" strokeDasharray={`${(rsiVal/100)*283} 283`} strokeLinecap="round" />
-                <g transform={`rotate(${(rsiVal/100)*180 - 90} 100 100)`}><path d="M 100 100 L 100 20" className="stroke-gray-800 dark:stroke-white" strokeWidth="3" /><circle cx="100" cy="100" r="5" className="fill-gray-800 dark:fill-white" /></g>
+                <g transform={`rotate(${(rsiVal/100)*180 - 90} 100 100)`}><path d="M 100 100 L 100 20" className="stroke-gray-800 dark:stroke-white" strokeWidth="3" /><circle cx={100} cy={100} r="5" className="fill-gray-800 dark:fill-white" /></g>
             </svg>
-            <div className="mt-4"><div className="text-4xl font-black text-[#dd9933]">{rsiAvgData?.averageRsi.toFixed(0)}</div><div className="text-xs font-bold text-gray-500 dark:text-white uppercase">{label}</div></div>
+            <div className="mt-4"><div className="text-4xl font-black text-[#dd9933]">{rsiAvgData?.averageRsi.toFixed(0)}</div><div className="text-[10px] font-black text-gray-900 dark:text-white uppercase tracking-widest mt-1">{label}</div></div>
             <div className="flex justify-around mt-4 pt-2 border-t border-gray-100 dark:border-slate-700">
                 <div><div className="text-[10px] text-gray-400 uppercase">Ontem</div><div className="font-bold text-sm text-gray-900 dark:text-white">{rsiAvgData?.yesterday.toFixed(0)}</div></div>
                 <div><div className="text-[10px] text-gray-400 uppercase">7D</div><div className="font-bold text-sm text-gray-900 dark:text-white">{rsiAvgData?.days7Ago.toFixed(0)}</div></div>

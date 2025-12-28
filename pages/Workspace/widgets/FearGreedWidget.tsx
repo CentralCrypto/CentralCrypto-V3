@@ -40,7 +40,7 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
 
     const CustomFngTick = ({ x, y, payload }: any) => {
         const label = getClassification(payload.value);
-        return <text x={x} y={y} dy={4} textAnchor="start" className="fill-gray-500 dark:fill-slate-400" fontSize={12} fontStyle="italic" fontWeight="900" style={{ textTransform: 'uppercase' }}>{label}</text>;
+        return <text x={x} y={y} dy={4} textAnchor="start" className="fill-gray-500 dark:fill-slate-400" fontSize={10} fontStyle="italic" fontWeight="900" style={{ textTransform: 'uppercase' }}>{label}</text>;
     };
 
     const CustomXAxisTick = ({ x, y, payload }: any) => { 
@@ -91,7 +91,7 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
                                 <circle cx={100} cy={75} r="6" className="fill-gray-900 dark:fill-white" />
                             </g>
                             <text x={100} y={105} textAnchor="middle" className="fill-gray-900 dark:fill-[#dd9933]" fontSize="38" fontWeight="1000" fontFamily="monospace">{fgValue}</text>
-                            <text x={100} y={128} textAnchor="middle" className="fill-gray-600 dark:fill-gray-300" fontSize="16" fontWeight="1000" letterSpacing="1.5">{fgLabel}</text>
+                            <text x={100} y={122} textAnchor="middle" className="fill-gray-600 dark:fill-gray-300" fontSize="6.5" fontWeight="1000" letterSpacing="1" style={{ textTransform: 'uppercase' }}>{fgLabel}</text>
                         </svg>
                     </div>
                     <div className="flex flex-wrap justify-center gap-6">
@@ -145,7 +145,6 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
             <div className="flex items-center justify-center relative mt-6 z-10">
                 <svg viewBox="0 0 200 110" className="w-[85%] max-w-[280px]">
                     <defs>
-                        {/* Fix: Removed duplicate attributes x2 and y2, added missing y1 */}
                         <linearGradient id="lsr-grad-main" x1="0" y1="0" x2="1" y2="0">
                             <stop offset="0%" stopColor="#CD534B" />
                             <stop offset="50%" stopColor="#dd9933" />
@@ -155,13 +154,13 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
                     <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" className="stroke-[#eeeeee] dark:stroke-[#333]" strokeWidth="18" strokeLinecap="round"/>
                     <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" stroke="url(#lsr-grad-main)" strokeWidth="18" strokeDasharray={`${(fgValue/100)*283} 283`} strokeLinecap="round" />
                     <g transform={`rotate(${rotation} 100 100)`}>
-                        <path d="M 100 100 L 100 20" className="stroke-gray-800 dark:stroke-white" strokeWidth="3" /><circle cx="100" cy="100" r="5" className="fill-gray-800 dark:fill-white" />
+                        <path d="M 100 100 L 100 20" className="stroke-gray-800 dark:stroke-white" strokeWidth="3" /><circle cx={100} cy={100} r="5" className="fill-gray-800 dark:fill-white" />
                     </g>
                 </svg>
             </div>
             <div className="flex flex-col items-center mt-2 z-10">
-                <div className="text-4xl font-black text-[#dd9933] leading-none">{fgValue}</div>
-                <div className="text-sm font-black text-gray-900 dark:text-white uppercase mt-1 tracking-wider">{fgLabel}</div>
+                <div className="text-[14px] font-black text-[#dd9933] leading-none">{fgValue}</div>
+                <div className="text-[10px] font-black text-gray-900 dark:text-white uppercase mt-1 tracking-wider">{fgLabel}</div>
             </div>
             <div className="flex justify-around w-full mt-2 text-center z-10 border-t border-gray-200 dark:border-slate-700/30 pt-2 pb-2">
                 <div><div className="text-[10px] text-gray-500 dark:text-slate-500 font-bold uppercase">{tTime.yesterday}</div><div className="text-sm font-bold text-gray-800 dark:text-white">{fgYesterday}</div></div>

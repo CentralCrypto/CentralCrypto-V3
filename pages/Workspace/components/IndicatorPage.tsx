@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { WidgetType, Language, ApiCoin, UserTier } from '../../../types';
 import { getTranslations } from '../../../locales';
@@ -160,7 +159,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                         placeholder="Buscar ativo..." 
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full bg-white dark:bg-[#2f3032] border border-gray-200 dark:border-slate-700 rounded-lg py-2.5 pl-11 pr-4 text-base text-gray-900 dark:text-white focus:border-[#dd9933] outline-none transition-all shadow-inner border-none"
+                        className="w-full bg-white dark:bg-[#2f3032] border border-slate-100 dark:border-slate-700 rounded-lg py-2.5 pl-11 pr-4 text-base text-gray-900 dark:text-white focus:border-[#dd9933] outline-none transition-all shadow-inner border-none"
                     />
                 </div>
                 <button onClick={load} className="p-2.5 hover:bg-gray-200 dark:hover:bg-slate-700 rounded-lg text-gray-500 transition-colors" title="Atualizar">
@@ -176,8 +175,8 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                     </div>
                 ) : (
                     <table className="w-full text-left border-collapse min-w-[1000px]">
-                        <thead className="sticky top-0 z-20 bg-gray-50 dark:bg-[#2f3032]">
-                            <tr className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-slate-400 border-b border-gray-100 dark:border-slate-800">
+                        <thead className="sticky top-0 z-20 bg-white dark:bg-[#2f3032]">
+                            <tr className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-slate-400 border-b border-gray-100 dark:border-slate-800">
                                 <SortHeader label="#" sortKey="market_cap_rank" />
                                 <SortHeader label="Ativo" sortKey="name" />
                                 <SortHeader label="Preço" sortKey="current_price" align="right" />
@@ -188,18 +187,18 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                                 <th className="p-4 text-right">7 Dias</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
+                        <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
                             {sortedCoins.map((coin) => {
                                 const change = coin.price_change_percentage_24h || 0;
                                 const isPos = change >= 0;
                                 const sparkData = coin.sparkline_in_7d?.price?.map((v, i) => ({ i, v })) || [];
 
                                 return (
-                                    <tr key={coin.id} className="hover:bg-gray-50 dark:hover:bg-white/5 transition-colors group">
+                                    <tr key={coin.id} className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors group">
                                         <td className="p-4 text-sm font-bold text-gray-400">#{coin.market_cap_rank}</td>
                                         <td className="p-4">
                                             <div className="flex items-center gap-3">
-                                                <img src={coin.image} alt="" className="w-9 h-9 rounded-full bg-white p-0.5 border border-gray-200 dark:border-slate-700" onError={(e) => (e.currentTarget.style.display='none')} />
+                                                <img src={coin.image} alt="" className="w-9 h-9 rounded-full bg-white p-0.5 border border-slate-100 dark:border-white/10 shadow-sm" onError={(e) => (e.currentTarget.style.display='none')} />
                                                 <div className="flex flex-col">
                                                     <span className="text-base font-black text-gray-900 dark:text-white leading-none group-hover:text-[#dd9933] transition-colors">{coin.name}</span>
                                                     <span className="text-xs font-bold text-gray-500 uppercase mt-1">{coin.symbol}</span>
@@ -225,7 +224,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                                             {sparkData.length > 0 && (
                                                 <ResponsiveContainer width="100%" height="100%">
                                                     <LineChart data={sparkData}>
-                                                        <Line type="monotone" dataKey="v" stroke={isPos ? '#22c55e' : '#ef4444'} strokeWidth={2} dot={false} isAnimationActive={false} />
+                                                        <Line type="monotone" dataKey="v" stroke={isPos ? '#548f3f' : '#CD534B'} strokeWidth={2} dot={false} isAnimationActive={false} />
                                                         <YAxis domain={['auto', 'auto']} hide />
                                                     </LineChart>
                                                 </ResponsiveContainer>

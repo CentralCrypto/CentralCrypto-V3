@@ -52,7 +52,7 @@ const HorizontalHistoryRow = ({ data, labels }: { data: (string | number)[], lab
       {labels.map((label, i) => (
           <div key={label}>
               <div className="text-[9px] text-gray-500 font-bold uppercase">{label}</div>
-              <div className="text-sm font-bold text-gray-300 font-mono">{data[i] !== undefined ? data[i] : '-'}</div>
+              <div className="text-sm font-bold text-gray-400 dark:text-gray-300 font-mono">{data[i] !== undefined ? data[i] : '-'}</div>
           </div>
       ))}
   </div>
@@ -63,7 +63,7 @@ const GAUGE_CY = 75;
 const GAUGE_R = 65;  
 const GAUGE_RY = 65; 
 const TEXT_VAL_Y = 104; 
-const TEXT_LBL_Y = 124;
+const TEXT_LBL_Y = 122; 
 const GAUGE_STROKE = 10; 
 
 const FearAndGreedWidget = ({ language, onNavigate }: { language: Language; onNavigate: () => void }) => {
@@ -97,7 +97,7 @@ const FearAndGreedWidget = ({ language, onNavigate }: { language: Language; onNa
   return (
     <div className="glass-panel p-2 rounded-xl flex flex-col h-full relative overflow-hidden bg-tech-800 border-tech-700 hover:border-[#dd9933]/50 transition-all">
       <div className="flex justify-between items-start absolute top-2 left-2 right-2 z-10">
-          <span className="text-base text-gray-400 font-black uppercase tracking-wider truncate">{t.title}</span>
+          <span className="text-base text-gray-500 dark:text-gray-400 font-black uppercase tracking-wider truncate">{t.title}</span>
           <WorkspaceLink onClick={onNavigate} />
       </div>
       {loading ? (
@@ -113,14 +113,14 @@ const FearAndGreedWidget = ({ language, onNavigate }: { language: Language; onNa
                    <stop offset="100%" stopColor="#548f3f" />
                  </linearGradient>
                </defs>
-               <path d={`M ${GAUGE_CX-GAUGE_R} ${GAUGE_CY} A ${GAUGE_R} ${GAUGE_RY} 0 0 1 ${GAUGE_CX+GAUGE_R} ${GAUGE_CY}`} fill="none" stroke="currentColor" className="text-tech-700" strokeWidth={GAUGE_STROKE} strokeLinecap="round" />
+               <path d={`M ${GAUGE_CX-GAUGE_R} ${GAUGE_CY} A ${GAUGE_R} ${GAUGE_RY} 0 0 1 ${GAUGE_CX+GAUGE_R} ${GAUGE_CY}`} fill="none" stroke="currentColor" className="text-gray-200 dark:text-tech-700" strokeWidth={GAUGE_STROKE} strokeLinecap="round" />
                <path d={`M ${GAUGE_CX-GAUGE_R} ${GAUGE_CY} A ${GAUGE_R} ${GAUGE_RY} 0 0 1 ${GAUGE_CX+GAUGE_R} ${GAUGE_CY}`} fill="none" stroke="url(#fngGradient)" strokeWidth={GAUGE_STROKE} strokeLinecap="round" />
                <g transform={`rotate(${rotation} ${GAUGE_CX} ${GAUGE_CY})`}>
                  <path d={`M ${GAUGE_CX} ${GAUGE_CY} L ${GAUGE_CX} ${GAUGE_CY - GAUGE_RY + 2}`} stroke="var(--color-text-main)" strokeWidth="4" strokeLinecap="round" />
                  <circle cx={GAUGE_CX} cy={GAUGE_CY} r="5" fill="var(--color-text-main)" />
                </g>
-               <text x={GAUGE_CX} y={TEXT_VAL_Y} textAnchor="middle" fill="var(--color-gauge-val)" fontSize="44" fontWeight="900" fontFamily="monospace">{val}</text>
-               <text x={GAUGE_CX} y={TEXT_LBL_Y} textAnchor="middle" fill="var(--color-text-main)" fontSize="16" fontWeight="900" letterSpacing="0.5">{classification}</text>
+               <text x={GAUGE_CX} y={TEXT_VAL_Y} textAnchor="middle" fill="var(--color-gauge-val)" fontSize="24" fontWeight="900" fontFamily="monospace">{val}</text>
+               <text x={GAUGE_CX} y={TEXT_LBL_Y} textAnchor="middle" fill="var(--color-text-main)" fontSize="8" fontWeight="900" letterSpacing="1" style={{ textTransform: 'uppercase' }}>{classification}</text>
              </svg>
            </div>
            <HorizontalHistoryRow 
@@ -136,8 +136,8 @@ const FearAndGreedWidget = ({ language, onNavigate }: { language: Language; onNa
 const RsiWidget = ({ language, onNavigate }: { language: Language; onNavigate: () => void }) => {
   const [data, setData] = useState({ averageRsi: 50, yesterday: 50, days7Ago: 50, days30Ago: 50 });
   const [loading, setLoading] = useState(true);
-  const t = getTranslations(language).dashboard.widgets.rsi;
   const timeT = getTranslations(language).dashboard.widgets.time;
+  const t = getTranslations(language).dashboard.widgets.rsi;
 
   useEffect(() => {
     fetchRsiAverage().then(res => { if(res) setData(res); setLoading(false); }).catch(() => setLoading(false));
@@ -145,11 +145,12 @@ const RsiWidget = ({ language, onNavigate }: { language: Language; onNavigate: (
 
   const rsiVal = data.averageRsi ?? 50;
   const rotation = -90 + (rsiVal / 100) * 180;
+  const label = rsiVal < 30 ? t.oversold : rsiVal > 70 ? t.overbought : t.neutral;
 
   return (
     <div className="glass-panel p-2 rounded-xl flex flex-col h-full relative overflow-hidden bg-tech-800 border-tech-700 hover:border-[#dd9933]/50 transition-all">
       <div className="flex justify-between items-start absolute top-2 left-2 right-2 z-10">
-          <span className="text-base text-gray-400 font-black uppercase tracking-wider truncate">{t.title}</span>
+          <span className="text-base text-gray-500 dark:text-gray-400 font-black uppercase tracking-wider truncate">RSI Tracker</span>
           <WorkspaceLink onClick={onNavigate} />
       </div>
       {loading ? (
@@ -165,13 +166,14 @@ const RsiWidget = ({ language, onNavigate }: { language: Language; onNavigate: (
                   <stop offset="100%" stopColor="#CD534B" />
                 </linearGradient>
               </defs>
-              <path d={`M ${GAUGE_CX-GAUGE_R} ${GAUGE_CY} A ${GAUGE_R} ${GAUGE_RY} 0 0 1 ${GAUGE_CX+GAUGE_R} ${GAUGE_CY}`} fill="none" stroke="currentColor" className="text-tech-700" strokeWidth={GAUGE_STROKE} strokeLinecap="round" />
+              <path d={`M ${GAUGE_CX-GAUGE_R} ${GAUGE_CY} A ${GAUGE_R} ${GAUGE_RY} 0 0 1 ${GAUGE_CX+GAUGE_R} ${GAUGE_CY}`} fill="none" stroke="currentColor" className="text-gray-200 dark:text-tech-700" strokeWidth={GAUGE_STROKE} strokeLinecap="round" />
               <path d={`M ${GAUGE_CX-GAUGE_R} ${GAUGE_CY} A ${GAUGE_R} ${GAUGE_RY} 0 0 1 ${GAUGE_CX+GAUGE_R} ${GAUGE_CY}`} fill="none" stroke="url(#rsiGradient)" strokeWidth={GAUGE_STROKE} strokeLinecap="round" />
               <g transform={`rotate(${rotation} ${GAUGE_CX} ${GAUGE_CY})`}>
                 <path d={`M ${GAUGE_CX} ${GAUGE_CY} L ${GAUGE_CX} ${GAUGE_CY - GAUGE_RY + 2}`} stroke="var(--color-text-main)" strokeWidth="4" strokeLinecap="round" />
                 <circle cx={GAUGE_CX} cy={GAUGE_CY} r="5" fill="var(--color-text-main)" />
               </g>
-              <text x={GAUGE_CX} y={TEXT_VAL_Y} textAnchor="middle" fill="var(--color-gauge-val)" fontSize="44" fontWeight="900" fontFamily="monospace">{(rsiVal).toFixed(0)}</text>
+              <text x={GAUGE_CX} y={TEXT_VAL_Y} textAnchor="middle" fill="var(--color-gauge-val)" fontSize="24" fontWeight="900" fontFamily="monospace">{(rsiVal).toFixed(0)}</text>
+              <text x={GAUGE_CX} y={TEXT_LBL_Y} textAnchor="middle" fill="var(--color-text-main)" fontSize="8" fontWeight="900" letterSpacing="1" className="uppercase">{label}</text>
             </svg>
           </div>
           <HorizontalHistoryRow labels={[timeT.yesterday, timeT.d7, timeT.d30]} data={[(data.yesterday ?? 0).toFixed(0), (data.days7Ago ?? 0).toFixed(0), (data.days30Ago ?? 0).toFixed(0)]} />
@@ -193,31 +195,33 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
 
   const val = data?.lsr ?? 1;
   const rotation = -90 + (Math.min(Math.max(val, 0), 3) / 3) * 180;
+  const label = val > 1.1 ? t.longs : val < 0.9 ? t.shorts : t.neutral;
 
   return (
     <div className="glass-panel p-2 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 hover:border-[#dd9933]/50 transition-all relative">
         <div className="w-full flex justify-between items-center mb-1">
-            <span className="text-base text-gray-400 uppercase tracking-wider font-black ml-1">{t.title}</span>
+            <span className="text-base text-gray-500 dark:text-gray-400 uppercase tracking-wider font-black ml-1">{t.title}</span>
             <WorkspaceLink onClick={onNavigate} />
         </div>
         <div className="flex justify-center gap-1 mb-1">
-            <select value={symbol} onChange={e => setSymbol(e.target.value)} className="bg-tech-900 text-gray-200 text-sm font-bold rounded px-2 py-1 border border-tech-700 outline-none">
+            <select value={symbol} onChange={e => setSymbol(e.target.value)} className="bg-gray-100 dark:bg-tech-900 text-gray-800 dark:text-gray-200 text-sm font-bold rounded px-2 py-1 border border-transparent dark:border-tech-700 outline-none">
                 <option value="BTCUSDT">BTC</option><option value="ETHUSDT">ETH</option><option value="SOLUSDT">SOL</option>
             </select>
-            <select value={period} onChange={e => setPeriod(e.target.value)} className="bg-tech-900 text-gray-200 text-sm font-bold rounded px-2 py-1 border border-tech-700 outline-none">
+            <select value={period} onChange={e => setPeriod(e.target.value)} className="bg-gray-100 dark:bg-tech-900 text-gray-800 dark:text-gray-200 text-sm font-bold rounded px-2 py-1 border border-transparent dark:border-tech-700 outline-none">
                 <option value="5m">5m</option><option value="1h">1h</option><option value="1D">1D</option>
             </select>
         </div>
         <div className="flex-1 relative w-full flex justify-center items-end pb-1">
             <svg viewBox="0 0 200 125" className="w-full h-full overflow-visible" preserveAspectRatio="xMidYMax meet">
                 <defs><linearGradient id="lsrGradient" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#CD534B" /><stop offset="50%" stopColor="#eab308" /><stop offset="100%" stopColor="#548f3f" /></linearGradient></defs>
-                <path d={`M ${GAUGE_CX-GAUGE_R} ${GAUGE_CY} A ${GAUGE_R} ${GAUGE_RY} 0 0 1 ${GAUGE_CX+GAUGE_R} ${GAUGE_CY}`} fill="none" stroke="currentColor" className="text-tech-700" strokeWidth={GAUGE_STROKE} strokeLinecap="round" />
+                <path d={`M ${GAUGE_CX-GAUGE_R} ${GAUGE_CY} A ${GAUGE_R} ${GAUGE_RY} 0 0 1 ${GAUGE_CX+GAUGE_R} ${GAUGE_CY}`} fill="none" stroke="currentColor" className="text-gray-200 dark:text-tech-700" strokeWidth={GAUGE_STROKE} strokeLinecap="round" />
                 <path d={`M ${GAUGE_CX-GAUGE_R} ${GAUGE_CY} A ${GAUGE_R} ${GAUGE_RY} 0 0 1 ${GAUGE_CX+GAUGE_R} ${GAUGE_CY}`} fill="none" stroke="url(#lsrGradient)" strokeWidth={GAUGE_STROKE} strokeLinecap="round" />
                 <g transform={`rotate(${rotation} ${GAUGE_CX} ${GAUGE_CY})`}>
                     <path d={`M ${GAUGE_CX} ${GAUGE_CY} L ${GAUGE_CX} ${GAUGE_CY - GAUGE_RY + 2}`} stroke="var(--color-text-main)" strokeWidth="4" strokeLinecap="round" />
                     <circle cx={GAUGE_CX} cy={GAUGE_CY} r="5" fill="var(--color-text-main)" />
                 </g>
-                <text x={GAUGE_CX} y={TEXT_VAL_Y} textAnchor="middle" fill="var(--color-gauge-val)" fontSize="44" fontWeight="900" fontFamily="monospace">{val.toFixed(2)}</text>
+                <text x={GAUGE_CX} y={TEXT_VAL_Y} textAnchor="middle" fill="var(--color-gauge-val)" fontSize="24" fontWeight="900" fontFamily="monospace">{val.toFixed(2)}</text>
+                <text x={GAUGE_CX} y={TEXT_LBL_Y} textAnchor="middle" fill="var(--color-text-main)" fontSize="8" fontWeight="900" letterSpacing="1" className="uppercase">{label}</text>
             </svg>
         </div>
     </div>
@@ -245,10 +249,10 @@ const AltSeasonWidget = ({ language, onNavigate }: { language: Language; onNavig
   return (
     <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 relative">
       <div className="shrink-0 flex justify-between items-start mb-1">
-        <div className="flex flex-col"><span className="font-black text-base text-gray-400 uppercase tracking-wider">{t.title}</span><span className="text-[10px] font-bold text-gray-200">Index</span></div>
-        <div className="text-right flex items-start gap-2"><span className="text-2xl font-bold text-gray-200 font-mono">{data.index ?? 0}</span><WorkspaceLink onClick={onNavigate} /></div>
+        <div className="flex flex-col"><span className="font-black text-base text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t.title}</span><span className="text-[10px] font-bold text-gray-600 dark:text-gray-200">Index</span></div>
+        <div className="text-right flex items-start gap-2"><span className="text-2xl font-bold text-gray-800 dark:text-gray-200 font-mono">{data.index ?? 0}</span><WorkspaceLink onClick={onNavigate} /></div>
       </div>
-      <div className="relative flex-1 bg-tech-900/50 rounded-lg mb-1 overflow-hidden">
+      <div className="relative flex-1 bg-gray-50 dark:bg-tech-900/50 rounded-lg mb-1 overflow-hidden">
         <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data.history} margin={{top:5, right:5, left:5, bottom:5}}>
                 <Tooltip content={<CustomTooltip language={language} suffix=" Index" />} cursor={{ stroke: '#dd9933', strokeWidth: 1 }} />
@@ -272,10 +276,10 @@ const MarketCapHistoryWidget = ({ language, onNavigate }: { language: Language; 
   return (
     <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 relative">
       <div className="shrink-0 flex justify-between items-start mb-1">
-        <div className="flex flex-col"><span className="font-black text-base text-gray-400 uppercase tracking-wider">{t.title}</span><span className="text-[10px] font-bold text-gray-200">Global</span></div>
+        <div className="flex flex-col"><span className="font-black text-base text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t.title}</span><span className="text-[10px] font-bold text-gray-600 dark:text-gray-200">Global</span></div>
         <div className="text-right flex items-start gap-2"><span className="text-lg font-bold text-tech-accent font-mono">{data ? formatVal(data.current) : '---'}</span><WorkspaceLink onClick={onNavigate} /></div>
       </div>
-      <div className="relative flex-1 bg-tech-900/50 rounded-lg mb-1 overflow-hidden">
+      <div className="relative flex-1 bg-gray-50 dark:bg-tech-900/50 rounded-lg mb-1 overflow-hidden">
         <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data?.history || []}>
                 <defs><linearGradient id="colorMkt" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#548f3f" stopOpacity={0.3}/><stop offset="95%" stopColor="#548f3f" stopOpacity={0}/></linearGradient></defs>
@@ -297,7 +301,7 @@ const EtfFlowWidget = ({ language, onNavigate }: { language: Language; onNavigat
     return (
         <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 relative">
             <div className="flex justify-between items-center mb-1">
-                <div className="font-black text-gray-400 text-base uppercase tracking-wider">{t.title}</div>
+                <div className="font-black text-gray-500 dark:text-gray-400 text-base uppercase tracking-wider">{t.title}</div>
                 <WorkspaceLink onClick={onNavigate} />
             </div>
             <div className="flex-1 flex flex-col items-center justify-center py-2">
@@ -308,8 +312,8 @@ const EtfFlowWidget = ({ language, onNavigate }: { language: Language; onNavigat
                 </div>
             </div>
             <div className="grid grid-cols-2 gap-1 border-t border-tech-700/50 pt-2">
-                <div className="text-center"><div className="text-[9px] text-[#dd9933] font-black uppercase">BTC ETF</div><div className="text-sm font-mono font-bold text-gray-300">{(data.btc / 1e6).toFixed(1)}M</div></div>
-                <div className="text-center"><div className="text-[9px] text-[#627eea] font-black uppercase">ETH ETF</div><div className="text-sm font-mono font-bold text-gray-300">{(data.eth / 1e6).toFixed(1)}M</div></div>
+                <div className="text-center"><div className="text-[9px] text-[#dd9933] font-black uppercase">BTC ETF</div><div className="text-sm font-mono font-bold text-gray-700 dark:text-gray-300">{(data.btc / 1e6).toFixed(1)}M</div></div>
+                <div className="text-center"><div className="text-[9px] text-[#627eea] font-black uppercase">ETH ETF</div><div className="text-sm font-mono font-bold text-gray-700 dark:text-gray-300">{(data.eth / 1e6).toFixed(1)}M</div></div>
             </div>
         </div>
     );
@@ -325,16 +329,16 @@ const TrumpOMeterWidget = ({ language, onNavigate }: { language: Language; onNav
     return (
         <div className="glass-panel p-2 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 relative">
             <div className="flex justify-between items-start mb-1 shrink-0">
-                <div className="text-left font-black text-base uppercase tracking-wider">{t.title}</div>
+                <div className="text-left font-black text-base uppercase tracking-wider text-gray-500 dark:text-gray-400">{t.title}</div>
                 <WorkspaceLink onClick={onNavigate} />
             </div>
             <div className="relative h-2 w-full rounded-full bg-gradient-to-r from-[#CD534B] via-yellow-500 to-[#548f3f] mt-4 mb-5">
-                <div className="absolute w-0 h-0 border-l-[5px] border-r-[5px] border-b-[6px] border-b-tech-950 transition-all duration-700" style={{ left: `calc(${percent}% - 5px)`, top: '100%' }}></div>
+                <div className="absolute w-0 h-0 border-l-[5px] border-r-[5px] border-b-[6px] border-b-gray-800 dark:border-b-tech-950 transition-all duration-700" style={{ left: `calc(${percent}% - 5px)`, top: '100%' }}></div>
             </div>
             <div className="text-center mb-1 shrink-0 text-[11px] font-black uppercase text-[#dd9933]">{data.sarcastic_label}</div>
-            <div className="text-center text-3xl font-black text-white leading-none mb-2">{score > 0 ? '+' : ''}{score}</div>
-            <div className="flex-1 flex flex-col border border-dashed border-gray-600 rounded-lg p-1.5 bg-black/10 min-h-0 overflow-hidden">
-                <p className="text-[10px] text-gray-300 font-medium line-clamp-3">{data.title}</p>
+            <div className="text-center text-3xl font-black text-gray-900 dark:text-white leading-none mb-2">{score > 0 ? '+' : ''}{score}</div>
+            <div className="flex-1 flex flex-col border border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-1.5 bg-black/5 dark:bg-black/10 min-h-0 overflow-hidden">
+                <p className="text-[10px] text-gray-700 dark:text-gray-300 font-medium line-clamp-3 italic">"{data.title}"</p>
             </div>
         </div>
     );
@@ -347,18 +351,18 @@ const GainersLosersWidget = ({ language, onNavigate }: { language: Language; onN
     useEffect(() => { fetchGainersLosers().then(setData).catch(() => {}); }, []);
     const list = tab === 'gainers' ? data.gainers : data.losers;
     return (
-        <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700">
-            <div className="flex bg-tech-900 rounded p-1 mb-2">
-                <button onClick={() => setTab('gainers')} className={`flex-1 py-1 text-sm font-black uppercase rounded ${tab==='gainers'?'bg-tech-success text-black':'text-gray-500'}`}>{t.gainers}</button>
-                <button onClick={() => setTab('losers')} className={`flex-1 py-1 text-sm font-black uppercase rounded ${tab==='losers'?'bg-tech-danger text-black':'text-gray-500'}`}>{t.losers}</button>
+        <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 transition-colors">
+            <div className="flex bg-gray-100 dark:bg-tech-900 rounded p-1 mb-2 border border-transparent dark:border-tech-700">
+                <button onClick={() => setTab('gainers')} className={`flex-1 py-1 text-sm font-black uppercase rounded transition-all ${tab==='gainers'?'bg-tech-success text-white shadow':'text-gray-500'}`}>{t.gainers}</button>
+                <button onClick={() => setTab('losers')} className={`flex-1 py-1 text-sm font-black uppercase rounded transition-all ${tab==='losers'?'bg-tech-danger text-white shadow':'text-gray-500'}`}>{t.losers}</button>
                 <WorkspaceLink onClick={onNavigate} />
             </div>
             <div className="flex-1 flex flex-col gap-1 overflow-y-auto custom-scrollbar">
                 {list?.slice(0, 10).map((coin: any, i: number) => (
-                    <div key={i} className="flex items-center justify-between px-2 py-1.5 hover:bg-white/5 rounded">
+                    <div key={i} className="flex items-center justify-between px-2 py-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded transition-colors group">
                         <div className="flex items-center gap-3">
-                            <img src={coin.image} className="w-7 h-7 rounded-full" alt="" />
-                            <div className="flex flex-col"><span className="text-lg font-black text-white leading-none">{coin.symbol?.toUpperCase()}</span><span className="text-[11px] text-gray-500 font-mono">${(coin.current_price ?? 0).toFixed(4)}</span></div>
+                            <img src={coin.image} className="w-7 h-7 rounded-full bg-white p-0.5 border border-gray-100 dark:border-transparent" alt="" />
+                            <div className="flex flex-col"><span className="text-lg font-black text-gray-900 dark:text-white leading-none group-hover:text-tech-accent">{coin.symbol?.toUpperCase()}</span><span className="text-[11px] text-gray-500 font-mono font-bold">${(coin.current_price ?? 0).toFixed(4)}</span></div>
                         </div>
                         <div className={`text-lg font-black font-mono ${(coin.price_change_percentage_24h ?? 0) >=0 ?'text-tech-success':'text-tech-danger'}`}>{(coin.price_change_percentage_24h ?? 0).toFixed(2)}%</div>
                     </div>
@@ -372,20 +376,20 @@ const MarketCapWidget = ({ language, onNavigate }: { language: Language; onNavig
     const [list, setList] = useState<any[]>([]);
     useEffect(() => { fetchTopCoins().then(data => setList(data.slice(0, 10))).catch(() => {}); }, []);
     return (
-        <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700">
+        <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 transition-colors">
             <div className="flex justify-between items-center mb-2">
-                <div className="font-black text-gray-400 text-base uppercase tracking-wider">TOP 10 MARKET CAP</div>
+                <div className="font-black text-gray-500 dark:text-gray-400 text-base uppercase tracking-wider">TOP 10 MARKET CAP</div>
                 <WorkspaceLink onClick={onNavigate} />
             </div>
             <div className="flex-1 overflow-y-auto flex flex-col gap-1 custom-scrollbar">
                 {list.map((coin, i) => (
-                    <div key={i} className="flex items-center justify-between px-2 py-1.5 hover:bg-white/5 rounded">
+                    <div key={i} className="flex items-center justify-between px-2 py-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded transition-colors group">
                         <div className="flex items-center gap-3">
-                            <img src={coin.image} className="w-7 h-7 rounded-full" alt="" />
-                            <div className="flex flex-col"><span className="text-lg font-black text-white leading-none">{coin.name}</span><span className="text-[11px] font-bold text-gray-500 uppercase">{coin.symbol}</span></div>
+                            <img src={coin.image} className="w-7 h-7 rounded-full bg-white p-0.5 border border-gray-100 dark:border-transparent" alt="" />
+                            <div className="flex flex-col"><span className="text-lg font-black text-gray-900 dark:text-white leading-none group-hover:text-tech-accent">{coin.name}</span><span className="text-[11px] font-bold text-gray-500 uppercase">{coin.symbol}</span></div>
                         </div>
                         <div className="text-right">
-                            <div className="text-lg font-black text-white font-mono">${(coin.current_price ?? 0).toLocaleString()}</div>
+                            <div className="text-lg font-black text-gray-900 dark:text-white font-mono leading-none">${(coin.current_price ?? 0).toLocaleString()}</div>
                             <div className={`text-[11px] font-black font-mono ${(coin.price_change_percentage_24h ?? 0) >= 0 ? 'text-tech-success' : 'text-tech-danger'}`}>{(coin.price_change_percentage_24h ?? 0).toFixed(2)}%</div>
                         </div>
                     </div>
@@ -415,7 +419,7 @@ const EconomicCalendarWidget = ({ language, onNavigate }: { language: Language; 
     return (
         <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700">
              <div className="flex justify-between items-center mb-2">
-                <div className="font-black text-base uppercase tracking-wider">{t.title}</div>
+                <div className="font-black text-base uppercase tracking-wider text-gray-500 dark:text-gray-400">{t.title}</div>
                 <div className="flex items-center gap-3">
                     <div className="flex items-center gap-1.5">
                         <button onClick={() => setFilter('BRL')} className={`transition-all ${filter==='BRL'?'ring-2 ring-[#dd9933] rounded-full':'opacity-40 grayscale'}`}><img src={getFlag('BRL')} className="w-5 h-5 rounded-full" /></button>
@@ -426,7 +430,7 @@ const EconomicCalendarWidget = ({ language, onNavigate }: { language: Language; 
                 </div>
             </div>
             
-            <div className="grid grid-cols-[80px_2px_1fr_180px] gap-3 px-2 py-1 mb-1 border-b border-white/10 text-[9px] font-black text-gray-500 uppercase tracking-widest">
+            <div className="grid grid-cols-[80px_2px_1fr_180px] gap-3 px-2 py-1 mb-1 border-b border-gray-200 dark:border-white/10 text-[9px] font-black text-gray-500 uppercase tracking-widest">
                 <span>Horário</span><span></span><span>Evento</span>
                 <div className="grid grid-cols-3 gap-2 text-right">
                     <span>{t.previous}</span><span>{t.forecast}</span><span>{t.actual}</span>
@@ -434,23 +438,23 @@ const EconomicCalendarWidget = ({ language, onNavigate }: { language: Language; 
             </div>
 
             <div className="flex-1 overflow-y-auto custom-scrollbar">
-                 {loading ? <div className="animate-pulse h-20 bg-white/5 rounded" /> : filteredEvents.map((e, i) => {
+                 {loading ? <div className="animate-pulse h-20 bg-black/5 dark:bg-white/5 rounded" /> : filteredEvents.map((e, i) => {
                     const date = new Date(e.date);
                     return (
-                        <div key={i} className="flex items-center gap-3 p-2 hover:bg-white/5 rounded transition-colors group">
+                        <div key={i} className="flex items-center gap-3 p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded transition-colors group">
                             <div className="w-16 flex flex-col shrink-0">
-                                <span className="text-base font-black text-gray-200 leading-none">{date.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                                <span className="text-base font-black text-gray-900 dark:text-gray-200 leading-none">{date.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
                                 <span className="text-[9px] font-bold text-gray-500 uppercase">{date.toLocaleDateString([], {day:'2-digit', month:'short'})}</span>
                             </div>
                             <div className={`w-1 h-8 rounded-full shrink-0 ${getImpactColor(e.impact)}`} />
                             <div className="flex-1 flex items-center gap-2 min-w-0">
                                 <img src={getFlag(e.country)} className="w-4 h-4 rounded-full shadow-sm" />
-                                <span className="text-base font-black text-gray-200 truncate leading-none group-hover:text-[#dd9933] transition-colors uppercase">{e.title}</span>
+                                <span className="text-base font-black text-gray-800 dark:text-gray-200 truncate leading-none group-hover:text-[#dd9933] transition-colors uppercase">{e.title}</span>
                             </div>
                             <div className="w-[180px] grid grid-cols-3 gap-2 shrink-0 text-right">
                                 <span className="text-xs font-mono font-black text-gray-500">{e.previous || '--'}</span>
                                 <span className="text-xs font-mono font-black text-[#dd9933]">{e.forecast || '--'}</span>
-                                <span className="text-xs font-mono font-black text-gray-200">--</span>
+                                <span className="text-xs font-mono font-black text-gray-700 dark:text-gray-300">--</span>
                             </div>
                         </div>
                     );
@@ -469,17 +473,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onPostClick, language = 'pt' as L
     <div className="w-full flex-1 flex flex-col transition-colors duration-700 pb-20">
       <div className="container mx-auto px-4 mt-6">
         <div className="flex items-center justify-center mb-6">
-            <div className="h-px bg-tech-600 flex-1"></div>
+            <div className="h-px bg-tech-600 flex-1 opacity-20 dark:opacity-100"></div>
             <div className="flex items-center gap-4 px-4 py-1 bg-tech-800 border border-tech-700 rounded-lg shadow-xl">
-               <button onClick={() => setView(ViewMode.WORKSPACE)} className="text-black dark:text-[#dd9933] hover:text-[#dd9933] transition-colors font-black tracking-[0.2em] text-lg uppercase flex items-center gap-2">
+               <button onClick={() => setView(ViewMode.WORKSPACE)} className="text-gray-900 dark:text-[#dd9933] hover:text-[#dd9933] transition-colors font-black tracking-[0.2em] text-lg uppercase flex items-center gap-2">
                    ANALYTICS WORKSPACE <LayoutDashboard size={16} />
                </button>
                <div className="w-px h-4 bg-tech-600/50"></div>
-               <button onClick={() => setShowStats(!showStats)} className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-gray-400 hover:text-[#dd9933]">
+               <button onClick={() => setShowStats(!showStats)} className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 hover:text-[#dd9933]">
                     {showStats ? <EyeOff size={12} /> : <Eye size={12} />}
                 </button>
             </div>
-            <div className="h-px bg-tech-600 flex-1"></div>
+            <div className="h-px bg-tech-600 flex-1 opacity-20 dark:opacity-100"></div>
         </div>
 
         {showStats && (
@@ -501,9 +505,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onPostClick, language = 'pt' as L
 
       <div className="container mx-auto px-4 mt-16 flex flex-col">
         <div className="flex items-center justify-center mb-8">
-            <div className="h-px bg-tech-600 flex-1"></div>
-            <div className="px-6 py-2 bg-tech-800 border border-tech-700 rounded-lg shadow-xl"><h2 className="text-black dark:text-[#dd9933] font-black tracking-[0.2em] text-lg uppercase">CENTRAL MAGAZINE</h2></div>
-            <div className="h-px bg-tech-600 flex-1"></div>
+            <div className="h-px bg-tech-600 flex-1 opacity-20 dark:opacity-100"></div>
+            <div className="px-6 py-2 bg-tech-800 border border-tech-700 rounded-lg shadow-xl"><h2 className="text-gray-900 dark:text-[#dd9933] font-black tracking-[0.2em] text-lg uppercase">CENTRAL MAGAZINE</h2></div>
+            <div className="h-px bg-tech-600 flex-1 opacity-20 dark:opacity-100"></div>
         </div>
         <div className="flex flex-col gap-5">
             <div><MagazineTicker onPostClick={onPostClick} /></div>

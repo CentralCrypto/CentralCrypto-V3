@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Navbar } from './Indicators/components/Navbar';
 import { Hero } from './Indicators/components/Hero';
@@ -200,17 +199,19 @@ function IndicatorsPage({ user, language }: IndicatorsPageProps) {
             />
             <Features currentLang={language} /> 
             <Testimonials currentLang={language} />
-            <section id="faq" className="relative py-20 bg-gray-50 dark:bg-tech-900 border-t border-transparent dark:border-tech-800 overflow-hidden">
+            <section id="faq" className="relative py-20 bg-gray-100 dark:bg-tech-950 border-t border-transparent dark:border-tech-800 overflow-hidden transition-colors duration-700">
                <div className="relative z-10 max-w-4xl mx-auto px-4">
-                  <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-12">{t.faq.title}</h2>
+                  <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-12 uppercase tracking-[0.2em]">{t.faq.title}</h2>
                   <div className="space-y-4">
                      {faqs.map((faq, index) => (
-                         <div key={index} className="bg-white/95 dark:bg-tech-950/95 backdrop-blur-sm rounded-xl overflow-hidden transition-all duration-500 shadow-lg hover:shadow-xl group" onMouseEnter={() => setHoveredFaq(index)} onMouseLeave={() => setHoveredFaq(null)}>
+                         <div key={index} className="bg-white dark:bg-[#1a1c1e] backdrop-blur-sm rounded-xl overflow-hidden transition-all duration-500 shadow-md hover:shadow-xl group border border-gray-100 dark:border-tech-800" onMouseEnter={() => setHoveredFaq(index)} onMouseLeave={() => setHoveredFaq(null)}>
                             <div className="p-6 flex justify-between items-center cursor-pointer">
                                 <h3 className={`font-bold text-gray-900 dark:text-white transition-colors ${hoveredFaq === index ? 'text-tech-accent' : ''}`}>{faq.question}</h3>
                                 <ChevronDown className={`w-5 h-5 text-gray-500 transition-transform duration-300 ${hoveredFaq === index ? 'rotate-180 text-tech-accent' : ''}`} />
                             </div>
-                            <div className={`px-6 overflow-hidden transition-all duration-500 ease-in-out ${hoveredFaq === index ? 'max-h-40 pb-6 opacity-100' : 'max-h-0 opacity-0'}`}><p className="text-gray-600 dark:text-gray-400 text-sm">{faq.answer}</p></div>
+                            <div className={`px-6 overflow-hidden transition-all duration-500 ease-in-out ${hoveredFaq === index ? 'max-h-60 pb-6 opacity-100' : 'max-h-0 opacity-0'}`}>
+                                <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed border-t border-gray-50 dark:border-white/5 pt-4">{faq.answer}</p>
+                            </div>
                          </div>
                      ))}
                   </div>

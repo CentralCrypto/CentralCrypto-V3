@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import { 
   Share2, 
@@ -54,12 +53,11 @@ const TickerItem: React.FC<{ symbol: string; data: TickerData; meta: CoinMeta; o
   const iconUrl = `https://assets.coincap.io/assets/icons/${symbol.toLowerCase()}@2x.png`;
   return (
     <div 
-      className="relative flex items-center h-full px-4 border-r border-transparent dark:border-tech-800/50 min-w-[200px] hover:bg-gray-100 dark:hover:bg-tech-800 transition-colors cursor-pointer select-none shrink-0 group/item" 
+      className="relative flex items-center h-full px-4 border-r border-transparent dark:border-tech-800/30 min-w-[200px] hover:bg-gray-100/50 dark:hover:bg-tech-800/40 transition-colors cursor-pointer select-none shrink-0 group/item" 
       onMouseEnter={(e) => onHover(e, symbol, data, meta)} 
       onMouseMove={(e) => onHover(e, symbol, data, meta)}
-      onMouseLeave={onLeave}
     >
-        <img src={iconUrl} alt={symbol} className="w-6 h-6 rounded-full shrink-0 mr-2" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+        <img src={iconUrl} alt={symbol} className="w-6 h-6 rounded-full shrink-0 mr-2 shadow-sm" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
         <div className="flex items-baseline gap-2 mr-auto">
             <span className="text-gray-900 dark:text-gray-200 font-bold text-sm tracking-tight">{symbol}</span>
             <span className="text-gray-700 dark:text-gray-300 font-mono text-sm font-semibold">{p}</span>
@@ -195,49 +193,49 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
 
   return (
     <>
-      {/* ENRICHED TOOLTIP - ADJUSTED FONT SIZES */}
+      {/* IMPROVED STYLISH TOOLTIP - THEME ADJUSTED */}
       {tooltip.visible && tooltip.data && (
         <div 
-            className="fixed z-[9999] pointer-events-none animate-in fade-in zoom-in-95 duration-75" 
+            className="fixed z-[9999] pointer-events-none animate-in fade-in zoom-in-95 duration-150" 
             style={{ 
                 top: `${tooltip.y}px`, 
                 left: `${Math.min(window.innerWidth - 270, Math.max(10, tooltip.x - 128))}px` 
             }}
         >
-            <div className="w-64 bg-white dark:bg-[#1a1c1e] border border-gray-200 dark:border-tech-800 shadow-2xl rounded-xl p-4 overflow-hidden">
-                <div className="flex items-center gap-3 mb-3 border-b border-gray-100 dark:border-tech-800 pb-3">
+            <div className="w-68 bg-white dark:bg-[#1a1c1e] backdrop-blur-xl border border-gray-200 dark:border-white/10 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] rounded-2xl p-5 overflow-hidden">
+                <div className="flex items-center gap-4 mb-4 border-b border-gray-100 dark:border-white/5 pb-4">
                     <div className="relative">
-                        <img src={`https://assets.coincap.io/assets/icons/${tooltip.symbol.toLowerCase()}@2x.png`} className="w-10 h-10 rounded-full bg-white p-0.5 border border-gray-100 dark:border-tech-700" alt="" />
-                        <span className="absolute -top-1 -right-1 bg-tech-accent text-black text-[10px] font-black w-5 h-5 flex items-center justify-center rounded-full shadow">#{tooltip.meta?.rank || '?'}</span>
+                        <img src={`https://assets.coincap.io/assets/icons/${tooltip.symbol.toLowerCase()}@2x.png`} className="w-12 h-12 rounded-full bg-white p-1 shadow-md" alt="" />
+                        <span className="absolute -top-1 -right-1 bg-[#dd9933] text-black text-[10px] font-black w-6 h-6 flex items-center justify-center rounded-full shadow-lg border-2 border-white dark:border-[#1a1c1e]">#{tooltip.meta?.rank || '?'}</span>
                     </div>
                     <div className="flex flex-col">
-                        <div className="text-base font-black text-gray-900 dark:text-white uppercase tracking-tighter leading-none">{tooltip.meta?.name || tooltip.symbol}</div>
-                        <div className="text-xs font-bold text-tech-accent uppercase mt-1">{tooltip.symbol}/USDT</div>
+                        <div className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-tighter leading-none">{tooltip.meta?.name || tooltip.symbol}</div>
+                        <div className="text-xs font-black text-[#dd9933] uppercase mt-1 tracking-widest">{tooltip.symbol}/USDT</div>
                     </div>
                 </div>
-                <div className="grid grid-cols-2 gap-y-3 gap-x-4">
+                <div className="grid grid-cols-2 gap-y-4 gap-x-6">
                     <div className="flex flex-col">
-                        <span className="text-gray-500 dark:text-gray-500 text-[10px] font-black uppercase tracking-widest">Price</span>
-                        <span className="font-bold font-mono text-sm dark:text-white">{tooltip.data.p}</span>
+                        <span className="text-gray-400 dark:text-gray-500 text-[9px] font-black uppercase tracking-widest mb-0.5">Price</span>
+                        <span className="font-bold font-mono text-sm text-gray-900 dark:text-white">{tooltip.data.p}</span>
                     </div>
                     <div className="flex flex-col text-right">
-                        <span className="text-gray-500 dark:text-gray-500 text-[10px] font-black uppercase tracking-widest">Change 24h</span>
+                        <span className="text-gray-400 dark:text-gray-500 text-[9px] font-black uppercase tracking-widest mb-0.5">24h Change</span>
                         <span className={`font-bold font-mono text-sm ${tooltip.data.c >= 0 ? 'text-tech-success' : 'text-tech-danger'}`}>
                             {tooltip.data.c >= 0 ? '+' : ''}{tooltip.data.c.toFixed(2)}%
                         </span>
                     </div>
                     <div className="flex flex-col">
-                        <span className="text-gray-500 dark:text-gray-500 text-[10px] font-black uppercase tracking-widest">Market Cap</span>
-                        <span className="font-bold font-mono text-sm text-blue-400">{formatUSD(tooltip.meta?.mcap || 0)}</span>
+                        <span className="text-gray-400 dark:text-gray-500 text-[9px] font-black uppercase tracking-widest mb-0.5">Market Cap</span>
+                        <span className="font-bold font-mono text-sm text-blue-600 dark:text-blue-400/80">{formatUSD(tooltip.meta?.mcap || 0)}</span>
                     </div>
                     <div className="flex flex-col text-right">
-                        <span className="text-gray-500 dark:text-gray-500 text-[10px] font-black uppercase tracking-widest">Volume (Daily)</span>
-                        <span className="font-bold font-mono text-sm text-[#dd9933]">{tooltip.data.v}</span>
+                        <span className="text-gray-400 dark:text-gray-500 text-[9px] font-black uppercase tracking-widest mb-0.5">Daily Volume</span>
+                        <span className="font-bold font-mono text-sm text-[#dd9933]/80">{tooltip.data.v}</span>
                     </div>
                 </div>
-                <div className="mt-3 pt-3 border-t border-gray-100 dark:border-tech-800 flex justify-center">
-                    <div className="text-[9px] font-black text-gray-400 dark:text-gray-600 uppercase tracking-[0.2em] flex items-center gap-1.5 animate-pulse">
-                        <span className="w-1.5 h-1.5 rounded-full bg-tech-success"></span> Live Binance Data
+                <div className="mt-4 pt-4 border-t border-gray-100 dark:border-white/5 flex justify-center">
+                    <div className="text-[8px] font-black text-gray-400 dark:text-gray-600 uppercase tracking-[0.3em] flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-tech-success animate-pulse"></span> Network Active
                     </div>
                 </div>
             </div>
@@ -324,9 +322,9 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
       {/* DESKTOP HEADER */}
       <header className="fixed top-0 left-0 right-0 z-[1000] w-full flex flex-col shadow-lg transition-all duration-700">
         
-        {/* UPPER TICKER BAR */}
+        {/* UPPER TICKER BAR - IMPROVED MOUSE LEAVE */}
         <div 
-          className="bg-white dark:bg-tech-950 border-b border-transparent dark:border-tech-800 h-14 flex items-center overflow-hidden w-full relative transition-colors duration-700 shadow-sm"
+          className="bg-white dark:bg-tech-950 border-b border-transparent dark:border-white/5 h-14 flex items-center overflow-hidden w-full relative transition-colors duration-700 shadow-sm"
           onMouseLeave={hideTooltip}
         >
           <div className="animate-scroll flex items-center w-max will-change-transform"><TickerList /><TickerList /></div>
@@ -335,7 +333,7 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
         </div>
 
         {/* MAIN NAV BAR */}
-        <div className="bg-[#f3f4f6] dark:bg-tech-900 relative z-20 transition-colors duration-700 h-24">
+        <div className="bg-[#f3f4f6] dark:bg-tech-900 relative z-20 transition-colors duration-700 h-24" onMouseEnter={hideTooltip}>
           <div className="container mx-auto px-4 h-full flex items-center justify-between relative">
             
             <div className="flex items-center z-30 md:absolute md:left-1/2 md:-translate-x-1/2 xl:relative xl:left-0 xl:translate-x-0">

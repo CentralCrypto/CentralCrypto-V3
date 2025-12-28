@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Loader2, AlertTriangle, ChevronsUpDown } from 'lucide-react';
 import { LsrData, fetchLongShortRatio, fetchTopCoins } from '../services/api'; 
@@ -172,10 +171,10 @@ const LsrWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ ite
                     <svg viewBox="0 0 200 110">
                         <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" className="stroke-gray-100 dark:stroke-slate-800" strokeWidth="18" strokeLinecap="round" />
                         <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" stroke="#dd9933" strokeWidth="18" strokeDasharray={`${(lsrAngle/180)*283} 283`} strokeLinecap="round" />
-                        <g transform={`rotate(${lsrAngle - 90} 100 100)`}><path d="M 100 100 L 100 20" className="stroke-gray-800 dark:stroke-white" strokeWidth="3" /><circle cx="100" cy="100" r="5" className="fill-gray-800 dark:fill-white" /></g>
+                        <g transform={`rotate(${lsrAngle - 90} 100 100)`}><path d="M 100 100 L 100 20" className="stroke-gray-800 dark:stroke-white" strokeWidth="3" /><circle cx={100} cy={100} r="5" className="fill-gray-800 dark:fill-white" /></g>
                     </svg>
                 </div>
-                <div className="mt-2"><div className="text-4xl font-black text-[#dd9933] leading-none">{lsrVal.toFixed(2)}</div><div className="text-sm font-black text-gray-900 dark:text-white uppercase mt-1 tracking-wider">{lsrVal > 1.1 ? t.longs : lsrVal < 0.9 ? t.shorts : t.neutral}</div></div>
+                <div className="mt-2"><div className="text-4xl font-black text-[#dd9933] leading-none">{lsrVal.toFixed(2)}</div><div className="text-[10px] font-black text-gray-900 dark:text-white uppercase mt-1 tracking-widest" style={{ fontSize: '6.5px' }}>{lsrVal > 1.1 ? t.longs : lsrVal < 0.9 ? t.shorts : t.neutral}</div></div>
                 </>
             )}
         </div>
