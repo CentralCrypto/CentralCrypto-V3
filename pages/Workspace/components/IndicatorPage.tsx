@@ -93,11 +93,41 @@ const PageFaq = ({ language, pageType }: { language: Language, pageType: string 
 
 // --- MARKET CAP TABLE ---
 
+const safePct = (v: number) => {
+    if (!isFinite(v)) return '--';
+    const s = v >= 0 ? '+' : '';
+    return `${s}${v.toFixed(2)}%`;
+};
+
+// CoinGecko sparkline_in_7d geralmente vem em pontos horários (168).
+// Quando o dado é menor, ainda assim tentamos uma estimativa.
+const pctFromSpark = (prices?: number[], pointsBack: number = 1) => {
+    const arr = Array.isArray(prices) ? prices.filter(n => typeof n === 'number' && isFinite(n)) : [];
+    if (arr.length < 2) return NaN;
+    const last = arr[arr.length - 1];
+    const idx = Math.max(0, arr.length - 1 - Math.max(1, pointsBack));
+    const prev = arr[idx];
+    if (!isFinite(prev) || prev === 0) return NaN;
+    return ((last - prev) / prev) * 100;
+};
+
+const pct7dFromSpark = (prices?: number[]) => {
+    const arr = Array.isArray(prices) ? prices.filter(n => typeof n === 'number' && isFinite(n)) : [];
+    if (arr.length < 2) return NaN;
+    const first = arr[0];
+    const last = arr[arr.length - 1];
+    if (!isFinite(first) || first === 0) return NaN;
+    return ((last - first) / first) * 100;
+};
+
 const MarketCapTable = ({ language }: { language: Language }) => {
     const [coins, setCoins] = useState<ApiCoin[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'market_cap_rank', direction: 'asc' });
+
+    const PAGE_SIZE = 100;
+    const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
     const load = async () => {
         setLoading(true);
@@ -117,9 +147,10 @@ const MarketCapTable = ({ language }: { language: Language }) => {
         let direction: 'asc' | 'desc' = 'desc';
         if (sortConfig.key === key && sortConfig.direction === 'desc') direction = 'asc';
         setSortConfig({ key, direction });
+        setVisibleCount(PAGE_SIZE);
     };
 
-    const sortedCoins = useMemo(() => {
+    const { totalCount, visibleCoins } = useMemo(() => {
         let items = [...coins];
         if (searchTerm) {
             items = items.filter(c => 
@@ -127,19 +158,56 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                 c.symbol?.toLowerCase().includes(searchTerm.toLowerCase())
             );
         }
+        const getVal = (c: ApiCoin, key: string) => {
+            const prices = c.sparkline_in_7d?.price;
+            if (key === 'change_1h_est') return pctFromSpark(prices, 1);
+            if (key === 'change_6h_est') return pctFromSpark(prices, 6);
+            if (key === 'change_7d_est') return pct7dFromSpark(prices);
+            if (key === 'vol_7d_est') return (c.total_volume || 0) * 7;
+
+            // @ts-ignore
+            return c[key];
+        };
+
         items.sort((a: any, b: any) => {
-            const aVal = a[sortConfig.key] ?? 0;
-            const bVal = b[sortConfig.key] ?? 0;
-            if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-            if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+            const aVal = getVal(a, sortConfig.key);
+            const bVal = getVal(b, sortConfig.key);
+
+            // String sort (name/symbol)
+            if (typeof aVal === 'string' || typeof bVal === 'string') {
+                const as = String(aVal ?? '');
+                const bs = String(bVal ?? '');
+                const r = as.localeCompare(bs);
+                return sortConfig.direction === 'asc' ? r : -r;
+            }
+
+            const an = isFinite(aVal) ? Number(aVal) : 0;
+            const bn = isFinite(bVal) ? Number(bVal) : 0;
+            if (an < bn) return sortConfig.direction === 'asc' ? -1 : 1;
+            if (an > bn) return sortConfig.direction === 'asc' ? 1 : -1;
             return 0;
         });
-        return items;
-    }, [coins, searchTerm, sortConfig]);
+
+        const total = items.length;
+        const visible = items.slice(0, Math.min(total, visibleCount));
+        return { totalCount: total, visibleCoins: visible };
+    }, [coins, searchTerm, sortConfig, visibleCount]);
+
+    useEffect(() => {
+        setVisibleCount(PAGE_SIZE);
+    }, [searchTerm]);
+
+    const onScrollLoadMore: React.UIEventHandler<HTMLDivElement> = (e) => {
+        const el = e.currentTarget;
+        const nearBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) < 320;
+        if (!nearBottom) return;
+        if (visibleCount >= totalCount) return;
+        setVisibleCount(v => Math.min(totalCount, v + PAGE_SIZE));
+    };
 
     const SortHeader = ({ label, sortKey, align = "left" }: { label: string, sortKey: string, align?: "left" | "right" | "center" }) => (
         <th 
-            className={`p-4 cursor-pointer hover:bg-gray-100 dark:hover:bg-white/5 transition-colors group ${align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'}`}
+            className={`p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-white/5 transition-colors group ${align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'}`}
             onClick={() => handleSort(sortKey)}
         >
             <div className={`flex items-center gap-1 ${align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : 'justify-start'}`}>
@@ -167,36 +235,43 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                 </button>
             </div>
 
-            <div className="flex-1 overflow-auto custom-scrollbar">
+            <div className="flex-1 overflow-auto custom-scrollbar" onScroll={onScrollLoadMore}>
                 {loading && coins.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-64 text-gray-500">
                         <Loader2 className="animate-spin mb-2" size={32} />
                         <span className="font-bold text-sm uppercase tracking-widest animate-pulse">Sincronizando Mercado...</span>
                     </div>
                 ) : (
-                    <table className="w-full text-left border-collapse min-w-[1000px]">
+                    <table className="w-full text-left border-collapse min-w-[1180px] table-fixed">
                         <thead className="sticky top-0 z-20 bg-white dark:bg-[#2f3032]">
                             <tr className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-slate-400 border-b border-gray-100 dark:border-slate-800">
                                 <SortHeader label="#" sortKey="market_cap_rank" />
                                 <SortHeader label="Ativo" sortKey="name" />
                                 <SortHeader label="Preço" sortKey="current_price" align="right" />
+                                <SortHeader label="1h %" sortKey="change_1h_est" align="right" />
                                 <SortHeader label="24h %" sortKey="price_change_percentage_24h" align="right" />
+                                <SortHeader label="7d %" sortKey="change_7d_est" align="right" />
                                 <SortHeader label="Market Cap" sortKey="market_cap" align="right" />
                                 <SortHeader label="Vol (24h)" sortKey="total_volume" align="right" />
+                                <SortHeader label="Vol (7d)" sortKey="vol_7d_est" align="right" />
                                 <SortHeader label="Circ. Supply" sortKey="circulating_supply" align="right" />
-                                <th className="p-4 text-right">7 Dias</th>
+                                <th className="p-3 text-right w-[240px]">Mini-chart (7d)</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
-                            {sortedCoins.map((coin) => {
+                            {visibleCoins.map((coin) => {
                                 const change = coin.price_change_percentage_24h || 0;
                                 const isPos = change >= 0;
                                 const sparkData = coin.sparkline_in_7d?.price?.map((v, i) => ({ i, v })) || [];
 
+                                const c1h = pctFromSpark(coin.sparkline_in_7d?.price, 1);
+                                const c7d = pct7dFromSpark(coin.sparkline_in_7d?.price);
+                                const vol7d = (coin.total_volume || 0) * 7;
+
                                 return (
                                     <tr key={coin.id} className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors group">
-                                        <td className="p-4 text-sm font-bold text-gray-400">#{coin.market_cap_rank}</td>
-                                        <td className="p-4">
+                                        <td className="p-3 text-sm font-bold text-gray-400 w-[84px]">#{coin.market_cap_rank}</td>
+                                        <td className="p-3 w-[280px]">
                                             <div className="flex items-center gap-3">
                                                 <img src={coin.image} alt="" className="w-9 h-9 rounded-full bg-white p-0.5 border border-slate-100 dark:border-white/10 shadow-sm" onError={(e) => (e.currentTarget.style.display='none')} />
                                                 <div className="flex flex-col">
@@ -205,22 +280,31 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="p-4 text-right font-mono text-base font-black text-gray-900 dark:text-slate-200">
+                                        <td className="p-3 text-right font-mono text-base font-black text-gray-900 dark:text-slate-200 w-[140px]">
                                             {formatUSD(coin.current_price)}
                                         </td>
-                                        <td className={`p-4 text-right font-mono text-base font-black ${isPos ? 'text-green-500' : 'text-red-500'}`}>
+                                        <td className={`p-3 text-right font-mono text-sm font-black ${!isFinite(c1h) ? 'text-gray-400 dark:text-slate-500' : (c1h >= 0 ? 'text-green-500' : 'text-red-500')} w-[90px]`} title="Estimativa via sparkline 7d">
+                                            {safePct(c1h)}
+                                        </td>
+                                        <td className={`p-3 text-right font-mono text-base font-black ${isPos ? 'text-green-500' : 'text-red-500'} w-[96px]`}>
                                             {isPos ? '+' : ''}{change.toFixed(2)}%
                                         </td>
-                                        <td className="p-4 text-right font-mono text-sm font-bold text-gray-600 dark:text-slate-400">
+                                        <td className={`p-3 text-right font-mono text-sm font-black ${!isFinite(c7d) ? 'text-gray-400 dark:text-slate-500' : (c7d >= 0 ? 'text-green-500' : 'text-red-500')} w-[96px]`} title="Estimativa via sparkline 7d">
+                                            {safePct(c7d)}
+                                        </td>
+                                        <td className="p-3 text-right font-mono text-sm font-bold text-gray-600 dark:text-slate-400 w-[140px]">
                                             {formatUSD(coin.market_cap, true)}
                                         </td>
-                                        <td className="p-4 text-right font-mono text-sm font-bold text-gray-600 dark:text-slate-400">
+                                        <td className="p-3 text-right font-mono text-sm font-bold text-gray-600 dark:text-slate-400 w-[120px]">
                                             {formatUSD(coin.total_volume, true)}
                                         </td>
-                                        <td className="p-4 text-right font-mono text-xs font-bold text-gray-500 dark:text-slate-500">
+                                        <td className="p-3 text-right font-mono text-sm font-bold text-gray-600 dark:text-slate-400 w-[120px]" title="Estimativa simples: Vol(24h) * 7">
+                                            {formatUSD(vol7d, true)}
+                                        </td>
+                                        <td className="p-3 text-right font-mono text-xs font-bold text-gray-500 dark:text-slate-500 w-[170px]">
                                             {coin.circulating_supply?.toLocaleString()} <span className="uppercase opacity-50">{coin.symbol}</span>
                                         </td>
-                                        <td className="p-4 w-32 h-14">
+                                        <td className="p-3 h-14 w-[240px]">
                                             {sparkData.length > 0 && (
                                                 <ResponsiveContainer width="100%" height="100%">
                                                     <LineChart data={sparkData}>
@@ -235,6 +319,18 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                             })}
                         </tbody>
                     </table>
+                )}
+            </div>
+
+            <div className="p-3 border-t border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-black/20 flex items-center justify-between text-xs text-gray-500 dark:text-slate-400 shrink-0">
+                <div className="font-bold">Mostrando {Math.min(visibleCount, totalCount)} / {totalCount}</div>
+                {visibleCount < totalCount && (
+                    <button
+                        onClick={() => setVisibleCount(v => Math.min(totalCount, v + PAGE_SIZE))}
+                        className="px-3 py-2 rounded-lg bg-[#dd9933] text-black font-black hover:opacity-90 transition-opacity"
+                    >
+                        Carregar +{PAGE_SIZE}
+                    </button>
                 )}
             </div>
         </div>
@@ -305,7 +401,6 @@ const IndicatorPage: React.FC<IndicatorPageProps> = ({ language, coinMap, userTi
                         ))}
                     </div>
                 </div>
-
                 {/* Conteúdo Principal */}
                 <div className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto custom-scrollbar pr-1">
                     <PageHeader title={currentPage.label} description="Dados analíticos e ferramentas de mercado em tempo real." />
