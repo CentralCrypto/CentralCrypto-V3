@@ -1,4 +1,3 @@
-
 /**
  * CENTRAL DE ENDPOINTS CCT - VERSÃO VPS (RELATIVE)
  * Configurado para caminhos relativos que o Vite Proxy intercepta.
@@ -25,6 +24,7 @@ export const ENDPOINTS = {
       mktcapHist: "/mktcap-historico.json",
       calendar: "/calendar.json",
       heatmap: "/heatmap.json",
+      heatmapCategories: "/heatmap-categories.json",
       etfBtc: "/spot-btc-etf-flows.json",
       etfEth: "/spot-eth-etf-flows.json",
       etfNetFlow: "/etfnetflow.json",

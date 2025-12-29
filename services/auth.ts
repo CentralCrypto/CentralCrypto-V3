@@ -1,6 +1,7 @@
 export interface UserData {
   id: number;
-  token: string;
+  token: string; // ✅ auth token (Bearer)
+  wp_nonce?: string; // opcional: nonce wp_rest, se um dia precisar
   user_email: string;
   user_nicename: string;
   user_display_name: string;
@@ -44,6 +45,12 @@ function buildHttpError(res: Response, data: any, rawText: string): Error {
   return new Error(msg);
 }
 
+function isValidAuthToken(t: string): boolean {
+  const s = String(t || '').trim();
+  // teu token válido é hex grande (ex: b10848...); nonce é curtinho (~10)
+  return s.length >= 20;
+}
+
 export const authService = {
   login: async (username: string, password: string): Promise<UserData> => {
     const API_URL = getApiBase();
@@ -51,28 +58,25 @@ export const authService = {
     const res = await fetch(`${API_URL}/custom/v1/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-
-      // Em DEV (porta diferente), "include" pode disparar bloqueio de CORS.
-      // Como o endpoint já devolve token/nonce, não precisamos de cookie aqui.
       credentials: 'omit',
-
       body: JSON.stringify({ username, password }),
     });
 
     const { data, rawText } = await safeReadJson(res);
 
-    console.log('LOGIN URL:', `${API_URL}/custom/v1/login`);
-    console.log('LOGIN HTTP:', res.status, res.statusText);
-    console.log('LOGIN RAW (head):', (rawText || '').slice(0, 400));
-    console.log('LOGIN JSON:', data);
-
     if (!res.ok) throw buildHttpError(res, data, rawText);
     if (!data) throw new Error('Login retornou HTTP 200, mas corpo veio vazio.');
     if (data.code === 'invalid_auth') throw new Error('Credenciais inválidas.');
 
+    const token = String(data.token || '').trim();
+    if (!isValidAuthToken(token)) {
+      throw new Error('Login retornou token inválido. Limpe o storage e tente novamente.');
+    }
+
     const user: UserData = {
       id: data.user_id || 0,
-      token: data.token || data.nonce || 'session_token',
+      token: token, // ✅ SEM FALLBACK PRA NONCE
+      wp_nonce: data.nonce ? String(data.nonce).trim() : undefined,
       user_email: data.user_email || '',
       user_nicename: data.user_nicename || username,
       user_display_name: data.user_display_name || username,
@@ -93,6 +97,18 @@ export const authService = {
 
   getCurrentUser: (): UserData | null => {
     const stored = localStorage.getItem('central_user');
-    return stored ? JSON.parse(stored) : null;
+    if (!stored) return null;
+
+    try {
+      const u = JSON.parse(stored) as UserData;
+      if (!u?.token || !isValidAuthToken(u.token)) {
+        localStorage.removeItem('central_user');
+        return null;
+      }
+      return u;
+    } catch {
+      localStorage.removeItem('central_user');
+      return null;
+    }
   },
 };
