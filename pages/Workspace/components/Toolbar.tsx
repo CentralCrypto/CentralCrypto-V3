@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Trash2, Save, RotateCcw, Layout, Search, ChevronDown, Filter, FileText, Minus } from 'lucide-react';
 import { Dashboard, ApiCoin, UserTier, WidgetType, Language } from '../../../types';
@@ -153,7 +154,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
 
   return (
     <div className="bg-white dark:bg-[#1a1c1e] p-2 fixed top-[152px] -mt-[19px] left-0 right-0 z-[900] shadow-sm transition-colors">
-      <div className="max-w-[1920px] mx-auto flex flex-col gap-2">
+      <div className="w-[98%] mx-auto flex flex-col gap-2">
 
         {/* ROW 1: Tier, Save, Reset (Right Aligned) */}
         <div className="flex items-center justify-end gap-3 px-2 border-b border-gray-100 dark:border-slate-800/50 pb-2">

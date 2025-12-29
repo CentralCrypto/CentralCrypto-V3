@@ -1,13 +1,31 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+
 import { WidgetType, Language, ApiCoin, UserTier } from '../../../types';
 import { getTranslations } from '../../../locales';
+
 import CryptoWidget from './CryptoWidget';
+
 import {
-  BarChart2, TrendingUp, Activity, PieChart, ArrowUpRight,
-  Calendar, ChevronsUpDown, List, Loader2,
-  LayoutGrid, CircleDashed, Search, RefreshCw, Lock, ChevronDown, User
+  BarChart2,
+  TrendingUp,
+  Activity,
+  PieChart,
+  ArrowUpRight,
+  Calendar,
+  ChevronsUpDown,
+  List,
+  Loader2,
+  LayoutGrid,
+  CircleDashed,
+  Search,
+  RefreshCw,
+  Lock,
+  ChevronDown,
+  User
 } from 'lucide-react';
+
 import { fetchTopCoins, fetchHeatmapCategories, HeatmapCategory } from '../services/api';
+
 import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts';
 
 // ---------------- Helpers ----------------
@@ -65,9 +83,6 @@ const PageHeader = ({ title, description }: { title: string, description: string
     <p className="text-gray-500 dark:text-slate-400 mt-1 text-sm">{description}</p>
   </div>
 );
-
-// ---------------- MARKET CAP TABLE (PAGINADA 100/100) ----------------
-
 const MarketCapTable = ({ language }: { language: Language }) => {
   const [coins, setCoins] = useState<ApiCoin[]>([]);
   const [loading, setLoading] = useState(true);
@@ -79,11 +94,13 @@ const MarketCapTable = ({ language }: { language: Language }) => {
   const [page, setPage] = useState(0);
 
   const [buyOpen, setBuyOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const [categories, setCategories] = useState<HeatmapCategory[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>('__all__');
 
   const buyRef = useRef<HTMLDivElement | null>(null);
+  const moreRef = useRef<HTMLDivElement | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -102,12 +119,14 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
   useEffect(() => { load(); }, []);
 
-  // Fecha dropdown BUY clicando fora
+  // Fecha dropdowns clicando fora
   useEffect(() => {
     const onDocClick = (ev: MouseEvent) => {
-      if (!buyRef.current) return;
-      if (buyRef.current.contains(ev.target as any)) return;
+      const t = ev.target as any;
+      if (buyRef.current && buyRef.current.contains(t)) return;
+      if (moreRef.current && moreRef.current.contains(t)) return;
       setBuyOpen(false);
+      setMoreOpen(false);
     };
     document.addEventListener('mousedown', onDocClick);
     return () => document.removeEventListener('mousedown', onDocClick);
@@ -120,28 +139,75 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     setPage(0);
   };
 
-  // Mapa de categoria -> Set(coinId)
-  const categoryIdSet = useMemo(() => {
+  const selectCategory = (id: string) => {
+    setActiveCategory(id);
+    setMoreOpen(false);
+    setPage(0);
+  };
+
+  // ✅ Categoria matcher robusto (ID + SYMBOL + NAME)
+  const categoryMatcher = useMemo(() => {
     if (activeCategory === '__all__') return null;
+
     const cat = categories.find(c => c?.id === activeCategory);
-    if (!cat || !Array.isArray(cat.coins)) return new Set<string>();
+    if (!cat || !Array.isArray(cat.coins) || cat.coins.length === 0) {
+      return (coin: ApiCoin) => false;
+    }
 
     const ids = new Set<string>();
+    const syms = new Set<string>();
+    const names = new Set<string>();
+
     for (const item of cat.coins) {
-      if (typeof item === 'string') ids.add(item);
-      else if (item && typeof item === 'object') {
-        const id = (item as any).id || (item as any).coin_id || (item as any).coinId;
-        if (typeof id === 'string' && id) ids.add(id);
+      if (typeof item === 'string') {
+        const s = item.trim();
+        if (!s) continue;
+        ids.add(s.toLowerCase());
+        syms.add(s.toUpperCase());
+        names.add(s.toLowerCase());
+        continue;
+      }
+
+      if (item && typeof item === 'object') {
+        const o: any = item;
+
+        const possibleIds = [
+          o.coingecko_id,
+          o.coingeckoId,
+          o.id,
+          o.coin_id,
+          o.coinId,
+          o.slug
+        ].filter(v => typeof v === 'string' && v.trim());
+
+        for (const v of possibleIds) ids.add(String(v).toLowerCase());
+
+        const sym = (typeof o.symbol === 'string' && o.symbol.trim()) ? o.symbol : (typeof o.ticker === 'string' ? o.ticker : null);
+        if (sym) syms.add(String(sym).toUpperCase());
+
+        const nm = (typeof o.name === 'string' && o.name.trim()) ? o.name : null;
+        if (nm) names.add(String(nm).toLowerCase());
       }
     }
-    return ids;
+
+    return (coin: ApiCoin) => {
+      const cid = (coin.id || '').toLowerCase();
+      const csym = (coin.symbol || '').toUpperCase();
+      const cnm = (coin.name || '').toLowerCase();
+
+      if (cid && ids.has(cid)) return true;
+      if (csym && syms.has(csym)) return true;
+      if (cnm && names.has(cnm)) return true;
+
+      return false;
+    };
   }, [categories, activeCategory]);
 
   const processed = useMemo(() => {
     let items = [...coins];
 
     // 1) categoria
-    if (categoryIdSet) items = items.filter(c => categoryIdSet.has(c.id));
+    if (categoryMatcher) items = items.filter(c => categoryMatcher(c));
 
     // 2) busca
     if (searchTerm) {
@@ -177,7 +243,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     });
 
     return items;
-  }, [coins, searchTerm, sortConfig, categoryIdSet]);
+  }, [coins, searchTerm, sortConfig, categoryMatcher]);
 
   const totalCount = processed.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
@@ -189,8 +255,17 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     return processed.slice(start, end);
   }, [processed, safePage]);
 
-  // Reset page quando muda filtro
   useEffect(() => { setPage(0); }, [searchTerm, activeCategory]);
+
+  // Tabs: limita + “Mais…”
+  const MAX_TABS = 10;
+  const mainCats = useMemo(() => categories.slice(0, MAX_TABS), [categories]);
+  const extraCats = useMemo(() => categories.slice(MAX_TABS), [categories]);
+
+  const activeIsExtra = useMemo(() => {
+    if (activeCategory === '__all__') return false;
+    return extraCats.some(c => c.id === activeCategory);
+  }, [activeCategory, extraCats]);
 
   const SortHeader = ({ label, sortKey, align = "left", width }: { label: string, sortKey: string, align?: "left" | "right" | "center", width?: string }) => (
     <th
@@ -206,7 +281,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
   return (
     <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-100 dark:border-slate-800 shadow-xl overflow-hidden flex flex-col h-full min-h-0">
-      {/* Header: busca + BUY + refresh */}
+      {/* Header */}
       <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col gap-3 bg-gray-50/50 dark:bg-black/20 shrink-0">
         <div className="flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="relative w-full md:w-80">
@@ -216,13 +291,13 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               placeholder="Buscar ativo..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-white dark:bg-[#2f3032] rounded-lg py-2.5 pl-11 pr-4 text-[15px] text-gray-900 dark:text-white focus:border-[#dd9933] outline-none transition-all shadow-inner"
+              className="w-full bg-white dark:bg-[#2f3032] rounded-lg py-2.5 pl-11 pr-4 text-[16px] text-gray-900 dark:text-white focus:border-[#dd9933] outline-none transition-all shadow-inner"
             />
           </div>
 
-          <div className="flex items-center gap-2" ref={buyRef}>
+          <div className="flex items-center gap-2">
             {/* BUY dropdown */}
-            <div className="relative">
+            <div className="relative" ref={buyRef}>
               <button
                 onClick={() => setBuyOpen(v => !v)}
                 className="px-3 py-2.5 rounded-lg bg-white dark:bg-[#2f3032] border border-gray-100 dark:border-slate-700 text-sm font-black text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors flex items-center gap-2"
@@ -245,6 +320,31 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               )}
             </div>
 
+            {/* Pager TOP */}
+            <div className="hidden md:flex items-center gap-2 px-2">
+              <button
+                onClick={() => setPage(p => Math.max(0, p - 1))}
+                disabled={safePage === 0}
+                className={`px-3 py-2 rounded-lg font-black text-sm transition-colors
+                  ${safePage === 0 ? 'bg-gray-200 text-gray-500 dark:bg-slate-800 dark:text-slate-500 cursor-not-allowed' : 'bg-white dark:bg-[#2f3032] text-gray-800 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 border border-gray-100 dark:border-slate-700'}`}
+              >
+                Prev
+              </button>
+
+              <div className="text-xs font-black text-gray-500 dark:text-slate-400 whitespace-nowrap">
+                Page {safePage + 1} / {totalPages}
+              </div>
+
+              <button
+                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                disabled={safePage >= totalPages - 1}
+                className={`px-3 py-2 rounded-lg font-black text-sm transition-colors
+                  ${safePage >= totalPages - 1 ? 'bg-gray-200 text-gray-500 dark:bg-slate-800 dark:text-slate-500 cursor-not-allowed' : 'bg-[#dd9933] text-black hover:opacity-90'}`}
+              >
+                Next
+              </button>
+            </div>
+
             {/* Refresh */}
             <button
               onClick={load}
@@ -256,10 +356,10 @@ const MarketCapTable = ({ language }: { language: Language }) => {
           </div>
         </div>
 
-        {/* Tabs de categoria */}
-        <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar py-1">
+        {/* Categories tabs + More */}
+        <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => setActiveCategory('__all__')}
+            onClick={() => selectCategory('__all__')}
             className={`px-3 py-2 rounded-full text-xs font-black whitespace-nowrap border transition-colors
               ${activeCategory === '__all__'
                 ? 'bg-[#dd9933] text-black border-transparent'
@@ -270,10 +370,10 @@ const MarketCapTable = ({ language }: { language: Language }) => {
             All
           </button>
 
-          {categories.map(cat => (
+          {mainCats.map(cat => (
             <button
               key={cat.id}
-              onClick={() => setActiveCategory(cat.id)}
+              onClick={() => selectCategory(cat.id)}
               className={`px-3 py-2 rounded-full text-xs font-black whitespace-nowrap border transition-colors
                 ${activeCategory === cat.id
                   ? 'bg-[#dd9933] text-black border-transparent'
@@ -285,6 +385,43 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               {typeof cat.coin_counter === 'number' ? <span className="ml-2 opacity-70">({cat.coin_counter})</span> : null}
             </button>
           ))}
+
+          {extraCats.length > 0 && (
+            <div className="relative" ref={moreRef}>
+              <button
+                onClick={() => setMoreOpen(v => !v)}
+                className={`px-3 py-2 rounded-full text-xs font-black whitespace-nowrap border transition-colors flex items-center gap-2
+                  ${(activeIsExtra)
+                    ? 'bg-[#dd9933] text-black border-transparent'
+                    : 'bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 border-gray-100 dark:border-slate-700 hover:bg-gray-100 dark:hover:bg-white/5'
+                  }`}
+                title="Mais categorias"
+              >
+                Mais… <ChevronDown size={14} className={`${moreOpen ? 'rotate-180' : ''} transition-transform`} />
+              </button>
+
+              {moreOpen && (
+                <div className="absolute left-0 mt-2 w-[320px] max-w-[90vw] rounded-xl overflow-hidden border border-gray-100 dark:border-slate-700 bg-white dark:bg-[#1a1c1e] shadow-xl z-50">
+                  <div className="max-h-[320px] overflow-auto custom-scrollbar">
+                    {extraCats.map(cat => (
+                      <button
+                        key={cat.id}
+                        onClick={() => selectCategory(cat.id)}
+                        className={`w-full text-left px-4 py-3 text-sm font-black transition-colors
+                          ${activeCategory === cat.id ? 'bg-[#dd9933] text-black' : 'text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5'}`}
+                        title={cat.description || cat.name}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="truncate">{cat.name}</span>
+                          {typeof cat.coin_counter === 'number' ? <span className="opacity-70">({cat.coin_counter})</span> : null}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -296,11 +433,11 @@ const MarketCapTable = ({ language }: { language: Language }) => {
             <span className="font-bold text-sm uppercase tracking-widest animate-pulse">Sincronizando Mercado...</span>
           </div>
         ) : (
-          <table className="w-full text-left border-collapse min-w-[1220px] table-fixed text-[14px]">
+          <table className="w-full text-left border-collapse min-w-[1220px] table-fixed text-[15px]">
             <thead className="sticky top-0 z-20 bg-white dark:bg-[#2f3032]">
-              <tr className="text-[11px] font-black uppercase tracking-widest text-gray-400 dark:text-slate-400 border-b border-gray-100 dark:border-slate-800">
-                <SortHeader label="#" sortKey="market_cap_rank" width="w-[64px]" />
-                <SortHeader label="Ativo" sortKey="name" width="w-[330px]" />
+              <tr className="text-[12px] font-black uppercase tracking-widest text-gray-400 dark:text-slate-400 border-b border-gray-100 dark:border-slate-800">
+                <SortHeader label="#" sortKey="market_cap_rank" width="w-[56px]" />
+                <SortHeader label="Ativo" sortKey="name" width="w-[360px]" />
                 <SortHeader label="Preço" sortKey="current_price" align="right" width="w-[150px]" />
                 <SortHeader label="1h %" sortKey="change_1h_est" align="right" width="w-[92px]" />
                 <SortHeader label="24h %" sortKey="price_change_percentage_24h" align="right" width="w-[96px]" />
@@ -325,21 +462,21 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
                 return (
                   <tr key={coin.id} className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors group">
-                    <td className="p-3 font-bold text-gray-400 w-[64px]">#{coin.market_cap_rank}</td>
+                    <td className="p-3 font-bold text-gray-400 w-[56px]">#{coin.market_cap_rank}</td>
 
-                    <td className="p-3 w-[330px]">
+                    <td className="p-3 w-[360px]">
                       <div className="flex items-center gap-3">
                         <img
                           src={coin.image}
                           alt=""
-                          className="w-9 h-9 rounded-full bg-white p-0.5 border border-slate-100 dark:border-white/10 shadow-sm"
+                          className="w-10 h-10 rounded-full p-1 border border-slate-100 dark:border-white/5 shadow-sm bg-slate-100 dark:bg-[#242628]"
                           onError={(e) => (e.currentTarget.style.display = 'none')}
                         />
                         <div className="flex flex-col min-w-0">
-                          <span className="font-black text-gray-900 dark:text-white leading-none truncate group-hover:text-[#dd9933] transition-colors">
+                          <span className="font-black text-[16px] text-gray-900 dark:text-white leading-none truncate group-hover:text-[#dd9933] transition-colors">
                             {coin.name}
                           </span>
-                          <span className="text-[12px] font-bold text-gray-500 uppercase mt-1">{coin.symbol}</span>
+                          <span className="text-[13px] font-bold text-gray-500 uppercase mt-1">{coin.symbol}</span>
                         </div>
                       </div>
                     </td>
@@ -372,7 +509,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                       {formatUSD(vol7d, true)}
                     </td>
 
-                    <td className="p-3 text-right font-mono text-[12px] font-bold text-gray-500 dark:text-slate-500 w-[170px]">
+                    <td className="p-3 text-right font-mono text-[13px] font-bold text-gray-500 dark:text-slate-500 w-[170px]">
                       {coin.circulating_supply?.toLocaleString()} <span className="uppercase opacity-50">{coin.symbol}</span>
                     </td>
 
@@ -398,6 +535,12 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               })}
             </tbody>
           </table>
+        )}
+
+        {!loading && coins.length > 0 && totalCount === 0 && (
+          <div className="p-6 text-sm text-gray-500 dark:text-slate-400">
+            Nada encontrado para esse filtro. (O filtro já tenta bater por ID, símbolo e nome.)
+          </div>
         )}
       </div>
 
@@ -430,9 +573,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     </div>
   );
 };
-
-// ---------------- MAIN WRAPPER ----------------
-
 interface IndicatorPageProps {
   language: Language;
   coinMap: Record<string, ApiCoin>;
@@ -455,32 +595,36 @@ type PageType =
 
 const IndicatorPage: React.FC<IndicatorPageProps> = ({ language, userTier }) => {
   const [activePage, setActivePage] = useState<PageType>('MARKETCAP');
+
   const tWs = getTranslations(language).workspace.widgets;
   const tPages = getTranslations(language).workspace.pages;
 
   const GROUPS = [
     {
-      title: 'Market', items: [
+      title: 'Market',
+      items: [
         { id: 'MARKETCAP' as PageType, label: tPages.marketcap, icon: <List size={18} /> },
         { id: 'GAINERS' as PageType, label: tPages.topmovers, icon: <TrendingUp size={18} /> },
-        { id: 'HEATMAP' as PageType, label: "Heatmap Square", icon: <LayoutGrid size={18} /> },
-        { id: 'BUBBLE_HEATMAP' as PageType, label: "Crypto Bubbles", icon: <CircleDashed size={18} /> },
+        { id: 'HEATMAP' as PageType, label: 'Heatmap Square', icon: <LayoutGrid size={18} /> },
+        { id: 'BUBBLE_HEATMAP' as PageType, label: 'Crypto Bubbles', icon: <CircleDashed size={18} /> },
         { id: 'RSI' as PageType, label: tWs.rsi.title, icon: <Activity size={18} /> },
         { id: 'MACD' as PageType, label: tWs.macd.title, icon: <BarChart2 size={18} /> },
         { id: 'LSR' as PageType, label: tWs.lsr.title, icon: <BarChart2 size={18} /> },
       ]
     },
     {
-      title: 'Global', items: [
+      title: 'Global',
+      items: [
         { id: 'CALENDAR' as PageType, label: tWs.calendar.title, icon: <Calendar size={18} /> },
         { id: 'ETF' as PageType, label: tWs.etf.title, icon: <ArrowUpRight size={18} /> },
       ]
     },
     {
-      title: 'Sentiment', items: [
+      title: 'Sentiment',
+      items: [
         { id: 'FNG' as PageType, label: tWs.fng.title, icon: <PieChart size={18} /> },
         { id: 'ALTSEASON' as PageType, label: tWs.altseason.title, icon: <Activity size={18} /> },
-        { id: 'TRUMP' as PageType, label: "Trump-o-Meter", icon: <User size={18} /> },
+        { id: 'TRUMP' as PageType, label: 'Trump-o-Meter', icon: <User size={18} /> },
       ]
     }
   ];
@@ -499,10 +643,14 @@ const IndicatorPage: React.FC<IndicatorPageProps> = ({ language, userTier }) => 
           <div className="p-4 border-b border-gray-100 dark:border-slate-800 font-black text-gray-500 dark:text-slate-400 text-xs uppercase tracking-wider">
             Dashboard Pages
           </div>
+
           <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
             {GROUPS.map((group, groupIdx) => (
               <div key={groupIdx} className="mb-4">
-                <div className="px-4 py-2 text-[10px] font-black text-gray-400 dark:text-slate-500 uppercase tracking-widest">{group.title}</div>
+                <div className="px-4 py-2 text-[10px] font-black text-gray-400 dark:text-slate-500 uppercase tracking-widest">
+                  {group.title}
+                </div>
+
                 <div className="space-y-1">
                   {group.items.map((item) => (
                     <button
@@ -532,61 +680,91 @@ const IndicatorPage: React.FC<IndicatorPageProps> = ({ language, userTier }) => 
 
             {activePage === 'ALTSEASON' && (
               <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                <CryptoWidget item={{ id: 'altseason-page', type: WidgetType.ALTCOIN_SEASON, title: 'Altcoin Season Index', symbol: 'GLOBAL', isMaximized: true }} language={language} />
+                <CryptoWidget
+                  item={{ id: 'altseason-page', type: WidgetType.ALTCOIN_SEASON, title: 'Altcoin Season Index', symbol: 'GLOBAL', isMaximized: true }}
+                  language={language}
+                />
               </div>
             )}
 
             {activePage === 'ETF' && (
               <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                <CryptoWidget item={{ id: 'etf-page', type: WidgetType.ETF_NET_FLOW, title: 'ETF Net Flow', symbol: 'GLOBAL', isMaximized: true }} language={language} />
+                <CryptoWidget
+                  item={{ id: 'etf-page', type: WidgetType.ETF_NET_FLOW, title: 'ETF Net Flow', symbol: 'GLOBAL', isMaximized: true }}
+                  language={language}
+                />
               </div>
             )}
 
             {activePage === 'FNG' && (
               <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                <CryptoWidget item={{ id: 'fng-page', type: WidgetType.FEAR_GREED, title: 'Fear & Greed Index', symbol: 'GLOBAL', isMaximized: true }} language={language} />
+                <CryptoWidget
+                  item={{ id: 'fng-page', type: WidgetType.FEAR_GREED, title: 'Fear & Greed Index', symbol: 'GLOBAL', isMaximized: true }}
+                  language={language}
+                />
               </div>
             )}
 
             {activePage === 'RSI' && (
               <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                <CryptoWidget item={{ id: 'rsi-page', type: WidgetType.RSI_AVG, title: 'RSI Average Tracker', symbol: 'MARKET', isMaximized: true }} language={language} />
+                <CryptoWidget
+                  item={{ id: 'rsi-page', type: WidgetType.RSI_AVG, title: 'RSI Average Tracker', symbol: 'MARKET', isMaximized: true }}
+                  language={language}
+                />
               </div>
             )}
 
             {activePage === 'MACD' && (
               <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                <CryptoWidget item={{ id: 'macd-page', type: WidgetType.MACD_AVG, title: 'MACD Average Tracker', symbol: 'MARKET', isMaximized: true }} language={language} />
+                <CryptoWidget
+                  item={{ id: 'macd-page', type: WidgetType.MACD_AVG, title: 'MACD Average Tracker', symbol: 'MARKET', isMaximized: true }}
+                  language={language}
+                />
               </div>
             )}
 
             {activePage === 'GAINERS' && (
               <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                <CryptoWidget item={{ id: 'gainers-page', type: WidgetType.GAINERS_LOSERS, title: 'Top Movers (24h)', symbol: 'MARKET', isMaximized: true }} language={language} />
+                <CryptoWidget
+                  item={{ id: 'gainers-page', type: WidgetType.GAINERS_LOSERS, title: 'Top Movers (24h)', symbol: 'MARKET', isMaximized: true }}
+                  language={language}
+                />
               </div>
             )}
 
             {activePage === 'HEATMAP' && (
               <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                <CryptoWidget item={{ id: 'heatmap-page', type: WidgetType.HEATMAP, title: 'Crypto Heatmap', symbol: 'MARKET', isMaximized: true }} language={language} />
+                <CryptoWidget
+                  item={{ id: 'heatmap-page', type: WidgetType.HEATMAP, title: 'Crypto Heatmap', symbol: 'MARKET', isMaximized: true }}
+                  language={language}
+                />
               </div>
             )}
 
             {activePage === 'BUBBLE_HEATMAP' && (
               <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                <CryptoWidget item={{ id: 'bubble-page', type: WidgetType.BUBBLE_HEATMAP, title: 'Crypto Bubbles', symbol: 'MARKET', isMaximized: true }} language={language} />
+                <CryptoWidget
+                  item={{ id: 'bubble-page', type: WidgetType.BUBBLE_HEATMAP, title: 'Crypto Bubbles', symbol: 'MARKET', isMaximized: true }}
+                  language={language}
+                />
               </div>
             )}
 
             {activePage === 'CALENDAR' && (
               <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                <CryptoWidget item={{ id: 'cal-page', type: WidgetType.CALENDAR, title: 'Calendar', symbol: 'CAL', isMaximized: true }} language={language} />
+                <CryptoWidget
+                  item={{ id: 'cal-page', type: WidgetType.CALENDAR, title: 'Calendar', symbol: 'CAL', isMaximized: true }}
+                  language={language}
+                />
               </div>
             )}
 
             {activePage === 'TRUMP' && (
               <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                <CryptoWidget item={{ id: 'trump-page', type: WidgetType.TRUMP_METER, title: 'Trump-o-Meter', symbol: 'SENTIMENT', isMaximized: true }} language={language} />
+                <CryptoWidget
+                  item={{ id: 'trump-page', type: WidgetType.TRUMP_METER, title: 'Trump-o-Meter', symbol: 'SENTIMENT', isMaximized: true }}
+                  language={language}
+                />
               </div>
             )}
 
@@ -594,7 +772,10 @@ const IndicatorPage: React.FC<IndicatorPageProps> = ({ language, userTier }) => 
               <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800 relative">
                 {userTier === UserTier.TIER_1 && <LockOverlay />}
                 <div className={userTier === UserTier.TIER_1 ? 'blur-sm h-full' : 'h-full'}>
-                  <CryptoWidget item={{ id: 'lsr-page', type: WidgetType.LONG_SHORT_RATIO, title: 'Long/Short Ratio', symbol: 'GLOBAL', isMaximized: true }} language={language} />
+                  <CryptoWidget
+                    item={{ id: 'lsr-page', type: WidgetType.LONG_SHORT_RATIO, title: 'Long/Short Ratio', symbol: 'GLOBAL', isMaximized: true }}
+                    language={language}
+                  />
                 </div>
               </div>
             )}

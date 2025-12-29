@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 // @ts-ignore
 import { Responsive, WidthProvider } from 'react-grid-layout';
@@ -486,7 +487,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ language }) => {
         </div>
       )}
 
-      <div className="max-w-[1920px] mx-auto p-4 pt-32 h-full min-h-screen flex flex-col">
+      <div className="w-[98%] mx-auto p-4 pt-32 h-full min-h-screen flex flex-col">
         {mode === 'pages' ? (
           <IndicatorPage language={language} coinMap={coinMap} userTier={userTier} />
         ) : (

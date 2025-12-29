@@ -103,7 +103,8 @@ const SidebarItem: React.FC<SidebarItemProps> = ({
       }
   };
   
-  const TIER_MAP = getTierMap(currentLanguage as Language);
+  // Fix: Convert AcademyLanguage (uppercase) to Language (lowercase) for getTierMap
+  const TIER_MAP = getTierMap(currentLanguage.toLowerCase() as Language);
   const displayTitle = topic.displayTitle?.[currentLanguage] || topic.title;
   const tierInfo = TIER_MAP[topic.tier];
   
@@ -185,7 +186,8 @@ const SidebarItem: React.FC<SidebarItemProps> = ({
 const Sidebar: React.FC<SidebarProps> = ({ 
   topics, selectedTopicId, currentLanguage, isAdmin, apiStatus, isSaving, onSelectTopic, onOpenAddModal, onEditTopic, onDeleteTopic, onReload, onMoveTopic
 }) => {
-  const TIER_MAP = getTierMap(currentLanguage as Language);
+  // Fix: Convert AcademyLanguage (uppercase) to Language (lowercase) for getTierMap
+  const TIER_MAP = getTierMap(currentLanguage.toLowerCase() as Language);
   
   return (
     <aside className="w-[370px] md:w-[434px] bg-white dark:bg-[#1a1c1e] flex flex-col h-full shadow-lg z-10 transition-colors duration-300 shrink-0">

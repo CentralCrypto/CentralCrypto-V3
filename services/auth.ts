@@ -111,4 +111,45 @@ export const authService = {
       return null;
     }
   },
+
+  // Fix: Add missing 'register', 'resetPassword', and 'validateEmail' methods
+  register: async (email: string, password: string): Promise<any> => {
+    const API_URL = getApiBase();
+    const res = await fetch(`${API_URL}/custom/v1/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const { data, rawText } = await safeReadJson(res);
+    if (!res.ok) throw buildHttpError(res, data, rawText);
+    if (data?.code && data.code !== 'success' && data.code !== 'user_registered') {
+        throw new Error(data.message || 'Erro desconhecido no registro.');
+    }
+    return data;
+  },
+
+  resetPassword: async (email: string): Promise<any> => {
+    const API_URL = getApiBase();
+    const res = await fetch(`${API_URL}/custom/v1/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    const { data, rawText } = await safeReadJson(res);
+    if (!res.ok) throw buildHttpError(res, data, rawText);
+    return data;
+  },
+
+  validateEmail: async (userId: number, key: string): Promise<any> => {
+    const API_URL = getApiBase();
+    const res = await fetch(`${API_URL}/custom/v1/validate-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, key }),
+    });
+    const { data, rawText } = await safeReadJson(res);
+    if (!res.ok) throw buildHttpError(res, data, rawText);
+    if (!data?.success) throw new Error(data?.message || 'Chave de validação inválida.');
+    return data;
+  },
 };

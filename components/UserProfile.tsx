@@ -126,7 +126,8 @@ const UserProfile: React.FC = () => {
             updateData.meta = { simple_local_avatar: { media_id: avatarId } }; 
         }
 
-        await userService.updateProfile(userData.id, updateData);
+        // Fix: userService.updateProfile expects only one argument.
+        await userService.updateProfile(updateData);
         
         setMsg({ type: 'success', text: 'Perfil atualizado com sucesso!' });
         fetchLatestData();
