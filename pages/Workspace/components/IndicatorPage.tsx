@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, ucategoryMatcher =seMemo, useRef } from 'react';
 
 import { WidgetType, Language, ApiCoin, UserTier } from '../../../types';
 import { getTranslations } from '../../../locales';
@@ -146,62 +146,111 @@ const MarketCapTable = ({ language }: { language: Language }) => {
   };
 
   // ✅ Categoria matcher robusto (ID + SYMBOL + NAME)
-  const categoryMatcher = useMemo(() => {
-    if (activeCategory === '__all__') return null;
+// ✅ Categoria matcher robusto (CoinPaprika ids tipo "btc-bitcoin" + objetos + símbolos)
+const categoryMatcher = useMemo(() => {
+  if (activeCategory === '__all__') return null;
 
-    const cat = categories.find(c => c?.id === activeCategory);
-    if (!cat || !Array.isArray(cat.coins) || cat.coins.length === 0) {
-      return (coin: ApiCoin) => false;
+  const cat = categories.find(c => c?.id === activeCategory);
+  if (!cat) return (coin: ApiCoin) => false;
+
+  // aceita variações de estrutura: coins pode ser array direto ou aninhado
+  const rawCoins: any[] =
+    Array.isArray((cat as any).coins) ? (cat as any).coins :
+    Array.isArray((cat as any).coins?.data) ? (cat as any).coins.data :
+    Array.isArray((cat as any).coins?.coins) ? (cat as any).coins.coins :
+    Array.isArray((cat as any).items) ? (cat as any).items :
+    [];
+
+  if (!rawCoins || rawCoins.length === 0) return (coin: ApiCoin) => false;
+
+  const ids = new Set<string>();   // coingecko-like: "bitcoin"
+  const syms = new Set<string>();  // "BTC"
+  const names = new Set<string>(); // "bitcoin" ou "bitcoin cash"
+
+  const ingestCoinPaprikaId = (sRaw: string) => {
+    const s = (sRaw || '').trim();
+    if (!s) return;
+
+    // guarda original também (pra debug / fallback)
+    ids.add(s.toLowerCase());
+    names.add(s.toLowerCase());
+
+    // Se vier "btc-bitcoin" => símbolo BTC e slug "bitcoin"
+    if (s.includes('-')) {
+      const parts = s.split('-').filter(Boolean);
+      const sym = parts[0];
+      const slug = parts.slice(1).join('-');
+
+      if (sym) syms.add(sym.toUpperCase());
+      if (slug) {
+        ids.add(slug.toLowerCase()); // "bitcoin"
+        names.add(slug.replace(/-/g, ' ').toLowerCase()); // "bitcoin cash"
+      }
+    } else {
+      // Se vier só "btc" ou "bitcoin"
+      if (s.length <= 10 && /^[a-z0-9]+$/i.test(s)) syms.add(s.toUpperCase());
+    }
+  };
+
+  const ingestName = (nRaw: string) => {
+    const n = (nRaw || '').trim();
+    if (!n) return;
+    names.add(n.toLowerCase());
+  };
+
+  const ingestSymbol = (symRaw: string) => {
+    const sym = (symRaw || '').trim();
+    if (!sym) return;
+    syms.add(sym.toUpperCase());
+  };
+
+  for (const item of rawCoins) {
+    if (typeof item === 'string') {
+      ingestCoinPaprikaId(item);
+      continue;
     }
 
-    const ids = new Set<string>();
-    const syms = new Set<string>();
-    const names = new Set<string>();
+    if (item && typeof item === 'object') {
+      const o: any = item;
 
-    for (const item of cat.coins) {
-      if (typeof item === 'string') {
-        const s = item.trim();
-        if (!s) continue;
-        ids.add(s.toLowerCase());
-        syms.add(s.toUpperCase());
-        names.add(s.toLowerCase());
-        continue;
-      }
+      // ids possíveis
+      const possibleIds = [
+        o.coingecko_id,
+        o.coingeckoId,
+        o.id,
+        o.coin_id,
+        o.coinId,
+        o.slug,
+      ].filter(v => typeof v === 'string' && v.trim());
 
-      if (item && typeof item === 'object') {
-        const o: any = item;
+      for (const v of possibleIds) ingestCoinPaprikaId(String(v));
 
-        const possibleIds = [
-          o.coingecko_id,
-          o.coingeckoId,
-          o.id,
-          o.coin_id,
-          o.coinId,
-          o.slug
-        ].filter(v => typeof v === 'string' && v.trim());
+      // symbol possíveis
+      if (typeof o.symbol === 'string') ingestSymbol(o.symbol);
+      if (typeof o.ticker === 'string') ingestSymbol(o.ticker);
 
-        for (const v of possibleIds) ids.add(String(v).toLowerCase());
-
-        const sym = (typeof o.symbol === 'string' && o.symbol.trim()) ? o.symbol : (typeof o.ticker === 'string' ? o.ticker : null);
-        if (sym) syms.add(String(sym).toUpperCase());
-
-        const nm = (typeof o.name === 'string' && o.name.trim()) ? o.name : null;
-        if (nm) names.add(String(nm).toLowerCase());
-      }
+      // name possíveis
+      if (typeof o.name === 'string') ingestName(o.name);
     }
+  }
 
-    return (coin: ApiCoin) => {
-      const cid = (coin.id || '').toLowerCase();
-      const csym = (coin.symbol || '').toUpperCase();
-      const cnm = (coin.name || '').toLowerCase();
+  return (coin: ApiCoin) => {
+    const cid = (coin.id || '').toLowerCase();          // coingecko id ex: "bitcoin"
+    const csym = (coin.symbol || '').toUpperCase();     // ex: "BTC"
+    const cnm = (coin.name || '').toLowerCase();        // ex: "bitcoin"
 
-      if (cid && ids.has(cid)) return true;
-      if (csym && syms.has(csym)) return true;
-      if (cnm && names.has(cnm)) return true;
+    if (cid && ids.has(cid)) return true;
+    if (csym && syms.has(csym)) return true;
+    if (cnm && names.has(cnm)) return true;
 
-      return false;
-    };
-  }, [categories, activeCategory]);
+    // fallback: nome sem espaços vs nome com hífen
+    const cnmCompact = cnm.replace(/\s+/g, '-');
+    if (cnmCompact && ids.has(cnmCompact)) return true;
+
+    return false;
+  };
+}, [categories, activeCategory]);
+
 
   const processed = useMemo(() => {
     let items = [...coins];
