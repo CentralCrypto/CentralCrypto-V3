@@ -190,21 +190,38 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ onPostClick, language }) => {
                         <h3 className="text-gray-200 font-bold uppercase tracking-widest text-sm">{t.miniBulletins}</h3>
                     </div>
                     <div className="flex flex-col gap-4">
-                        {bulletins.map((post, i) => (
-                           <div 
-                              onClick={() => onPostClick(post.id)} 
-                              key={post.id} 
-                              className={`group cursor-pointer flex items-center gap-4 bg-tech-900 border border-tech-800 hover:border-[#dd9933] p-3 rounded-lg shadow-lg transition-all hover:-translate-y-1 ${i % 2 !== 0 ? 'flex-row-reverse' : ''}`}
-                            >
-                                <div className="w-24 h-24 shrink-0 rounded-md overflow-hidden border border-tech-700">
-                                    <img src={post.featuredImage} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" alt="" />
+                        {loadingSpecifics ? (
+                            Array.from({ length: 5 }).map((_, i) => (
+                                <div key={i} className={`flex items-center gap-4 bg-gray-100 dark:bg-tech-900 border border-gray-200 dark:border-tech-800 p-3 rounded-lg shadow-lg animate-pulse ${i % 2 !== 0 ? 'flex-row-reverse' : ''}`}>
+                                    <div className="w-24 h-24 shrink-0 rounded-md bg-gray-200 dark:bg-tech-800"></div>
+                                    <div className="flex-1 space-y-3">
+                                        <div className="h-4 bg-gray-200 dark:bg-tech-800 rounded w-3/4"></div>
+                                        <div className="h-4 bg-gray-200 dark:bg-tech-800 rounded w-1/2"></div>
+                                        <div className="h-3 bg-gray-200 dark:bg-tech-800 rounded w-1/4 mt-2"></div>
+                                    </div>
                                 </div>
-                                <div className="flex-1 flex flex-col justify-center">
-                                    <h4 className="text-gray-200 dark:text-[#dd9933] font-bold text-base leading-tight group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors mb-2 line-clamp-3">{decodeHTML(post.titleHtml)}</h4>
-                                    <div className="flex items-center text-xs text-gray-500 gap-1.5"><User size={12} /> {post.authorName}</div>
+                            ))
+                        ) : bulletins.length > 0 ? (
+                           bulletins.map((post, i) => (
+                               <div 
+                                  onClick={() => onPostClick(post.id)} 
+                                  key={post.id} 
+                                  className={`group cursor-pointer flex items-center gap-4 bg-gray-100 dark:bg-tech-900 border border-gray-200 dark:border-tech-800 hover:border-[#dd9933] p-3 rounded-lg shadow-lg transition-all hover:-translate-y-1 ${i % 2 !== 0 ? 'flex-row-reverse' : ''}`}
+                                >
+                                    <div className="w-24 h-24 shrink-0 rounded-md overflow-hidden border border-tech-700">
+                                        <img src={post.featuredImage} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" alt="" />
+                                    </div>
+                                    <div className="flex-1 flex flex-col justify-center">
+                                        <h4 className="text-gray-800 dark:text-[#dd9933] font-bold text-base leading-tight group-hover:text-black dark:group-hover:text-white transition-colors mb-2 line-clamp-3">{decodeHTML(post.titleHtml)}</h4>
+                                        <div className="flex items-center text-xs text-gray-500 gap-1.5"><User size={12} /> {post.authorName}</div>
+                                    </div>
                                 </div>
+                            ))
+                        ) : (
+                            <div className="text-center text-xs text-gray-500 py-10 bg-gray-100 dark:bg-tech-900 rounded-lg border border-gray-200 dark:border-tech-800">
+                                Nenhum boletim encontrado.
                             </div>
-                        ))}
+                        )}
                     </div>
                 </div>
             </div>
