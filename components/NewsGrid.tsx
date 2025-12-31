@@ -172,7 +172,7 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
         <div className="md:col-span-3 flex flex-col h-full">
            <div className="text-lg font-bold uppercase tracking-widest text-gray-200 border-b-2 border-[#dd9933] pb-2 mb-6 text-right shrink-0">{t.trendingTopics}</div>
            <div className="flex-1 flex flex-col overflow-hidden relative">
-             <AnimatePresence>
+             <AnimatePresence mode="popLayout">
               {visibleTrending.map((post) => {
                 const originalIndex = maisLidas.findIndex(p => p.id === post.id);
                 return (
