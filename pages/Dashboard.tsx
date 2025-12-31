@@ -533,29 +533,41 @@ const EtfFlowWidget = ({ language, onNavigate, theme }: { language: Language; on
 
       <div className="flex-1 min-h-[150px]">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 35 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#3e4044' : '#e5e7eb'} vertical={false} />
+        <BarChart data={chartData} margin={{ top: 6, right: 6, left: 6, bottom: 6 }}>
+            {/* opcional: tira o grid pra não poluir */}
+            {/* <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#3e4044' : '#e5e7eb'} vertical={false} /> */}
+
             <XAxis
-              dataKey="date"
-              type="category"
-              tickFormatter={(tick) => new Date(tick).toLocaleDateString(language, { month: 'short', day: 'numeric' })}
-              tick={{ fontSize: 9, fill: theme === 'dark' ? '#9ca3af' : '#6b7280' }}
-              angle={-45}
-              textAnchor="end"
-              axisLine={false}
-              tickLine={false}
-              interval={0}
-              height={60}
+            dataKey="date"
+            type="category"
+            axisLine={false}
+            tickLine={false}
+            height={18}
+            tick={(props: any) => {
+                const { x, y, payload, index } = props;
+                if (index !== chartData.length - 1) return null; // só a última data
+                const d = new Date(payload.value);
+                const label = d.toLocaleDateString(language, { month: 'short', day: 'numeric' });
+                return (
+                <text x={x} y={y + 12} textAnchor="end" fontSize={9} fill={theme === 'dark' ? '#9ca3af' : '#6b7280'}>
+                    {label}
+                </text>
+                );
+            }}
             />
-            <YAxis tick={{ fontSize: 9, fill: theme === 'dark' ? '#9ca3af' : '#6b7280' }} axisLine={false} tickLine={false} />
-            <Tooltip content={<BarTooltip />} cursor={{ fill: 'rgba(221, 153, 51, 0.1)' }} />
-            <ReferenceLine y={0} stroke={theme === 'dark' ? '#9ca3af' : '#6b7280'} strokeWidth={1} />
+
+            <YAxis hide />
+
+            {/* tira tooltip e referenceLine */}
+            {/* <Tooltip ... /> */}
+            {/* <ReferenceLine y={0} ... /> */}
+
             <Bar dataKey="flow">
-              {chartData.map((entry, index) => (
+            {chartData.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={entry.flow >= 0 ? 'var(--color-success)' : 'var(--color-danger)'} />
-              ))}
+            ))}
             </Bar>
-          </BarChart>
+        </BarChart>
         </ResponsiveContainer>
       </div>
     </div>
