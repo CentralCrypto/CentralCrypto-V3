@@ -47,7 +47,7 @@ export const es = {
       trendingTopics: "Más Leídas",
       dailyNews: "Noticias del Día",
       dontMiss: "No te Pierdas",
-      editorsChoice: "Elección del Editor",
+      editorsChoice: "Editor's Pick",
       miniBulletins: "Mini Boletines"
     },
     pagination: {

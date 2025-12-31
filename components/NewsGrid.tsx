@@ -138,7 +138,7 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
             {estudos.map((post) => (
                <div onClick={() => onPostClick(post.id)} key={post.id} className="relative group cursor-pointer overflow-hidden rounded-lg flex-1 border border-tech-700 hover:border-[#dd9933] transition-colors shadow-lg bg-black">
                   <img src={post.featuredImage} alt="" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-70 group-hover:opacity-100" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-transparent"></div>
+                  <div className="absolute inset-0 bg-gradient-to-t from-tech-950 via-tech-950/70 to-transparent"></div>
                   <div className="absolute bottom-0 left-0 right-0 p-5">
                      <h4 className="text-white dark:text-[#dd9933] font-bold text-2xl leading-tight drop-shadow-md mb-2 line-clamp-2 group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors">{decodeHTML(post.titleHtml)}</h4>
                      <div className="flex items-center text-xs text-gray-300 gap-2 font-mono border-t border-gray-600/50 pt-2">
@@ -184,7 +184,7 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
                   exit={{ opacity: 0, y: -50, scale: 0.95 }}
                   transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                   onClick={() => onPostClick(post.id)} 
-                  className="h-[20%] shrink-0 flex gap-4 bg-tech-900 border-b border-tech-800 last:border-b-0 hover:border-b-[#dd9933] p-3 cursor-pointer group items-center transition-colors"
+                  className="h-[20%] shrink-0 flex gap-4 bg-gray-100 dark:bg-tech-900 border-b border-tech-800 last:border-b-0 hover:border-b-[#dd9933] p-3 cursor-pointer group items-center transition-colors"
                 >
                   <div className="flex-shrink-0 w-8 flex items-center justify-center">
                     <span className="text-3xl font-black text-gray-800 dark:text-gray-700 transition-colors group-hover:text-[#dd9933]">{originalIndex + 1}</span>

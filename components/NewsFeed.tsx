@@ -125,7 +125,7 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ onPostClick, language }) => {
                         <div onClick={() => onPostClick(post.id)} key={post.id} className="group cursor-pointer">
                             <div className="aspect-video w-full overflow-hidden rounded-md border border-tech-700 group-hover:border-[#dd9933] relative mb-3">
                                 <img src={post.featuredImage} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" alt="" />
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                                <div className="absolute inset-0 bg-gradient-to-t from-tech-950/80 to-transparent"></div>
                                 <div className="absolute bottom-2 left-3 right-3 text-[10px] text-[#dd9933] font-bold uppercase">{post.authorName}</div>
                             </div>
                             <h4 className="text-gray-200 dark:text-[#dd9933] font-bold text-lg leading-tight group-hover:text-[#dd9933] dark:group-hover:text-white transition-colors">{decodeHTML(post.titleHtml)}</h4>
@@ -138,12 +138,12 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ onPostClick, language }) => {
                 <div className="lg:col-span-6 flex flex-col flex-1">
                     <div className="mb-10 w-full">
                         <div className="flex justify-between items-center border-b-2 border-[#dd9933] pb-2 mb-4">
-                            <h3 className="text-gray-200 font-bold uppercase tracking-widest text-sm">Estudos e Escolhas</h3>
+                            <h3 className="text-gray-200 font-bold uppercase tracking-widest text-sm">{t.editorsChoice}</h3>
                         </div>
                         {loadingSpecifics ? <div className="w-full h-[350px] bg-tech-800 rounded-xl animate-pulse"></div> : carouselFiltered.length > 0 && (
                             <div className="relative w-full h-[350px] rounded-xl overflow-hidden group shadow-2xl border border-tech-700" onClick={() => onPostClick(carouselFiltered[carouselIndex].id)}>
                                 <img src={carouselFiltered[carouselIndex].featuredImage} className="w-full h-full object-cover transition-opacity duration-700 cursor-pointer" alt="" />
-                                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div>
+                                <div className="absolute inset-0 bg-gradient-to-t from-tech-950 via-tech-950/40 to-transparent"></div>
                                 <div className="absolute bottom-0 left-0 right-0 p-8 cursor-pointer">
                                     <div className="bg-[#dd9933] text-black text-[10px] font-black px-2 py-0.5 inline-block mb-3 rounded-sm uppercase tracking-wider">{t.editorsChoice}</div>
                                     <h2 className="text-3xl font-black text-white dark:text-[#dd9933] leading-tight drop-shadow-md mb-4 hover:text-[#dd9933] dark:hover:text-white transition-colors">
