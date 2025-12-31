@@ -458,6 +458,7 @@ const EtfFlowWidget = ({ language, onNavigate, theme }: { language: Language; on
                             axisLine={false} 
                             tickLine={false} 
                             interval={0} 
+                            height={60}
                         />
                         <YAxis tick={{ fontSize: 9, fill: theme === 'dark' ? '#9ca3af' : '#6b7280' }} axisLine={false} tickLine={false} />
                         <Tooltip content={<BarTooltip />} cursor={{ fill: 'rgba(221, 153, 51, 0.1)' }} />
