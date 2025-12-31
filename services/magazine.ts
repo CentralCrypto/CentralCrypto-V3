@@ -1,6 +1,8 @@
 /**
- * MOTOR MAGAZINE V5.0 - PROXY-READY
- * Otimizado para Same-Origin Fetch com Fallback automático de Proxy
+ * MOTOR MAGAZINE V5.1
+ * - Cache TTL + dedupe (home rápida)
+ * - Sem cache-buster por padrão (só com forceFresh)
+ * - Lightweight via context=embed (NÃO usa _fields porque mata _embedded)
  */
 import { getMagazineUrl, ENDPOINTS } from './endpoints';
 import { httpGetJson } from './http';
@@ -28,7 +30,7 @@ const PLACEHOLDER_IMG =
   'https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png';
 
 // ==============================================================
-// Cache & Dedupe (front) — reduz brutalmente o tempo da Home
+// Cache & Dedupe (front)
 // ==============================================================
 
 type HeaderLike = { get: (name: string) => string | null };
@@ -47,7 +49,7 @@ type CacheEntry = {
 };
 
 const DEFAULT_TIMEOUT_MS = 10000;
-const POSTS_CACHE_TTL_MS = 30_000; // suficiente p/ DEV sem ficar “travado”
+const POSTS_CACHE_TTL_MS = 30_000; // DEV: rápido sem ficar travado
 const CATS_CACHE_TTL_MS = 3_600_000; // 1h
 const HEADERS_TO_KEEP = ['X-WP-Total', 'X-WP-TotalPages'];
 
@@ -68,7 +70,6 @@ function pickHeaders(headers: Headers, keys: string[]): Record<string, string> {
 }
 
 function buildHeaderLike(obj: Record<string, string>): HeaderLike {
-  // Mantém compatível com o uso atual (headers.get('X-WP-Total'))
   return {
     get: (name: string) => obj[name] ?? obj[name.toLowerCase()] ?? null
   };
@@ -139,19 +140,38 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]*>?/gm, '').trim();
 }
 
+function pickFeaturedFromEmbedded(post: any): string | null {
+  const media = post?._embedded?.['wp:featuredmedia']?.[0];
+  if (!media) return null;
+
+  // Preferir um tamanho “de home” antes do full
+  const sizes = media?.media_details?.sizes;
+  const candidate =
+    sizes?.medium_large?.source_url ||
+    sizes?.large?.source_url ||
+    sizes?.medium?.source_url ||
+    sizes?.full?.source_url ||
+    media?.source_url;
+
+  return typeof candidate === 'string' && candidate.length > 0 ? candidate : null;
+}
+
 function normalizePost(post: any): MagazinePost {
   if (!post || typeof post !== 'object') return { id: 0 } as MagazinePost;
 
   let img =
     post.featured_media_url ||
-    post._embedded?.['wp:featuredmedia']?.[0]?.source_url ||
-    post.jetpack_featured_media_url;
+    post.jetpack_featured_media_url ||
+    pickFeaturedFromEmbedded(post);
 
-  // Só tenta “pescar” imagem do content se ele existir (no modo lightweight, não vem)
+  // Só tenta pescar do content se ele existir (em context=embed normalmente não vem)
   if (!img && post.content?.rendered) {
     const match = post.content.rendered.match(/<img[^>]+src="([^">]+)"/);
     if (match) img = match[1];
   }
+
+  // Se realmente não tem imagem, aí sim placeholder
+  const finalImg = img || PLACEHOLDER_IMG;
 
   return {
     id: post.id || 0,
@@ -161,13 +181,12 @@ function normalizePost(post: any): MagazinePost {
     contentHtml: post.content?.rendered || '',
     date: post.date || new Date().toISOString(),
     categories: post.categories || [],
-    featuredImage: img || PLACEHOLDER_IMG,
-    authorName: post._embedded?.['author']?.[0]?.name || 'Central Crypto'
+    featuredImage: finalImg,
+    authorName: post._embedded?.author?.[0]?.name || 'Central Crypto'
   };
 }
 
-// Updated fetchMagazinePosts parameter type for categories to allow string (comma-separated list)
-// This fix addresses Type 'string' is not assignable to type 'number' errors in NewsGrid.tsx and NewsFeed.tsx
+// Updated parameter type for categories to allow string (comma-separated list)
 export async function fetchMagazinePosts(params: {
   search?: string;
   page?: number;
@@ -177,65 +196,52 @@ export async function fetchMagazinePosts(params: {
   cacheTtlMs?: number; // override
   forceFresh?: boolean; // ignora cache
 }): Promise<{ posts: MagazinePost[]; total: number; totalPages: number }> {
-  try {
-    const lightweight = params.lightweight ?? true;
-    const fieldsLight = [
-      'id',
-      'slug',
-      'date',
-      'title',
-      'excerpt',
-      'categories',
-      'featured_media',
-      'featured_media_url',
-      'jetpack_featured_media_url',
-      '_embedded'
-    ].join(',');
+  const lightweight = params.lightweight ?? true;
 
-    const query = {
-      _embed: 1,
-      search: params.search,
-      page: params.page,
-      per_page: params.perPage || 10,
-      categories: params.categories,
-      ...(lightweight ? { _fields: fieldsLight } : {})
-    };
+  // IMPORTANTE:
+  // - NÃO usar _fields com _embed: isso pode remover _embedded e matar featured images.
+  // - Usar context=embed reduz payload mantendo _embedded.
+  const query = {
+    _embed: 1,
+    ...(lightweight ? { context: 'embed' } : {}),
+    search: params.search,
+    page: params.page,
+    per_page: params.perPage || 10,
+    categories: params.categories
+  };
 
-    const { data, headers } = await magazineFetch(ENDPOINTS.magazine.posts, query, {
-      cacheTtlMs: params.cacheTtlMs ?? (lightweight ? POSTS_CACHE_TTL_MS : 0),
-      forceFresh: !!params.forceFresh,
-      dedupe: true,
-      timeoutMs: DEFAULT_TIMEOUT_MS
-    });
+  const { data, headers } = await magazineFetch(ENDPOINTS.magazine.posts, query, {
+    cacheTtlMs: params.cacheTtlMs ?? (lightweight ? POSTS_CACHE_TTL_MS : 0),
+    forceFresh: !!params.forceFresh,
+    dedupe: true,
+    timeoutMs: DEFAULT_TIMEOUT_MS
+  });
 
-    const rawPosts = Array.isArray(data) ? data : [];
-    const posts = rawPosts.map(normalizePost).filter((p: any) => p.id > 0);
+  const rawPosts = Array.isArray(data) ? data : [];
+  const posts = rawPosts.map(normalizePost).filter((p: any) => p.id > 0);
 
-    let total = posts.length;
-    let totalPages = 1;
+  let total = posts.length;
+  let totalPages = 1;
 
-    if (headers) {
-      const wpTotal = headers.get('X-WP-Total');
-      const wpPages = headers.get('X-WP-TotalPages');
-      if (wpTotal) total = parseInt(wpTotal);
-      if (wpPages) totalPages = parseInt(wpPages);
-    }
-
-    return { posts, total, totalPages };
-  } catch (e) {
-    throw e;
+  if (headers) {
+    const wpTotal = headers.get('X-WP-Total');
+    const wpPages = headers.get('X-WP-TotalPages');
+    if (wpTotal) total = parseInt(wpTotal);
+    if (wpPages) totalPages = parseInt(wpPages);
   }
+
+  return { posts, total, totalPages };
 }
 
 export async function fetchSinglePost(id: number): Promise<MagazinePost | null> {
   try {
     const { data } = await magazineFetch(
       `${ENDPOINTS.magazine.posts}/${id}`,
-      { _embed: 1 },
+      { _embed: 1, context: 'view' },
       { cacheTtlMs: 0, forceFresh: true, dedupe: true, timeoutMs: DEFAULT_TIMEOUT_MS }
     );
     return data ? normalizePost(data) : null;
-  } catch (e) {
+  } catch {
     return null;
   }
 }
@@ -254,7 +260,7 @@ export async function fetchMagazineCategories(): Promise<MagazineCategory[]> {
       slug: c.slug,
       count: c.count
     }));
-  } catch (e) {
+  } catch {
     return [];
   }
 }

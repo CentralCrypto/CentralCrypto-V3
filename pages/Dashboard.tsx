@@ -448,7 +448,7 @@ const EtfFlowWidget = ({ language, onNavigate, theme }: { language: Language; on
                 <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: -10 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#3e4044' : '#e5e7eb'} vertical={false} />
-                        <XAxis dataKey="date" tickFormatter={(tick) => new Date(tick).toLocaleDateString(language, { month: 'short', day: 'numeric' })} tick={{ fontSize: 9, fill: theme === 'dark' ? '#9ca3af' : '#6b7280' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                        <XAxis dataKey="date" tickFormatter={(tick) => new Date(tick).toLocaleDateString(language, { month: 'short', day: 'numeric' })} tick={{ fontSize: 9, fill: theme === 'dark' ? '#9ca3af' : '#6b7280' }} axisLine={false} tickLine={false} />
                         <YAxis tick={{ fontSize: 9, fill: theme === 'dark' ? '#9ca3af' : '#6b7280' }} axisLine={false} tickLine={false} />
                         <Tooltip content={<BarTooltip />} cursor={{ fill: 'rgba(221, 153, 51, 0.1)' }} />
                         <ReferenceLine y={0} stroke={theme === 'dark' ? '#9ca3af' : '#6b7280'} strokeWidth={1} />
