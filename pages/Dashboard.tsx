@@ -386,11 +386,26 @@ const EtfFlowWidget = ({ language, onNavigate, theme }: { language: Language; on
             const rawData = await fetchWithFallback('/cachecko/etfnetflowcompleto.json');
             if (rawData && Array.isArray(rawData)) {
                 const processed = rawData
-                    .map(d => ({
-                        date: new Date(d.date).getTime(),
-                        flow: d.total?.btc ?? 0
-                    }))
-                    .filter(d => d.date && isFinite(d.flow))
+                    .map(dailyData => {
+                        if (!dailyData || typeof dailyData !== 'object' || !dailyData.date) {
+                            return null;
+                        }
+                        
+                        let dailyBtcFlow = 0;
+                        const excludedKeys = ['date', 'total', 'BTC', 'ETH', 'usd', 'eth'];
+
+                        for (const etfKey in dailyData) {
+                            if (!excludedKeys.includes(etfKey) && dailyData[etfKey] && typeof dailyData[etfKey].btc === 'number') {
+                                dailyBtcFlow += dailyData[etfKey].btc;
+                            }
+                        }
+
+                        return {
+                            date: new Date(dailyData.date).getTime(),
+                            flow: dailyBtcFlow
+                        };
+                    })
+                    .filter((d): d is { date: number; flow: number } => d !== null && !isNaN(d.date) && isFinite(d.flow))
                     .sort((a, b) => a.date - b.date)
                     .slice(-30);
                 setChartData(processed);
