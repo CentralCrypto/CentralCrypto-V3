@@ -383,18 +383,15 @@ const EtfFlowWidget = ({ language, onNavigate, theme }: { language: Language; on
   const toMs = (v: any): number | null => {
     if (v === null || v === undefined) return null;
 
-    // number -> pode ser seconds ou ms
     if (typeof v === 'number' && isFinite(v)) {
-      if (v < 1e12) return Math.round(v * 1000); // seconds -> ms
-      return Math.round(v); // already ms
+      if (v < 1e12) return Math.round(v * 1000);
+      return Math.round(v);
     }
 
-    // string -> timestamp numérico ou data ISO
     if (typeof v === 'string') {
       const s = v.trim();
       if (!s) return null;
 
-      // numeric string timestamp
       if (/^\d+$/.test(s)) {
         const n = Number(s);
         if (!isFinite(n)) return null;
@@ -412,15 +409,12 @@ const EtfFlowWidget = ({ language, onNavigate, theme }: { language: Language; on
   const normalizeDailyList = (raw: any): any[] => {
     if (!raw) return [];
 
-    // já é array (mais comum)
     if (Array.isArray(raw)) return raw;
 
-    // objeto com arrays em chaves comuns
     if (typeof raw === 'object') {
       if (Array.isArray((raw as any).daily)) return (raw as any).daily;
       if (Array.isArray((raw as any).data)) return (raw as any).data;
 
-      // objeto indexado por timestamp/data -> vira lista
       const out: any[] = [];
       for (const [k, v] of Object.entries(raw)) {
         if (!v || typeof v !== 'object') continue;
@@ -431,7 +425,6 @@ const EtfFlowWidget = ({ language, onNavigate, theme }: { language: Language; on
           continue;
         }
 
-        // tenta usar a key como data/timestamp
         const ms = toMs(k);
         if (ms !== null) out.push({ ...(v as any), timestamp: ms });
       }
@@ -454,7 +447,6 @@ const EtfFlowWidget = ({ language, onNavigate, theme }: { language: Language; on
         'btc', 'eth', 'usd'
       ]);
 
-      // soma BTC por dia e agrupa (garante 30 barras “por dia”, mesmo se houver duplicatas)
       const byDay = new Map<string, { date: number; flow: number }>();
 
       for (const dailyData of list) {
@@ -477,13 +469,11 @@ const EtfFlowWidget = ({ language, onNavigate, theme }: { language: Language; on
           if (isFinite(n)) dailyBtcFlow += n;
         }
 
-        // chave de dia (UTC) pra agrupar
         const dayKey = new Date(ms).toISOString().slice(0, 10);
 
         const prev = byDay.get(dayKey);
         if (prev) {
           prev.flow += dailyBtcFlow;
-          // mantém o ms do primeiro registro daquele dia
         } else {
           byDay.set(dayKey, { date: ms, flow: dailyBtcFlow });
         }
@@ -500,74 +490,85 @@ const EtfFlowWidget = ({ language, onNavigate, theme }: { language: Language; on
     loadData().catch(() => setLoading(false));
   }, []);
 
-  const BarTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      const date = new Date(label);
-      const flow = payload[0].value;
-      return (
-        <div className="bg-white dark:bg-[#1e2022] border border-gray-200 dark:border-tech-700 p-3 rounded-lg shadow-xl font-sans">
-          <p className="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase mb-1">
-            {date.toLocaleDateString(language, { day: '2-digit', month: 'short', year: 'numeric' })}
-          </p>
-          <div className="flex items-center gap-2">
-            <p className={`text-base font-black font-mono ${flow >= 0 ? 'text-tech-success' : 'text-tech-danger'}`}>
-              {flow >= 0 ? '+' : ''}{Number(flow).toFixed(2)} BTC
-            </p>
-          </div>
-        </div>
-      );
-    }
-    return null;
-  };
+  const latest = chartData.length ? chartData[chartData.length - 1] : null;
+
+  const latestDateStr = latest
+    ? new Date(latest.date).toLocaleDateString(language, { day: '2-digit', month: 'short', year: 'numeric' })
+    : '--';
+
+  const latestFlowStr = latest
+    ? `${latest.flow >= 0 ? '+' : ''}${latest.flow.toFixed(2)} BTC`
+    : '--';
+
+  const latestFlowClass = latest?.flow !== undefined
+    ? (latest.flow >= 0 ? 'text-tech-success' : 'text-tech-danger')
+    : 'text-gray-400';
 
   if (loading) return <div className="glass-panel p-3 rounded-xl h-full animate-pulse bg-tech-800 border-tech-700 w-full" />;
 
   return (
     <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 relative w-full overflow-hidden transition-all duration-700">
-      <div className="flex justify-between items-center mb-2 px-1">
-        <div className="font-black text-gray-500 dark:text-gray-400 text-[11px] leading-tight uppercase tracking-wider">
-          Fluxo ETF BTC SPOT
+      <div className="flex justify-between items-start mb-2 px-1">
+        <div className="flex flex-col">
+          <div className="font-black text-gray-500 dark:text-gray-400 text-[11px] leading-tight uppercase tracking-wider">
+            Fluxo ETF BTC SPOT
+          </div>
+          <div className="text-[10px] font-bold text-gray-600 dark:text-gray-300 uppercase tracking-widest">
+            {latestDateStr}
+          </div>
         </div>
-        <WorkspaceLink onClick={onNavigate} />
+
+        <div className="flex items-start gap-2">
+          <div className="text-right">
+            <div className={`text-base font-black font-mono leading-none ${latestFlowClass}`}>
+              {latestFlowStr}
+            </div>
+            <div className="text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest mt-0.5">
+              last daily netflow
+            </div>
+          </div>
+          <WorkspaceLink onClick={onNavigate} />
+        </div>
       </div>
 
       <div className="flex-1 min-h-[150px]">
         <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={chartData} margin={{ top: 6, right: 6, left: 6, bottom: 6 }}>
-            {/* opcional: tira o grid pra não poluir */}
-            {/* <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#3e4044' : '#e5e7eb'} vertical={false} /> */}
-
+          <BarChart data={chartData} margin={{ top: 6, right: 6, left: 6, bottom: 6 }}>
             <XAxis
-            dataKey="date"
-            type="category"
-            axisLine={false}
-            tickLine={false}
-            height={18}
-            tick={(props: any) => {
+              dataKey="date"
+              type="category"
+              axisLine={false}
+              tickLine={false}
+              height={18}
+              tick={(props: any) => {
                 const { x, y, payload, index } = props;
-                if (index !== chartData.length - 1) return null; // só a última data
+                if (index !== chartData.length - 1) return null;
+
                 const d = new Date(payload.value);
                 const label = d.toLocaleDateString(language, { month: 'short', day: 'numeric' });
+
                 return (
-                <text x={x} y={y + 12} textAnchor="end" fontSize={9} fill={theme === 'dark' ? '#9ca3af' : '#6b7280'}>
+                  <text
+                    x={x}
+                    y={y + 12}
+                    textAnchor="end"
+                    fontSize={9}
+                    fill={theme === 'dark' ? '#9ca3af' : '#6b7280'}
+                  >
                     {label}
-                </text>
+                  </text>
                 );
-            }}
+              }}
             />
 
             <YAxis hide />
 
-            {/* tira tooltip e referenceLine */}
-            {/* <Tooltip ... /> */}
-            {/* <ReferenceLine y={0} ... /> */}
-
             <Bar dataKey="flow">
-            {chartData.map((entry, index) => (
+              {chartData.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={entry.flow >= 0 ? 'var(--color-success)' : 'var(--color-danger)'} />
-            ))}
+              ))}
             </Bar>
-        </BarChart>
+          </BarChart>
         </ResponsiveContainer>
       </div>
     </div>
@@ -679,7 +680,7 @@ const LiveCoinRow: React.FC<{ coin: any; color: string }> = ({ coin, color }) =>
 };
 
 const GainersLosersWidget = ({ language, onNavigate }: { language: Language; onNavigate: () => void }) => {
-    const [data, setData] = useState({ gainers: [], losers: [] });
+    const [data, setData] = useState<{ gainers: any[], losers: any[] }>({ gainers: [], losers: [] });
     const [tab, setTab] = useState('gainers');
     useEffect(() => { fetchGainersLosers().then(setData).catch(() => {}); }, []);
     
@@ -868,6 +869,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onPostClick, language = 'pt' as L
     <div className="w-full flex-1 flex flex-col transition-colors duration-700 pb-20">
       <div className="w-full max-w-[90%] mx-auto px-4 mt-6">
         <div className="flex items-center justify-center mb-6">
+            <div className="h-px bg-tech-600 flex-1 opacity-20 dark:opacity-100"></div>
             <div className="flex items-center gap-4 px-4 py-1 bg-tech-800 border border-tech-700 rounded-lg shadow-xl">
                <button onClick={() => setView(ViewMode.WORKSPACE)} className="text-gray-900 dark:text-[#dd9933] hover:text-[#dd9933] transition-colors font-black tracking-[0.2em] text-lg uppercase flex items-center gap-2">
                    ANALYTICS WORKSPACE <LayoutDashboard size={16} />
