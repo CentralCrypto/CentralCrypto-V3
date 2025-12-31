@@ -377,15 +377,15 @@ const AltSeasonWidget = ({ language, onNavigate, theme }: { language: Language; 
 };
 
 const EtfFlowWidget = ({ language, onNavigate, theme }: { language: Language; onNavigate: () => void; theme: 'dark' | 'light' }) => {
-  const [chartData, setChartData] = useState<{ date: number; flow: number }[]>([]);
+  const [chartData, setChartData] = useState<{ date: number; btc: number; eth: number; usd: number }[]>([]);
   const [loading, setLoading] = useState(true);
 
   const toMs = (v: any): number | null => {
     if (v === null || v === undefined) return null;
 
     if (typeof v === 'number' && isFinite(v)) {
-      if (v < 1e12) return Math.round(v * 1000);
-      return Math.round(v);
+      if (v < 1e12) return Math.round(v * 1000); // seconds -> ms
+      return Math.round(v); // ms
     }
 
     if (typeof v === 'string') {
@@ -408,13 +408,13 @@ const EtfFlowWidget = ({ language, onNavigate, theme }: { language: Language; on
 
   const normalizeDailyList = (raw: any): any[] => {
     if (!raw) return [];
-
     if (Array.isArray(raw)) return raw;
 
     if (typeof raw === 'object') {
       if (Array.isArray((raw as any).daily)) return (raw as any).daily;
       if (Array.isArray((raw as any).data)) return (raw as any).data;
 
+      // object keyed by timestamp/date
       const out: any[] = [];
       for (const [k, v] of Object.entries(raw)) {
         if (!v || typeof v !== 'object') continue;
@@ -434,6 +434,23 @@ const EtfFlowWidget = ({ language, onNavigate, theme }: { language: Language; on
     return [];
   };
 
+  const formatSigned = (n?: number, decimals = 2) => {
+    if (n === undefined || n === null || !isFinite(n)) return '--';
+    return `${n >= 0 ? '+' : ''}${n.toFixed(decimals)}`;
+  };
+
+  const formatUsd = (n?: number) => {
+    if (n === undefined || n === null || !isFinite(n)) return '--';
+    const abs = Math.abs(n);
+    const sign = n < 0 ? '-' : '';
+    const v = abs >= 1e12 ? `${(abs / 1e12).toFixed(2)}T`
+      : abs >= 1e9 ? `${(abs / 1e9).toFixed(2)}B`
+      : abs >= 1e6 ? `${(abs / 1e6).toFixed(2)}M`
+      : abs >= 1e3 ? `${(abs / 1e3).toFixed(2)}K`
+      : abs.toFixed(0);
+    return `${sign}$${v}`;
+  };
+
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
@@ -447,7 +464,7 @@ const EtfFlowWidget = ({ language, onNavigate, theme }: { language: Language; on
         'btc', 'eth', 'usd'
       ]);
 
-      const byDay = new Map<string, { date: number; flow: number }>();
+      const byDay = new Map<string, { date: number; btc: number; eth: number; usd: number }>();
 
       for (const dailyData of list) {
         if (!dailyData || typeof dailyData !== 'object') continue;
@@ -456,7 +473,9 @@ const EtfFlowWidget = ({ language, onNavigate, theme }: { language: Language; on
         const ms = toMs(tsRaw);
         if (ms === null) continue;
 
-        let dailyBtcFlow = 0;
+        let dailyBtc = 0;
+        let dailyEth = 0;
+        let dailyUsd = 0;
 
         for (const etfKey of Object.keys(dailyData)) {
           if (excludedKeys.has(etfKey)) continue;
@@ -464,18 +483,26 @@ const EtfFlowWidget = ({ language, onNavigate, theme }: { language: Language; on
           const etfObj = (dailyData as any)[etfKey];
           if (!etfObj || typeof etfObj !== 'object') continue;
 
-          const btcVal = (etfObj as any).btc;
-          const n = Number(btcVal);
-          if (isFinite(n)) dailyBtcFlow += n;
+          const btcVal = Number((etfObj as any).btc);
+          if (isFinite(btcVal)) dailyBtc += btcVal;
+
+          const ethVal = Number((etfObj as any).eth);
+          if (isFinite(ethVal)) dailyEth += ethVal;
+
+          const usdVal = Number((etfObj as any).usd);
+          if (isFinite(usdVal)) dailyUsd += usdVal;
         }
 
+        // group by day (UTC) to avoid duplicates
         const dayKey = new Date(ms).toISOString().slice(0, 10);
 
         const prev = byDay.get(dayKey);
         if (prev) {
-          prev.flow += dailyBtcFlow;
+          prev.btc += dailyBtc;
+          prev.eth += dailyEth;
+          prev.usd += dailyUsd;
         } else {
-          byDay.set(dayKey, { date: ms, flow: dailyBtcFlow });
+          byDay.set(dayKey, { date: ms, btc: dailyBtc, eth: dailyEth, usd: dailyUsd });
         }
       }
 
@@ -490,86 +517,70 @@ const EtfFlowWidget = ({ language, onNavigate, theme }: { language: Language; on
     loadData().catch(() => setLoading(false));
   }, []);
 
-  const latest = chartData.length ? chartData[chartData.length - 1] : null;
+  const last = chartData.length ? chartData[chartData.length - 1] : null;
 
-  const latestDateStr = latest
-    ? new Date(latest.date).toLocaleDateString(language, { day: '2-digit', month: 'short', year: 'numeric' })
-    : '--';
+  // "dia anterior" (normalmente o último registro do JSON)
+  const btcHeadline = last ? `${formatSigned(last.btc, 2)} BTC` : '--';
 
-  const latestFlowStr = latest
-    ? `${latest.flow >= 0 ? '+' : ''}${latest.flow.toFixed(2)} BTC`
-    : '--';
-
-  const latestFlowClass = latest?.flow !== undefined
-    ? (latest.flow >= 0 ? 'text-tech-success' : 'text-tech-danger')
-    : 'text-gray-400';
+  const ethFooter = last ? `${formatSigned(last.eth, 2)} ETH` : '--';
+  const usdFooter = last ? formatUsd(last.usd) : '--';
 
   if (loading) return <div className="glass-panel p-3 rounded-xl h-full animate-pulse bg-tech-800 border-tech-700 w-full" />;
 
   return (
     <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 relative w-full overflow-hidden transition-all duration-700">
-      <div className="flex justify-between items-start mb-2 px-1">
-        <div className="flex flex-col">
-          <div className="font-black text-gray-500 dark:text-gray-400 text-[11px] leading-tight uppercase tracking-wider">
-            Fluxo ETF BTC SPOT
-          </div>
-          <div className="text-[10px] font-bold text-gray-600 dark:text-gray-300 uppercase tracking-widest">
-            {latestDateStr}
-          </div>
+      {/* header: título + link (sem quebrar linha) */}
+      <div className="flex justify-between items-center mb-1 px-1">
+        <div className="font-black text-gray-500 dark:text-gray-400 text-[11px] leading-tight uppercase tracking-wider whitespace-nowrap">
+          Fluxo ETF BTC SPOT
         </div>
+        <WorkspaceLink onClick={onNavigate} />
+      </div>
 
-        <div className="flex items-start gap-2">
-          <div className="text-right">
-            <div className={`text-base font-black font-mono leading-none ${latestFlowClass}`}>
-              {latestFlowStr}
-            </div>
-            <div className="text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest mt-0.5">
-              last daily netflow
-            </div>
-          </div>
-          <WorkspaceLink onClick={onNavigate} />
+      {/* headline: abaixo do título e acima do gráfico */}
+      <div className="px-1 mb-2">
+        <div className="text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">
+          BTC netflow (último dia)
+        </div>
+        <div className="text-xl font-black font-mono leading-none text-gray-900 dark:text-gray-100">
+          {btcHeadline}
         </div>
       </div>
 
-      <div className="flex-1 min-h-[150px]">
+      {/* chart: sem eixos, sem tooltip */}
+      <div className="flex-1 min-h-[130px]">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData} margin={{ top: 6, right: 6, left: 6, bottom: 6 }}>
-            <XAxis
-              dataKey="date"
-              type="category"
-              axisLine={false}
-              tickLine={false}
-              height={18}
-              tick={(props: any) => {
-                const { x, y, payload, index } = props;
-                if (index !== chartData.length - 1) return null;
-
-                const d = new Date(payload.value);
-                const label = d.toLocaleDateString(language, { month: 'short', day: 'numeric' });
-
-                return (
-                  <text
-                    x={x}
-                    y={y + 12}
-                    textAnchor="end"
-                    fontSize={9}
-                    fill={theme === 'dark' ? '#9ca3af' : '#6b7280'}
-                  >
-                    {label}
-                  </text>
-                );
-              }}
-            />
-
+          <BarChart data={chartData} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+            <XAxis hide dataKey="date" />
             <YAxis hide />
-
-            <Bar dataKey="flow">
+            <Bar dataKey="btc">
               {chartData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.flow >= 0 ? 'var(--color-success)' : 'var(--color-danger)'} />
+                <Cell key={`cell-${index}`} fill={entry.btc >= 0 ? 'var(--color-success)' : 'var(--color-danger)'} />
               ))}
             </Bar>
           </BarChart>
         </ResponsiveContainer>
+      </div>
+
+      {/* footer: ETH à esquerda, Total USD à direita */}
+      <div className="flex justify-between items-center pt-2 mt-2 border-t border-tech-700/50 px-1">
+        <div className="flex flex-col">
+          <div className="text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">
+            ETH netflow (último)
+          </div>
+          <div className="text-sm font-black font-mono text-gray-700 dark:text-gray-200">
+            {ethFooter}
+          </div>
+        </div>
+
+        <div className="flex flex-col text-right">
+          <div className="text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">
+            NetFlow Total (USD)
+          </div>
+          <div className="text-sm font-black font-mono text-gray-700 dark:text-gray-200">
+            {usdFooter}
+          </div>
+        </div>
       </div>
     </div>
   );
