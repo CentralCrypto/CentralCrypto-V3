@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { User, CreditCard, Lock, Loader2, Save, Camera, Mail, X } from './Icons';
 import { userService } from '../services/user';
@@ -111,8 +112,10 @@ const UserProfile: React.FC = () => {
     try {
         let avatarId = null;
         if (selectedFile) {
-            const media = await userService.uploadMedia(selectedFile);
-            avatarId = media.id;
+            // Fix: Property 'uploadMedia' does not exist on userService. Changed to 'uploadAvatar'.
+            // The result from uploadAvatar contains 'attachment_id', which is used below.
+            const media = await userService.uploadAvatar(selectedFile);
+            avatarId = media.attachment_id;
         }
 
         const updateData: any = {
@@ -126,6 +129,7 @@ const UserProfile: React.FC = () => {
             updateData.meta = { simple_local_avatar: { media_id: avatarId } }; 
         }
 
+        // The comment below appears to be a leftover from previous code. The call is correct.
         // Fix: userService.updateProfile expects only one argument.
         await userService.updateProfile(updateData);
         

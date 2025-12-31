@@ -3,11 +3,12 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ArrowUpRight, Zap, Eye, EyeOff, ArrowDownRight, Activity, Loader2, ChevronDown, ExternalLink, ArrowUp, ArrowDown, LayoutDashboard, Calendar, Server, RefreshCw, Search, Clock } from '../components/Icons';
 import NewsGrid from '../components/NewsGrid';
 import NewsFeed from '../components/NewsFeed';
-import { LineChart, Line, ResponsiveContainer, YAxis, XAxis, CartesianGrid, Tooltip, AreaChart, Area, Brush } from 'recharts';
+import { LineChart, Line, ResponsiveContainer, YAxis, XAxis, CartesianGrid, Tooltip, AreaChart, Area, Brush, BarChart, Bar, Cell, ReferenceLine } from 'recharts';
 import { WPPost, Language, ViewMode } from '../types';
 import MagazineTicker from '../components/MagazineTicker';
 import { getTranslations } from '../locales';
 import { 
+    fetchWithFallback,
     fetchTopCoins, 
     fetchAltcoinSeason, 
     fetchAltcoinSeasonHistory, 
@@ -16,7 +17,6 @@ import {
     fetchRsiAverage,
     TrumpData,
     fetchLongShortRatio,
-    fetchEtfFlow,
     fetchMarketCapHistory,
     fetchEconomicCalendar,
     fetchFearAndGreed
@@ -376,58 +376,74 @@ const AltSeasonWidget = ({ language, onNavigate, theme }: { language: Language; 
   );
 };
 
-const EtfFlowWidget = ({ language, onNavigate }: { language: Language; onNavigate: () => void }) => {
-    const [data, setData] = useState<any>(null);
+const EtfFlowWidget = ({ language, onNavigate, theme }: { language: Language; onNavigate: () => void; theme: 'dark' | 'light' }) => {
+    const [chartData, setChartData] = useState<{date: number, flow: number}[]>([]);
     const [loading, setLoading] = useState(true);
-    const t = getTranslations(language as Language).dashboard.widgets.etf;
 
-    useEffect(() => { 
-        setLoading(true);
-        fetchEtfFlow().then(res => { 
-            if(res) setData(res);
+    useEffect(() => {
+        const loadData = async () => {
+            setLoading(true);
+            const rawData = await fetchWithFallback('/cachecko/etfnetflowcompleto.json');
+            if (rawData && Array.isArray(rawData)) {
+                const processed = rawData
+                    .map(d => ({
+                        date: new Date(d.date).getTime(),
+                        flow: d.total?.btc ?? 0
+                    }))
+                    .filter(d => d.date && isFinite(d.flow))
+                    .sort((a, b) => a.date - b.date)
+                    .slice(-30);
+                setChartData(processed);
+            }
             setLoading(false);
-        }).catch(() => setLoading(false)); 
+        };
+        loadData();
     }, []);
+
+    const BarTooltip = ({ active, payload, label }: any) => {
+        if (active && payload && payload.length) {
+            const date = new Date(label);
+            const flow = payload[0].value;
+            return (
+                <div className="bg-white dark:bg-[#1e2022] border border-gray-200 dark:border-tech-700 p-3 rounded-lg shadow-xl font-sans">
+                    <p className="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase mb-1">
+                        {date.toLocaleDateString(language, { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </p>
+                    <div className="flex items-center gap-2">
+                        <p className={`text-base font-black font-mono ${flow >= 0 ? 'text-tech-success' : 'text-tech-danger'}`}>
+                            {flow >= 0 ? '+' : ''}{flow.toFixed(2)} BTC
+                        </p>
+                    </div>
+                </div>
+            );
+        }
+        return null;
+    };
+
 
     if (loading) return <div className="glass-panel p-3 rounded-xl h-full animate-pulse bg-tech-800 border-tech-700 w-full" />;
 
-    const btc = data?.btcValue || 0;
-    const eth = data?.ethValue || 0;
-    const net = data?.netFlow || 0;
-
-    const formatVal = (v: number) => {
-        const abs = Math.abs(v);
-        if (abs >= 1e9) return `$${(v / 1e9).toFixed(1)}B`;
-        if (abs >= 1e6) return `$${(v / 1e6).toFixed(1)}M`;
-        return `$${v.toLocaleString()}`;
-    };
-
     return (
         <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 relative w-full overflow-hidden transition-all duration-700">
-            <div className="flex justify-between items-center mb-1">
-                <div className="font-black text-gray-500 dark:text-gray-400 text-[11px] leading-tight uppercase tracking-wider">{t.title}</div>
+            <div className="flex justify-between items-center mb-2 px-1">
+                <div className="font-black text-gray-500 dark:text-gray-400 text-[11px] leading-tight uppercase tracking-wider">Fluxo ETF BTC SPOT</div>
                 <WorkspaceLink onClick={onNavigate} />
             </div>
-            <div className="flex-1 flex flex-col items-center justify-center py-2">
-                <div className={`text-[11px] font-black uppercase tracking-widest ${net >= 0 ? 'text-tech-success' : 'text-tech-danger'}`}>
-                    {t.netFlow}
-                </div>
-                <div className="flex items-center gap-1">
-                    {net >= 0 ? <ArrowUp size={24} className="text-tech-success"/> : <ArrowDown size={24} className="text-tech-danger"/>}
-                    <span className={`text-2xl font-mono font-black ${net >= 0 ? 'text-tech-success' : 'text-tech-danger'}`}>
-                        {formatVal(net)}
-                    </span>
-                </div>
-            </div>
-            <div className="grid grid-cols-2 gap-1 border-t border-tech-700/50 pt-3 mt-1 w-full">
-                <div className="text-center">
-                    <div className="text-[9px] text-[#dd9933] font-black uppercase">BTC ETF</div>
-                    <div className="text-sm font-mono font-bold text-gray-700 dark:text-gray-300">{formatVal(btc)}</div>
-                </div>
-                <div className="text-center border-l border-tech-700/50">
-                    <div className="text-[9px] text-[#627eea] font-black uppercase">ETH ETF</div>
-                    <div className="text-sm font-mono font-bold text-gray-700 dark:text-gray-300">{formatVal(eth)}</div>
-                </div>
+            <div className="flex-1 min-h-[150px]">
+                <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: -10 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#3e4044' : '#e5e7eb'} vertical={false} />
+                        <XAxis dataKey="date" tickFormatter={(tick) => new Date(tick).toLocaleDateString(language, { month: 'short', day: 'numeric' })} tick={{ fontSize: 9, fill: theme === 'dark' ? '#9ca3af' : '#6b7280' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                        <YAxis tick={{ fontSize: 9, fill: theme === 'dark' ? '#9ca3af' : '#6b7280' }} axisLine={false} tickLine={false} />
+                        <Tooltip content={<BarTooltip />} cursor={{ fill: 'rgba(221, 153, 51, 0.1)' }} />
+                        <ReferenceLine y={0} stroke={theme === 'dark' ? '#9ca3af' : '#6b7280'} strokeWidth={1} />
+                        <Bar dataKey="flow">
+                            {chartData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.flow >= 0 ? 'var(--color-success)' : 'var(--color-danger)'} />
+                            ))}
+                        </Bar>
+                    </BarChart>
+                </ResponsiveContainer>
             </div>
         </div>
     );
@@ -747,7 +763,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onPostClick, language = 'pt' as L
                 <div className="h-[250px] md:h-[260px] xl:h-[270px]"><LongShortRatioWidget language={language} onNavigate={navigateToWorkspace} /></div>
                 <div className="h-[250px] md:h-[260px] xl:h-[270px]"><AltSeasonWidget language={language} onNavigate={navigateToWorkspace} theme={theme} /></div>
                 <div className="h-[250px] md:h-[260px] xl:h-[270px]"><MarketCapHistoryWidget language={language} onNavigate={navigateToWorkspace} theme={theme} /></div>
-                <div className="h-[250px] md:h-[260px] xl:h-[270px]"><EtfFlowWidget language={language} onNavigate={navigateToWorkspace} /></div>
+                <div className="h-[250px] md:h-[260px] xl:h-[270px]"><EtfFlowWidget language={language} onNavigate={navigateToWorkspace} theme={theme} /></div>
                 <div className="h-[250px] md:h-[260px] xl:h-[270px]"><TrumpOMeterWidget language={language} onNavigate={navigateToWorkspace} /></div>
                 
                 <div className="h-[340px] md:col-span-1 xl:col-span-2"><GainersLosersWidget language={language} onNavigate={navigateToWorkspace} /></div>
@@ -774,4 +790,3 @@ const Dashboard: React.FC<DashboardProps> = ({ onPostClick, language = 'pt' as L
 };
 
 export default Dashboard;
-    
