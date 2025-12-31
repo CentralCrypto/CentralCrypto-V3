@@ -377,102 +377,189 @@ const AltSeasonWidget = ({ language, onNavigate, theme }: { language: Language; 
 };
 
 const EtfFlowWidget = ({ language, onNavigate, theme }: { language: Language; onNavigate: () => void; theme: 'dark' | 'light' }) => {
-    const [chartData, setChartData] = useState<{date: number, flow: number}[]>([]);
-    const [loading, setLoading] = useState(true);
+  const [chartData, setChartData] = useState<{ date: number; flow: number }[]>([]);
+  const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        const loadData = async () => {
-            setLoading(true);
-            const rawData = await fetchWithFallback('/cachecko/etfnetflowcompleto.json');
-            if (rawData && Array.isArray(rawData)) {
-                const processed = rawData
-                    .map(dailyData => {
-                        if (!dailyData || typeof dailyData !== 'object' || !dailyData.date) {
-                            return null;
-                        }
-                        
-                        let dailyBtcFlow = 0;
-                        const excludedKeys = ['date', 'total', 'BTC', 'ETH', 'usd', 'eth'];
+  const toMs = (v: any): number | null => {
+    if (v === null || v === undefined) return null;
 
-                        for (const etfKey in dailyData) {
-                            if (!excludedKeys.includes(etfKey) && dailyData[etfKey] && typeof dailyData[etfKey].btc === 'number') {
-                                dailyBtcFlow += dailyData[etfKey].btc;
-                            }
-                        }
+    // number -> pode ser seconds ou ms
+    if (typeof v === 'number' && isFinite(v)) {
+      if (v < 1e12) return Math.round(v * 1000); // seconds -> ms
+      return Math.round(v); // already ms
+    }
 
-                        return {
-                            date: new Date(dailyData.date).getTime(),
-                            flow: dailyBtcFlow
-                        };
-                    })
-                    .filter((d): d is { date: number; flow: number } => d !== null && !isNaN(d.date) && isFinite(d.flow))
-                    .sort((a, b) => a.date - b.date)
-                    .slice(-30);
-                setChartData(processed);
-            }
-            setLoading(false);
-        };
-        loadData();
-    }, []);
+    // string -> timestamp numérico ou data ISO
+    if (typeof v === 'string') {
+      const s = v.trim();
+      if (!s) return null;
 
-    const BarTooltip = ({ active, payload, label }: any) => {
-        if (active && payload && payload.length) {
-            const date = new Date(label);
-            const flow = payload[0].value;
-            return (
-                <div className="bg-white dark:bg-[#1e2022] border border-gray-200 dark:border-tech-700 p-3 rounded-lg shadow-xl font-sans">
-                    <p className="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase mb-1">
-                        {date.toLocaleDateString(language, { day: '2-digit', month: 'short', year: 'numeric' })}
-                    </p>
-                    <div className="flex items-center gap-2">
-                        <p className={`text-base font-black font-mono ${flow >= 0 ? 'text-tech-success' : 'text-tech-danger'}`}>
-                            {flow >= 0 ? '+' : ''}{flow.toFixed(2)} BTC
-                        </p>
-                    </div>
-                </div>
-            );
+      // numeric string timestamp
+      if (/^\d+$/.test(s)) {
+        const n = Number(s);
+        if (!isFinite(n)) return null;
+        if (n < 1e12) return Math.round(n * 1000);
+        return Math.round(n);
+      }
+
+      const ms = Date.parse(s);
+      return isNaN(ms) ? null : ms;
+    }
+
+    return null;
+  };
+
+  const normalizeDailyList = (raw: any): any[] => {
+    if (!raw) return [];
+
+    // já é array (mais comum)
+    if (Array.isArray(raw)) return raw;
+
+    // objeto com arrays em chaves comuns
+    if (typeof raw === 'object') {
+      if (Array.isArray((raw as any).daily)) return (raw as any).daily;
+      if (Array.isArray((raw as any).data)) return (raw as any).data;
+
+      // objeto indexado por timestamp/data -> vira lista
+      const out: any[] = [];
+      for (const [k, v] of Object.entries(raw)) {
+        if (!v || typeof v !== 'object') continue;
+
+        const hasDateField = 'date' in (v as any) || 'timestamp' in (v as any) || 'ts' in (v as any);
+        if (hasDateField) {
+          out.push(v);
+          continue;
         }
-        return null;
+
+        // tenta usar a key como data/timestamp
+        const ms = toMs(k);
+        if (ms !== null) out.push({ ...(v as any), timestamp: ms });
+      }
+      return out;
+    }
+
+    return [];
+  };
+
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+
+      const raw = await fetchWithFallback('/cachecko/etfnetflowcompleto.json');
+      const list = normalizeDailyList(raw);
+
+      const excludedKeys = new Set([
+        'date', 'timestamp', 'ts',
+        'total', 'BTC', 'ETH',
+        'btc', 'eth', 'usd'
+      ]);
+
+      // soma BTC por dia e agrupa (garante 30 barras “por dia”, mesmo se houver duplicatas)
+      const byDay = new Map<string, { date: number; flow: number }>();
+
+      for (const dailyData of list) {
+        if (!dailyData || typeof dailyData !== 'object') continue;
+
+        const tsRaw = (dailyData as any).timestamp ?? (dailyData as any).ts ?? (dailyData as any).date;
+        const ms = toMs(tsRaw);
+        if (ms === null) continue;
+
+        let dailyBtcFlow = 0;
+
+        for (const etfKey of Object.keys(dailyData)) {
+          if (excludedKeys.has(etfKey)) continue;
+
+          const etfObj = (dailyData as any)[etfKey];
+          if (!etfObj || typeof etfObj !== 'object') continue;
+
+          const btcVal = (etfObj as any).btc;
+          const n = Number(btcVal);
+          if (isFinite(n)) dailyBtcFlow += n;
+        }
+
+        // chave de dia (UTC) pra agrupar
+        const dayKey = new Date(ms).toISOString().slice(0, 10);
+
+        const prev = byDay.get(dayKey);
+        if (prev) {
+          prev.flow += dailyBtcFlow;
+          // mantém o ms do primeiro registro daquele dia
+        } else {
+          byDay.set(dayKey, { date: ms, flow: dailyBtcFlow });
+        }
+      }
+
+      const processed = Array.from(byDay.values())
+        .sort((a, b) => a.date - b.date)
+        .slice(-30);
+
+      setChartData(processed);
+      setLoading(false);
     };
 
+    loadData().catch(() => setLoading(false));
+  }, []);
 
-    if (loading) return <div className="glass-panel p-3 rounded-xl h-full animate-pulse bg-tech-800 border-tech-700 w-full" />;
-
-    return (
-        <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 relative w-full overflow-hidden transition-all duration-700">
-            <div className="flex justify-between items-center mb-2 px-1">
-                <div className="font-black text-gray-500 dark:text-gray-400 text-[11px] leading-tight uppercase tracking-wider">Fluxo ETF BTC SPOT</div>
-                <WorkspaceLink onClick={onNavigate} />
-            </div>
-            <div className="flex-1 min-h-[150px]">
-                <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 35 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#3e4044' : '#e5e7eb'} vertical={false} />
-                        <XAxis 
-                            dataKey="date" 
-                            type="category" 
-                            tickFormatter={(tick) => new Date(tick).toLocaleDateString(language, { month: 'short', day: 'numeric' })} 
-                            tick={{ fontSize: 9, fill: theme === 'dark' ? '#9ca3af' : '#6b7280' }} 
-                            angle={-45}
-                            textAnchor="end"
-                            axisLine={false} 
-                            tickLine={false} 
-                            interval={0} 
-                            height={60}
-                        />
-                        <YAxis tick={{ fontSize: 9, fill: theme === 'dark' ? '#9ca3af' : '#6b7280' }} axisLine={false} tickLine={false} />
-                        <Tooltip content={<BarTooltip />} cursor={{ fill: 'rgba(221, 153, 51, 0.1)' }} />
-                        <ReferenceLine y={0} stroke={theme === 'dark' ? '#9ca3af' : '#6b7280'} strokeWidth={1} />
-                        <Bar dataKey="flow">
-                            {chartData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.flow >= 0 ? 'var(--color-success)' : 'var(--color-danger)'} />
-                            ))}
-                        </Bar>
-                    </BarChart>
-                </ResponsiveContainer>
-            </div>
+  const BarTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      const date = new Date(label);
+      const flow = payload[0].value;
+      return (
+        <div className="bg-white dark:bg-[#1e2022] border border-gray-200 dark:border-tech-700 p-3 rounded-lg shadow-xl font-sans">
+          <p className="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase mb-1">
+            {date.toLocaleDateString(language, { day: '2-digit', month: 'short', year: 'numeric' })}
+          </p>
+          <div className="flex items-center gap-2">
+            <p className={`text-base font-black font-mono ${flow >= 0 ? 'text-tech-success' : 'text-tech-danger'}`}>
+              {flow >= 0 ? '+' : ''}{Number(flow).toFixed(2)} BTC
+            </p>
+          </div>
         </div>
-    );
+      );
+    }
+    return null;
+  };
+
+  if (loading) return <div className="glass-panel p-3 rounded-xl h-full animate-pulse bg-tech-800 border-tech-700 w-full" />;
+
+  return (
+    <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 relative w-full overflow-hidden transition-all duration-700">
+      <div className="flex justify-between items-center mb-2 px-1">
+        <div className="font-black text-gray-500 dark:text-gray-400 text-[11px] leading-tight uppercase tracking-wider">
+          Fluxo ETF BTC SPOT
+        </div>
+        <WorkspaceLink onClick={onNavigate} />
+      </div>
+
+      <div className="flex-1 min-h-[150px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 35 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#3e4044' : '#e5e7eb'} vertical={false} />
+            <XAxis
+              dataKey="date"
+              type="category"
+              tickFormatter={(tick) => new Date(tick).toLocaleDateString(language, { month: 'short', day: 'numeric' })}
+              tick={{ fontSize: 9, fill: theme === 'dark' ? '#9ca3af' : '#6b7280' }}
+              angle={-45}
+              textAnchor="end"
+              axisLine={false}
+              tickLine={false}
+              interval={0}
+              height={60}
+            />
+            <YAxis tick={{ fontSize: 9, fill: theme === 'dark' ? '#9ca3af' : '#6b7280' }} axisLine={false} tickLine={false} />
+            <Tooltip content={<BarTooltip />} cursor={{ fill: 'rgba(221, 153, 51, 0.1)' }} />
+            <ReferenceLine y={0} stroke={theme === 'dark' ? '#9ca3af' : '#6b7280'} strokeWidth={1} />
+            <Bar dataKey="flow">
+              {chartData.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={entry.flow >= 0 ? 'var(--color-success)' : 'var(--color-danger)'} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
 };
 
 const TrumpOMeterWidget = ({ language, onNavigate }: { language: Language; onNavigate: () => void }) => {
@@ -769,7 +856,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onPostClick, language = 'pt' as L
     <div className="w-full flex-1 flex flex-col transition-colors duration-700 pb-20">
       <div className="w-full max-w-[90%] mx-auto px-4 mt-6">
         <div className="flex items-center justify-center mb-6">
-            <div className="h-px bg-tech-600 flex-1 opacity-20 dark:opacity-100"></div>
             <div className="flex items-center gap-4 px-4 py-1 bg-tech-800 border border-tech-700 rounded-lg shadow-xl">
                <button onClick={() => setView(ViewMode.WORKSPACE)} className="text-gray-900 dark:text-[#dd9933] hover:text-[#dd9933] transition-colors font-black tracking-[0.2em] text-lg uppercase flex items-center gap-2">
                    ANALYTICS WORKSPACE <LayoutDashboard size={16} />
