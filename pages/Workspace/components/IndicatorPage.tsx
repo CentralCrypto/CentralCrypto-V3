@@ -1,3 +1,4 @@
+
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ApiCoin, Language, WidgetType, UserTier } from '../../../types';
 import { getTranslations } from '../../../locales';
@@ -395,9 +396,10 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     align?: 'left' | 'center' | 'right';
     w: string;
   }) => {
-    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useDndKitSortable({ id: colId });
+    // @ts-ignore FIX: Alias destructured 'transform' to avoid naming conflicts.
+    const { attributes, listeners, setNodeRef, transform: dndTransform, transition, isDragging } = useDndKitSortable({ id: colId });
     const style: React.CSSProperties = {
-      transform: CSS.Transform.toString(transform),
+      transform: CSS.Transform.toString(dndTransform),
       transition,
       opacity: isDragging ? 0.6 : 1,
     };
@@ -804,7 +806,7 @@ function IndicatorPage({ language, coinMap, userTier }: IndicatorPageProps) {
     <div className="flex flex-col w-full h-[calc(100vh-160px)] overflow-hidden">
       <div className="flex h-full w-full gap-4 overflow-hidden">
         {/* Sidebar */}
-        <div className={`w-64 flex-shrink-0 bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-slate-800 rounded-xl flex-col overflow-hidden shadow-sm transition-all duration-300 shrink-0 ${activePage === 'SWARM' ? 'hidden' : 'flex'}`}>
+        <div className={`w-64 flex-shrink-0 bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-slate-800 rounded-xl flex flex-col overflow-hidden shadow-sm transition-colors shrink-0`}>
           <div className="p-4 border-b border-gray-100 dark:border-slate-800 font-black text-gray-500 dark:text-slate-400 text-xs uppercase tracking-wider">Dashboard Pages</div>
           <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
             {GROUPS.map((group, groupIdx) => (
@@ -827,7 +829,7 @@ function IndicatorPage({ language, coinMap, userTier }: IndicatorPageProps) {
         </div>
 
         {/* Main Content Area */}
-        <div className={`flex-1 flex-col min-w-0 h-full overflow-y-auto custom-scrollbar pr-1 ${activePage === 'SWARM' ? 'hidden' : 'flex'}`}>
+        <div className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto custom-scrollbar pr-1">
           <PageHeader title={currentPage.label} description="Dados analíticos e ferramentas de mercado em tempo real." />
 
           <div className="flex-1 min-h-[600px] relative">
@@ -853,12 +855,14 @@ function IndicatorPage({ language, coinMap, userTier }: IndicatorPageProps) {
           </div>
           <PageFaq language={language} pageType={activePage} />
         </div>
-        
-        {/* Fullscreen SWARM modal */}
-        {activePage === 'SWARM' && (
-            <MarketWindSwarm language={language} onClose={() => setActivePage('MARKETCAP')} />
-        )}
       </div>
+
+      {/* Fullscreen SWARM modal */}
+      {activePage === 'SWARM' && (
+          <div className="fixed inset-0 z-[2000] bg-black/50 backdrop-blur-sm animate-in fade-in">
+              <MarketWindSwarm language={language} onClose={() => setActivePage('MARKETCAP')} />
+          </div>
+      )}
     </div>
   );
 }
