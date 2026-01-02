@@ -39,45 +39,31 @@ import { CSS } from '@dnd-kit/utilities';
 
 import { Area, AreaChart, ResponsiveContainer, YAxis } from 'recharts';
 
-// -------------------- HELPERS --------------------
+// --- HELPERS ---
 
-const formatUSD = (v: any, compact = false) => {
-  const n = Number(v);
-  if (!isFinite(n)) return '-';
-
+const formatUSD = (val: number, compact = false) => {
+  if (val === undefined || val === null) return "---";
   if (compact) {
-    const abs = Math.abs(n);
-    if (abs >= 1e12) return `$${(n / 1e12).toFixed(2)}T`;
-    if (abs >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
-    if (abs >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
-    if (abs >= 1e3) return `$${(n / 1e3).toFixed(2)}K`;
-    return `$${n.toFixed(2)}`;
+    if (val >= 1e12) return `$${(val / 1e12).toFixed(2)}T`;
+    if (val >= 1e9) return `$${(val / 1e9).toFixed(2)}B`;
+    if (val >= 1e6) return `$${(val / 1e6).toFixed(2)}M`;
   }
-
-  const maxDecimals = n >= 100 ? 0 : n >= 1 ? 2 : 6;
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: maxDecimals,
-  }).format(n);
+  return `$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
-const safePct = (v: any) => {
-  const n = Number(v);
-  if (!isFinite(n)) return '--';
-  const s = n >= 0 ? '+' : '';
-  return `${s}${n.toFixed(2)}%`;
+const safePct = (v: number) => {
+  if (!isFinite(v)) return '--';
+  const s = v >= 0 ? '+' : '';
+  return `${s}${v.toFixed(2)}%`;
 };
 
-// sparkline 7d: varia por fonte. Então faz robusto por índice, sem assumir 168.
-const pctFromSpark = (prices?: number[], pointsBack = 1) => {
+// CoinGecko sparkline_in_7d geralmente vem em pontos horários (168).
+const pctFromSpark = (prices?: number[], pointsBack: number = 1) => {
   const arr = Array.isArray(prices) ? prices.filter(n => typeof n === 'number' && isFinite(n)) : [];
   if (arr.length < 2) return NaN;
-
   const last = arr[arr.length - 1];
-  const idx = Math.max(0, arr.length - 1 - Math.max(1, Math.floor(pointsBack)));
+  const idx = Math.max(0, arr.length - 1 - Math.max(1, pointsBack));
   const prev = arr[idx];
-
   if (!isFinite(prev) || prev === 0) return NaN;
   return ((last - prev) / prev) * 100;
 };
@@ -85,35 +71,11 @@ const pctFromSpark = (prices?: number[], pointsBack = 1) => {
 const pct7dFromSpark = (prices?: number[]) => {
   const arr = Array.isArray(prices) ? prices.filter(n => typeof n === 'number' && isFinite(n)) : [];
   if (arr.length < 2) return NaN;
-
   const first = arr[0];
   const last = arr[arr.length - 1];
-
   if (!isFinite(first) || first === 0) return NaN;
   return ((last - first) / first) * 100;
 };
-
-// getters tolerantes (se vier "in_currency" ou campos antigos)
-const getPct24h = (c: any) =>
-  Number(
-    c?.price_change_percentage_24h_in_currency ??
-    c?.price_change_percentage_24h ??
-    0
-  );
-
-const getPct1h = (c: any) =>
-  Number(
-    c?.price_change_percentage_1h_in_currency ??
-    c?.price_change_percentage_1h ??
-    NaN
-  );
-
-const getPct7d = (c: any) =>
-  Number(
-    c?.price_change_percentage_7d_in_currency ??
-    c?.price_change_percentage_7d ??
-    NaN
-  );
 
 function LockOverlay() {
   return (
@@ -125,7 +87,7 @@ function LockOverlay() {
   );
 }
 
-function PageHeader({ title, description }: { title: string; description: string }) {
+function PageHeader({ title, description }: { title: string, description: string }) {
   return (
     <div className="bg-white dark:bg-[#1a1c1e] p-6 rounded-xl border border-gray-100 dark:border-slate-800 shadow-sm transition-colors mb-4 shrink-0">
       <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{title}</h2>
@@ -1419,5 +1381,111 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     </div>
   );
 };
+
+// --- MAIN PAGE WRAPPER ---
+
+interface IndicatorPageProps {
+  language: Language;
+  coinMap: Record<string, ApiCoin>;
+  userTier: UserTier;
+}
+
+type PageType = 'MARKETCAP' | 'RSI' | 'MACD' | 'FNG' | 'LSR' | 'ALTSEASON' | 'ETF' | 'GAINERS' | 'HEATMAP' | 'BUBBLE_HEATMAP' | 'SWARM' | 'CALENDAR' | 'TRUMP';
+
+function IndicatorPage({ language, coinMap, userTier }: IndicatorPageProps) {
+  const [activePage, setActivePage] = useState<PageType>('MARKETCAP');
+  const tWs = getTranslations(language).workspace.widgets;
+  const tPages = getTranslations(language).workspace.pages;
+
+  const GROUPS = [
+    { title: 'Market', items: [
+      { id: 'MARKETCAP' as PageType, label: tPages.marketcap, icon: <List size={18} /> },
+      { id: 'GAINERS' as PageType, label: tPages.topmovers, icon: <TrendingUp size={18} /> },
+      { id: 'HEATMAP' as PageType, label: "Heatmap Square", icon: <LayoutGrid size={18} /> },
+      { id: 'BUBBLE_HEATMAP' as PageType, label: "Crypto Bubbles", icon: <CircleDashed size={18} /> },
+      { id: 'SWARM' as PageType, label: tPages.swarm, icon: <Wind size={18} /> },
+      { id: 'RSI' as PageType, label: tWs.rsi.title, icon: <Activity size={18} /> },
+      { id: 'MACD' as PageType, label: tWs.macd.title, icon: <BarChart2 size={18} /> },
+      { id: 'LSR' as PageType, label: tWs.lsr.title, icon: <BarChart2 size={18} /> },
+    ] },
+    { title: 'Global', items: [
+      { id: 'CALENDAR' as PageType, label: tWs.calendar.title, icon: <Calendar size={18} /> },
+      { id: 'ETF' as PageType, label: tWs.etf.title, icon: <ArrowUpRight size={18} /> },
+    ] },
+    { title: 'Sentiment', items: [
+      { id: 'FNG' as PageType, label: tWs.fng.title, icon: <PieChart size={18} /> },
+      { id: 'ALTSEASON' as PageType, label: tWs.altseason.title, icon: <Activity size={18} /> },
+      { id: 'TRUMP' as PageType, label: "Trump-o-Meter", icon: <User size={18} /> },
+    ] }
+  ];
+
+  let currentPage = GROUPS[0].items[0];
+  for (const group of GROUPS) {
+    const found = group.items.find(item => item.id === activePage);
+    if (found) { currentPage = found; break; }
+  }
+
+  return (
+    <div className="flex flex-col w-full h-[calc(100vh-160px)] overflow-hidden">
+      <div className="flex h-full w-full gap-4 overflow-hidden">
+        {/* Sidebar */}
+        <div className={`w-64 flex-shrink-0 bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-slate-800 rounded-xl flex-col overflow-hidden shadow-sm transition-all duration-300 shrink-0 ${activePage === 'SWARM' ? 'hidden' : 'flex'}`}>
+          <div className="p-4 border-b border-gray-100 dark:border-slate-800 font-black text-gray-500 dark:text-slate-400 text-xs uppercase tracking-wider">Dashboard Pages</div>
+          <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
+            {GROUPS.map((group, groupIdx) => (
+              <div key={groupIdx} className="mb-4">
+                <div className="px-4 py-2 text-[10px] font-black text-gray-400 dark:text-slate-500 uppercase tracking-widest">{group.title}</div>
+                <div className="space-y-1">
+                  {group.items.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => setActivePage(item.id)}
+                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-black transition-all tracking-wide ${activePage === item.id ? 'bg-[#dd9933] text-black shadow-md' : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-[#2f3032]'}`}
+                    >
+                      {item.icon}{item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Main Content Area */}
+        <div className={`flex-1 flex-col min-w-0 h-full overflow-y-auto custom-scrollbar pr-1 ${activePage === 'SWARM' ? 'hidden' : 'flex'}`}>
+          <PageHeader title={currentPage.label} description="Dados analíticos e ferramentas de mercado em tempo real." />
+
+          <div className="flex-1 min-h-[600px] relative">
+            {activePage === 'MARKETCAP' && <MarketCapTable language={language} />}
+            {activePage === 'ALTSEASON' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'altseason-page', type: WidgetType.ALTCOIN_SEASON, title: 'Altcoin Season Index', symbol: 'GLOBAL', isMaximized: true }} language={language} /></div>}
+            {activePage === 'ETF' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'etf-page', type: WidgetType.ETF_NET_FLOW, title: 'ETF Net Flow', symbol: 'GLOBAL', isMaximized: true }} language={language} /></div>}
+            {activePage === 'FNG' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'fng-page', type: WidgetType.FEAR_GREED, title: 'Fear & Greed Index', symbol: 'GLOBAL', isMaximized: true }} language={language} /></div>}
+            {activePage === 'RSI' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'rsi-page', type: WidgetType.RSI_AVG, title: 'RSI Average Tracker', symbol: 'MARKET', isMaximized: true }} language={language} /></div>}
+            {activePage === 'MACD' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'macd-page', type: WidgetType.MACD_AVG, title: 'MACD Average Tracker', symbol: 'MARKET', isMaximized: true }} language={language} /></div>}
+            {activePage === 'GAINERS' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'gainers-page', type: WidgetType.GAINERS_LOSERS, title: 'Top Movers (24h)', symbol: 'MARKET', isMaximized: true }} language={language} /></div>}
+            {activePage === 'HEATMAP' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'heatmap-page', type: WidgetType.HEATMAP, title: 'Crypto Heatmap', symbol: 'MARKET', isMaximized: true }} language={language} /></div>}
+            {activePage === 'BUBBLE_HEATMAP' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'bubble-page', type: WidgetType.BUBBLE_HEATMAP, title: 'Crypto Bubbles', symbol: 'MARKET', isMaximized: true }} language={language} /></div>}
+            {activePage === 'CALENDAR' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'cal-page', type: WidgetType.CALENDAR, title: 'Calendar', symbol: 'CAL', isMaximized: true }} language={language} /></div>}
+            {activePage === 'TRUMP' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'trump-page', type: WidgetType.TRUMP_METER, title: 'Trump-o-Meter', symbol: 'SENTIMENT', isMaximized: true }} language={language} /></div>}
+            {activePage === 'LSR' && (
+              <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800 relative">
+                {userTier === UserTier.TIER_1 && <LockOverlay />}
+                <div className={userTier === UserTier.TIER_1 ? 'blur-sm h-full' : 'h-full'}>
+                  <CryptoWidget item={{ id: 'lsr-page', type: WidgetType.LONG_SHORT_RATIO, title: 'Long/Short Ratio', symbol: 'GLOBAL', isMaximized: true }} language={language} />
+                </div>
+              </div>
+            )}
+          </div>
+          <PageFaq language={language} pageType={activePage} />
+        </div>
+        
+        {/* Fullscreen SWARM modal */}
+        {activePage === 'SWARM' && (
+            <MarketWindSwarm language={language} onClose={() => setActivePage('MARKETCAP')} />
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default IndicatorPage;

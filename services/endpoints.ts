@@ -1,3 +1,4 @@
+
 /**
  * CENTRAL DE ENDPOINTS CCT - VERSÃO VPS (RELATIVE)
  * Configurado para caminhos relativos que o Vite Proxy intercepta.
@@ -15,7 +16,7 @@ export const ENDPOINTS = {
       global: "/cg_global.json",
       main: "/cachecko.json",
       fng: "/fearandgreed_data.json",
-      rsiAvg: "/rsiavg.json",
+      rsiAvg: "/rsi_avg.json",
       rsiTracker: "/rsitrackerhist.json",
       macdAvg: "/macdavg.json",
       macdTracker: "/macdtracker.json",

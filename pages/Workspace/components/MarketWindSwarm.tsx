@@ -61,7 +61,8 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   const lastUpdateTime = useRef<number>(Date.now());
 
   // --- MAPPING LOGIC (needs to be stable) ---
-  const getParticleMappings = useCallback(() => {
+  // Fix: Renamed function to avoid potential name collisions causing TS errors.
+  const calculateMappings = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas || coins.length === 0) return null;
     
@@ -98,7 +99,8 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
   // --- DATA & PARTICLE UPDATE ---
   const updateParticlesFromData = useCallback((data: ApiCoin[]) => {
-      const mappings = getParticleMappings();
+      // Fix: Call renamed function.
+      const mappings = calculateMappings();
       if (!mappings) return;
 
       const { mapX, mapY, mapRadius } = mappings;
@@ -117,7 +119,8 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
               p.animProgress = 0;
           }
       });
-  }, [getParticleMappings, yAxisMode]);
+  // Fix: Update dependency array with renamed function.
+  }, [calculateMappings, yAxisMode]);
 
   const loadData = useCallback(async (isInitial = false) => {
     if (isInitial) setStatus('loading');
@@ -148,7 +151,8 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     const canvas = canvasRef.current;
     if (!canvas || coins.length === 0) return;
 
-    const mappings = getParticleMappings();
+    // Fix: Call renamed function.
+    const mappings = calculateMappings();
     if (!mappings) return;
     const { mapX, mapY, mapRadius, topCoins } = mappings;
 
@@ -178,10 +182,12 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         trail: [],
       };
     });
-  }, [coins, numCoins, yAxisMode, chartVersion, getParticleMappings]);
+  // Fix: Update dependency array with renamed function.
+  }, [coins, numCoins, yAxisMode, chartVersion, calculateMappings]);
 
   // --- ANIMATION & DRAWING ---
-  const animate = useCallback(() => {
+  // Fix: Renamed function to avoid potential name collisions causing TS errors.
+  const animationLoop = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!ctx || !canvas) return;
@@ -194,12 +200,15 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
     const particles = particlesRef.current;
     if (particles.length === 0) {
-      animationFrameId.current = requestAnimationFrame(animate); return;
+      // Fix: Call renamed function.
+      animationFrameId.current = requestAnimationFrame(animationLoop); return;
     }
 
-    const mappings = getParticleMappings();
+    // Fix: Call renamed function.
+    const mappings = calculateMappings();
     if (!mappings) {
-        animationFrameId.current = requestAnimationFrame(animate); return;
+        // Fix: Call renamed function.
+        animationFrameId.current = requestAnimationFrame(animationLoop); return;
     }
     const { pad, width, height, minX, maxX, minY, maxY, logMinY, logMaxY } = mappings;
 
@@ -286,8 +295,10 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         ctx.fillText(`M.Cap: $${formatCompact(p.coin.market_cap)}`, ttX + 10, ttY + 76);
     }
 
-    animationFrameId.current = requestAnimationFrame(animate);
-  }, [animSpeed, selectedParticle, hoveredParticle, yAxisMode, isDark, getParticleMappings, trailLength]);
+    // Fix: Call renamed function.
+    animationFrameId.current = requestAnimationFrame(animationLoop);
+  // Fix: Update dependency array with renamed functions.
+  }, [animSpeed, selectedParticle, hoveredParticle, yAxisMode, isDark, calculateMappings, trailLength]);
 
   // --- SETUP & RESIZE ---
   useEffect(() => {
@@ -301,12 +312,14 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       setChartVersion(v => v + 1);
     });
     resizeObserver.observe(container);
-    animationFrameId.current = requestAnimationFrame(animate);
+    // Fix: Call renamed function.
+    animationFrameId.current = requestAnimationFrame(animationLoop);
     return () => {
       if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
       resizeObserver.disconnect();
     };
-  }, [animate]);
+  // Fix: Update dependency array with renamed function.
+  }, [animationLoop]);
 
   // --- INTERACTIVITY ---
   const handleMouseMove = (e: React.MouseEvent) => {

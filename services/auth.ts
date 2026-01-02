@@ -1,3 +1,4 @@
+
 export interface UserData {
   id: number;
   token: string; // ✅ auth token (Bearer)
@@ -112,7 +113,6 @@ export const authService = {
     }
   },
 
-  // Fix: Add missing 'register', 'resetPassword', and 'validateEmail' methods
   register: async (email: string, password: string): Promise<any> => {
     const API_URL = getApiBase();
     const res = await fetch(`${API_URL}/custom/v1/register`, {
