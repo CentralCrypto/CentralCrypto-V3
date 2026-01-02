@@ -404,8 +404,8 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
   const rotation = -90 + ((clampedVal - 1) / 4) * 180;
 
   // ✅ AUMENTO DO ARCO (antes 55)
-  const MINI_GAUGE_R = 60;
-  const MINI_GAUGE_RY = 60;
+  const MINI_GAUGE_R = 65;
+  const MINI_GAUGE_RY = 65;
 
   // ✅ Escala respeitando stroke + "round caps" nas pontas
   const LABEL_PAD = 8;
