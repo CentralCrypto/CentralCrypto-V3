@@ -189,95 +189,46 @@ function PageFaq({ language, pageType }: { language: Language, pageType: string 
 
 // --- MARKET CAP TABLE ---
 
-type TaxonomyMaster = {
-  id: string;
-  name: string;
-  categoryIds?: string[];
-  groups?: { id: string; name: string; categoryIds: string[] }[];
-};
-
-type CatListRow = { category_id: string; name: string } | { id: string; name: string };
-type CatMarketRow = any;
-
 const MarketCapTable = ({ language }: { language: Language }) => {
   const [coins, setCoins] = useState<ApiCoin[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Views
-  const [view, setView] = useState<'market' | 'categories'>('market');
-
-  // Search
   const [searchTerm, setSearchTerm] = useState('');
-
-  // Sort
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({
     key: 'market_cap_rank',
     direction: 'asc',
   });
 
-  // Pagination
   const PAGE_SIZE = 100;
   const [page, setPage] = useState(0);
 
-  // Favorites (placeholder pro futuro)
-  const [fav, setFav] = useState<Set<string>>(new Set());
-
-  // BUY dropdown
   const [buyOpen, setBuyOpen] = useState(false);
   const buyRef = useRef<HTMLDivElement | null>(null);
 
-  // Column reorder
-  type ColId =
-    | 'fav'
-    | 'rank'
-    | 'asset'
-    | 'price'
-    | 'chg1h'
-    | 'chg24h'
-    | 'chg7d'
-    | 'mcap'
-    | 'vol24h'
-    | 'vol7d'
-    | 'circ'
-    | 'spark';
+  // ⭐ Favoritos (placeholder pro seu futuro portfolio)
+  const [favorites, setFavorites] = useState<Record<string, boolean>>({});
 
-  const [colOrder, setColOrder] = useState<ColId[]>([
-    'fav',
+  // Column reorder (dnd-kit)
+  const DEFAULT_COLS: string[] = [
     'rank',
     'asset',
     'price',
-    'chg1h',
-    'chg24h',
-    'chg7d',
+    'ch1h',
+    'ch24h',
+    'ch7d',
     'mcap',
     'vol24h',
     'vol7d',
-    'circ',
-    'spark',
-  ]);
+    'supply',
+    'spark7d',
+  ];
+  const [colOrder, setColOrder] = useState<string[]>(DEFAULT_COLS);
 
-  // Categories local data
-  const [catLoading, setCatLoading] = useState(false);
-  const [taxonomyMasters, setTaxonomyMasters] = useState<TaxonomyMaster[]>([]);
-  const [catList, setCatList] = useState<Record<string, string>>({});
-  const [catMarket, setCatMarket] = useState<Record<string, any>>({});
-  const [catMap, setCatMap] = useState<Record<string, string[]>>({});
-  const [hasCatSnapshot, setHasCatSnapshot] = useState<boolean>(true);
-  const [catWarnShown, setCatWarnShown] = useState(false);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
+  );
 
-  // Master/group/category selection (sem “Masters” no dropdown)
-  const [selMasterId, setSelMasterId] = useState<string>(''); // vazio = nada selecionado
-  const [selGroupId, setSelGroupId] = useState<string>('');   // vazio = sem group
-  const [selCategoryId, setSelCategoryId] = useState<string>(''); // coin-gecko category id
-
-  const handleSort = (key: string) => {
-    let direction: 'asc' | 'desc' = 'desc';
-    if (sortConfig.key === key && sortConfig.direction === 'desc') direction = 'asc';
-    setSortConfig({ key, direction });
-    setPage(0);
-  };
-
-  const loadCoins = async () => {
+  const load = async () => {
     setLoading(true);
     try {
       const data = await fetchTopCoins();
@@ -289,68 +240,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     }
   };
 
-  const fetchLocalJson = async (url: string) => {
-    const r = await fetch(url, { cache: 'no-store' });
-    if (!r.ok) throw new Error(`${url} -> ${r.status}`);
-    return r.json();
-  };
-
-  const loadCategoriesLocal = async () => {
-    setCatLoading(true);
-    try {
-      const [taxonomy, list, market] = await Promise.all([
-        fetchLocalJson('/cachecko/categories/taxonomy-master.json'),
-        fetchLocalJson('/cachecko/categories/coingecko_categories_list.json'),
-        fetchLocalJson('/cachecko/categories/coingecko_categories_market.json'),
-      ]);
-
-      const masters: TaxonomyMaster[] = Array.isArray(taxonomy) ? taxonomy : (taxonomy?.masters || taxonomy?.data || []);
-      setTaxonomyMasters(masters || []);
-
-      const listArr: CatListRow[] = Array.isArray(list) ? list : (list?.data || []);
-      const listMap: Record<string, string> = {};
-      for (const row of listArr) {
-        const id = (row as any).category_id ?? (row as any).id;
-        const name = (row as any).name;
-        if (id && name) listMap[String(id)] = String(name);
-      }
-      setCatList(listMap);
-
-      const marketArr: CatMarketRow[] = Array.isArray(market) ? market : (market?.data || []);
-      const marketMap: Record<string, any> = {};
-      for (const row of marketArr) {
-        const id = String(row?.id ?? row?.category_id ?? '');
-        if (!id) continue;
-        marketMap[id] = row;
-      }
-      setCatMarket(marketMap);
-
-      // Snapshot (opcional)
-      try {
-        const snap = await fetchLocalJson('/cachecko/categories/category_coins_map.json');
-        const cats = snap?.categories || {};
-        setCatMap(cats);
-        setHasCatSnapshot(true);
-      } catch {
-        setCatMap({});
-        setHasCatSnapshot(false);
-      }
-    } catch (e) {
-      console.error('Categories local load error', e);
-      setTaxonomyMasters([]);
-      setCatList({});
-      setCatMarket({});
-      setCatMap({});
-      setHasCatSnapshot(false);
-    } finally {
-      setCatLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadCoins();
-    loadCategoriesLocal();
-  }, []);
+  useEffect(() => { load(); }, []);
 
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
@@ -361,124 +251,31 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     return () => document.removeEventListener('mousedown', onDocClick);
   }, []);
 
-  useEffect(() => {
+  const handleSort = (key: string) => {
+    let direction: 'asc' | 'desc' = 'desc';
+    if (sortConfig.key === key && sortConfig.direction === 'desc') direction = 'asc';
+    setSortConfig({ key, direction });
     setPage(0);
-  }, [searchTerm, sortConfig.key, sortConfig.direction]);
-
-  // -------- DND header helpers --------
-  const SortableTh = ({
-    id,
-    children,
-    align = 'left',
-    w,
-    onClick,
-  }: {
-    id: ColId;
-    children: React.ReactNode;
-    align?: 'left' | 'right' | 'center';
-    w?: string;
-    onClick?: () => void;
-  }) => {
-    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
-    const style: React.CSSProperties = {
-      transform: CSS.Transform.toString(transform),
-      transition,
-      opacity: isDragging ? 0.6 : 1,
-    };
-
-    return (
-      <th
-        ref={setNodeRef}
-        style={style}
-        className={`p-3 select-none border-b border-gray-100 dark:border-slate-800
-          ${w || ''} ${align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'}
-          ${onClick ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-white/5' : ''}`}
-        onClick={onClick}
-      >
-        <div className={`relative flex items-center ${align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : 'justify-start'}`}>
-          <span
-            className="absolute left-0 inline-flex items-center justify-center w-6 h-6 rounded-md
-              text-gray-400 hover:text-tech-accent hover:bg-gray-100 dark:hover:bg-white/5 cursor-grab active:cursor-grabbing"
-            {...attributes}
-            {...listeners}
-            title="Arraste para reordenar"
-          >
-            <GripVertical size={16} />
-          </span>
-
-          <div className={`flex items-center gap-1 ${align === 'right' ? 'pr-0' : 'pl-7'} justify-center`}>
-            {children}
-          </div>
-        </div>
-      </th>
-    );
   };
-
-  const SortLabel = ({ label, sortKey }: { label: string; sortKey?: string }) => (
-    <>
-      <span className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-slate-400">{label}</span>
-      {sortKey && (
-        <ChevronsUpDown
-          size={14}
-          className={`text-gray-400 group-hover:text-tech-accent ${sortConfig.key === sortKey ? 'text-tech-accent' : ''}`}
-        />
-      )}
-    </>
-  );
-
-  // -------- Category selection helpers --------
-  const masters = useMemo(() => Array.isArray(taxonomyMasters) ? taxonomyMasters : [], [taxonomyMasters]);
-
-  const selectedMaster = useMemo(() => masters.find(m => m.id === selMasterId), [masters, selMasterId]);
-
-  const groups = useMemo(() => {
-    if (!selectedMaster?.groups || !Array.isArray(selectedMaster.groups)) return [];
-    return selectedMaster.groups;
-  }, [selectedMaster]);
-
-  const groupCategoryIds = useMemo(() => {
-    if (!selectedMaster) return [];
-    if (groups.length > 0) {
-      const g = groups.find(x => x.id === selGroupId);
-      return g?.categoryIds || [];
-    }
-    return selectedMaster.categoryIds || [];
-  }, [selectedMaster, groups, selGroupId]);
-
-  const categoryName = (id: string) => catList[id] || catMarket[id]?.name || id;
-
-  // category filter coin ids (snapshot)
-  const activeCoinIdsSet = useMemo(() => {
-    if (!selCategoryId) return null;
-    const ids = catMap?.[selCategoryId];
-    if (!Array.isArray(ids) || ids.length === 0) return new Set<string>();
-    return new Set(ids);
-  }, [catMap, selCategoryId]);
 
   const filteredSortedCoins = useMemo(() => {
     let items = [...coins];
 
     if (searchTerm) {
       const q = searchTerm.toLowerCase();
-      items = items.filter(c => (c.name || '').toLowerCase().includes(q) || (c.symbol || '').toLowerCase().includes(q));
+      items = items.filter(c =>
+        c.name?.toLowerCase().includes(q) ||
+        c.symbol?.toLowerCase().includes(q)
+      );
     }
 
-    // If a category selected and snapshot exists, filter.
-    if (selCategoryId) {
-      if (!hasCatSnapshot) {
-        // snapshot missing: don't filter, just warn (once)
-      } else if (activeCoinIdsSet) {
-        items = items.filter((c: any) => activeCoinIdsSet.has(String(c.id)));
-      }
-    }
-
-    const getVal = (c: any, key: string) => {
-      const prices = (c as any).sparkline_in_7d?.price;
-      if (key === 'chg1h') return isFinite(getPct1h(c)) ? getPct1h(c) : pctFromSpark(prices, 1);
-      if (key === 'chg24h') return getPct24h(c);
-      if (key === 'chg7d') return isFinite(getPct7d(c)) ? getPct7d(c) : pct7dFromSpark(prices);
-      if (key === 'vol7d') return (Number(c.total_volume || 0) || 0) * 7;
-      return (c as any)[key];
+    const getVal = (c: ApiCoin, key: string) => {
+      const prices = c.sparkline_in_7d?.price;
+      if (key === 'change_1h_est') return pctFromSpark(prices, 1);
+      if (key === 'change_7d_est') return pct7dFromSpark(prices);
+      if (key === 'vol_7d_est') return (c.total_volume || 0) * 7;
+      // @ts-ignore
+      return c[key];
     };
 
     items.sort((a: any, b: any) => {
@@ -501,7 +298,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     });
 
     return items;
-  }, [coins, searchTerm, sortConfig, selCategoryId, activeCoinIdsSet, hasCatSnapshot]);
+  }, [coins, searchTerm, sortConfig]);
 
   const totalCount = filteredSortedCoins.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
@@ -512,79 +309,8 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     return filteredSortedCoins.slice(start, start + PAGE_SIZE);
   }, [filteredSortedCoins, safePage]);
 
-  // Warn once about missing snapshot when trying to use category filter
-  useEffect(() => {
-    if (view !== 'categories') return;
-    if (hasCatSnapshot) return;
-    if (catWarnShown) return;
-    setCatWarnShown(true);
-  }, [view, hasCatSnapshot, catWarnShown]);
+  useEffect(() => { setPage(0); }, [searchTerm]);
 
-  // -------- Categories table rows --------
-  const masterRows = useMemo(() => {
-    // aggregate from coingecko_categories_market.json (local)
-    return masters.map(m => {
-      const ids = m.groups?.length
-        ? m.groups.flatMap(g => g.categoryIds || [])
-        : (m.categoryIds || []);
-
-      const rows = ids.map(id => catMarket[id]).filter(Boolean);
-
-      const marketCap = rows.reduce((s, r) => s + (Number(r?.market_cap ?? r?.market_cap_usd ?? 0) || 0), 0);
-      const vol24 = rows.reduce((s, r) => s + (Number(r?.volume_24h ?? r?.volume_24h_usd ?? r?.total_volume ?? 0) || 0), 0);
-      const coinsCount = rows.reduce((s, r) => s + (Number(r?.coin_counter ?? r?.coins_count ?? 0) || 0), 0);
-
-      // pct avg (marketcap weighted if we have market_cap)
-      const wsum = rows.reduce((s, r) => s + (Number(r?.market_cap ?? 0) || 0), 0);
-      const pct1h = wsum > 0
-        ? rows.reduce((s, r) => s + (Number(r?.market_cap ?? 0) || 0) * (Number(r?.price_change_percentage_1h_in_currency ?? r?.price_change_percentage_1h ?? 0) || 0), 0) / wsum
-        : rows.reduce((s, r) => s + (Number(r?.price_change_percentage_1h_in_currency ?? r?.price_change_percentage_1h ?? 0) || 0), 0) / Math.max(1, rows.length);
-
-      const pct24h = wsum > 0
-        ? rows.reduce((s, r) => s + (Number(r?.market_cap ?? 0) || 0) * (Number(r?.price_change_percentage_24h_in_currency ?? r?.price_change_percentage_24h ?? 0) || 0), 0) / wsum
-        : rows.reduce((s, r) => s + (Number(r?.price_change_percentage_24h_in_currency ?? r?.price_change_percentage_24h ?? 0) || 0), 0) / Math.max(1, rows.length);
-
-      const pct7d = wsum > 0
-        ? rows.reduce((s, r) => s + (Number(r?.market_cap ?? 0) || 0) * (Number(r?.price_change_percentage_7d_in_currency ?? r?.price_change_percentage_7d ?? 0) || 0), 0) / wsum
-        : rows.reduce((s, r) => s + (Number(r?.price_change_percentage_7d_in_currency ?? r?.price_change_percentage_7d ?? 0) || 0), 0) / Math.max(1, rows.length);
-
-      return {
-        id: m.id,
-        name: m.name,
-        marketCap,
-        vol24,
-        coinsCount,
-        pct1h,
-        pct24h,
-        pct7d,
-        isMaster: true,
-      };
-    });
-  }, [masters, catMarket]);
-
-  const categoryRows = useMemo(() => {
-    if (!selectedMaster) return [];
-
-    const ids = groupCategoryIds || [];
-    const rows = ids.map(id => catMarket[id]).filter(Boolean);
-
-    return ids.map(id => {
-      const r = catMarket[id] || {};
-      return {
-        id,
-        name: categoryName(id),
-        marketCap: Number(r?.market_cap ?? r?.market_cap_usd ?? 0) || 0,
-        vol24: Number(r?.volume_24h ?? r?.volume_24h_usd ?? r?.total_volume ?? 0) || 0,
-        coinsCount: Number(r?.coin_counter ?? r?.coins_count ?? 0) || 0,
-        pct1h: Number(r?.price_change_percentage_1h_in_currency ?? r?.price_change_percentage_1h ?? 0) || 0,
-        pct24h: Number(r?.price_change_percentage_24h_in_currency ?? r?.price_change_percentage_24h ?? 0) || 0,
-        pct7d: Number(r?.price_change_percentage_7d_in_currency ?? r?.price_change_percentage_7d ?? 0) || 0,
-        isMaster: false,
-      };
-    }).sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0));
-  }, [selectedMaster, groupCategoryIds, catMarket, catList]);
-
-  // -------- UI blocks --------
   const Paginator = ({ compact = false }: { compact?: boolean }) => {
     const start = safePage * PAGE_SIZE + 1;
     const end = Math.min(totalCount, (safePage + 1) * PAGE_SIZE);
@@ -632,697 +358,404 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     );
   };
 
-  const CategoriesControl = () => {
-    // Spot do botão CATEGORIAS (ou dropdowns quando view = categories)
-    if (view === 'market') {
-      return (
-        <button
-          onClick={() => {
-            setView('categories');
-            setPage(0);
-            setSortConfig({ key: 'market_cap_rank', direction: 'asc' });
-          }}
-          className="px-3 py-2 rounded-lg border bg-white dark:bg-[#2f3032]
-            text-gray-700 dark:text-slate-200 border-slate-200 dark:border-slate-700
-            hover:bg-gray-100 dark:hover:bg-white/5 text-sm font-black transition-colors"
-          title="Categorias"
-        >
-          Categorias
-        </button>
-      );
-    }
+  const SortIcon = ({ active }: { active: boolean }) => (
+    <ChevronsUpDown size={14} className={`text-gray-400 group-hover:text-tech-accent ${active ? 'text-tech-accent' : ''}`} />
+  );
 
-    // view === categories -> dropdowns (sem “Masters” dentro)
+  const COLS: Record<string, {
+    id: string;
+    label: string;
+    sortKey?: string;
+    align?: 'left' | 'center' | 'right';
+    w: string;
+  }> = {
+    rank: { id: 'rank', label: '#', sortKey: 'market_cap_rank', align: 'center', w: 'w-[72px]' },
+    asset: { id: 'asset', label: 'Ativo', sortKey: 'name', align: 'left', w: 'w-[300px]' },
+    price: { id: 'price', label: 'Preço', sortKey: 'current_price', align: 'right', w: 'w-[140px]' },
+    ch1h: { id: 'ch1h', label: '1h %', sortKey: 'change_1h_est', align: 'right', w: 'w-[92px]' },
+    ch24h: { id: 'ch24h', label: '24h %', sortKey: 'price_change_percentage_24h', align: 'right', w: 'w-[100px]' },
+    ch7d: { id: 'ch7d', label: '7d %', sortKey: 'change_7d_est', align: 'right', w: 'w-[100px]' },
+    mcap: { id: 'mcap', label: 'Market Cap', sortKey: 'market_cap', align: 'right', w: 'w-[150px]' },
+    vol24h: { id: 'vol24h', label: 'Vol (24h)', sortKey: 'total_volume', align: 'right', w: 'w-[130px]' },
+    vol7d: { id: 'vol7d', label: 'Vol (7d)', sortKey: 'vol_7d_est', align: 'right', w: 'w-[130px]' },
+    supply: { id: 'supply', label: 'Circ. Supply', sortKey: 'circulating_supply', align: 'right', w: 'w-[170px]' },
+    spark7d: { id: 'spark7d', label: 'Mini-chart (7d)', sortKey: undefined, align: 'center', w: 'w-[340px]' },
+  };
+
+  const SortableTh = ({
+    colId,
+    label,
+    sortKey,
+    align = 'left',
+    w,
+  }: {
+    colId: string;
+    label: string;
+    sortKey?: string;
+    align?: 'left' | 'center' | 'right';
+    w: string;
+  }) => {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useDndKitSortable({ id: colId });
+    const style: React.CSSProperties = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+      opacity: isDragging ? 0.6 : 1,
+    };
+
+    const justify =
+      align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : 'justify-start';
+    const textAlign =
+      align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left';
+
     return (
-      <div className="flex items-center gap-2">
-        <select
-          value={selMasterId}
-          onChange={(e) => {
-            const v = e.target.value;
-            setSelMasterId(v);
-            setSelGroupId('');
-            setSelCategoryId('');
-          }}
-          className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700
-            bg-white dark:bg-[#2f3032] text-gray-900 dark:text-white
-            hover:bg-gray-50 dark:hover:bg-white/5
-            text-sm font-black outline-none
-            [color-scheme:light] dark:[color-scheme:dark]"
-          title="Master"
-        >
-          <option value="" disabled>Selecione um master…</option>
-          {masters.map(m => (
-            <option key={m.id} value={m.id}>{m.name}</option>
-          ))}
-        </select>
-
-        {groups.length > 0 && (
-          <select
-            value={selGroupId}
-            onChange={(e) => {
-              setSelGroupId(e.target.value);
-              setSelCategoryId('');
-            }}
-            className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700
-              bg-white dark:bg-[#2f3032] text-gray-900 dark:text-white
-              hover:bg-gray-50 dark:hover:bg-white/5
-              text-sm font-black outline-none
-              [color-scheme:light] dark:[color-scheme:dark]"
-            title="Grupo"
+      <th
+        ref={setNodeRef}
+        style={style}
+        className={`p-3 select-none group border-b border-gray-100 dark:border-slate-800 ${w} ${textAlign} 
+          hover:bg-gray-100 dark:hover:bg-white/5 transition-colors`}
+      >
+        <div className={`flex items-center gap-2 ${justify}`}>
+          {/* puxador */}
+          <span
+            className="inline-flex items-center justify-center w-6 h-6 rounded-md hover:bg-gray-200 dark:hover:bg-white/10 text-gray-400"
+            onClick={(e) => e.stopPropagation()}
+            {...attributes}
+            {...listeners}
+            title="Arraste para reordenar"
           >
-            <option value="" disabled>Selecione um grupo…</option>
-            {groups.map(g => (
-              <option key={g.id} value={g.id}>{g.name}</option>
-            ))}
-          </select>
-        )}
+            <GripVertical size={16} />
+          </span>
 
-        {selMasterId && (groups.length === 0 || selGroupId) && (
-          <select
-            value={selCategoryId}
-            onChange={(e) => {
-              setSelCategoryId(e.target.value);
-              // ao escolher categoria, volta pra tabela principal filtrada
-              setView('market');
-              setSortConfig({ key: 'market_cap', direction: 'desc' });
-              setPage(0);
-            }}
-            className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700
-              bg-white dark:bg-[#2f3032] text-gray-900 dark:text-white
-              hover:bg-gray-50 dark:hover:bg-white/5
-              text-sm font-black outline-none
-              [color-scheme:light] dark:[color-scheme:dark]"
-            title="Subcategoria"
+          {/* label + sort (clicável) */}
+          <button
+            type="button"
+            className={`inline-flex items-center gap-1 font-black uppercase tracking-widest text-xs text-gray-400 dark:text-slate-400 ${justify}`}
+            onClick={() => sortKey && handleSort(sortKey)}
+            disabled={!sortKey}
+            title={sortKey ? 'Ordenar' : ''}
           >
-            <option value="" disabled>Selecione uma categoria…</option>
-            {groupCategoryIds.map(id => (
-              <option key={id} value={id}>{categoryName(id)}</option>
-            ))}
-          </select>
-        )}
-
-        <button
-          onClick={() => {
-            setSelMasterId('');
-            setSelGroupId('');
-            setSelCategoryId('');
-          }}
-          className="px-3 py-2 rounded-lg border bg-white dark:bg-[#2f3032]
-            text-gray-700 dark:text-slate-200 border-slate-200 dark:border-slate-700
-            hover:bg-gray-100 dark:hover:bg-white/5 text-sm font-black transition-colors"
-          title="Resetar seleção"
-        >
-          Reset
-        </button>
-
-        <button
-          onClick={() => setView('market')}
-          className="px-3 py-2 rounded-lg border bg-white dark:bg-[#2f3032]
-            text-gray-700 dark:text-slate-200 border-slate-200 dark:border-slate-700
-            hover:bg-gray-100 dark:hover:bg-white/5 text-sm font-black transition-colors"
-          title="Voltar para Marketcap"
-        >
-          Marketcap
-        </button>
-      </div>
+            <span className="whitespace-nowrap">{label}</span>
+            {sortKey ? <SortIcon active={sortConfig.key === sortKey} /> : null}
+          </button>
+        </div>
+      </th>
     );
   };
 
-  // BUY dropdown (fixo, sempre no mesmo lugar)
-  const BuyControl = () => (
-    <div className="relative" ref={buyRef}>
-      <button
-        onClick={() => setBuyOpen(v => !v)}
-        className="px-3 py-2 rounded-lg bg-[#dd9933] text-black font-black hover:opacity-90 transition-opacity flex items-center gap-2"
-        title="BUY"
-      >
-        BUY <ChevronDown size={16} />
-      </button>
+  const onDragEnd = (event: any) => {
+    const { active, over } = event;
+    if (!over) return;
+    if (active.id === over.id) return;
 
-      {buyOpen && (
-        <div className="absolute left-0 mt-2 w-56 bg-white dark:bg-[#2f3032] border border-slate-100 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden z-50">
-          <a
-            href="https://www.bybit.com/invite?ref=JMBYZW"
-            target="_blank"
-            rel="noreferrer"
-            className="px-4 py-3 flex items-center justify-between hover:bg-gray-100 dark:hover:bg-white/5 text-sm font-black text-gray-800 dark:text-slate-200"
-          >
-            Bybit
-            <ExternalLink size={16} className="text-gray-400" />
-          </a>
-        </div>
-      )}
-    </div>
-  );
+    const oldIndex = colOrder.indexOf(active.id);
+    const newIndex = colOrder.indexOf(over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
 
-  // -------- Render --------
+    setColOrder(prev => arrayMove(prev, oldIndex, newIndex));
+  };
+
   return (
-    // ✅ AQUI é o “item 1” que você reclamou: forço altura mínima pro corpo não sumir.
-    <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-100 dark:border-slate-800 shadow-xl overflow-hidden flex flex-col min-h-[640px]">
-      {/* Header Row: Search + Categories + BUY + Refresh */}
+    <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-100 dark:border-slate-800 shadow-xl overflow-hidden flex flex-col h-full min-h-0">
+
+      {/* Header Row: Search + (Categorias placeholder) + BUY + (Paginator/Refresh) */}
       <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col gap-3 bg-gray-50/50 dark:bg-black/20 shrink-0">
-        <div className="flex flex-col md:flex-row items-center gap-3">
-          <div className="relative w-full md:flex-1 min-w-[260px]">
-            <Search size={18} className="absolute left-3 top-2.5 text-gray-500" />
-            <input
-              type="text"
-              placeholder="Buscar ativo..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-white dark:bg-[#2f3032] rounded-lg py-2.5 pl-11 pr-4 text-[15px] text-gray-900 dark:text-white focus:border-[#dd9933] outline-none transition-all shadow-inner border border-slate-100 dark:border-slate-700"
-            />
+        <div className="flex flex-col lg:flex-row justify-between items-center gap-3">
+
+          {/* left group */}
+          <div className="flex items-center gap-2 w-full lg:w-auto">
+            <div className="relative w-full lg:w-[420px]">
+              <Search size={18} className="absolute left-3 top-2.5 text-gray-500" />
+              <input
+                type="text"
+                placeholder="Buscar ativo..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-white dark:bg-[#2f3032] rounded-lg py-2.5 pl-11 pr-4 text-[15px] text-gray-900 dark:text-white focus:border-[#dd9933] outline-none transition-all shadow-inner border border-slate-100 dark:border-slate-700"
+              />
+            </div>
+
+            {/* Categorias (placeholder só pro botão existir sem popup agora) */}
+            <button
+              type="button"
+              className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 font-black hover:bg-gray-100 dark:hover:bg-white/5 transition-colors whitespace-nowrap"
+              title="Categorias"
+            >
+              Categorias
+            </button>
+
+            {/* BUY dropdown */}
+            <div className="relative" ref={buyRef}>
+              <button
+                onClick={() => setBuyOpen(v => !v)}
+                className="px-3 py-2 rounded-lg bg-[#dd9933] text-black font-black hover:opacity-90 transition-opacity flex items-center gap-2 whitespace-nowrap"
+                title="BUY"
+              >
+                BUY <ChevronDown size={16} />
+              </button>
+
+              {buyOpen && (
+                <div className="absolute left-0 mt-2 w-56 bg-white dark:bg-[#2f3032] border border-slate-100 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden z-50">
+                  <a
+                    href="https://www.bybit.com/invite?ref=JMBYZW"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-4 py-3 flex items-center justify-between hover:bg-gray-100 dark:hover:bg-white/5 text-sm font-black text-gray-800 dark:text-slate-200"
+                  >
+                    Bybit
+                    <ExternalLink size={16} className="text-gray-400" />
+                  </a>
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* ✅ CATEGORIAS + BUY devem ficar ao lado da busca (esquerda do header) */}
-          <div className="flex items-center gap-2 w-full md:w-auto justify-start">
-            <CategoriesControl />
-            <BuyControl />
-
+          {/* right group */}
+          <div className="flex items-center gap-2 w-full lg:w-auto justify-end">
+            <Paginator compact />
             <button
-              onClick={() => { loadCoins(); loadCategoriesLocal(); }}
+              onClick={() => load()}
               className="p-2.5 hover:bg-gray-200 dark:hover:bg-slate-700 rounded-lg text-gray-500 transition-colors"
               title="Atualizar"
             >
               <RefreshCw size={22} className={loading ? 'animate-spin' : ''} />
             </button>
           </div>
-
-          {/* paginator do topo só no market */}
-          {view === 'market' && (
-            <div className="w-full md:w-auto md:ml-auto">
-              <Paginator compact />
-            </div>
-          )}
         </div>
-
-        {/* Aviso do snapshot (uma vez, só na tela de categorias) */}
-        {view === 'categories' && !hasCatSnapshot && (
-          <div className="text-xs font-bold text-amber-600 dark:text-amber-400">
-            Dados de categoria não indexados localmente. Para filtrar moedas por categoria, gere o snapshot:
-            <span className="font-black"> /opt/n8n/cachecko/categories/category_coins_map.json </span>
-            e exponha via
-            <span className="font-black"> /cachecko/categories/category_coins_map.json</span>.
-            <span className="ml-2 opacity-80">(A tabela de categorias usa os agregados do coingecko_categories_market.json mesmo sem snapshot.)</span>
-          </div>
-        )}
       </div>
 
-      {/* Body */}
-      <div className="flex-1 min-h-[420px] min-h-0 overflow-auto custom-scrollbar">
-        {view === 'categories' ? (
-          // -------------------- CATEGORIES TABLE --------------------
-          <div className="p-0">
-            {catLoading ? (
-              <div className="flex flex-col items-center justify-center h-64 text-gray-500">
-                <Loader2 className="animate-spin mb-2" size={32} />
-                <span className="font-bold text-sm uppercase tracking-widest animate-pulse">Carregando Categorias...</span>
-              </div>
-            ) : (
-              <table className="w-full text-left border-collapse min-w-[1100px] table-fixed">
-                <thead className="sticky top-0 z-20 bg-white dark:bg-[#2f3032]">
-                  <tr className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-slate-400 border-b border-gray-100 dark:border-slate-800">
-                    <th className="p-3 w-[420px]">Categoria</th>
-                    <th className="p-3 text-right w-[120px]">1h</th>
-                    <th className="p-3 text-right w-[120px]">24h</th>
-                    <th className="p-3 text-right w-[120px]">7d</th>
-                    <th className="p-3 text-right w-[180px]">Market Cap</th>
-                    <th className="p-3 text-right w-[180px]">24h Volume</th>
-                    <th className="p-3 text-right w-[120px]"># Coins</th>
-                  </tr>
-                </thead>
-
-                <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
-                  {(selMasterId ? categoryRows : masterRows).map((row) => {
-                    const isPos24 = (row.pct24h || 0) >= 0;
-                    return (
-                      <tr
-                        key={row.id}
-                        className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors cursor-pointer"
-                        onClick={() => {
-                          if (row.isMaster) {
-                            setSelMasterId(row.id);
-                            setSelGroupId('');
-                            setSelCategoryId('');
-                          }
-                        }}
-                        title={row.isMaster ? 'Clique para abrir subcategorias' : ''}
-                      >
-                        <td className="p-3 w-[420px]">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <span className="text-[14px] font-black text-gray-900 dark:text-white truncate">
-                              {row.name}
-                            </span>
-                            {row.isMaster && (
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-gray-100 dark:bg-black/20 text-gray-500 dark:text-slate-400">
-                                master
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="p-3 text-right font-mono text-[13px] font-black">
-                          <span className={(row.pct1h || 0) >= 0 ? 'text-green-500' : 'text-red-500'}>{safePct(row.pct1h)}</span>
-                        </td>
-                        <td className="p-3 text-right font-mono text-[13px] font-black">
-                          <span className={isPos24 ? 'text-green-500' : 'text-red-500'}>{safePct(row.pct24h)}</span>
-                        </td>
-                        <td className="p-3 text-right font-mono text-[13px] font-black">
-                          <span className={(row.pct7d || 0) >= 0 ? 'text-green-500' : 'text-red-500'}>{safePct(row.pct7d)}</span>
-                        </td>
-                        <td className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-300">
-                          {formatUSD(row.marketCap, true)}
-                        </td>
-                        <td className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-300">
-                          {formatUSD(row.vol24, true)}
-                        </td>
-                        <td className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-300">
-                          {Number(row.coinsCount || 0).toLocaleString()}
-                        </td>
-                      </tr>
-                    );
-                  })}
-
-                  {(selMasterId ? categoryRows : masterRows).length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="p-8 text-center text-sm font-bold text-gray-500 dark:text-slate-400">
-                        Nenhuma categoria carregada. Confere os arquivos em /cachecko/categories/.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            )}
+      {/* Table */}
+      <div className="flex-1 overflow-auto custom-scrollbar">
+        {loading && coins.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-64 text-gray-500">
+            <Loader2 className="animate-spin mb-2" size={32} />
+            <span className="font-bold text-sm uppercase tracking-widest animate-pulse">Sincronizando Mercado...</span>
           </div>
         ) : (
-          // -------------------- MARKET TABLE --------------------
-          <>
-            {loading && coins.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-64 text-gray-500">
-                <Loader2 className="animate-spin mb-2" size={32} />
-                <span className="font-bold text-sm uppercase tracking-widest animate-pulse">Sincronizando Mercado...</span>
-              </div>
-            ) : (
-              <DndContext
-                collisionDetection={closestCenter}
-                onDragEnd={(e) => {
-                  const { active, over } = e;
-                  if (!over || active.id === over.id) return;
-                  const oldIndex = colOrder.indexOf(active.id as ColId);
-                  const newIndex = colOrder.indexOf(over.id as ColId);
-                  if (oldIndex === -1 || newIndex === -1) return;
-                  setColOrder(arrayMove(colOrder, oldIndex, newIndex));
-                }}
-              >
-                <SortableContext items={colOrder} strategy={horizontalListSortingStrategy}>
-                  <table className="w-full text-left border-collapse min-w-[1380px] table-fixed">
-                    <thead className="sticky top-0 z-20 bg-white dark:bg-[#2f3032]">
-                      <tr className="border-b border-gray-100 dark:border-slate-800">
-                        {colOrder.map((col) => {
-                          if (col === 'fav') {
-                            return (
-                              <SortableTh key={col} id={col} align="center" w="w-[52px]">
-                                <span className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-slate-400">★</span>
-                              </SortableTh>
-                            );
-                          }
+          <table className="w-full text-left border-collapse min-w-[1420px] table-fixed">
+            <thead className="sticky top-0 z-20 bg-white dark:bg-[#2f3032]">
+              <tr className="border-b border-gray-100 dark:border-slate-800">
+                {/* ⭐ coluna fixa (não reordenável) */}
+                <th className="p-3 w-[44px] text-center">
+                  <span className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-slate-400">
+                    Fav
+                  </span>
+                </th>
 
-                          if (col === 'rank') {
-                            return (
-                              <SortableTh
-                                key={col}
-                                id={col}
-                                align="center"
-                                w="w-[76px]"
-                                onClick={() => handleSort('market_cap_rank')}
-                              >
-                                <div className="group flex items-center gap-1">
-                                  <SortLabel label="#" sortKey="market_cap_rank" />
-                                </div>
-                              </SortableTh>
-                            );
-                          }
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+                  <SortableContext items={colOrder} strategy={horizontalListSortingStrategy}>
+                    {colOrder.map((cid) => {
+                      const c = COLS[cid];
+                      return (
+                        <SortableTh
+                          key={c.id}
+                          colId={c.id}
+                          label={c.label}
+                          sortKey={c.sortKey}
+                          align={c.align}
+                          w={c.w}
+                        />
+                      );
+                    })}
+                  </SortableContext>
+                </DndContext>
+              </tr>
+            </thead>
 
-                          if (col === 'asset') {
-                            return (
-                              <SortableTh
-                                key={col}
-                                id={col}
-                                align="left"
-                                w="w-[300px]"
-                                onClick={() => handleSort('name')}
-                              >
-                                <div className="group flex items-center gap-1">
-                                  <SortLabel label="Ativo" sortKey="name" />
-                                </div>
-                              </SortableTh>
-                            );
-                          }
+            <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
+              {pageCoins.map((coin) => {
+                const change24 = (coin as any).price_change_percentage_24h_in_currency ?? coin.price_change_percentage_24h ?? 0;
+                const isPos24 = change24 >= 0;
 
-                          if (col === 'price') {
-                            return (
-                              <SortableTh
-                                key={col}
-                                id={col}
-                                align="right"
-                                w="w-[140px]"
-                                onClick={() => handleSort('current_price')}
-                              >
-                                <div className="group flex items-center gap-1">
-                                  <SortLabel label="Preço" sortKey="current_price" />
-                                </div>
-                              </SortableTh>
-                            );
-                          }
+                const prices = coin.sparkline_in_7d?.price;
+                const c1h = pctFromSpark(prices, 1);
+                const c7d = pct7dFromSpark(prices);
+                const vol7d = (coin.total_volume || 0) * 7;
 
-                          if (col === 'chg1h') {
-                            return (
-                              <SortableTh
-                                key={col}
-                                id={col}
-                                align="right"
-                                w="w-[96px]"
-                                onClick={() => handleSort('chg1h')}
-                              >
-                                <div className="group flex items-center gap-1">
-                                  <SortLabel label="1h %" sortKey="chg1h" />
-                                </div>
-                              </SortableTh>
-                            );
-                          }
+                const sparkData = Array.isArray(prices) ? prices.map((v, i) => ({ i, v })) : [];
 
-                          if (col === 'chg24h') {
-                            return (
-                              <SortableTh
-                                key={col}
-                                id={col}
-                                align="right"
-                                w="w-[104px]"
-                                onClick={() => handleSort('chg24h')}
-                              >
-                                <div className="group flex items-center gap-1">
-                                  <SortLabel label="24h %" sortKey="chg24h" />
-                                </div>
-                              </SortableTh>
-                            );
-                          }
+                const favKey = coin.id || `${coin.symbol}-${coin.name}`;
+                const isFav = !!favorites[favKey];
 
-                          if (col === 'chg7d') {
-                            return (
-                              <SortableTh
-                                key={col}
-                                id={col}
-                                align="right"
-                                w="w-[104px]"
-                                onClick={() => handleSort('chg7d')}
-                              >
-                                <div className="group flex items-center gap-1">
-                                  <SortLabel label="7d %" sortKey="chg7d" />
-                                </div>
-                              </SortableTh>
-                            );
-                          }
+                return (
+                  <tr key={coin.id} className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors group">
+                    {/* ⭐ fav */}
+                    <td className="p-3 w-[44px] text-center">
+                      <button
+                        type="button"
+                        onClick={() => setFavorites(prev => ({ ...prev, [favKey]: !prev[favKey] }))}
+                        className="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"
+                        title="Favoritar (placeholder)"
+                      >
+                        <Star size={18} className={isFav ? 'text-[#dd9933]' : 'text-gray-400'} />
+                      </button>
+                    </td>
 
-                          if (col === 'mcap') {
-                            return (
-                              <SortableTh
-                                key={col}
-                                id={col}
-                                align="right"
-                                w="w-[160px]"
-                                onClick={() => handleSort('market_cap')}
-                              >
-                                <div className="group flex items-center gap-1">
-                                  <SortLabel label="Market Cap" sortKey="market_cap" />
-                                </div>
-                              </SortableTh>
-                            );
-                          }
-
-                          if (col === 'vol24h') {
-                            return (
-                              <SortableTh
-                                key={col}
-                                id={col}
-                                align="right"
-                                w="w-[140px]"
-                                onClick={() => handleSort('total_volume')}
-                              >
-                                <div className="group flex items-center gap-1">
-                                  <SortLabel label="Vol (24h)" sortKey="total_volume" />
-                                </div>
-                              </SortableTh>
-                            );
-                          }
-
-                          if (col === 'vol7d') {
-                            return (
-                              <SortableTh
-                                key={col}
-                                id={col}
-                                align="right"
-                                w="w-[140px]"
-                                onClick={() => handleSort('vol7d')}
-                              >
-                                <div className="group flex items-center gap-1">
-                                  <SortLabel label="Vol (7d)" sortKey="vol7d" />
-                                </div>
-                              </SortableTh>
-                            );
-                          }
-
-                          if (col === 'circ') {
-                            return (
-                              <SortableTh
-                                key={col}
-                                id={col}
-                                align="right"
-                                w="w-[170px]"
-                                onClick={() => handleSort('circulating_supply')}
-                              >
-                                <div className="group flex items-center gap-1">
-                                  <SortLabel label="Circ. Supply" sortKey="circulating_supply" />
-                                </div>
-                              </SortableTh>
-                            );
-                          }
-
-                          // spark
-                          return (
-                            <SortableTh key={col} id={col} align="right" w="w-[360px]">
-                              <span className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-slate-400">Last 7 Days</span>
-                            </SortableTh>
-                          );
-                        })}
-                      </tr>
-                    </thead>
-
-                    <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
-                      {pageCoins.map((coin: any) => {
-                        const change24 = getPct24h(coin);
-                        const isPos24 = change24 >= 0;
-
-                        const prices = coin.sparkline_in_7d?.price;
-                        const c1h = isFinite(getPct1h(coin)) ? getPct1h(coin) : pctFromSpark(prices, 1);
-                        const c7d = isFinite(getPct7d(coin)) ? getPct7d(coin) : pct7dFromSpark(prices);
-                        const vol7d = (Number(coin.total_volume || 0) || 0) * 7;
-
-                        const sparkData = Array.isArray(prices) ? prices.map((v: number, i: number) => ({ i, v })) : [];
-
+                    {colOrder.map((cid) => {
+                      if (cid === 'rank') {
                         return (
-                          <tr key={coin.id} className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors group">
-                            {colOrder.map((col) => {
-                              if (col === 'fav') {
-                                const isFav = fav.has(String(coin.id));
-                                return (
-                                  <td key={col} className="p-3 text-center w-[52px]">
-                                    <button
-                                      onClick={() => {
-                                        setFav(prev => {
-                                          const n = new Set(prev);
-                                          const id = String(coin.id);
-                                          if (n.has(id)) n.delete(id);
-                                          else n.add(id);
-                                          return n;
-                                        });
-                                      }}
-                                      className={`inline-flex items-center justify-center w-8 h-8 rounded-lg border
-                                        ${isFav
-                                          ? 'bg-[#dd9933] border-transparent text-black'
-                                          : 'bg-white dark:bg-[#2f3032] border-slate-200 dark:border-slate-700 text-gray-400 hover:text-[#dd9933]'
-                                        } transition-colors`}
-                                      title="Favoritar (placeholder)"
-                                    >
-                                      <Star size={16} className={isFav ? '' : 'opacity-80'} />
-                                    </button>
-                                  </td>
-                                );
-                              }
-
-                              if (col === 'rank') {
-                                return (
-                                  <td key={col} className="p-3 text-center text-[13px] font-black text-gray-400 w-[76px]">
-                                    #{coin.market_cap_rank}
-                                  </td>
-                                );
-                              }
-
-                              if (col === 'asset') {
-                                return (
-                                  <td key={col} className="p-3 w-[300px]">
-                                    <div className="flex items-center gap-3 min-w-0">
-                                      <img
-                                        src={coin.image}
-                                        alt=""
-                                        className="w-9 h-9 rounded-full bg-slate-100 dark:bg-[#242628] p-1 border border-slate-200 dark:border-white/10 shadow-sm"
-                                        onError={(e) => (e.currentTarget.style.display = 'none')}
-                                      />
-                                      <div className="flex flex-col min-w-0">
-                                        <span className="text-[15px] font-black text-gray-900 dark:text-white leading-none group-hover:text-[#dd9933] transition-colors truncate">
-                                          {coin.name}
-                                        </span>
-                                        <span className="text-xs font-bold text-gray-500 uppercase mt-1">
-                                          {(coin.symbol || '').toUpperCase()}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </td>
-                                );
-                              }
-
-                              if (col === 'price') {
-                                return (
-                                  <td key={col} className="p-3 text-right font-mono text-[15px] font-black text-gray-900 dark:text-slate-200 w-[140px]">
-                                    {formatUSD(coin.current_price)}
-                                  </td>
-                                );
-                              }
-
-                              if (col === 'chg1h') {
-                                return (
-                                  <td
-                                    key={col}
-                                    className={`p-3 text-right font-mono text-[13px] font-black w-[96px] ${!isFinite(c1h) ? 'text-gray-400 dark:text-slate-500' : (c1h >= 0 ? 'text-green-500' : 'text-red-500')}`}
-                                    title="Estimativa via sparkline 7d (ou dado 1h se vier no dataset)"
-                                  >
-                                    {safePct(c1h)}
-                                  </td>
-                                );
-                              }
-
-                              if (col === 'chg24h') {
-                                return (
-                                  <td key={col} className={`p-3 text-right font-mono text-[15px] font-black w-[104px] ${isPos24 ? 'text-green-500' : 'text-red-500'}`}>
-                                    {safePct(change24)}
-                                  </td>
-                                );
-                              }
-
-                              if (col === 'chg7d') {
-                                return (
-                                  <td
-                                    key={col}
-                                    className={`p-3 text-right font-mono text-[13px] font-black w-[104px] ${!isFinite(c7d) ? 'text-gray-400 dark:text-slate-500' : (c7d >= 0 ? 'text-green-500' : 'text-red-500')}`}
-                                    title="Estimativa via sparkline 7d (ou dado 7d se vier no dataset)"
-                                  >
-                                    {safePct(c7d)}
-                                  </td>
-                                );
-                              }
-
-                              if (col === 'mcap') {
-                                return (
-                                  <td key={col} className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[160px]">
-                                    {formatUSD(coin.market_cap, true)}
-                                  </td>
-                                );
-                              }
-
-                              if (col === 'vol24h') {
-                                return (
-                                  <td key={col} className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[140px]">
-                                    {formatUSD(coin.total_volume, true)}
-                                  </td>
-                                );
-                              }
-
-                              if (col === 'vol7d') {
-                                return (
-                                  <td key={col} className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[140px]" title="Estimativa simples: Vol(24h) * 7">
-                                    {formatUSD(vol7d, true)}
-                                  </td>
-                                );
-                              }
-
-                              if (col === 'circ') {
-                                return (
-                                  <td key={col} className="p-3 text-right font-mono text-[12px] font-bold text-gray-500 dark:text-slate-500 w-[170px]">
-                                    {Number(coin.circulating_supply || 0).toLocaleString()} <span className="uppercase opacity-50">{(coin.symbol || '').toUpperCase()}</span>
-                                  </td>
-                                );
-                              }
-
-                              // spark
-                              return (
-                                <td key={col} className="p-3 w-[360px]">
-                                  <div className="w-full h-[44px] min-w-0">
-                                    {sparkData.length > 0 ? (
-                                      <ResponsiveContainer width="100%" height="100%">
-                                        <AreaChart data={sparkData}>
-                                          <defs>
-                                            <linearGradient id={`sparkFill_${coin.id}`} x1="0" y1="0" x2="0" y2="1">
-                                              <stop offset="0%" stopColor={isPos24 ? '#548f3f' : '#CD534B'} stopOpacity={0.45} />
-                                              <stop offset="100%" stopColor={isPos24 ? '#548f3f' : '#CD534B'} stopOpacity={0.06} />
-                                            </linearGradient>
-                                          </defs>
-                                          <YAxis domain={['auto', 'auto']} hide />
-                                          <Area
-                                            type="monotone"
-                                            dataKey="v"
-                                            stroke={isPos24 ? '#548f3f' : '#CD534B'}
-                                            strokeWidth={2}
-                                            fill={`url(#sparkFill_${coin.id})`}
-                                            dot={false}
-                                            isAnimationActive={false}
-                                          />
-                                        </AreaChart>
-                                      </ResponsiveContainer>
-                                    ) : (
-                                      <div className="w-full h-full rounded-lg bg-slate-100/60 dark:bg-white/5" />
-                                    )}
-                                  </div>
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        );
-                      })}
-
-                      {pageCoins.length === 0 && (
-                        <tr>
-                          <td colSpan={colOrder.length} className="p-8 text-center text-sm font-bold text-gray-500 dark:text-slate-400">
-                            Nenhum resultado com os filtros atuais.
+                          <td key={cid} className="p-3 text-[13px] font-black text-gray-400 w-[72px] text-center">
+                            #{coin.market_cap_rank}
                           </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </SortableContext>
-              </DndContext>
-            )}
-          </>
+                        );
+                      }
+
+                      if (cid === 'asset') {
+                        return (
+                          <td key={cid} className="p-3 w-[300px]">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <img
+                                src={coin.image}
+                                alt=""
+                                className="w-9 h-9 rounded-full bg-slate-100 dark:bg-[#242628] p-1 border border-slate-200 dark:border-white/10 shadow-sm shrink-0"
+                                onError={(e) => (e.currentTarget.style.display = 'none')}
+                              />
+                              <div className="flex flex-col min-w-0">
+                                <span className="text-[15px] font-black text-gray-900 dark:text-white leading-none group-hover:text-[#dd9933] transition-colors truncate">
+                                  {coin.name}
+                                </span>
+                                <span className="text-xs font-bold text-gray-500 uppercase mt-1 truncate">
+                                  {coin.symbol}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+                        );
+                      }
+
+                      if (cid === 'price') {
+                        return (
+                          <td key={cid} className="p-3 text-right font-mono text-[15px] font-black text-gray-900 dark:text-slate-200 w-[140px]">
+                            {formatUSD(coin.current_price)}
+                          </td>
+                        );
+                      }
+
+                      if (cid === 'ch1h') {
+                        return (
+                          <td
+                            key={cid}
+                            className={`p-3 text-right font-mono text-[13px] font-black w-[92px] ${!isFinite(c1h) ? 'text-gray-400 dark:text-slate-500' : (c1h >= 0 ? 'text-green-500' : 'text-red-500')}`}
+                            title="Estimativa via sparkline 7d"
+                          >
+                            {safePct(c1h)}
+                          </td>
+                        );
+                      }
+
+                      if (cid === 'ch24h') {
+                        return (
+                          <td key={cid} className={`p-3 text-right font-mono text-[15px] font-black w-[100px] ${isPos24 ? 'text-green-500' : 'text-red-500'}`}>
+                            {isPos24 ? '+' : ''}{Number(change24 || 0).toFixed(2)}%
+                          </td>
+                        );
+                      }
+
+                      if (cid === 'ch7d') {
+                        return (
+                          <td
+                            key={cid}
+                            className={`p-3 text-right font-mono text-[13px] font-black w-[100px] ${!isFinite(c7d) ? 'text-gray-400 dark:text-slate-500' : (c7d >= 0 ? 'text-green-500' : 'text-red-500')}`}
+                            title="Estimativa via sparkline 7d"
+                          >
+                            {safePct(c7d)}
+                          </td>
+                        );
+                      }
+
+                      if (cid === 'mcap') {
+                        return (
+                          <td key={cid} className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[150px]">
+                            {formatUSD(coin.market_cap, true)}
+                          </td>
+                        );
+                      }
+
+                      if (cid === 'vol24h') {
+                        return (
+                          <td key={cid} className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[130px]">
+                            {formatUSD(coin.total_volume, true)}
+                          </td>
+                        );
+                      }
+
+                      if (cid === 'vol7d') {
+                        return (
+                          <td key={cid} className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[130px]" title="Estimativa simples: Vol(24h) * 7">
+                            {formatUSD(vol7d, true)}
+                          </td>
+                        );
+                      }
+
+                      if (cid === 'supply') {
+                        return (
+                          <td key={cid} className="p-3 text-right font-mono text-[12px] font-bold text-gray-500 dark:text-slate-500 w-[170px]">
+                            {coin.circulating_supply?.toLocaleString()} <span className="uppercase opacity-50">{coin.symbol}</span>
+                          </td>
+                        );
+                      }
+
+                      if (cid === 'spark7d') {
+                        return (
+                          <td key={cid} className="p-3 w-[340px]">
+                            <div className="w-full h-12 min-w-0">
+                              {sparkData.length > 1 ? (
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <AreaChart data={sparkData}>
+                                    <defs>
+                                      <linearGradient id={`g_${coin.id}`} x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stopColor={isPos24 ? '#26a269' : '#e01b24'} stopOpacity={0.55} />
+                                        <stop offset="75%" stopColor={isPos24 ? '#26a269' : '#e01b24'} stopOpacity={0.18} />
+                                        <stop offset="100%" stopColor={isPos24 ? '#26a269' : '#e01b24'} stopOpacity={0.02} />
+                                      </linearGradient>
+                                    </defs>
+                                    <Area
+                                      type="monotone"
+                                      dataKey="v"
+                                      stroke={isPos24 ? '#26a269' : '#e01b24'}
+                                      strokeWidth={2}
+                                      fill={`url(#g_${coin.id})`}
+                                      fillOpacity={1}
+                                      isAnimationActive={false}
+                                      dot={false}
+                                    />
+                                    <YAxis domain={['auto', 'auto']} hide />
+                                  </AreaChart>
+                                </ResponsiveContainer>
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-xs font-bold text-gray-400 dark:text-slate-500">
+                                  —
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        );
+                      }
+
+                      return <td key={cid} className="p-3" />;
+                    })}
+                  </tr>
+                );
+              })}
+
+              {pageCoins.length === 0 && (
+                <tr>
+                  <td colSpan={1 + colOrder.length} className="p-8 text-center text-sm font-bold text-gray-500 dark:text-slate-400">
+                    Nenhum resultado.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         )}
       </div>
 
-      {/* Footer paginator (só no market) */}
-      {view === 'market' && (
-        <div className="p-3 border-t border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-black/20 shrink-0">
-          <Paginator />
-        </div>
-      )}
+      {/* Footer paginator */}
+      <div className="p-3 border-t border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-black/20 shrink-0">
+        <Paginator />
+      </div>
     </div>
   );
 };
-
-export default MarketCapTable;
 
 // --- MAIN PAGE WRAPPER ---
 
