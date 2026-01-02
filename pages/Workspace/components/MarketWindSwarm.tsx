@@ -7,14 +7,14 @@ import { fetchTopCoins } from '../services/api';
 interface Particle {
   id: string;
   x: number; y: number;
-  vx: number; vy: number; // For physics
-  startX: number; startY: number; // For lerp animation
+  startX: number; startY: number; 
   targetX: number; targetY: number;
   animProgress: number;
   radius: number;
   color: string;
   coin: ApiCoin;
   trail: { x: number, y: number }[];
+  phase: number; // For oscillation
 }
 type YAxisMode = 'total_volume' | 'market_cap' | 'price_change_percentage_24h';
 type Status = 'loading' | 'running' | 'demo' | 'error';
@@ -35,36 +35,57 @@ const formatCompact = (v?: number) => {
     return n.toFixed(0);
 };
 
+// --- MAIN COMPONENT ---
 const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const particlesRef = useRef<Particle[]>([]);
   const imageCache = useRef(new Map<string, HTMLImageElement>());
   
+  // State
   const [status, setStatus] = useState<Status>('loading');
   const [coins, setCoins] = useState<ApiCoin[]>([]);
-  
   const [hoveredParticle, setHoveredParticle] = useState<Particle | null>(null);
   const [selectedParticle, setSelectedParticle] = useState<Particle | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
+  // Settings
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [numCoins, setNumCoins] = useState(150);
   const [animSpeed, setAnimSpeed] = useState(0.8);
   const [yAxisMode, setYAxisMode] = useState<YAxisMode>('total_volume');
-  const [trailLength, setTrailLength] = useState(25);
+  const [trailLength, setTrailLength] = useState(15);
   
   const [chartVersion, setChartVersion] = useState(0);
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
   
-  // Refs para manter os valores mais recentes para o loop de animação estável
-  // Fix: Explicitly pass `undefined` to `useRef` to satisfy older TypeScript/React type definitions
-  // that may not support the no-argument overload `useRef<T>()`.
-  const animationLoopRef = useRef<(() => void) | undefined>(undefined);
+  // Interaction Refs
+  const zoomRef = useRef(1.0);
+  const panRef = useRef({ x: 0, y: 0 });
+  const isPanningRef = useRef(false);
+  const panStartRef = useRef({ clientX: 0, clientY: 0, panX: 0, panY: 0 });
+  const searchResultRef = useRef<Particle | null>(null);
+  
   const hoveredParticleRef = useRef(hoveredParticle);
   hoveredParticleRef.current = hoveredParticle;
   const selectedParticleRef = useRef(selectedParticle);
   selectedParticleRef.current = selectedParticle;
+
+  // --- SEARCH EFFECT ---
+  useEffect(() => {
+    if (!searchTerm) {
+      searchResultRef.current = null;
+      return;
+    }
+    const found = particlesRef.current.find(p => 
+      p.coin.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      p.coin.symbol.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    searchResultRef.current = found || null;
+    if (found) {
+        setSelectedParticle(found);
+    }
+  }, [searchTerm]);
 
   // --- DATA LOADING ---
   const loadData = useCallback(async () => {
@@ -74,12 +95,9 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       if (data && data.length > 0) {
         setCoins(data);
         setStatus('running');
-      } else if (particlesRef.current.length === 0) {
-        setStatus('demo');
-      }
+      } else if (particlesRef.current.length === 0) setStatus('demo');
     } catch (error) {
       if (particlesRef.current.length === 0) setStatus('error');
-      console.error("WindSwarm data error:", error);
     }
   }, []);
 
@@ -91,11 +109,13 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     return () => { clearInterval(interval); observer.disconnect(); };
   }, [loadData]);
   
-  // --- MAPPING LOGIC ---
+  // --- MAPPING LOGIC (with zoom/pan) ---
   const calculateMappings = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas || coins.length === 0) return null;
     
+    const zoom = zoomRef.current;
+    const pan = panRef.current;
     const { width, height } = canvas;
     const pad = 80;
 
@@ -111,25 +131,29 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     const minY = Math.min(...yValues), maxY = Math.max(...yValues);
     const logMinY = (yAxisMode !== 'price_change_percentage_24h' && minY > 0) ? Math.log10(minY) : 0;
     const logMaxY = (yAxisMode !== 'price_change_percentage_24h' && maxY > 0) ? Math.log10(maxY) : 0;
-    
-    const mapX = (v: number) => pad + (v - minX) / (maxX - minX || 1) * (width - pad * 2);
-    const mapY = (v: number) => {
+
+    const baseMapX = (v: number) => pad + (v - minX) / (maxX - minX || 1) * (width - pad * 2);
+    const baseMapY = (v: number) => {
         if (yAxisMode === 'price_change_percentage_24h') {
             return height - pad - (v - minY) / (maxY - minY || 1) * (height - pad * 2);
         }
         if (v <= 0) return height - pad;
         return height - pad - (Math.log10(v) - logMinY) / (logMaxY - logMinY || 1) * (height - pad * 2);
     };
-    const mapRadius = (mc: number) => {
-        if (mc <= 0) return 8;
-        return 8 + (Math.log10(mc) - minLogMc) / (maxLogMc - minLogMc || 1) * 42;
-    };
 
+    const mapX = (v: number) => pan.x + (baseMapX(v) - width / 2) * zoom + width / 2;
+    const mapY = (v: number) => pan.y + (baseMapY(v) - height / 2) * zoom + height / 2;
+    
+    const mapRadius = (mc: number) => {
+        if (mc <= 0) return 8 * zoom;
+        return (8 + (Math.log10(mc) - minLogMc) / (maxLogMc - minLogMc || 1) * 42) * zoom;
+    };
+    
     return { mapX, mapY, mapRadius, topCoins, minX, maxX, minY, maxY, logMinY, logMaxY, pad, width, height };
   }, [coins, numCoins, yAxisMode, chartVersion]);
 
 
-  // --- UNIFIED PARTICLE MANAGEMENT ---
+  // --- PARTICLE MANAGEMENT ---
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || coins.length === 0 || canvas.width === 0) return;
@@ -142,7 +166,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
     const newParticles = topCoins.map(coin => {
       const existing = existingParticleMap.get(coin.id);
-
       const targetX = mapX(coin.price_change_percentage_24h || 0);
       const targetY = mapY(coin[yAxisMode] || 1);
       const newRadius = mapRadius(coin.market_cap);
@@ -168,10 +191,9 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         }
         const centerX = canvas.width / 2;
         const centerY = canvas.height / 2;
-        
         return {
           id: coin.id,
-          x: centerX, y: centerY, vx: 0, vy: 0,
+          x: centerX, y: centerY, vx:0, vy:0,
           startX: centerX, startY: centerY,
           targetX, targetY,
           animProgress: 0,
@@ -179,25 +201,29 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
           color: newColor,
           coin,
           trail: [],
+          phase: Math.random() * Math.PI * 2,
         };
       }
     });
-    
     particlesRef.current = newParticles;
-
   }, [coins, numCoins, yAxisMode, chartVersion, calculateMappings]);
 
-  // --- STABLE ANIMATION & DRAWING ---
-  useEffect(() => {
+  // --- ANIMATION & DRAWING ---
+  const animationLoop = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx || !canvas) return;
     
     let lastUpdateTime = Date.now();
-    
-    // A função de animação real. Será atualizada no ref.
-    animationLoopRef.current = () => {
+    let frameId: number;
+
+    const drawRoundedRect = (x:number, y:number, w:number, h:number, r:number) => {
+        ctx.beginPath(); ctx.moveTo(x+r, y); ctx.lineTo(x+w-r, y); ctx.arcTo(x+w, y, x+w, y+r, r);
+        ctx.lineTo(x+w, y+h-r); ctx.arcTo(x+w, y+h, x+w-r, y+h, r); ctx.lineTo(x+r, y+h);
+        ctx.arcTo(x, y+h, x, y+h-r, r); ctx.lineTo(x, y+r); ctx.arcTo(x, y, x+r, y, r); ctx.closePath();
+    };
+
+    const loop = () => {
         const now = Date.now();
         const delta = Math.min(0.05, (now - lastUpdateTime) / 1000);
         lastUpdateTime = now;
@@ -205,48 +231,58 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         const particles = particlesRef.current;
-        if (particles.length === 0) return;
+        if (particles.length === 0) { frameId = requestAnimationFrame(loop); return; }
 
         const mappings = calculateMappings();
-        if (!mappings) return;
-
+        if (!mappings) { frameId = requestAnimationFrame(loop); return; }
         const { pad, width, height, minX, maxX, minY, maxY, logMinY, logMaxY } = mappings;
 
-        // Desenha eixos
+        // Eixos (transformados com zoom/pan)
+        const zoom = zoomRef.current;
         ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
-        ctx.lineWidth = 1; ctx.font = 'bold 10px Inter';
+        ctx.lineWidth = 1; ctx.font = `bold ${10 * Math.max(1, zoom * 0.5)}px Inter`;
         ctx.fillStyle = isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)';
         for (let i = 0; i <= 5; i++) {
-            const y = pad + i * (height - pad * 2) / 5;
+          const val = (yAxisMode === 'price_change_percentage_24h') ? maxY - i * (maxY - minY) / 5 : Math.pow(10, logMaxY - i * (logMaxY - logMinY) / 5);
+          const y = mappings.mapY(val);
+          if (y > pad * 0.5 && y < height - pad * 0.5) {
             ctx.beginPath(); ctx.moveTo(pad - 5, y); ctx.lineTo(width - pad, y); ctx.stroke();
-            const val = (yAxisMode === 'price_change_percentage_24h') ? maxY - i * (maxY - minY) / 5 : Math.pow(10, logMaxY - i * (logMaxY - logMinY) / 5);
             ctx.fillText(yAxisMode === 'price_change_percentage_24h' ? `${val.toFixed(1)}%` : `$${formatCompact(val)}`, 15, y + 3);
+          }
         }
         for (let i = 0; i <= 10; i++) {
-            const x = pad + i * (width - pad * 2) / 10;
+          const val = minX + i * (maxX - minX) / 10;
+          const x = mappings.mapX(val);
+          if (x > pad * 0.5 && x < width - pad * 0.5) {
             ctx.beginPath(); ctx.moveTo(x, pad); ctx.lineTo(x, height - pad + 5); ctx.stroke();
-            const val = minX + i * (maxX - minX) / 10;
             ctx.textAlign = 'center'; ctx.fillText(`${val.toFixed(1)}%`, x, height - pad + 15);
+          }
         }
 
-        // Obtém os estados de hover/select mais recentes dos refs
-        const hoveredP = hoveredParticleRef.current;
-        const selectedP = selectedParticleRef.current;
+        ctx.fillStyle = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)';
+        ctx.font = 'bold 12px Inter'; ctx.textAlign = 'center';
+        ctx.fillText('Variação de Preço 24h (%)', width / 2, height - 15);
+        ctx.save();
+        ctx.translate(25, height / 2); ctx.rotate(-Math.PI / 2);
+        const yLabel = yAxisMode === 'total_volume' ? 'Volume 24h (Log)' : yAxisMode === 'market_cap' ? 'Market Cap (Log)' : 'Variação Preço %';
+        ctx.fillText(yLabel, 0, 0); ctx.restore();
 
-        // Atualiza e desenha partículas
+        // Partículas
         particles.forEach(p => {
+            const isMatch = searchResultRef.current && p.id === searchResultRef.current.id;
+            ctx.globalAlpha = (searchTerm && !isMatch) ? 0.05 : 1.0;
+
             if (p.animProgress < 1) {
-                p.animProgress = Math.min(1, p.animProgress + delta * animSpeed);
+                p.animProgress = Math.min(1, p.animProgress + delta * 2.5);
                 const easedProgress = easeOutCubic(p.animProgress);
                 p.x = lerp(p.startX, p.targetX, easedProgress);
                 p.y = lerp(p.startY, p.targetY, easedProgress);
-                p.vx = 0; p.vy = 0;
             } else {
-                const dx = p.targetX - p.x; const dy = p.targetY - p.y;
-                p.vx += dx * 0.005; p.vy += dy * 0.005;
-                p.vx += (Math.random() - 0.5) * 0.2; p.vy += (Math.random() - 0.5) * 0.2;
-                p.vx *= 0.94; p.vy *= 0.94;
-                p.x += p.vx; p.y += p.vy;
+                p.phase += delta * animSpeed;
+                const driftX = Math.sin(p.phase) * (p.radius * 0.05);
+                const driftY = Math.cos(p.phase * 0.7) * (p.radius * 0.05);
+                p.x = p.targetX + driftX;
+                p.y = p.targetY + driftY;
             }
 
             p.trail.push({ x: p.x, y: p.y });
@@ -254,96 +290,155 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
             if (p.trail.length > 1 && trailLength > 0) {
                 const baseColor = p.color === '#089981' ? '8, 153, 129' : '242, 54, 69';
-                ctx.beginPath(); ctx.moveTo(p.trail[0].x, p.trail[0].y);
                 for (let i = 1; i < p.trail.length; i++) {
+                    const alpha = Math.pow(i / p.trail.length, 2) * 0.7;
+                    ctx.beginPath();
+                    ctx.moveTo(p.trail[i-1].x, p.trail[i-1].y);
                     ctx.lineTo(p.trail[i].x, p.trail[i].y);
+                    ctx.strokeStyle = `rgba(${baseColor}, ${alpha})`;
+                    ctx.lineWidth = 2.5 * zoom;
+                    ctx.stroke();
                 }
-                ctx.strokeStyle = `rgba(${baseColor}, 0.5)`;
-                ctx.lineWidth = 1.5; ctx.stroke();
             }
 
             ctx.save();
             ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2); ctx.clip();
             const img = imageCache.current.get(p.coin.image);
-            if (img?.complete) { ctx.drawImage(img, p.x - p.radius, p.y - p.radius, p.radius * 2, p.radius * 2); }
+            if (img?.complete) { ctx.drawImage(img, p.x - p.radius, p.y - p.radius, p.radius * 2, p.radius * 2); } 
             else { ctx.fillStyle = p.color; ctx.fill(); }
             ctx.restore();
-
-            if (selectedP?.id === p.id || hoveredP?.id === p.id) {
+            
+            ctx.globalAlpha = 1.0;
+            if (selectedParticleRef.current?.id === p.id || hoveredParticleRef.current?.id === p.id) {
                 ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-                ctx.strokeStyle = '#dd9933'; ctx.lineWidth = selectedP?.id === p.id ? 4 : 2;
+                ctx.strokeStyle = '#dd9933'; ctx.lineWidth = selectedParticleRef.current?.id === p.id ? 4 * zoom : 2 * zoom;
                 ctx.stroke();
             }
         });
 
-        // Desenha tooltip
-        if (hoveredP && !selectedP) {
-            const p = hoveredP; const ttWidth = 200, ttHeight = 100;
-            let ttX = p.x - ttWidth / 2; let ttY = p.y - p.radius - ttHeight - 10;
-            if (ttY < 10) ttY = p.y + p.radius + 10;
-            ttX = clamp(ttX, 10, width - ttWidth - 10);
+        // Tooltip
+        const particleForTooltip = selectedParticleRef.current || hoveredParticleRef.current;
+        if (particleForTooltip) {
+            const p = particleForTooltip; const ttWidth = 240, ttHeight = 145;
+            let ttX = p.x + p.radius + 15; let ttY = p.y - ttHeight / 2;
+            if (ttX + ttWidth > width - 10) ttX = p.x - p.radius - ttWidth - 15;
+            ttX = clamp(ttX, 10, width - ttWidth - 10); ttY = clamp(ttY, 10, height - ttHeight - 10);
             
-            ctx.fillStyle = isDark ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.9)'; ctx.strokeStyle = '#dd9933'; ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.roundRect(ttX, ttY, ttWidth, ttHeight, 8); ctx.fill(); ctx.stroke();
-            ctx.font = 'bold 14px Inter'; ctx.fillStyle = isDark ? '#fff' : '#000'; ctx.textAlign = 'left';
-            ctx.fillText(p.coin.name, ttX + 10, ttY + 20);
-            ctx.font = '12px Inter'; ctx.fillStyle = isDark ? '#ccc' : '#333';
-            ctx.fillText(`$${p.coin.current_price.toLocaleString()}`, ttX + 10, ttY + 40);
+            ctx.fillStyle = isDark ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.95)';
+            ctx.strokeStyle = '#dd9933'; ctx.lineWidth = 1;
+            drawRoundedRect(ttX, ttY, ttWidth, ttHeight, 12); ctx.fill(); ctx.stroke();
+
+            const img = imageCache.current.get(p.coin.image);
+            if (img?.complete) {
+                ctx.drawImage(img, ttX + 15, ttY + 15, 40, 40);
+            }
+            ctx.font = 'bold 16px Inter'; ctx.fillStyle = isDark ? '#fff' : '#000'; ctx.textAlign = 'left';
+            ctx.fillText(p.coin.name, ttX + 65, ttY + 30);
+            ctx.font = 'bold 12px Inter'; ctx.fillStyle = '#dd9933';
+            ctx.fillText(p.coin.symbol, ttX + 65, ttY + 48);
+
             const change = p.coin.price_change_percentage_24h || 0;
-            ctx.fillStyle = change > 0 ? '#089981' : '#f23645';
-            ctx.fillText(`${change.toFixed(2)}%`, ttX + 10, ttY + 58);
-            ctx.fillStyle = isDark ? '#ccc' : '#333';
-            ctx.fillText(`M.Cap: $${formatCompact(p.coin.market_cap)}`, ttX + 10, ttY + 76);
+            const price = p.coin.current_price || 0;
+            const data = [
+                { label: 'Preço', value: `$${price.toLocaleString()}`, color: isDark ? '#fff' : '#000' },
+                { label: '24h %', value: `${change.toFixed(2)}%`, color: change > 0 ? '#089981' : '#f23645' },
+                { label: 'Volume', value: formatCompact(p.coin.total_volume), color: isDark ? '#ccc' : '#333' },
+                { label: 'Mkt Cap', value: formatCompact(p.coin.market_cap), color: isDark ? '#ccc' : '#333' },
+            ];
+            
+            ctx.font = '12px Inter';
+            data.forEach((d, i) => {
+                const yPos = ttY + 75 + (i * 18);
+                ctx.fillStyle = isDark ? '#999' : '#666'; ctx.fillText(d.label, ttX + 15, yPos);
+                ctx.fillStyle = d.color; ctx.font = 'bold 12px Inter';
+                ctx.fillText(d.value, ttX + 90, yPos);
+                ctx.font = '12px Inter';
+            });
         }
+        frameId = requestAnimationFrame(loop);
     };
-  }, [calculateMappings, animSpeed, trailLength, isDark, yAxisMode]);
-
-  // --- EFEITO PARA INICIAR O LOOP DE ANIMAÇÃO DE FORMA ESTÁVEL ---
-  useEffect(() => {
-    let frameId: number;
-    const renderLoop = () => {
-      animationLoopRef.current?.();
-      frameId = requestAnimationFrame(renderLoop);
-    };
-    renderLoop();
+    frameId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(frameId);
-  }, []);
-  
-  // --- SETUP E RESIZE ---
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const container = containerRef.current;
-    if (!canvas || !container) return;
-    const resizeObserver = new ResizeObserver(entries => {
-      const { width, height } = entries[0].contentRect;
-      canvas.width = width;
-      canvas.height = height;
-      setChartVersion(v => v + 1); // Trigger re-calculation
-    });
-    resizeObserver.observe(container);
-    return () => resizeObserver.disconnect();
-  }, []);
+  }, [animSpeed, trailLength, isDark, calculateMappings, searchTerm]);
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-      const canvas = canvasRef.current; if (!canvas) return;
-      const rect = canvas.getBoundingClientRect();
-      const pos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-      let foundParticle: Particle | null = null;
-      for (const p of particlesRef.current) {
-          const dx = p.x - pos.x; const dy = p.y - pos.y;
-          if (dx * dx + dy * dy < p.radius * p.radius) { foundParticle = p; break; }
-      }
-      setHoveredParticle(foundParticle);
+  // --- EVENT HANDLERS ---
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const canvas = canvasRef.current; if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    const zoomFactor = Math.pow(0.99, e.deltaY);
+    const newZoom = clamp(zoomRef.current * zoomFactor, 0.2, 10);
+    const actualZoomFactor = newZoom / zoomRef.current;
+
+    panRef.current.x = mouseX - (mouseX - panRef.current.x) * actualZoomFactor;
+    panRef.current.y = mouseY - (mouseY - panRef.current.y) * actualZoomFactor;
+    zoomRef.current = newZoom;
+
+    setChartVersion(v => v + 1);
+  };
+  
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    isPanningRef.current = true;
+    panStartRef.current = { clientX: e.clientX, clientY: e.clientY, panX: panRef.current.x, panY: panRef.current.y };
   };
 
-  const handleClick = () => { setSelectedParticle(hoveredParticle); setSearchTerm(''); };
+  const handleMouseMove = (e: React.MouseEvent) => {
+    const canvas = canvasRef.current; if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const pos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+
+    if (isPanningRef.current) {
+        const dx = e.clientX - panStartRef.current.clientX;
+        const dy = e.clientY - panStartRef.current.clientY;
+        panRef.current.x = panStartRef.current.panX + dx;
+        panRef.current.y = panStartRef.current.panY + dy;
+        setChartVersion(v => v + 1);
+    } else {
+        let found: Particle | null = null;
+        for (const p of particlesRef.current) {
+            const dx = p.x - pos.x; const dy = p.y - pos.y;
+            if (dx * dx + dy * dy < p.radius * p.radius) { found = p; break; }
+        }
+        setHoveredParticle(found);
+    }
+  };
+
+  const handleMouseUp = (e: React.MouseEvent) => {
+    const dx = e.clientX - panStartRef.current.clientX;
+    const dy = e.clientY - panStartRef.current.clientY;
+    if (isPanningRef.current && Math.sqrt(dx * dx + dy * dy) < 5) {
+        if (hoveredParticleRef.current) {
+            setSelectedParticle(p => p?.id === hoveredParticleRef.current?.id ? null : hoveredParticleRef.current);
+        } else {
+            setSelectedParticle(null);
+        }
+    }
+    isPanningRef.current = false;
+  };
+
+  const handleMouseLeave = () => {
+      isPanningRef.current = false;
+      setHoveredParticle(null);
+  }
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const resizeObserver = new ResizeObserver(() => setChartVersion(v => v + 1));
+    resizeObserver.observe(canvas);
+    return () => resizeObserver.disconnect();
+  }, []);
 
   return (
     <div ref={containerRef} className="fixed inset-0 z-[2000] bg-white dark:bg-[#0b0f14] text-gray-900 dark:text-white flex flex-col">
       <div className="flex justify-between items-start p-4 z-10 bg-white/80 dark:bg-black/50 backdrop-blur-sm border-b border-gray-200 dark:border-white/10 shrink-0">
         <div className="flex items-center gap-4">
             <Wind size={28} className="text-[#dd9933]" />
-            <div><h3 className="text-xl font-black uppercase tracking-wider">CentralCrypto WindSwarm</h3><p className="text-xs text-gray-500 dark:text-gray-400 font-bold">{status === 'demo' ? 'MODO DEMO' : 'Live Market Data'}</p></div>
+            <div><h3 className="text-xl font-black uppercase tracking-wider">Market WindSwarm</h3><p className="text-xs text-gray-500 dark:text-gray-400 font-bold">{status === 'demo' ? 'MODO DEMO' : 'Live Market Data'}</p></div>
             <div className="w-px h-8 bg-gray-200 dark:bg-white/10 mx-4"></div>
             <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/50 p-2 rounded-lg border border-gray-200 dark:border-white/10">
                 <Search size={16} className="text-gray-400" /><input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Buscar ativo..." className="bg-transparent outline-none text-sm w-48 text-gray-900 dark:text-white" />
@@ -358,7 +453,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       
       {settingsOpen && (
           <div className="absolute top-24 right-4 bg-white/90 dark:bg-black/80 p-4 rounded-lg border border-gray-200 dark:border-white/10 backdrop-blur-md w-64 z-20 space-y-4 animate-in fade-in slide-in-from-top-4 shadow-xl">
-              <div className="space-y-2"><label className="text-xs font-bold flex items-center gap-2"><FastForward size={14} /> Animação</label><input type="range" min="0.1" max="2" step="0.1" value={animSpeed} onChange={e => setAnimSpeed(parseFloat(e.target.value))} className="w-full accent-[#dd9933]" /></div>
+              <div className="space-y-2"><label className="text-xs font-bold flex items-center gap-2"><FastForward size={14} /> Flutuação</label><input type="range" min="0.1" max="3" step="0.1" value={animSpeed} onChange={e => setAnimSpeed(parseFloat(e.target.value))} className="w-full accent-[#dd9933]" /></div>
               <div className="space-y-2"><label className="text-xs font-bold flex items-center gap-2"><Droplets size={14} /> Rastro</label><input type="range" min="0" max="50" step="1" value={trailLength} onChange={e => setTrailLength(parseInt(e.target.value))} className="w-full accent-[#dd9933]" /></div>
               <div className="space-y-2"><label className="text-xs font-bold flex items-center gap-2"><Activity size={14} /> Eixo Y (Log)</label>
                   <select value={yAxisMode} onChange={e => setYAxisMode(e.target.value as YAxisMode)} className="w-full bg-gray-100 dark:bg-tech-800 text-gray-900 dark:text-gray-100 p-2 rounded text-xs border border-gray-200 dark:border-white/10 outline-none">
@@ -369,23 +464,18 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       )}
 
       <div className="flex-1 w-full h-full relative">
-        <canvas ref={canvasRef} onMouseMove={handleMouseMove} onClick={() => handleClick()} className="absolute inset-0 w-full h-full" />
+        <canvas 
+            ref={canvasRef} 
+            onMouseMove={handleMouseMove} 
+            onMouseDown={handleMouseDown}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseLeave}
+            onWheel={handleWheel}
+            className="absolute inset-0 w-full h-full" 
+            width={containerRef.current?.clientWidth}
+            height={containerRef.current?.clientHeight}
+        />
       </div>
-
-      {selectedParticle && (
-          <div className="absolute bottom-4 left-4 bg-white/90 dark:bg-black/80 p-4 rounded-lg border border-gray-200 dark:border-white/10 backdrop-blur-md w-72 z-10 animate-in fade-in slide-in-from-bottom-4 shadow-2xl">
-              <div className="flex items-center gap-3 mb-3 border-b border-gray-200 dark:border-white/10 pb-3">
-                  <img src={selectedParticle.coin.image} className="w-10 h-10 rounded-full bg-white p-1" />
-                  <div><h4 className="font-black text-lg">{selectedParticle.coin.name}</h4><p className="text-xs text-[#dd9933] font-bold">{selectedParticle.coin.symbol}</p></div>
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>Preço:</div><div className="font-mono text-right">${selectedParticle.coin.current_price.toLocaleString()}</div>
-                  <div>24h %:</div><div className={`font-mono text-right ${selectedParticle.coin.price_change_percentage_24h > 0 ? 'text-green-500' : 'text-red-500'}`}>{selectedParticle.coin.price_change_percentage_24h.toFixed(2)}%</div>
-                  <div>Volume:</div><div className="font-mono text-right">${formatCompact(selectedParticle.coin.total_volume)}</div>
-                  <div>Mkt Cap:</div><div className="font-mono text-right">${formatCompact(selectedParticle.coin.market_cap)}</div>
-              </div>
-          </div>
-      )}
     </div>
   );
 };
