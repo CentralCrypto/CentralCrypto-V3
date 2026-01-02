@@ -40,7 +40,8 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const particlesRef = useRef<Particle[]>([]);
   const imageCache = useRef(new Map<string, HTMLImageElement>());
-  const animationFrameId = useRef<number>();
+  // Fix: The error "Expected 1 arguments, but got 0" on line 43 is likely a misreported line number for this `useRef` initialization. `useRef<number>()` is invalid because the generic does not allow for the default `undefined` initial value. Corrected to initialize with `null`.
+  const animationFrameId = useRef<number | null>(null);
   
   const [status, setStatus] = useState<Status>('loading');
   const [coins, setCoins] = useState<ApiCoin[]>([]);
@@ -60,8 +61,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   
   const lastUpdateTime = useRef<number>(Date.now());
 
-  // --- MAPPING LOGIC (needs to be stable) ---
-  // Fix: Renamed function to avoid potential name collisions causing TS errors.
+  // --- MAPPING LOGIC ---
   const calculateMappings = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas || coins.length === 0) return null;
@@ -79,7 +79,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     const yValues = topCoins.map(p => p[yAxisMode] || 1);
     const minX = Math.min(...xValues), maxX = Math.max(...xValues);
     const minY = Math.min(...yValues), maxY = Math.max(...yValues);
-    // FIX: Guard against taking log of negative numbers for price change percentage
     const logMinY = (yAxisMode !== 'price_change_percentage_24h' && minY > 0) ? Math.log10(minY) : 0;
     const logMaxY = (yAxisMode !== 'price_change_percentage_24h' && maxY > 0) ? Math.log10(maxY) : 0;
     
@@ -88,105 +87,101 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         if (yAxisMode === 'price_change_percentage_24h') {
             return height - pad - (v - minY) / (maxY - minY || 1) * (height - pad * 2);
         }
+        if (v <= 0) return height - pad;
         return height - pad - (Math.log10(v) - logMinY) / (logMaxY - logMinY || 1) * (height - pad * 2);
     };
-    const mapRadius = (mc: number) => 8 + (Math.log10(mc || 1) - minLogMc) / (maxLogMc - minLogMc || 1) * 42;
+    const mapRadius = (mc: number) => {
+        if (mc <= 0) return 8;
+        return 8 + (Math.log10(mc) - minLogMc) / (maxLogMc - minLogMc || 1) * 42;
+    };
 
-    // FIX: Add pad, width, and height to the returned object so they can be destructured later.
     return { mapX, mapY, mapRadius, topCoins, minX, maxX, minY, maxY, logMinY, logMaxY, pad, width, height };
   }, [coins, numCoins, yAxisMode, chartVersion]);
 
-
-  // --- DATA & PARTICLE UPDATE ---
-  const updateParticlesFromData = useCallback((data: ApiCoin[]) => {
-      // Fix: Call renamed function.
-      const mappings = calculateMappings();
-      if (!mappings) return;
-
-      const { mapX, mapY, mapRadius } = mappings;
-      const coinMap = new Map(data.map(c => [c.id, c]));
-
-      particlesRef.current.forEach(p => {
-          const newCoinData = coinMap.get(p.id);
-          if (newCoinData) {
-              p.startX = p.x;
-              p.startY = p.y;
-              p.targetX = mapX(newCoinData.price_change_percentage_24h || 0);
-              p.targetY = mapY(newCoinData[yAxisMode] || 1);
-              p.coin = newCoinData;
-              p.radius = mapRadius(newCoinData.market_cap);
-              p.color = (newCoinData.price_change_percentage_24h || 0) > 0 ? '#089981' : '#f23645';
-              p.animProgress = 0;
-          }
-      });
-  // Fix: Update dependency array with renamed function.
-  }, [calculateMappings, yAxisMode]);
-
-  const loadData = useCallback(async (isInitial = false) => {
-    if (isInitial) setStatus('loading');
+  // --- DATA LOADING ---
+  const loadData = useCallback(async () => {
+    if (particlesRef.current.length === 0) setStatus('loading');
     try {
       const data = await fetchTopCoins({ force: true });
       if (data && data.length > 0) {
-        if (isInitial || particlesRef.current.length === 0) {
-          setCoins(data);
-        } else {
-          updateParticlesFromData(data);
-        }
+        setCoins(data);
         setStatus('running');
-      } else if (isInitial) { setStatus('demo'); }
+      } else if (particlesRef.current.length === 0) {
+        setStatus('demo');
+      }
     } catch (error) {
-      if (isInitial) setStatus('error');
+      if (particlesRef.current.length === 0) setStatus('error');
+      console.error("WindSwarm data error:", error);
     }
-  }, [updateParticlesFromData]);
+  }, []);
 
   useEffect(() => {
-    loadData(true);
-    const interval = setInterval(() => loadData(false), 60000);
+    loadData();
+    const interval = setInterval(loadData, 60000);
     const observer = new MutationObserver(() => setIsDark(document.documentElement.classList.contains('dark')));
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     return () => { clearInterval(interval); observer.disconnect(); };
   }, [loadData]);
-
+  
+  // --- UNIFIED PARTICLE MANAGEMENT ---
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || coins.length === 0) return;
+    if (!canvas || coins.length === 0 || canvas.width === 0) return;
 
-    // Fix: Call renamed function.
     const mappings = calculateMappings();
     if (!mappings) return;
     const { mapX, mapY, mapRadius, topCoins } = mappings;
 
-    const existingParticles = new Map(particlesRef.current.map(p => [p.id, p]));
-    particlesRef.current = topCoins.map(coin => {
-      const existing = existingParticles.get(coin.id);
-      if (existing) return existing; 
+    const existingParticleMap = new Map(particlesRef.current.map(p => [p.id, p]));
 
-      if (!imageCache.current.has(coin.image)) {
-          const img = new Image(); img.src = coin.image;
-          imageCache.current.set(coin.image, img);
-      }
-      
+    const newParticles = topCoins.map(coin => {
+      const existing = existingParticleMap.get(coin.id);
+
       const targetX = mapX(coin.price_change_percentage_24h || 0);
       const targetY = mapY(coin[yAxisMode] || 1);
+      const newRadius = mapRadius(coin.market_cap);
+      const newColor = (coin.price_change_percentage_24h || 0) > 0 ? '#089981' : '#f23645';
 
-      return {
-        id: coin.id,
-        x: targetX, y: targetY,
-        vx: 0, vy: 0,
-        startX: targetX, startY: targetY,
-        targetX, targetY,
-        animProgress: 1,
-        radius: mapRadius(coin.market_cap),
-        color: (coin.price_change_percentage_24h || 0) > 0 ? '#089981' : '#f23645',
-        coin,
-        trail: [],
-      };
+      if (existing) {
+        existing.coin = coin;
+        existing.radius = newRadius;
+        existing.color = newColor;
+
+        if (Math.abs(existing.targetX - targetX) > 1 || Math.abs(existing.targetY - targetY) > 1) {
+          existing.startX = existing.x;
+          existing.startY = existing.y;
+          existing.targetX = targetX;
+          existing.targetY = targetY;
+          existing.animProgress = 0;
+        }
+        return existing;
+      } else {
+        if (!imageCache.current.has(coin.image)) {
+          const img = new Image(); img.src = coin.image;
+          imageCache.current.set(coin.image, img);
+        }
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        
+        return {
+          id: coin.id,
+          x: centerX, y: centerY, vx: 0, vy: 0,
+          startX: centerX, startY: centerY,
+          targetX, targetY,
+          animProgress: 0,
+          radius: newRadius,
+          color: newColor,
+          coin,
+          trail: [],
+        };
+      }
     });
-  // Fix: Update dependency array with renamed function.
+    
+    particlesRef.current = newParticles;
+
   }, [coins, numCoins, yAxisMode, chartVersion, calculateMappings]);
 
   // --- ANIMATION & DRAWING ---
-  // Fix: Renamed function to avoid potential name collisions causing TS errors.
   const animationLoop = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
@@ -200,19 +195,15 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
     const particles = particlesRef.current;
     if (particles.length === 0) {
-      // Fix: Call renamed function.
       animationFrameId.current = requestAnimationFrame(animationLoop); return;
     }
 
-    // Fix: Call renamed function.
     const mappings = calculateMappings();
     if (!mappings) {
-        // Fix: Call renamed function.
         animationFrameId.current = requestAnimationFrame(animationLoop); return;
     }
     const { pad, width, height, minX, maxX, minY, maxY, logMinY, logMaxY } = mappings;
 
-    // --- Draw Axes ---
     ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
     ctx.lineWidth = 1; ctx.font = 'bold 10px Inter';
     ctx.fillStyle = isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)';
@@ -229,16 +220,14 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       ctx.textAlign = 'center'; ctx.fillText(`${val.toFixed(1)}%`, x, height - pad + 15);
     }
     
-    // --- Update & Draw Particles/Trails ---
     particles.forEach(p => {
-        // --- ANIMATION ---
-        if (p.animProgress < 1) { // Mode 1: Lerp Transition
+        if (p.animProgress < 1) {
             p.animProgress = Math.min(1, p.animProgress + delta * animSpeed);
             const easedProgress = easeOutCubic(p.animProgress);
             p.x = lerp(p.startX, p.targetX, easedProgress);
             p.y = lerp(p.startY, p.targetY, easedProgress);
             p.vx = 0; p.vy = 0;
-        } else { // Mode 2: Physics Wind
+        } else {
             const dx = p.targetX - p.x; const dy = p.targetY - p.y;
             p.vx += dx * 0.005; p.vy += dy * 0.005;
             p.vx += (Math.random() - 0.5) * 0.2; p.vy += (Math.random() - 0.5) * 0.2;
@@ -246,22 +235,22 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
             p.x += p.vx; p.y += p.vy;
         }
 
-        // --- TRAIL ---
         p.trail.push({ x: p.x, y: p.y });
         while (p.trail.length > trailLength) { p.trail.shift(); }
 
-        // Draw Trail
-        if (p.trail.length > 1) {
-            ctx.beginPath(); ctx.moveTo(p.trail[0].x, p.trail[0].y);
+        if (p.trail.length > 1 && trailLength > 0) {
+            const baseColor = p.color === '#089981' ? '8, 153, 129' : '242, 54, 69';
+            ctx.beginPath();
+            ctx.moveTo(p.trail[0].x, p.trail[0].y);
             for (let i = 1; i < p.trail.length; i++) {
-                const alpha = (i / p.trail.length) * 0.3;
-                ctx.strokeStyle = `rgba(221, 153, 51, ${alpha})`;
+                const alpha = (i / p.trail.length) * 0.7;
+                ctx.strokeStyle = `rgba(${baseColor}, ${alpha})`;
                 ctx.lineTo(p.trail[i].x, p.trail[i].y);
             }
-            ctx.lineWidth = 1.5; ctx.stroke();
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
         }
 
-        // Draw Bubble
         ctx.save();
         ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2); ctx.clip();
         const img = imageCache.current.get(p.coin.image);
@@ -275,7 +264,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         }
     });
 
-    // --- Draw Tooltip ---
     if (hoveredParticle && !selectedParticle) {
         const p = hoveredParticle; const ttWidth = 200, ttHeight = 100;
         let ttX = p.x - ttWidth / 2; let ttY = p.y - p.radius - ttHeight - 10;
@@ -295,10 +283,8 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         ctx.fillText(`M.Cap: $${formatCompact(p.coin.market_cap)}`, ttX + 10, ttY + 76);
     }
 
-    // Fix: Call renamed function.
     animationFrameId.current = requestAnimationFrame(animationLoop);
-  // Fix: Update dependency array with renamed functions.
-  }, [animSpeed, selectedParticle, hoveredParticle, yAxisMode, isDark, calculateMappings, trailLength]);
+  }, [animSpeed, trailLength, selectedParticle, hoveredParticle, isDark, calculateMappings]);
 
   // --- SETUP & RESIZE ---
   useEffect(() => {
@@ -312,16 +298,13 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       setChartVersion(v => v + 1);
     });
     resizeObserver.observe(container);
-    // Fix: Call renamed function.
     animationFrameId.current = requestAnimationFrame(animationLoop);
     return () => {
       if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
       resizeObserver.disconnect();
     };
-  // Fix: Update dependency array with renamed function.
   }, [animationLoop]);
 
-  // --- INTERACTIVITY ---
   const handleMouseMove = (e: React.MouseEvent) => {
       const canvas = canvasRef.current; if (!canvas) return;
       const rect = canvas.getBoundingClientRect();
@@ -338,7 +321,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
   return (
     <div ref={containerRef} className="fixed inset-0 z-[2000] bg-white dark:bg-[#0b0f14] text-gray-900 dark:text-white flex flex-col">
-      {/* Top Controls */}
       <div className="flex justify-between items-start p-4 z-10 bg-white/80 dark:bg-black/50 backdrop-blur-sm border-b border-gray-200 dark:border-white/10 shrink-0">
         <div className="flex items-center gap-4">
             <Wind size={28} className="text-[#dd9933]" />
@@ -351,7 +333,8 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         </div>
         <div className="flex items-center gap-3">
             <button onClick={() => setSettingsOpen(!settingsOpen)} className={`p-3 rounded-lg border transition-colors backdrop-blur-sm ${settingsOpen ? 'bg-[#dd9933] text-black border-[#dd9933]' : 'bg-gray-100 dark:bg-black/50 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10'}`}><Settings size={20} /></button>
-            <button onClick={onClose} className="p-3 bg-gray-100 dark:bg-black/50 rounded-lg border border-gray-200 dark:border-white/10 hover:bg-red-500/10 text-gray-600 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors" title="Close"><X size={20} /></button>
+            {/* Fix: The error "Expected 0 arguments, but got 1" on line 104 is likely a misreported line number for this onClick handler. `onClose` is defined as `() => void`, but `onClick` implicitly passes a MouseEvent. Wrapped in an arrow function. */}
+            <button onClick={() => onClose()} className="p-3 bg-gray-100 dark:bg-black/50 rounded-lg border border-gray-200 dark:border-white/10 hover:bg-red-500/10 text-gray-600 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors" title="Close"><X size={20} /></button>
         </div>
       </div>
       
