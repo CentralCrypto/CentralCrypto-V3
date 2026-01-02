@@ -40,7 +40,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const particlesRef = useRef<Particle[]>([]);
   const imageCache = useRef(new Map<string, HTMLImageElement>());
-  // Fix: The error "Expected 1 arguments, but got 0" on line 43 is likely a misreported line number for this `useRef` initialization. `useRef<number>()` is invalid because the generic does not allow for the default `undefined` initial value. Corrected to initialize with `null`.
   const animationFrameId = useRef<number | null>(null);
   
   const [status, setStatus] = useState<Status>('loading');
@@ -50,6 +49,12 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   const [selectedParticle, setSelectedParticle] = useState<Particle | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
+  // Refs para desacoplar o estado de hover/seleção do loop de animação
+  const hoveredParticleRef = useRef(hoveredParticle);
+  hoveredParticleRef.current = hoveredParticle;
+  const selectedParticleRef = useRef(selectedParticle);
+  selectedParticleRef.current = selectedParticle;
+
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [numCoins, setNumCoins] = useState(150);
   const [animSpeed, setAnimSpeed] = useState(0.8);
@@ -220,6 +225,9 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       ctx.textAlign = 'center'; ctx.fillText(`${val.toFixed(1)}%`, x, height - pad + 15);
     }
     
+    const hoveredP = hoveredParticleRef.current;
+    const selectedP = selectedParticleRef.current;
+
     particles.forEach(p => {
         if (p.animProgress < 1) {
             p.animProgress = Math.min(1, p.animProgress + delta * animSpeed);
@@ -257,15 +265,15 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         if (img && img.complete) { ctx.drawImage(img, p.x - p.radius, p.y - p.radius, p.radius * 2, p.radius * 2); } 
         else { ctx.fillStyle = p.color; ctx.fill(); }
         ctx.restore();
-        if (selectedParticle?.id === p.id || hoveredParticle?.id === p.id) {
+        if (selectedP?.id === p.id || hoveredP?.id === p.id) {
             ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-            ctx.strokeStyle = '#dd9933'; ctx.lineWidth = selectedParticle?.id === p.id ? 4 : 2;
+            ctx.strokeStyle = '#dd9933'; ctx.lineWidth = selectedP?.id === p.id ? 4 : 2;
             ctx.stroke();
         }
     });
 
-    if (hoveredParticle && !selectedParticle) {
-        const p = hoveredParticle; const ttWidth = 200, ttHeight = 100;
+    if (hoveredP && !selectedP) {
+        const p = hoveredP; const ttWidth = 200, ttHeight = 100;
         let ttX = p.x - ttWidth / 2; let ttY = p.y - p.radius - ttHeight - 10;
         if (ttY < 10) ttY = p.y + p.radius + 10;
         ttX = clamp(ttX, 10, width - ttWidth - 10);
@@ -284,7 +292,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     }
 
     animationFrameId.current = requestAnimationFrame(animationLoop);
-  }, [animSpeed, trailLength, selectedParticle, hoveredParticle, isDark, calculateMappings]);
+  }, [animSpeed, trailLength, isDark, calculateMappings]);
 
   // --- SETUP & RESIZE ---
   useEffect(() => {
@@ -294,7 +302,8 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     if (!canvas || !container) return;
     const resizeObserver = new ResizeObserver(entries => {
       const { width, height } = entries[0].contentRect;
-      canvas.width = width; canvas.height = height;
+      canvas.width = width;
+      canvas.height = height;
       setChartVersion(v => v + 1);
     });
     resizeObserver.observe(container);
@@ -333,7 +342,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         </div>
         <div className="flex items-center gap-3">
             <button onClick={() => setSettingsOpen(!settingsOpen)} className={`p-3 rounded-lg border transition-colors backdrop-blur-sm ${settingsOpen ? 'bg-[#dd9933] text-black border-[#dd9933]' : 'bg-gray-100 dark:bg-black/50 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10'}`}><Settings size={20} /></button>
-            {/* Fix: The error "Expected 0 arguments, but got 1" on line 104 is likely a misreported line number for this onClick handler. `onClose` is defined as `() => void`, but `onClick` implicitly passes a MouseEvent. Wrapped in an arrow function. */}
             <button onClick={() => onClose()} className="p-3 bg-gray-100 dark:bg-black/50 rounded-lg border border-gray-200 dark:border-white/10 hover:bg-red-500/10 text-gray-600 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors" title="Close"><X size={20} /></button>
         </div>
       </div>
@@ -351,7 +359,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       )}
 
       <div className="flex-1 w-full h-full relative">
-        <canvas ref={canvasRef} onMouseMove={handleMouseMove} onClick={handleClick} className="absolute inset-0 w-full h-full" />
+        <canvas ref={canvasRef} onMouseMove={handleMouseMove} onClick={() => handleClick()} className="absolute inset-0 w-full h-full" />
       </div>
 
       {selectedParticle && (

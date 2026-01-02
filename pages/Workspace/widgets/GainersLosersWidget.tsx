@@ -2,9 +2,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Loader2, TrendingUp, TrendingDown, AlertTriangle, RefreshCw, ChevronsUpDown } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts';
-import { fetchTopCoins, isStablecoin } from '../services/api';
+import { fetchTopCoins, isStablecoin, fetchWithFallback } from '../services/api';
 import { DashboardItem, Language, ApiCoin } from '../../../types';
 import { getTranslations } from '../../../locales';
+import { getCacheckoUrl, ENDPOINTS } from '../../../services/endpoints';
 
 const formatCompactNumber = (number: number) => {
   if (!number || number === 0) return "---";
@@ -16,8 +17,10 @@ const formatCompactNumber = (number: number) => {
   return shortValue + suffixes[suffixNum];
 };
 
-const TickerList: React.FC<{ tickers: ApiCoin[], type: 'gainer' | 'loser' }> = ({ tickers, type }) => {
-    const color = type === 'gainer' ? 'text-green-500' : 'text-red-500';
+// Fix: Updated type to accept 'gainers' | 'losers' for consistency.
+const TickerList: React.FC<{ tickers: ApiCoin[], type: 'gainers' | 'losers' }> = ({ tickers, type }) => {
+    // Fix: Updated logic to check for 'gainers'.
+    const color = type === 'gainers' ? 'text-green-500' : 'text-red-500';
     return (
         <div className="flex flex-col gap-1.5">
             {tickers.slice(0, 10).map(t => {
@@ -140,81 +143,72 @@ const MaximizedTable: React.FC<{ data: ApiCoin[], type: 'gainers' | 'losers' }> 
 }
 
 const GainersLosersWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ item, language = 'pt' }) => {
-    const [allCoins, setAllCoins] = useState<ApiCoin[]>([]);
-    const [activeGnlTab, setActiveGnlTab] = useState<'gainers' | 'losers'>('gainers');
+    const [data, setData] = useState<{ gainers: any[], losers: any[] }>({ gainers: [], losers: [] });
+    // Fix: Add explicit type to useState to prevent type inference to 'string'.
+    const [tab, setTab] = useState<'gainers' | 'losers'>('gainers');
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(false);
     
     const t = getTranslations(language as Language).dashboard.widgets.gainers;
     
-    const load = () => {
+    useEffect(() => { 
         setIsLoading(true);
-        setError(false);
-        fetchTopCoins()
-            .then(data => {
-                if (Array.isArray(data) && data.length > 0) {
-                    setAllCoins(data);
-                    setIsLoading(false);
-                } else {
-                    if (allCoins.length === 0) setError(true);
-                    setIsLoading(false);
+        fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.top10gnl))
+            .then(res => {
+                const dataRoot = res?.[0];
+                if (dataRoot && Array.isArray(dataRoot.gainers) && Array.isArray(dataRoot.losers)) {
+                    const mapCoinData = (coin: any) => ({
+                        ...coin,
+                        current_price: coin.price,
+                        price_change_percentage_24h: coin.change,
+                        image: coin.logo,
+                    });
+
+                    setData({
+                        gainers: dataRoot.gainers.map(mapCoinData),
+                        losers: dataRoot.losers.map(mapCoinData),
+                    });
                 }
+                setIsLoading(false);
             })
             .catch(() => {
-                if (allCoins.length === 0) setError(true);
+                setError(true);
                 setIsLoading(false);
-            });
-    };
-
-    useEffect(() => {
-        load();
+            }); 
     }, []);
-
-    const { gainers, losers } = useMemo(() => {
-        if (!allCoins || allCoins.length === 0) return { gainers: [], losers: [] };
-        
-        const validCoins = allCoins.filter(c => c && c.symbol && !isStablecoin(c.symbol));
-        const sorted = [...validCoins].sort((a, b) => (b.price_change_percentage_24h || 0) - (a.price_change_percentage_24h || 0));
-        
-        const gainersList = sorted.filter(c => (c.price_change_percentage_24h || 0) > 0);
-        const losersList = [...sorted].reverse().filter(c => (c.price_change_percentage_24h || 0) < 0);
-
-        return { gainers: gainersList, losers: losersList };
-    }, [allCoins]);
     
-    if (isLoading && allCoins.length === 0) {
+    const list = useMemo(() => {
+        return tab === 'gainers' ? data.gainers : data.losers;
+    }, [tab, data]);
+        
+    if (isLoading) {
         return <div className="flex items-center justify-center h-full text-gray-400 dark:text-slate-500"><Loader2 className="animate-spin" /></div>;
     }
-
-    if (error && allCoins.length === 0) {
+    
+    if (error) {
         return (
             <div className="flex flex-col items-center justify-center h-full text-center p-4 text-gray-500 dark:text-slate-400">
                 <AlertTriangle size={24} className="mb-2 text-yellow-500" />
                 <span className="text-sm font-bold">Offline</span>
-                <button onClick={load} className="mt-3 text-xs font-black uppercase bg-gray-100 dark:bg-slate-800 px-4 py-2 rounded hover:text-[#dd9933]">
-                    Reconectar
-                </button>
             </div>
         );
     }
-
-    const currentList = activeGnlTab === 'gainers' ? gainers : losers;
 
     if (item.isMaximized) {
         return (
             <div className="h-full flex flex-col p-4 bg-white dark:bg-[#2f3032]">
                 <div className="flex justify-between items-center mb-4">
                     <div className="flex bg-gray-100 dark:bg-slate-800/50 p-1 rounded-lg">
-                        <button onClick={() => setActiveGnlTab('gainers')} className={`flex items-center gap-2 text-base font-black px-6 py-2.5 rounded-md transition-all ${activeGnlTab === 'gainers' ? 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-white shadow' : 'text-gray-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700/50'}`}>
+                        <button onClick={() => setTab('gainers')} className={`flex items-center gap-2 text-base font-black px-6 py-2.5 rounded-md transition-all ${tab === 'gainers' ? 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-white shadow' : 'text-gray-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700/50'}`}>
                             <TrendingUp size={18} className="text-green-500" /> {t.gainers}
                         </button>
-                        <button onClick={() => setActiveGnlTab('losers')} className={`flex items-center gap-2 text-base font-black px-6 py-2.5 rounded-md transition-all ${activeGnlTab === 'losers' ? 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-white shadow' : 'text-gray-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700/50'}`}>
+                        <button onClick={() => setTab('losers')} className={`flex items-center gap-2 text-base font-black px-6 py-2.5 rounded-md transition-all ${tab === 'losers' ? 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-white shadow' : 'text-gray-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700/50'}`}>
                             <TrendingDown size={18} className="text-red-500" /> {t.losers}
                         </button>
                     </div>
                 </div>
                 <div className="flex-1 border-0 dark:border dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-[#1a1c1e]">
-                    <MaximizedTable data={currentList} type={activeGnlTab} />
+                    <MaximizedTable data={list} type={tab} />
                 </div>
             </div>
         );
@@ -223,16 +217,28 @@ const GainersLosersWidget: React.FC<{ item: DashboardItem, language?: Language }
     return (
         <div className="h-full flex flex-col p-2 bg-white dark:bg-[#2f3032]">
             <div className="flex bg-gray-100 dark:bg-slate-800/50 p-1 rounded-lg mb-2">
-                <button onClick={() => setActiveGnlTab('gainers')} className={`flex-1 flex items-center justify-center gap-2 text-xs font-black p-2 rounded-md transition-all ${activeGnlTab === 'gainers' ? 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-white shadow' : 'text-gray-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700/50'}`}>
+                <button 
+                    onClick={() => setTab('gainers')} 
+                    className={`flex-1 py-1 text-sm font-bold uppercase rounded transition-all ${tab === 'gainers' ? 'bg-tech-success text-white shadow' : 'text-gray-500'}`}
+                >
                     {t.gainers}
                 </button>
-                <button onClick={() => setActiveGnlTab('losers')} className={`flex-1 flex items-center justify-center gap-2 text-xs font-black p-2 rounded-md transition-all ${activeGnlTab === 'losers' ? 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-white shadow' : 'text-gray-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700/50'}`}>
+                <button 
+                    onClick={() => setTab('losers')} 
+                    className={`flex-1 py-1 text-sm font-bold uppercase rounded transition-all ${tab === 'losers' ? 'bg-tech-danger text-white shadow' : 'text-gray-500'}`}
+                >
                     {t.losers}
                 </button>
             </div>
-            <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
-                <TickerList tickers={currentList} type={activeGnlTab === 'gainers' ? 'gainer' : 'loser'} />
+
+            <div className="flex-1 flex flex-col gap-1 overflow-y-auto custom-scrollbar w-full pr-1">
+                <TickerList tickers={list} type={tab} />
             </div>
+            
+            <style>{`
+                .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(221, 153, 51, 0.2); border-radius: 10px; }
+            `}</style>
         </div>
     );
 };

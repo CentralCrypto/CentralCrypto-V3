@@ -11,7 +11,7 @@ export const ENDPOINTS = {
     categories: "/wp-json/wp/v2/categories"
   },
   cachecko: {
-    base: "/cachecko",
+    base: "/2/wp-content/uploads/cct-cache",
     files: {
       global: "/cg_global.json",
       main: "/cachecko.json",
@@ -29,8 +29,12 @@ export const ENDPOINTS = {
       etfBtc: "/spot-btc-etf-flows.json",
       etfEth: "/spot-eth-etf-flows.json",
       etfNetFlow: "/etfnetflow.json",
-      news: "/news.php"
+      top10gnl: "/top10gnl.json",
+      top10mktcap: "/top10mktcap.json"
     }
+  },
+  special: {
+    news: "/cachecko/news.php"
   }
 };
 

@@ -23,27 +23,53 @@ export const fetchWithFallback = async (url: string): Promise<any | null> => {
 
 export const isStablecoin = (symbol: string) => STABLECOINS.includes(symbol.toUpperCase());
 
-export const fetchTopCoins = async (): Promise<ApiCoin[]> => {
-  const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.main));
-  if (!data) return [];
+/**
+ * Cache + dedupe em memória (por aba).
+ * Evita várias chamadas simultâneas ao mesmo JSON quando há muitos widgets.
+ */
+const TOP_COINS_TTL_MS = 60_000;
+let topCoinsCacheTs = 0;
+let topCoinsCache: ApiCoin[] = [];
+let topCoinsInFlight: Promise<ApiCoin[]> | null = null;
 
-  let coins: any[] = [];
+export const fetchTopCoins = async (opts?: { force?: boolean; ttlMs?: number }): Promise<ApiCoin[]> => {
+  const now = Date.now();
+  const force = Boolean(opts?.force);
+  const ttlMs = typeof opts?.ttlMs === 'number' && isFinite(opts.ttlMs) ? opts!.ttlMs! : TOP_COINS_TTL_MS;
 
-  if (Array.isArray(data)) {
-    const subData = data.find(item => item && Array.isArray(item.data));
-    if (subData) coins = subData.data;
-    else if (data[0] && Array.isArray(data[0])) coins = data[0];
-    else coins = data;
-  } else if (data && typeof data === 'object') {
-    if (Array.isArray((data as any).data)) coins = (data as any).data;
-    else {
-      const foundArray = Object.values(data).find(v => Array.isArray(v) && (v as any[]).length > 10);
-      if (foundArray) coins = foundArray as any[];
+  if (!force && topCoinsCache.length > 0 && (now - topCoinsCacheTs) < ttlMs) return topCoinsCache;
+  if (!force && topCoinsInFlight) return topCoinsInFlight;
+
+  topCoinsInFlight = (async () => {
+    const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.main));
+    if (!data) return topCoinsCache || [];
+
+    let coins: any[] = [];
+
+    if (Array.isArray(data)) {
+      const subData = data.find(item => item && Array.isArray(item.data));
+      if (subData) coins = subData.data;
+      else if (data[0] && Array.isArray(data[0])) coins = data[0];
+      else coins = data;
+    } else if (data && typeof data === 'object') {
+      if (Array.isArray((data as any).data)) coins = (data as any).data;
+      else {
+        const foundArray = Object.values(data as any).find(v => Array.isArray(v) && (v as any[]).length > 10);
+        if (foundArray) coins = foundArray as any[];
+      }
     }
-  }
 
-  return Array.isArray(coins) ? coins : [];
+    topCoinsCache = Array.isArray(coins) ? (coins as ApiCoin[]) : [];
+    topCoinsCacheTs = Date.now();
+    return topCoinsCache;
+  })().finally(() => {
+    topCoinsInFlight = null;
+  });
+
+  return topCoinsInFlight;
 };
+
+// --------- CATEGORIES (HEATMAP) ---------
 
 export interface HeatmapCategory {
   id: string;
@@ -55,13 +81,41 @@ export interface HeatmapCategory {
   coins?: any[];
 }
 
-// ✅ Categories file: /cachecko/heatmap-categories.json
-export const fetchHeatmapCategories = async (): Promise<HeatmapCategory[]> => {
-  const data = await fetchWithFallback('/cachecko/heatmap-categories.json');
-  return Array.isArray(data) ? data : [];
+const CATEGORIES_TTL_MS = 10 * 60_000;
+let categoriesCacheTs = 0;
+let categoriesCache: HeatmapCategory[] = [];
+let categoriesInFlight: Promise<HeatmapCategory[]> | null = null;
+
+export const fetchHeatmapCategories = async (opts?: { force?: boolean }): Promise<HeatmapCategory[]> => {
+  const now = Date.now();
+  const force = Boolean(opts?.force);
+
+  if (!force && categoriesCache.length > 0 && (now - categoriesCacheTs) < CATEGORIES_TTL_MS) return categoriesCache;
+  if (!force && categoriesInFlight) return categoriesInFlight;
+
+  categoriesInFlight = (async () => {
+    const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.heatmapCategories));
+    const arr = Array.isArray(data) ? data : (Array.isArray((data as any)?.data) ? (data as any).data : []);
+    categoriesCache = Array.isArray(arr) ? (arr as HeatmapCategory[]) : [];
+    categoriesCacheTs = Date.now();
+    return categoriesCache;
+  })().finally(() => {
+    categoriesInFlight = null;
+  });
+
+  return categoriesInFlight;
 };
 
-export interface NewsItem { title: string; link: string; pubDate: string; source: string; description: string; thumbnail: string; }
+// --------- OUTROS EXPORTS USADOS PELOS WIDGETS ---------
+
+export interface NewsItem {
+  title: string;
+  link: string;
+  pubDate: string;
+  source: string;
+  description: string;
+  thumbnail: string;
+}
 
 export interface EtfFlowData {
   btcValue: number;
@@ -73,36 +127,6 @@ export interface EtfFlowData {
   history: { lastWeek: number; lastMonth: number; last90d: number; };
   solValue: number;
   xrpValue: number;
-}
-
-/**
- * ✅ ETF Netflow (daily) - NEW SHAPE (/cachecko/etfnetflow.json)
- * Modelo:
- * [
- *   {
- *     data: {
- *       points: [{ value, btcValue, ethValue, timestamp }],
- *       aggregation: "daily",
- *       total,
- *       totalBtcValue,
- *       totalEthValue
- *     },
- *     status: {...}
- *   }
- * ]
- */
-export interface EtfNetflowDailyPoint {
-  timestamp: number; // ms
-  totalUsd: number;  // value
-  btcUsd: number;    // btcValue
-  ethUsd: number;    // ethValue
-}
-
-export interface EtfNetflowDailyData {
-  aggregation: string;
-  points: EtfNetflowDailyPoint[];
-  totals: { totalUsd: number; btcUsd: number; ethUsd: number; };
-  statusTimestamp?: number;
 }
 
 export interface LsrData { lsr: number | null; longs: number | null; shorts: number | null; }
@@ -136,9 +160,19 @@ export interface RsiTrackerPoint {
   lastRsi?: number;
 }
 
-export interface EconEvent { date: string; title: string; country: string; impact: string; previous?: string; forecast?: string; }
+export interface EconEvent {
+  date: string;
+  title: string;
+  country: string;
+  impact: string;
+  previous?: string;
+  forecast?: string;
+}
 
-export interface OrderBookData { bids: { price: string; qty: string }[]; asks: { price: string; qty: string }[]; }
+export interface OrderBookData {
+  bids: { price: string; qty: string }[];
+  asks: { price: string; qty: string }[];
+}
 
 export interface FngData {
   value: string;
@@ -159,14 +193,14 @@ export interface TrumpData {
 }
 
 export interface AltSeasonHistoryPoint { timestamp: number; altcoinIndex: number; altcoinMarketcap: number; }
-
 export interface AltSeasonData { index: number; yesterday: number; lastWeek: number; lastMonth: number; history?: AltSeasonHistoryPoint[]; }
 
 export const fetchCryptoNews = async (symbol: string, coinName: string): Promise<NewsItem[]> => {
-  const url = getCacheckoUrl(ENDPOINTS.cachecko.files.news);
-  const finalUrl = `${url}?s=${symbol}&n=${encodeURIComponent(coinName)}`;
-  const res = await fetchWithFallback(finalUrl);
-  return Array.isArray(res) ? res : [];
+  // Fix: Use the correct endpoint from `ENDPOINTS.special`
+  const url = ENDPOINTS.special.news;
+  const finalUrl = `${url}?s=${encodeURIComponent(symbol)}&n=${encodeURIComponent(coinName)}`;
+  const data = await fetchWithFallback(finalUrl);
+  return Array.isArray(data) ? data : [];
 };
 
 export const fetchAltcoinSeason = async (): Promise<AltSeasonData | null> => {
@@ -176,10 +210,8 @@ export const fetchAltcoinSeason = async (): Promise<AltSeasonData | null> => {
 };
 
 export const fetchAltcoinSeasonHistory = async (): Promise<AltSeasonHistoryPoint[]> => {
-  const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.altseason));
-  if (!data) return [];
-  const root = Array.isArray(data) ? data[0] : data;
-  return Array.isArray(root.history) ? root.history : [];
+  const data = await fetchAltcoinSeason();
+  return Array.isArray(data?.history) ? (data!.history as AltSeasonHistoryPoint[]) : [];
 };
 
 export const fetchTrumpData = async (): Promise<TrumpData | null> => {
@@ -191,48 +223,13 @@ export const fetchTrumpData = async (): Promise<TrumpData | null> => {
 export const fetchFearAndGreed = async (): Promise<FngData[]> => {
   const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.fng));
   if (!data) return [];
-  const root = Array.isArray(data) ? ((data as any)[0]?.data || data) : ((data as any).data || []);
+  const root = Array.isArray(data) ? (data[0]?.data || data) : ((data as any).data || []);
   return Array.isArray(root) ? root : [];
 };
 
-const clamp = (n: number, min = 0, max = 100) => Math.min(max, Math.max(min, n));
-
-const toNum = (v: any, fallback = NaN) => {
-  const n = typeof v === 'string' ? parseFloat(v) : Number(v);
-  return Number.isFinite(n) ? n : fallback;
-};
-
-/**
- * ✅ RSI Average file: /cachecko/rsiavg.json
- * Formato atual:
- * [
- *   { data: { overall: { averageRsi, yesterday, days7Ago, days30Ago, ... } }, status: {...} }
- * ]
- * Este fetch normaliza e devolve o objeto plano esperado pelo widget.
- */
 export const fetchRsiAverage = async (): Promise<RsiAvgData | null> => {
-  const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiAvg));
-  if (!raw) return null;
-
-  const root = Array.isArray(raw) ? raw[0] : raw;
-
-  const overall =
-    (root as any)?.data?.overall ??
-    (root as any)?.overall ??
-    (root as any)?.data ??
-    root;
-
-  if (!overall || typeof overall !== 'object') return null;
-
-  const avg = toNum((overall as any).averageRsi, NaN);
-  if (!Number.isFinite(avg)) return null;
-
-  return {
-    averageRsi: clamp(avg),
-    yesterday: clamp(toNum((overall as any).yesterday, 0)),
-    days7Ago: clamp(toNum((overall as any).days7Ago, 0)),
-    days30Ago: clamp(toNum((overall as any).days30Ago, 0)),
-  };
+  const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiAvg));
+  return data || null;
 };
 
 export const fetchRsiTracker = async (): Promise<RsiTrackerPoint[]> => {
@@ -240,100 +237,58 @@ export const fetchRsiTracker = async (): Promise<RsiTrackerPoint[]> => {
   return Array.isArray(data) ? data : [];
 };
 
-export const fetchMacdAverage = async (): Promise<MacdAvgData | null> => fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.macdAvg));
+export const fetchMacdAverage = async (): Promise<MacdAvgData | null> => {
+  const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.macdAvg));
+  return data || null;
+};
 
 export const fetchMacdTracker = async (): Promise<MacdTrackerPoint[]> => {
   const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.macdTracker));
   return Array.isArray(data) ? data : [];
 };
 
-export const fetchMarketCapHistory = async (): Promise<any | null> => fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.mktcapHist));
-
 export const fetchEconomicCalendar = async (): Promise<EconEvent[]> => {
   const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.calendar));
   return Array.isArray(data) ? data : [];
 };
 
-/**
- * ✅ ETF FLOW - legado (mantido pra não quebrar)
- * Atenção: esse formato NÃO é o mesmo do /cachecko/etfnetflow.json (daily points).
- */
 export const fetchEtfFlow = async (): Promise<EtfFlowData | null> => {
-  const res = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.etfNetFlow));
-  if (!res) return null;
+  const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.etfNetFlow));
+  if (!raw) return null;
 
-  const root = Array.isArray(res) ? res[0] : res;
-  if (!root || !root.data) return null;
+  const root = Array.isArray(raw) ? raw[0] : raw;
 
-  return {
-    btcValue: root.data.totalBtcValue || 0,
-    ethValue: root.data.totalEthValue || 0,
-    netFlow: root.data.total || 0,
-    timestamp: root.status?.timestamp ? new Date(root.status.timestamp).getTime() : Date.now(),
-    chartDataBTC: root.data.chartDataBTC || [],
-    chartDataETH: root.data.chartDataETH || [],
-    history: root.data.history || { lastWeek: 0, lastMonth: 0, last90d: 0 },
-    solValue: root.data.solValue || 0,
-    xrpValue: root.data.xrpValue || 0
-  };
-};
-
-/**
- * ✅ ETF NETFLOW DAILY (NOVO) - usa o JSON que você colou (points + totals)
- * Fonte: getCacheckoUrl(ENDPOINTS.cachecko.files.etfNetFlow)
- * -> Ajuste o endpoint etfNetFlow para apontar para /cachecko/etfnetflow.json
- */
-export const fetchEtfNetflowDaily = async (): Promise<EtfNetflowDailyData | null> => {
-  const res = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.etfNetFlow));
-  if (!res) return null;
-
-  const root = Array.isArray(res) ? res[0] : res;
-  const data = (root as any)?.data;
-  if (!data || !Array.isArray(data.points)) return null;
-
-  const points: EtfNetflowDailyPoint[] = data.points
-    .map((p: any) => {
-      const ts = toNum(p?.timestamp, NaN);
-      const totalUsd = toNum(p?.value, NaN);
-      const btcUsd = toNum(p?.btcValue, NaN);
-      const ethUsd = toNum(p?.ethValue, NaN);
-
-      if (!Number.isFinite(ts) || !Number.isFinite(totalUsd) || !Number.isFinite(btcUsd) || !Number.isFinite(ethUsd)) return null;
-
-      return {
-        timestamp: Math.trunc(ts),
-        totalUsd,
-        btcUsd,
-        ethUsd
-      };
-    })
-    .filter((x: any) => x !== null)
-    .sort((a: EtfNetflowDailyPoint, b: EtfNetflowDailyPoint) => a.timestamp - b.timestamp);
-
-  const totals = {
-    totalUsd: toNum(data.total, 0),
-    btcUsd: toNum(data.totalBtcValue, 0),
-    ethUsd: toNum(data.totalEthValue, 0),
-  };
-
-  const statusTimestamp = (root as any)?.status?.timestamp ? new Date((root as any).status.timestamp).getTime() : undefined;
+  const data = (root && typeof root === 'object' && (root as any).data) ? (root as any).data : root;
+  const status = (root && typeof root === 'object' && (root as any).status) ? (root as any).status : null;
 
   return {
-    aggregation: data.aggregation || 'daily',
-    points,
-    totals,
-    statusTimestamp
+    btcValue: Number(data?.totalBtcValue ?? data?.btcValue ?? 0),
+    ethValue: Number(data?.totalEthValue ?? data?.ethValue ?? 0),
+    netFlow: Number(data?.total ?? data?.netFlow ?? 0),
+    timestamp: status?.timestamp ? new Date(status.timestamp).getTime() : Date.now(),
+    chartDataBTC: data?.chartDataBTC || [],
+    chartDataETH: data?.chartDataETH || [],
+    history: data?.history || { lastWeek: 0, lastMonth: 0, last90d: 0 },
+    solValue: Number(data?.solValue ?? 0),
+    xrpValue: Number(data?.xrpValue ?? 0)
   };
 };
 
 export const fetchLongShortRatio = async (symbol: string, period: string): Promise<LsrData> => {
-  const binanceUrl = `https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol=${symbol}&period=${period}&limit=1`;
+  const cleanSymbol = symbol.toUpperCase().endsWith('USDT') ? symbol.toUpperCase() : `${symbol.toUpperCase()}USDT`;
+  const cleanPeriod = period.toLowerCase();
+
+  const binanceUrl = `https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol=${cleanSymbol}&period=${cleanPeriod}&limit=1`;
   try {
-    const response = await fetch(binanceUrl);
-    const data = await response.json();
+    const res = await fetch(binanceUrl);
+    const data = await res.json();
     if (Array.isArray(data) && data.length > 0) {
-      const point = data[0];
-      return { lsr: parseFloat(point.longShortRatio), longs: parseFloat(point.longAccount) * 100, shorts: parseFloat(point.shortAccount) * 100 };
+      const p = data[0];
+      return {
+        lsr: isFinite(parseFloat(p.longShortRatio)) ? parseFloat(p.longShortRatio) : null,
+        longs: isFinite(parseFloat(p.longAccount)) ? parseFloat(p.longAccount) * 100 : null,
+        shorts: isFinite(parseFloat(p.shortAccount)) ? parseFloat(p.shortAccount) * 100 : null
+      };
     }
   } catch (e) {}
   return { lsr: null, longs: null, shorts: null };
@@ -342,6 +297,7 @@ export const fetchLongShortRatio = async (symbol: string, period: string): Promi
 export const fetchGainersLosers = async (): Promise<any> => {
   const coins = await fetchTopCoins();
   if (!coins || coins.length === 0) return { gainers: [], losers: [] };
+
   const filtered = coins.filter(c => c && c.symbol && !isStablecoin(c.symbol));
   const sorted = [...filtered].sort((a, b) => (b.price_change_percentage_24h || 0) - (a.price_change_percentage_24h || 0));
   return { gainers: sorted.slice(0, 100), losers: [...sorted].reverse().slice(0, 100) };
@@ -353,8 +309,17 @@ export const fetchOrderBook = async (symbol: string): Promise<OrderBookData | nu
     const response = await fetch(url);
     const data = await response.json();
     if (data && data.bids && data.asks) {
-      return { bids: data.bids.map((b: any) => ({ price: b[0], qty: b[1] })), asks: data.asks.map((a: any) => ({ price: a[0], qty: a[1] })) };
+      return {
+        bids: data.bids.map((b: any) => ({ price: b[0], qty: b[1] })),
+        asks: data.asks.map((a: any) => ({ price: a[0], qty: a[1] }))
+      };
     }
   } catch (e) {}
   return null;
+};
+
+// Fix: Add missing fetchMarketCapHistory function.
+export const fetchMarketCapHistory = async (): Promise<any | null> => {
+  const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.mktcapHist));
+  return data;
 };
