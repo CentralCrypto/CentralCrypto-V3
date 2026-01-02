@@ -1,3 +1,4 @@
+
 import { ApiCoin } from '../../../types';
 import { httpGetJson } from '../../../services/http';
 import { getCacheckoUrl, ENDPOINTS } from '../../../services/endpoints';
@@ -15,7 +16,7 @@ export const fetchWithFallback = async (url: string): Promise<any | null> => {
     const { data } = await httpGetJson(finalUrl, { timeoutMs: 10000, retries: 2 });
     return data;
   } catch (e) {
-    console.error(`[API] Erro ao buscar ${url}:`, e);
+    console.error(`[API] Erro ao buscar ${url}: `, (e as any).message || e);
   }
   return null;
 };

@@ -701,11 +701,11 @@ const EtfFlowWidget = ({ language, onNavigate, theme }: { language: Language; on
           {headlineBtcUsd}
         </div>
 
-        {periodTotals && (
+        {/*{periodTotals && (
           <div className="mt-1 text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest opacity-80">
             Período: {formatUsd(periodTotals.totalUsd)}
           </div>
-        )}
+        )}*/}
       </div>
 
       <div className="flex-1 min-h-[130px]">
@@ -728,7 +728,7 @@ const EtfFlowWidget = ({ language, onNavigate, theme }: { language: Language; on
       <div className="flex justify-between items-center pt-2 mt-2 border-t border-tech-700/50 px-1">
         <div className="flex flex-col">
           <div className="text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">
-            ETH NETFLOW (USD)
+            ETH NETFLOW
           </div>
           <div className="text-sm font-black font-mono text-gray-700 dark:text-gray-200">
             {footerEthUsd}
@@ -737,7 +737,7 @@ const EtfFlowWidget = ({ language, onNavigate, theme }: { language: Language; on
 
         <div className="flex flex-col text-right">
           <div className="text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">
-            NETFLOW TOTAL (USD)
+            TOTAL (USD)
           </div>
           <div className="text-sm font-black font-mono text-gray-700 dark:text-gray-200">
             {footerTotalUsd}

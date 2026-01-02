@@ -218,7 +218,6 @@ const EtfFlowWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({
         const ethTotal = latestETH?.total || 0;
         const ethDate = latestETH ? new Date(latestETH.date).toLocaleDateString() : '--/--/----';
 
-        // Increased gap-4 to gap-14 (~56px) for spacing
         return (
             <div className="h-full flex flex-col bg-white dark:bg-[#2f3032] overflow-hidden p-2 gap-14">
                 <div className="flex-1 flex flex-col min-h-0 border-b border-gray-100 dark:border-slate-700/50 pb-4 relative justify-center">
