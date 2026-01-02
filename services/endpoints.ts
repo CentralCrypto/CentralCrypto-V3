@@ -11,7 +11,7 @@ export const ENDPOINTS = {
     categories: "/wp-json/wp/v2/categories"
   },
   cachecko: {
-    base: "/2/wp-content/uploads/cct-cache",
+    base: "/cachecko",
     files: {
       global: "/cg_global.json",
       main: "/cachecko.json",

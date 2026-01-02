@@ -40,7 +40,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const particlesRef = useRef<Particle[]>([]);
   const imageCache = useRef(new Map<string, HTMLImageElement>());
-  const animationFrameId = useRef<number | null>(null);
   
   const [status, setStatus] = useState<Status>('loading');
   const [coins, setCoins] = useState<ApiCoin[]>([]);
@@ -49,12 +48,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   const [selectedParticle, setSelectedParticle] = useState<Particle | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Refs para desacoplar o estado de hover/seleção do loop de animação
-  const hoveredParticleRef = useRef(hoveredParticle);
-  hoveredParticleRef.current = hoveredParticle;
-  const selectedParticleRef = useRef(selectedParticle);
-  selectedParticleRef.current = selectedParticle;
-
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [numCoins, setNumCoins] = useState(150);
   const [animSpeed, setAnimSpeed] = useState(0.8);
@@ -64,8 +57,40 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   const [chartVersion, setChartVersion] = useState(0);
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
   
-  const lastUpdateTime = useRef<number>(Date.now());
+  // Refs para manter os valores mais recentes para o loop de animação estável
+  // Fix: Explicitly pass `undefined` to `useRef` to satisfy older TypeScript/React type definitions
+  // that may not support the no-argument overload `useRef<T>()`.
+  const animationLoopRef = useRef<(() => void) | undefined>(undefined);
+  const hoveredParticleRef = useRef(hoveredParticle);
+  hoveredParticleRef.current = hoveredParticle;
+  const selectedParticleRef = useRef(selectedParticle);
+  selectedParticleRef.current = selectedParticle;
 
+  // --- DATA LOADING ---
+  const loadData = useCallback(async () => {
+    if (particlesRef.current.length === 0) setStatus('loading');
+    try {
+      const data = await fetchTopCoins({ force: true });
+      if (data && data.length > 0) {
+        setCoins(data);
+        setStatus('running');
+      } else if (particlesRef.current.length === 0) {
+        setStatus('demo');
+      }
+    } catch (error) {
+      if (particlesRef.current.length === 0) setStatus('error');
+      console.error("WindSwarm data error:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+    const interval = setInterval(loadData, 60000);
+    const observer = new MutationObserver(() => setIsDark(document.documentElement.classList.contains('dark')));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => { clearInterval(interval); observer.disconnect(); };
+  }, [loadData]);
+  
   // --- MAPPING LOGIC ---
   const calculateMappings = useCallback(() => {
     const canvas = canvasRef.current;
@@ -103,31 +128,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     return { mapX, mapY, mapRadius, topCoins, minX, maxX, minY, maxY, logMinY, logMaxY, pad, width, height };
   }, [coins, numCoins, yAxisMode, chartVersion]);
 
-  // --- DATA LOADING ---
-  const loadData = useCallback(async () => {
-    if (particlesRef.current.length === 0) setStatus('loading');
-    try {
-      const data = await fetchTopCoins({ force: true });
-      if (data && data.length > 0) {
-        setCoins(data);
-        setStatus('running');
-      } else if (particlesRef.current.length === 0) {
-        setStatus('demo');
-      }
-    } catch (error) {
-      if (particlesRef.current.length === 0) setStatus('error');
-      console.error("WindSwarm data error:", error);
-    }
-  }, []);
 
-  useEffect(() => {
-    loadData();
-    const interval = setInterval(loadData, 60000);
-    const observer = new MutationObserver(() => setIsDark(document.documentElement.classList.contains('dark')));
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => { clearInterval(interval); observer.disconnect(); };
-  }, [loadData]);
-  
   // --- UNIFIED PARTICLE MANAGEMENT ---
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -186,117 +187,130 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
   }, [coins, numCoins, yAxisMode, chartVersion, calculateMappings]);
 
-  // --- ANIMATION & DRAWING ---
-  const animationLoop = useCallback(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    if (!ctx || !canvas) return;
-
-    const now = Date.now();
-    const delta = Math.min(0.05, (now - lastUpdateTime.current) / 1000);
-    lastUpdateTime.current = now;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    const particles = particlesRef.current;
-    if (particles.length === 0) {
-      animationFrameId.current = requestAnimationFrame(animationLoop); return;
-    }
-
-    const mappings = calculateMappings();
-    if (!mappings) {
-        animationFrameId.current = requestAnimationFrame(animationLoop); return;
-    }
-    const { pad, width, height, minX, maxX, minY, maxY, logMinY, logMaxY } = mappings;
-
-    ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
-    ctx.lineWidth = 1; ctx.font = 'bold 10px Inter';
-    ctx.fillStyle = isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)';
-    for (let i = 0; i <= 5; i++) {
-      const y = pad + i * (height - pad * 2) / 5;
-      ctx.beginPath(); ctx.moveTo(pad - 5, y); ctx.lineTo(width - pad, y); ctx.stroke();
-      const val = (yAxisMode === 'price_change_percentage_24h') ? maxY - i * (maxY - minY) / 5 : Math.pow(10, logMaxY - i * (logMaxY - logMinY) / 5);
-      ctx.fillText(yAxisMode === 'price_change_percentage_24h' ? `${val.toFixed(1)}%` : `$${formatCompact(val)}`, 15, y + 3);
-    }
-    for (let i = 0; i <= 10; i++) {
-      const x = pad + i * (width - pad * 2) / 10;
-      ctx.beginPath(); ctx.moveTo(x, pad); ctx.lineTo(x, height - pad + 5); ctx.stroke();
-      const val = minX + i * (maxX - minX) / 10;
-      ctx.textAlign = 'center'; ctx.fillText(`${val.toFixed(1)}%`, x, height - pad + 15);
-    }
-    
-    const hoveredP = hoveredParticleRef.current;
-    const selectedP = selectedParticleRef.current;
-
-    particles.forEach(p => {
-        if (p.animProgress < 1) {
-            p.animProgress = Math.min(1, p.animProgress + delta * animSpeed);
-            const easedProgress = easeOutCubic(p.animProgress);
-            p.x = lerp(p.startX, p.targetX, easedProgress);
-            p.y = lerp(p.startY, p.targetY, easedProgress);
-            p.vx = 0; p.vy = 0;
-        } else {
-            const dx = p.targetX - p.x; const dy = p.targetY - p.y;
-            p.vx += dx * 0.005; p.vy += dy * 0.005;
-            p.vx += (Math.random() - 0.5) * 0.2; p.vy += (Math.random() - 0.5) * 0.2;
-            p.vx *= 0.94; p.vy *= 0.94;
-            p.x += p.vx; p.y += p.vy;
-        }
-
-        p.trail.push({ x: p.x, y: p.y });
-        while (p.trail.length > trailLength) { p.trail.shift(); }
-
-        if (p.trail.length > 1 && trailLength > 0) {
-            const baseColor = p.color === '#089981' ? '8, 153, 129' : '242, 54, 69';
-            ctx.beginPath();
-            ctx.moveTo(p.trail[0].x, p.trail[0].y);
-            for (let i = 1; i < p.trail.length; i++) {
-                const alpha = (i / p.trail.length) * 0.7;
-                ctx.strokeStyle = `rgba(${baseColor}, ${alpha})`;
-                ctx.lineTo(p.trail[i].x, p.trail[i].y);
-            }
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
-        }
-
-        ctx.save();
-        ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2); ctx.clip();
-        const img = imageCache.current.get(p.coin.image);
-        if (img && img.complete) { ctx.drawImage(img, p.x - p.radius, p.y - p.radius, p.radius * 2, p.radius * 2); } 
-        else { ctx.fillStyle = p.color; ctx.fill(); }
-        ctx.restore();
-        if (selectedP?.id === p.id || hoveredP?.id === p.id) {
-            ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-            ctx.strokeStyle = '#dd9933'; ctx.lineWidth = selectedP?.id === p.id ? 4 : 2;
-            ctx.stroke();
-        }
-    });
-
-    if (hoveredP && !selectedP) {
-        const p = hoveredP; const ttWidth = 200, ttHeight = 100;
-        let ttX = p.x - ttWidth / 2; let ttY = p.y - p.radius - ttHeight - 10;
-        if (ttY < 10) ttY = p.y + p.radius + 10;
-        ttX = clamp(ttX, 10, width - ttWidth - 10);
-        
-        ctx.fillStyle = isDark ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.9)'; ctx.strokeStyle = '#dd9933'; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.roundRect(ttX, ttY, ttWidth, ttHeight, 8); ctx.fill(); ctx.stroke();
-        ctx.font = 'bold 14px Inter'; ctx.fillStyle = isDark ? '#fff' : '#000'; ctx.textAlign = 'left';
-        ctx.fillText(p.coin.name, ttX + 10, ttY + 20);
-        ctx.font = '12px Inter'; ctx.fillStyle = isDark ? '#ccc' : '#333';
-        ctx.fillText(`$${p.coin.current_price.toLocaleString()}`, ttX + 10, ttY + 40);
-        const change = p.coin.price_change_percentage_24h || 0;
-        ctx.fillStyle = change > 0 ? '#089981' : '#f23645';
-        ctx.fillText(`${change.toFixed(2)}%`, ttX + 10, ttY + 58);
-        ctx.fillStyle = isDark ? '#ccc' : '#333';
-        ctx.fillText(`M.Cap: $${formatCompact(p.coin.market_cap)}`, ttX + 10, ttY + 76);
-    }
-
-    animationFrameId.current = requestAnimationFrame(animationLoop);
-  }, [animSpeed, trailLength, isDark, calculateMappings]);
-
-  // --- SETUP & RESIZE ---
+  // --- STABLE ANIMATION & DRAWING ---
   useEffect(() => {
-    lastUpdateTime.current = Date.now();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    let lastUpdateTime = Date.now();
+    
+    // A função de animação real. Será atualizada no ref.
+    animationLoopRef.current = () => {
+        const now = Date.now();
+        const delta = Math.min(0.05, (now - lastUpdateTime) / 1000);
+        lastUpdateTime = now;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        const particles = particlesRef.current;
+        if (particles.length === 0) return;
+
+        const mappings = calculateMappings();
+        if (!mappings) return;
+
+        const { pad, width, height, minX, maxX, minY, maxY, logMinY, logMaxY } = mappings;
+
+        // Desenha eixos
+        ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+        ctx.lineWidth = 1; ctx.font = 'bold 10px Inter';
+        ctx.fillStyle = isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)';
+        for (let i = 0; i <= 5; i++) {
+            const y = pad + i * (height - pad * 2) / 5;
+            ctx.beginPath(); ctx.moveTo(pad - 5, y); ctx.lineTo(width - pad, y); ctx.stroke();
+            const val = (yAxisMode === 'price_change_percentage_24h') ? maxY - i * (maxY - minY) / 5 : Math.pow(10, logMaxY - i * (logMaxY - logMinY) / 5);
+            ctx.fillText(yAxisMode === 'price_change_percentage_24h' ? `${val.toFixed(1)}%` : `$${formatCompact(val)}`, 15, y + 3);
+        }
+        for (let i = 0; i <= 10; i++) {
+            const x = pad + i * (width - pad * 2) / 10;
+            ctx.beginPath(); ctx.moveTo(x, pad); ctx.lineTo(x, height - pad + 5); ctx.stroke();
+            const val = minX + i * (maxX - minX) / 10;
+            ctx.textAlign = 'center'; ctx.fillText(`${val.toFixed(1)}%`, x, height - pad + 15);
+        }
+
+        // Obtém os estados de hover/select mais recentes dos refs
+        const hoveredP = hoveredParticleRef.current;
+        const selectedP = selectedParticleRef.current;
+
+        // Atualiza e desenha partículas
+        particles.forEach(p => {
+            if (p.animProgress < 1) {
+                p.animProgress = Math.min(1, p.animProgress + delta * animSpeed);
+                const easedProgress = easeOutCubic(p.animProgress);
+                p.x = lerp(p.startX, p.targetX, easedProgress);
+                p.y = lerp(p.startY, p.targetY, easedProgress);
+                p.vx = 0; p.vy = 0;
+            } else {
+                const dx = p.targetX - p.x; const dy = p.targetY - p.y;
+                p.vx += dx * 0.005; p.vy += dy * 0.005;
+                p.vx += (Math.random() - 0.5) * 0.2; p.vy += (Math.random() - 0.5) * 0.2;
+                p.vx *= 0.94; p.vy *= 0.94;
+                p.x += p.vx; p.y += p.vy;
+            }
+
+            p.trail.push({ x: p.x, y: p.y });
+            while (p.trail.length > trailLength) { p.trail.shift(); }
+
+            if (p.trail.length > 1 && trailLength > 0) {
+                const baseColor = p.color === '#089981' ? '8, 153, 129' : '242, 54, 69';
+                ctx.beginPath(); ctx.moveTo(p.trail[0].x, p.trail[0].y);
+                for (let i = 1; i < p.trail.length; i++) {
+                    ctx.lineTo(p.trail[i].x, p.trail[i].y);
+                }
+                ctx.strokeStyle = `rgba(${baseColor}, 0.5)`;
+                ctx.lineWidth = 1.5; ctx.stroke();
+            }
+
+            ctx.save();
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2); ctx.clip();
+            const img = imageCache.current.get(p.coin.image);
+            if (img?.complete) { ctx.drawImage(img, p.x - p.radius, p.y - p.radius, p.radius * 2, p.radius * 2); }
+            else { ctx.fillStyle = p.color; ctx.fill(); }
+            ctx.restore();
+
+            if (selectedP?.id === p.id || hoveredP?.id === p.id) {
+                ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.strokeStyle = '#dd9933'; ctx.lineWidth = selectedP?.id === p.id ? 4 : 2;
+                ctx.stroke();
+            }
+        });
+
+        // Desenha tooltip
+        if (hoveredP && !selectedP) {
+            const p = hoveredP; const ttWidth = 200, ttHeight = 100;
+            let ttX = p.x - ttWidth / 2; let ttY = p.y - p.radius - ttHeight - 10;
+            if (ttY < 10) ttY = p.y + p.radius + 10;
+            ttX = clamp(ttX, 10, width - ttWidth - 10);
+            
+            ctx.fillStyle = isDark ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.9)'; ctx.strokeStyle = '#dd9933'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.roundRect(ttX, ttY, ttWidth, ttHeight, 8); ctx.fill(); ctx.stroke();
+            ctx.font = 'bold 14px Inter'; ctx.fillStyle = isDark ? '#fff' : '#000'; ctx.textAlign = 'left';
+            ctx.fillText(p.coin.name, ttX + 10, ttY + 20);
+            ctx.font = '12px Inter'; ctx.fillStyle = isDark ? '#ccc' : '#333';
+            ctx.fillText(`$${p.coin.current_price.toLocaleString()}`, ttX + 10, ttY + 40);
+            const change = p.coin.price_change_percentage_24h || 0;
+            ctx.fillStyle = change > 0 ? '#089981' : '#f23645';
+            ctx.fillText(`${change.toFixed(2)}%`, ttX + 10, ttY + 58);
+            ctx.fillStyle = isDark ? '#ccc' : '#333';
+            ctx.fillText(`M.Cap: $${formatCompact(p.coin.market_cap)}`, ttX + 10, ttY + 76);
+        }
+    };
+  }, [calculateMappings, animSpeed, trailLength, isDark, yAxisMode]);
+
+  // --- EFEITO PARA INICIAR O LOOP DE ANIMAÇÃO DE FORMA ESTÁVEL ---
+  useEffect(() => {
+    let frameId: number;
+    const renderLoop = () => {
+      animationLoopRef.current?.();
+      frameId = requestAnimationFrame(renderLoop);
+    };
+    renderLoop();
+    return () => cancelAnimationFrame(frameId);
+  }, []);
+  
+  // --- SETUP E RESIZE ---
+  useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
@@ -304,15 +318,11 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       const { width, height } = entries[0].contentRect;
       canvas.width = width;
       canvas.height = height;
-      setChartVersion(v => v + 1);
+      setChartVersion(v => v + 1); // Trigger re-calculation
     });
     resizeObserver.observe(container);
-    animationFrameId.current = requestAnimationFrame(animationLoop);
-    return () => {
-      if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
-      resizeObserver.disconnect();
-    };
-  }, [animationLoop]);
+    return () => resizeObserver.disconnect();
+  }, []);
 
   const handleMouseMove = (e: React.MouseEvent) => {
       const canvas = canvasRef.current; if (!canvas) return;

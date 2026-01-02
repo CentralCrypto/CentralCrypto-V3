@@ -196,7 +196,7 @@ export interface AltSeasonHistoryPoint { timestamp: number; altcoinIndex: number
 export interface AltSeasonData { index: number; yesterday: number; lastWeek: number; lastMonth: number; history?: AltSeasonHistoryPoint[]; }
 
 export const fetchCryptoNews = async (symbol: string, coinName: string): Promise<NewsItem[]> => {
-  const url = getCacheckoUrl(ENDPOINTS.cachecko.files.news);
+  const url = ENDPOINTS.special.news;
   const finalUrl = `${url}?s=${encodeURIComponent(symbol)}&n=${encodeURIComponent(coinName)}`;
   const data = await fetchWithFallback(finalUrl);
   return Array.isArray(data) ? data : [];
@@ -315,4 +315,9 @@ export const fetchOrderBook = async (symbol: string): Promise<OrderBookData | nu
     }
   } catch (e) {}
   return null;
+};
+
+export const fetchMarketCapHistory = async (): Promise<any | null> => {
+  const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.mktcapHist));
+  return data;
 };
