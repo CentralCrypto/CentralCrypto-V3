@@ -164,13 +164,53 @@ export const fetchFearAndGreed = async (): Promise<FngData[]> => {
   return Array.isArray(root) ? root : [];
 };
 
-export const fetchRsiAverage = async (): Promise<RsiAvgData | null> => fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiAvg));
+const clamp = (n: number, min = 0, max = 100) => Math.min(max, Math.max(min, n));
+
+const toNum = (v: any, fallback = NaN) => {
+  const n = typeof v === 'string' ? parseFloat(v) : Number(v);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+/**
+ * ✅ RSI Average file: /cachecko/rsiavg.json
+ * Formato atual:
+ * [
+ *   { data: { overall: { averageRsi, yesterday, days7Ago, days30Ago, ... } }, status: {...} }
+ * ]
+ * Este fetch normaliza e devolve o objeto plano esperado pelo widget.
+ */
+export const fetchRsiAverage = async (): Promise<RsiAvgData | null> => {
+  const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiAvg));
+  if (!raw) return null;
+
+  const root = Array.isArray(raw) ? raw[0] : raw;
+
+  const overall =
+    (root as any)?.data?.overall ??
+    (root as any)?.overall ??
+    (root as any)?.data ??
+    root;
+
+  if (!overall || typeof overall !== 'object') return null;
+
+  const avg = toNum((overall as any).averageRsi, NaN);
+  if (!Number.isFinite(avg)) return null;
+
+  return {
+    averageRsi: clamp(avg),
+    yesterday: clamp(toNum((overall as any).yesterday, 0)),
+    days7Ago: clamp(toNum((overall as any).days7Ago, 0)),
+    days30Ago: clamp(toNum((overall as any).days30Ago, 0)),
+  };
+};
+
 export const fetchRsiTracker = async (): Promise<RsiTrackerPoint[]> => {
   const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTracker));
   return Array.isArray(data) ? data : [];
 };
 
 export const fetchMacdAverage = async (): Promise<MacdAvgData | null> => fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.macdAvg));
+
 export const fetchMacdTracker = async (): Promise<MacdTrackerPoint[]> => {
   const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.macdTracker));
   return Array.isArray(data) ? data : [];
