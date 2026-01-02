@@ -260,6 +260,7 @@ const RsiWidget = ({ language, onNavigate }: { language: Language; onNavigate: (
 
   const rsiVal = clamp(data.averageRsi ?? 50);
   const label = rsiVal < 30 ? t.oversold : rsiVal > 70 ? t.overbought : t.neutral;
+  const rotation = toRotation(clamp(needleBase + jitter));
 
   // animação suave quando o valor muda (de onde está -> valor novo)
   useEffect(() => {
@@ -297,11 +298,8 @@ const RsiWidget = ({ language, onNavigate }: { language: Language; onNavigate: (
     return () => window.clearInterval(id);
   }, [loading]);
 
-  const needleVal = clamp(needleBase + jitter);
-  const rotation = toRotation(needleVal);
-
   return (
-    <div className="glass-panel p-2 pt-7 rounded-xl flex flex-col h-full relative overflow-hidden bg-tech-800 border-tech-700 hover:border-[#dd9933]/50 transition-all">
+    <div className="glass-panel p-2 rounded-xl flex flex-col h-full relative overflow-hidden bg-tech-800 border-tech-700 hover:border-[#dd9933]/50 transition-all">
       <div className="flex justify-between items-start absolute top-2 left-2 right-2 z-10">
         <span className="text-[11px] leading-tight text-gray-500 dark:text-gray-400 font-black uppercase tracking-wider truncate">
           {t.title}
@@ -313,9 +311,9 @@ const RsiWidget = ({ language, onNavigate }: { language: Language; onNavigate: (
         <div className="flex-1 flex items-center justify-center text-xs text-gray-500 animate-pulse">Loading...</div>
       ) : (
         <>
-          {/* 🔥 AJUSTE: centraliza melhor no card, sem empurrar pra baixo */}
-          <div className="flex-1 min-h-0 relative w-full flex justify-center items-center py-2 -translate-y-1">
-            <svg viewBox="0 0 200 125" className="w-full h-full overflow-visible" preserveAspectRatio="xMidYMax meet">
+          {/* Igual ao Fear&Greed: mesmo wrapper, mesmo padding, sem translate */}
+          <div className="flex-1 min-h-0 relative w-full flex justify-center items-center py-2">
+            <svg viewBox="0 0 200 135" className="w-full h-full overflow-visible" preserveAspectRatio="xMidYMax meet">
               <defs>
                 <linearGradient id="rsiGradient" x1="0" y1="0" x2="1" y2="0">
                   <stop offset="0%" stopColor="#548f3f" />
@@ -361,6 +359,7 @@ const RsiWidget = ({ language, onNavigate }: { language: Language; onNavigate: (
               >
                 {rsiVal.toFixed(0)}
               </text>
+
               <text
                 x={GAUGE_CX}
                 y={TEXT_LBL_Y}
@@ -369,7 +368,7 @@ const RsiWidget = ({ language, onNavigate }: { language: Language; onNavigate: (
                 fontSize="12"
                 fontWeight="900"
                 letterSpacing="1"
-                className="uppercase"
+                style={{ textTransform: 'uppercase' }}
               >
                 {label}
               </text>
@@ -407,31 +406,23 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
   const MINI_GAUGE_R = 55;
   const MINI_GAUGE_RY = 55;
 
-  // >>> Ajuste APENAS da escala (distância + ancoragem)
-  const LABEL_R = MINI_GAUGE_R + (GAUGE_STROKE / 2) + 10;
+  // Ajustes só da escala (não move o gauge)
+  const LABEL_PAD = 8; // distância "limpa" do arco
+  const CAP_PAD = (GAUGE_STROKE / 2) + 4; // extra nas pontas por causa do strokeLinecap="round"
+  const LABEL_R = MINI_GAUGE_R + (GAUGE_STROKE / 2) + LABEL_PAD;
 
   return (
     <div className="glass-panel p-2 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 hover:border-[#dd9933]/50 transition-all relative overflow-hidden">
       <div className="w-full flex justify-between items-center mb-1">
-        <span className="text-[11px] leading-tight text-gray-500 dark:text-gray-400 uppercase tracking-wider font-black ml-1">
-          {t.title}
-        </span>
+        <span className="text-[11px] leading-tight text-gray-500 dark:text-gray-400 uppercase tracking-wider font-black ml-1">{t.title}</span>
         <WorkspaceLink onClick={onNavigate} />
       </div>
 
       <div className="flex justify-center gap-1 mb-1">
-        <select
-          value={symbol}
-          onChange={e => setSymbol(e.target.value)}
-          className="bg-gray-100 dark:bg-tech-900 text-gray-800 dark:text-gray-200 text-[10px] font-bold rounded px-1.5 py-0.5 border border-transparent dark:border-tech-700 outline-none"
-        >
+        <select value={symbol} onChange={e => setSymbol(e.target.value)} className="bg-gray-100 dark:bg-tech-900 text-gray-800 dark:text-gray-200 text-[10px] font-bold rounded px-1.5 py-0.5 border border-transparent dark:border-tech-700 outline-none">
           <option value="BTCUSDT">BTC</option><option value="ETHUSDT">ETH</option><option value="SOLUSDT">SOL</option>
         </select>
-        <select
-          value={period}
-          onChange={e => setPeriod(e.target.value)}
-          className="bg-gray-100 dark:bg-tech-900 text-gray-800 dark:text-gray-200 text-[10px] font-bold rounded px-1.5 py-0.5 border border-transparent dark:border-tech-700 outline-none"
-        >
+        <select value={period} onChange={e => setPeriod(e.target.value)} className="bg-gray-100 dark:bg-tech-900 text-gray-800 dark:text-gray-200 text-[10px] font-bold rounded px-1.5 py-0.5 border border-transparent dark:border-tech-700 outline-none">
           <option value="5m">5m</option><option value="1h">1h</option><option value="1D">1D</option>
         </select>
       </div>
@@ -446,9 +437,9 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
             </linearGradient>
           </defs>
 
-          {/* arco cinza */}
+          {/* Arco cinza (CORRIGIDO: usa MINI_GAUGE_R nas duas pontas) */}
           <path
-            d={`M ${GAUGE_CX - MINI_GAUGE_R} ${GAUGE_CY} A ${MINI_GAUGE_R} ${MINI_GAUGE_RY} 0 0 1 ${GAUGE_CX + GAUGE_R} ${GAUGE_CY}`}
+            d={`M ${GAUGE_CX - MINI_GAUGE_R} ${GAUGE_CY} A ${MINI_GAUGE_R} ${MINI_GAUGE_RY} 0 0 1 ${GAUGE_CX + MINI_GAUGE_R} ${GAUGE_CY}`}
             fill="none"
             stroke="currentColor"
             className="text-gray-200 dark:text-tech-700"
@@ -456,30 +447,37 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
             strokeLinecap="round"
           />
 
-          {/* arco colorido */}
+          {/* Arco colorido (mesma geometria) */}
           <path
-            d={`M ${GAUGE_CX - MINI_GAUGE_R} ${GAUGE_CY} A ${MINI_GAUGE_R} ${MINI_GAUGE_RY} 0 0 1 ${GAUGE_CX + GAUGE_R} ${GAUGE_CY}`}
+            d={`M ${GAUGE_CX - MINI_GAUGE_R} ${GAUGE_CY} A ${MINI_GAUGE_R} ${MINI_GAUGE_RY} 0 0 1 ${GAUGE_CX + MINI_GAUGE_R} ${GAUGE_CY}`}
             fill="none"
             stroke="url(#lsrGradient)"
             strokeWidth={GAUGE_STROKE}
             strokeLinecap="round"
           />
 
-          {/* escala (DEPOIS do arco, pra não ficar escondida) */}
+          {/* Escala (calculada com offset real do stroke + padding + cap) */}
           {[1, 2, 3, 4, 5].map(v => {
-            const angle = ((v - 1) / 4) * 180;
-            const rad = (angle - 180) * (Math.PI / 180);
+            // 1..5 => ângulo 180..0 (esquerda->direita)
+            const angleDeg = 180 - ((v - 1) / 4) * 180;
+            const theta = (angleDeg * Math.PI) / 180;
 
-            let tx = GAUGE_CX + LABEL_R * Math.cos(rad);
-            let ty = GAUGE_CY + LABEL_R * Math.sin(rad) - 2; // sobe levemente pra não encostar no arco
+            // ponto do arco (ellipse)
+            const px = GAUGE_CX + MINI_GAUGE_R * Math.cos(theta);
+            const py = GAUGE_CY - MINI_GAUGE_RY * Math.sin(theta);
 
-            const isLeft = v === 1;
-            const isRight = v === 5;
+            // vetor "para fora" (radial aproximado)
+            const nx = Math.cos(theta);
+            const ny = -Math.sin(theta);
 
-            if (isLeft) tx += 3;
-            if (isRight) tx -= 3;
+            let tx = px + nx * (LABEL_R - MINI_GAUGE_R);
+            let ty = py + ny * (LABEL_R - MINI_GAUGE_R);
 
-            const anchor: 'start' | 'middle' | 'end' = isLeft ? 'start' : isRight ? 'end' : 'middle';
+            // Empurra as pontas pra fora do round cap (1 e 5)
+            if (v === 1) tx -= CAP_PAD;
+            if (v === 5) tx += CAP_PAD;
+
+            const anchor: 'start' | 'middle' | 'end' = v === 1 ? 'start' : v === 5 ? 'end' : 'middle';
 
             return (
               <text
@@ -497,7 +495,6 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
             );
           })}
 
-          {/* ponteiro */}
           <g transform={`rotate(${rotation} ${GAUGE_CX} ${GAUGE_CY})`}>
             <path
               d={`M ${GAUGE_CX} ${GAUGE_CY} L ${GAUGE_CX} ${GAUGE_CY - MINI_GAUGE_RY + 2}`}
@@ -508,15 +505,7 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
             <circle cx={GAUGE_CX} cy={GAUGE_CY} r="5" fill="var(--color-text-main)" />
           </g>
 
-          <text
-            x={GAUGE_CX}
-            y={TEXT_VAL_Y - 3}
-            textAnchor="middle"
-            fill="var(--color-gauge-val)"
-            fontSize="22"
-            fontWeight="900"
-            fontFamily="monospace"
-          >
+          <text x={GAUGE_CX} y={TEXT_VAL_Y - 3} textAnchor="middle" fill="var(--color-gauge-val)" fontSize="22" fontWeight="900" fontFamily="monospace">
             {val.toFixed(2)}
           </text>
         </svg>
