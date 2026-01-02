@@ -74,6 +74,36 @@ export interface EtfFlowData {
   xrpValue: number;
 }
 
+/**
+ * ✅ ETF Netflow (daily) - NEW SHAPE (/cachecko/etfnetflow.json)
+ * Modelo:
+ * [
+ *   {
+ *     data: {
+ *       points: [{ value, btcValue, ethValue, timestamp }],
+ *       aggregation: "daily",
+ *       total,
+ *       totalBtcValue,
+ *       totalEthValue
+ *     },
+ *     status: {...}
+ *   }
+ * ]
+ */
+export interface EtfNetflowDailyPoint {
+  timestamp: number; // ms
+  totalUsd: number;  // value
+  btcUsd: number;    // btcValue
+  ethUsd: number;    // ethValue
+}
+
+export interface EtfNetflowDailyData {
+  aggregation: string;
+  points: EtfNetflowDailyPoint[];
+  totals: { totalUsd: number; btcUsd: number; ethUsd: number; };
+  statusTimestamp?: number;
+}
+
 export interface LsrData { lsr: number | null; longs: number | null; shorts: number | null; }
 
 export interface MacdAvgData { averageMacd: number; yesterday: number; days7Ago: number; days30Ago: number; }
@@ -223,6 +253,10 @@ export const fetchEconomicCalendar = async (): Promise<EconEvent[]> => {
   return Array.isArray(data) ? data : [];
 };
 
+/**
+ * ✅ ETF FLOW - legado (mantido pra não quebrar)
+ * Atenção: esse formato NÃO é o mesmo do /cachecko/etfnetflow.json (daily points).
+ */
 export const fetchEtfFlow = async (): Promise<EtfFlowData | null> => {
   const res = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.etfNetFlow));
   if (!res) return null;
@@ -240,6 +274,54 @@ export const fetchEtfFlow = async (): Promise<EtfFlowData | null> => {
     history: root.data.history || { lastWeek: 0, lastMonth: 0, last90d: 0 },
     solValue: root.data.solValue || 0,
     xrpValue: root.data.xrpValue || 0
+  };
+};
+
+/**
+ * ✅ ETF NETFLOW DAILY (NOVO) - usa o JSON que você colou (points + totals)
+ * Fonte: getCacheckoUrl(ENDPOINTS.cachecko.files.etfNetFlow)
+ * -> Ajuste o endpoint etfNetFlow para apontar para /cachecko/etfnetflow.json
+ */
+export const fetchEtfNetflowDaily = async (): Promise<EtfNetflowDailyData | null> => {
+  const res = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.etfNetFlow));
+  if (!res) return null;
+
+  const root = Array.isArray(res) ? res[0] : res;
+  const data = (root as any)?.data;
+  if (!data || !Array.isArray(data.points)) return null;
+
+  const points: EtfNetflowDailyPoint[] = data.points
+    .map((p: any) => {
+      const ts = toNum(p?.timestamp, NaN);
+      const totalUsd = toNum(p?.value, NaN);
+      const btcUsd = toNum(p?.btcValue, NaN);
+      const ethUsd = toNum(p?.ethValue, NaN);
+
+      if (!Number.isFinite(ts) || !Number.isFinite(totalUsd) || !Number.isFinite(btcUsd) || !Number.isFinite(ethUsd)) return null;
+
+      return {
+        timestamp: Math.trunc(ts),
+        totalUsd,
+        btcUsd,
+        ethUsd
+      };
+    })
+    .filter((x: any) => x !== null)
+    .sort((a: EtfNetflowDailyPoint, b: EtfNetflowDailyPoint) => a.timestamp - b.timestamp);
+
+  const totals = {
+    totalUsd: toNum(data.total, 0),
+    btcUsd: toNum(data.totalBtcValue, 0),
+    ethUsd: toNum(data.totalEthValue, 0),
+  };
+
+  const statusTimestamp = (root as any)?.status?.timestamp ? new Date((root as any).status.timestamp).getTime() : undefined;
+
+  return {
+    aggregation: data.aggregation || 'daily',
+    points,
+    totals,
+    statusTimestamp
   };
 };
 

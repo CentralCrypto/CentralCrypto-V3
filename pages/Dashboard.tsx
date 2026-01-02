@@ -403,27 +403,43 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
   const clampedVal = Math.min(Math.max(val, 1), 5);
   const rotation = -90 + ((clampedVal - 1) / 4) * 180;
 
-  const MINI_GAUGE_R = 55;
-  const MINI_GAUGE_RY = 55;
+  // ✅ AUMENTO DO ARCO (antes 55)
+  const MINI_GAUGE_R = 60;
+  const MINI_GAUGE_RY = 60;
 
-  // Ajustes só da escala (não move o gauge)
-  const LABEL_PAD = 8; // distância "limpa" do arco
-  const CAP_PAD = (GAUGE_STROKE / 2) + 4; // extra nas pontas por causa do strokeLinecap="round"
+  // ✅ Escala respeitando stroke + "round caps" nas pontas
+  const LABEL_PAD = 8;
+  const CAP_PAD = (GAUGE_STROKE / 2) + 4;
   const LABEL_R = MINI_GAUGE_R + (GAUGE_STROKE / 2) + LABEL_PAD;
 
   return (
     <div className="glass-panel p-2 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 hover:border-[#dd9933]/50 transition-all relative overflow-hidden">
       <div className="w-full flex justify-between items-center mb-1">
-        <span className="text-[11px] leading-tight text-gray-500 dark:text-gray-400 uppercase tracking-wider font-black ml-1">{t.title}</span>
+        <span className="text-[11px] leading-tight text-gray-500 dark:text-gray-400 uppercase tracking-wider font-black ml-1">
+          {t.title}
+        </span>
         <WorkspaceLink onClick={onNavigate} />
       </div>
 
       <div className="flex justify-center gap-1 mb-1">
-        <select value={symbol} onChange={e => setSymbol(e.target.value)} className="bg-gray-100 dark:bg-tech-900 text-gray-800 dark:text-gray-200 text-[10px] font-bold rounded px-1.5 py-0.5 border border-transparent dark:border-tech-700 outline-none">
-          <option value="BTCUSDT">BTC</option><option value="ETHUSDT">ETH</option><option value="SOLUSDT">SOL</option>
+        <select
+          value={symbol}
+          onChange={e => setSymbol(e.target.value)}
+          className="bg-gray-100 dark:bg-tech-900 text-gray-800 dark:text-gray-200 text-[10px] font-bold rounded px-1.5 py-0.5 border border-transparent dark:border-tech-700 outline-none"
+        >
+          <option value="BTCUSDT">BTC</option>
+          <option value="ETHUSDT">ETH</option>
+          <option value="SOLUSDT">SOL</option>
         </select>
-        <select value={period} onChange={e => setPeriod(e.target.value)} className="bg-gray-100 dark:bg-tech-900 text-gray-800 dark:text-gray-200 text-[10px] font-bold rounded px-1.5 py-0.5 border border-transparent dark:border-tech-700 outline-none">
-          <option value="5m">5m</option><option value="1h">1h</option><option value="1D">1D</option>
+
+        <select
+          value={period}
+          onChange={e => setPeriod(e.target.value)}
+          className="bg-gray-100 dark:bg-tech-900 text-gray-800 dark:text-gray-200 text-[10px] font-bold rounded px-1.5 py-0.5 border border-transparent dark:border-tech-700 outline-none"
+        >
+          <option value="5m">5m</option>
+          <option value="1h">1h</option>
+          <option value="1D">1D</option>
         </select>
       </div>
 
@@ -437,7 +453,7 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
             </linearGradient>
           </defs>
 
-          {/* Arco cinza (CORRIGIDO: usa MINI_GAUGE_R nas duas pontas) */}
+          {/* ✅ Arco cinza (endpoint corrigido pra MINI_GAUGE_R) */}
           <path
             d={`M ${GAUGE_CX - MINI_GAUGE_R} ${GAUGE_CY} A ${MINI_GAUGE_R} ${MINI_GAUGE_RY} 0 0 1 ${GAUGE_CX + MINI_GAUGE_R} ${GAUGE_CY}`}
             fill="none"
@@ -447,7 +463,7 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
             strokeLinecap="round"
           />
 
-          {/* Arco colorido (mesma geometria) */}
+          {/* ✅ Arco colorido (mesma geometria) */}
           <path
             d={`M ${GAUGE_CX - MINI_GAUGE_R} ${GAUGE_CY} A ${MINI_GAUGE_R} ${MINI_GAUGE_RY} 0 0 1 ${GAUGE_CX + MINI_GAUGE_R} ${GAUGE_CY}`}
             fill="none"
@@ -456,24 +472,24 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
             strokeLinecap="round"
           />
 
-          {/* Escala (calculada com offset real do stroke + padding + cap) */}
+          {/* ✅ Escala (fora do arco, respeitando stroke/caps) */}
           {[1, 2, 3, 4, 5].map(v => {
-            // 1..5 => ângulo 180..0 (esquerda->direita)
+            // 1..5 => 180..0 (esquerda -> direita)
             const angleDeg = 180 - ((v - 1) / 4) * 180;
             const theta = (angleDeg * Math.PI) / 180;
 
-            // ponto do arco (ellipse)
+            // ponto sobre a elipse do arco
             const px = GAUGE_CX + MINI_GAUGE_R * Math.cos(theta);
             const py = GAUGE_CY - MINI_GAUGE_RY * Math.sin(theta);
 
-            // vetor "para fora" (radial aproximado)
+            // normal radial "pra fora"
             const nx = Math.cos(theta);
             const ny = -Math.sin(theta);
 
             let tx = px + nx * (LABEL_R - MINI_GAUGE_R);
             let ty = py + ny * (LABEL_R - MINI_GAUGE_R);
 
-            // Empurra as pontas pra fora do round cap (1 e 5)
+            // empurra as pontas pra não brigar com o round cap
             if (v === 1) tx -= CAP_PAD;
             if (v === 5) tx += CAP_PAD;
 
@@ -495,6 +511,7 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
             );
           })}
 
+          {/* Ponteiro */}
           <g transform={`rotate(${rotation} ${GAUGE_CX} ${GAUGE_CY})`}>
             <path
               d={`M ${GAUGE_CX} ${GAUGE_CY} L ${GAUGE_CX} ${GAUGE_CY - MINI_GAUGE_RY + 2}`}
@@ -505,8 +522,17 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
             <circle cx={GAUGE_CX} cy={GAUGE_CY} r="5" fill="var(--color-text-main)" />
           </g>
 
-          <text x={GAUGE_CX} y={TEXT_VAL_Y - 3} textAnchor="middle" fill="var(--color-gauge-val)" fontSize="22" fontWeight="900" fontFamily="monospace">
-            {val.toFixed(2)}
+          {/* Valor */}
+          <text
+            x={GAUGE_CX}
+            y={TEXT_VAL_Y - 3}
+            textAnchor="middle"
+            fill="var(--color-gauge-val)"
+            fontSize="22"
+            fontWeight="900"
+            fontFamily="monospace"
+          >
+            {Number.isFinite(val) ? val.toFixed(2) : '--'}
           </text>
         </svg>
       </div>
@@ -514,11 +540,15 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
       <div className="flex justify-between px-2 pt-1 border-t border-tech-700/50 mt-1">
         <div className="text-center">
           <div className="text-[10px] text-gray-500 font-black uppercase tracking-tighter">Shorts</div>
-          <div className="text-s font-mono font-black text-tech-danger">{data?.shorts ? `${data.shorts.toFixed(1)}%` : '--'}</div>
+          <div className="text-s font-mono font-black text-tech-danger">
+            {data?.shorts != null ? `${data.shorts.toFixed(1)}%` : '--'}
+          </div>
         </div>
         <div className="text-center">
           <div className="text-[10px] text-gray-500 font-black uppercase tracking-tighter">Longs</div>
-          <div className="text-s font-mono font-black text-tech-success">{data?.longs ? `${data.longs.toFixed(1)}%` : '--'}</div>
+          <div className="text-s font-mono font-black text-tech-success">
+            {data?.longs != null ? `${data.longs.toFixed(1)}%` : '--'}
+          </div>
         </div>
       </div>
     </div>
@@ -578,77 +608,23 @@ const AltSeasonWidget = ({ language, onNavigate, theme }: { language: Language; 
 };
 
 const EtfFlowWidget = ({ language, onNavigate, theme }: { language: Language; onNavigate: () => void; theme: 'dark' | 'light' }) => {
-  const [chartData, setChartData] = useState<{ date: number; btc: number; eth: number; usd: number }[]>([]);
+  const [chartData, setChartData] = useState<{ date: number; totalUsd: number; btcUsd: number; ethUsd: number }[]>([]);
+  const [periodTotals, setPeriodTotals] = useState<{ totalUsd: number; btcUsd: number; ethUsd: number } | null>(null);
   const [loading, setLoading] = useState(true);
-
-  const toMs = (v: any): number | null => {
-    if (v === null || v === undefined) return null;
-
-    if (typeof v === 'number' && isFinite(v)) {
-      if (v < 1e12) return Math.round(v * 1000); // seconds -> ms
-      return Math.round(v); // ms
-    }
-
-    if (typeof v === 'string') {
-      const s = v.trim();
-      if (!s) return null;
-
-      if (/^\d+$/.test(s)) {
-        const n = Number(s);
-        if (!isFinite(n)) return null;
-        if (n < 1e12) return Math.round(n * 1000);
-        return Math.round(n);
-      }
-
-      const ms = Date.parse(s);
-      return isNaN(ms) ? null : ms;
-    }
-
-    return null;
-  };
-
-  const normalizeDailyList = (raw: any): any[] => {
-    if (!raw) return [];
-    if (Array.isArray(raw)) return raw;
-
-    if (typeof raw === 'object') {
-      if (Array.isArray((raw as any).daily)) return (raw as any).daily;
-      if (Array.isArray((raw as any).data)) return (raw as any).data;
-
-      // object keyed by timestamp/date
-      const out: any[] = [];
-      for (const [k, v] of Object.entries(raw)) {
-        if (!v || typeof v !== 'object') continue;
-
-        const hasDateField = 'date' in (v as any) || 'timestamp' in (v as any) || 'ts' in (v as any);
-        if (hasDateField) {
-          out.push(v);
-          continue;
-        }
-
-        const ms = toMs(k);
-        if (ms !== null) out.push({ ...(v as any), timestamp: ms });
-      }
-      return out;
-    }
-
-    return [];
-  };
-
-  const formatSigned = (n?: number, decimals = 2) => {
-    if (n === undefined || n === null || !isFinite(n)) return '--';
-    return `${n >= 0 ? '+' : ''}${n.toFixed(decimals)}`;
-  };
 
   const formatUsd = (n?: number) => {
     if (n === undefined || n === null || !isFinite(n)) return '--';
+
     const abs = Math.abs(n);
     const sign = n < 0 ? '-' : '';
+
+    if (abs < 1000) return `${sign}$${abs.toFixed(0)}`;
+
     const v = abs >= 1e12 ? `${(abs / 1e12).toFixed(2)}T`
       : abs >= 1e9 ? `${(abs / 1e9).toFixed(2)}B`
       : abs >= 1e6 ? `${(abs / 1e6).toFixed(2)}M`
-      : abs >= 1e3 ? `${(abs / 1e3).toFixed(2)}K`
-      : abs.toFixed(0);
+      : `${(abs / 1e3).toFixed(2)}K`;
+
     return `${sign}$${v}`;
   };
 
@@ -656,130 +632,115 @@ const EtfFlowWidget = ({ language, onNavigate, theme }: { language: Language; on
     const loadData = async () => {
       setLoading(true);
 
-      const raw = await fetchWithFallback('/cachecko/etfnetflowcompleto.json');
-      const list = normalizeDailyList(raw);
+      const raw = await fetchWithFallback('/cachecko/etfnetflow.json');
+      const root = Array.isArray(raw) ? raw[0] : raw;
 
-      const excludedKeys = new Set([
-        'date', 'timestamp', 'ts',
-        'total', 'BTC', 'ETH',
-        'btc', 'eth', 'usd'
-      ]);
-
-      const byDay = new Map<string, { date: number; btc: number; eth: number; usd: number }>();
-
-      for (const dailyData of list) {
-        if (!dailyData || typeof dailyData !== 'object') continue;
-
-        const tsRaw = (dailyData as any).timestamp ?? (dailyData as any).ts ?? (dailyData as any).date;
-        const ms = toMs(tsRaw);
-        if (ms === null) continue;
-
-        let dailyBtc = 0;
-        let dailyEth = 0;
-        let dailyUsd = 0;
-
-        for (const etfKey of Object.keys(dailyData)) {
-          if (excludedKeys.has(etfKey)) continue;
-
-          const etfObj = (dailyData as any)[etfKey];
-          if (!etfObj || typeof etfObj !== 'object') continue;
-
-          const btcVal = Number((etfObj as any).btc);
-          if (isFinite(btcVal)) dailyBtc += btcVal;
-
-          const ethVal = Number((etfObj as any).eth);
-          if (isFinite(ethVal)) dailyEth += ethVal;
-
-          const usdVal = Number((etfObj as any).usd);
-          if (isFinite(usdVal)) dailyUsd += usdVal;
-        }
-
-        // group by day (UTC) to avoid duplicates
-        const dayKey = new Date(ms).toISOString().slice(0, 10);
-
-        const prev = byDay.get(dayKey);
-        if (prev) {
-          prev.btc += dailyBtc;
-          prev.eth += dailyEth;
-          prev.usd += dailyUsd;
-        } else {
-          byDay.set(dayKey, { date: ms, btc: dailyBtc, eth: dailyEth, usd: dailyUsd });
-        }
+      const points = root?.data?.points;
+      if (!Array.isArray(points)) {
+        setChartData([]);
+        setPeriodTotals(null);
+        setLoading(false);
+        return;
       }
 
-      const processed = Array.from(byDay.values())
-        .sort((a, b) => a.date - b.date)
+      const processed = points
+        .map((p: any) => {
+          const date = Number(p?.timestamp);
+          const totalUsd = Number(p?.value);
+          const btcUsd = Number(p?.btcValue);
+          const ethUsd = Number(p?.ethValue);
+
+          if (!isFinite(date) || !isFinite(totalUsd) || !isFinite(btcUsd) || !isFinite(ethUsd)) return null;
+
+          return { date, totalUsd, btcUsd, ethUsd };
+        })
+        .filter((x: any) => x !== null)
+        .sort((a: any, b: any) => a.date - b.date)
         .slice(-30);
 
       setChartData(processed);
+
+      const tTotal = Number(root?.data?.total);
+      const tBtc = Number(root?.data?.totalBtcValue);
+      const tEth = Number(root?.data?.totalEthValue);
+
+      if (isFinite(tTotal) && isFinite(tBtc) && isFinite(tEth)) {
+        setPeriodTotals({ totalUsd: tTotal, btcUsd: tBtc, ethUsd: tEth });
+      } else {
+        setPeriodTotals(null);
+      }
+
       setLoading(false);
     };
 
     loadData().catch(() => setLoading(false));
   }, []);
 
-  const last = chartData.length ? chartData[chartData.length - 1] : null;
+  const lastBar = chartData.length ? chartData[chartData.length - 1] : null;
 
-  // "dia anterior" (normalmente o último registro do JSON)
-  const btcHeadline = last ? `${formatSigned(last.btc, 2)} BTC` : '--';
-
-  const ethFooter = last ? `${formatSigned(last.eth, 2)} ETH` : '--';
-  const usdFooter = last ? formatUsd(last.usd) : '--';
+  const headlineBtcUsd = lastBar ? formatUsd(lastBar.btcUsd) : '--';
+  const footerEthUsd = lastBar ? formatUsd(lastBar.ethUsd) : '--';
+  const footerTotalUsd = lastBar ? formatUsd(lastBar.totalUsd) : '--';
 
   if (loading) return <div className="glass-panel p-3 rounded-xl h-full animate-pulse bg-tech-800 border-tech-700 w-full" />;
 
   return (
     <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 relative w-full overflow-hidden transition-all duration-700">
-      {/* header: título + link (sem quebrar linha) */}
       <div className="flex justify-between items-center mb-1 px-1">
         <div className="font-black text-gray-500 dark:text-gray-400 text-[11px] leading-tight uppercase tracking-wider whitespace-nowrap">
-          Fluxo ETF BTC SPOT
+          FLUXO ETF BTC SPOT
         </div>
         <WorkspaceLink onClick={onNavigate} />
       </div>
 
-      {/* headline: abaixo do título e acima do gráfico */}
-      <div className="px-1 mb-2">
+      <div className="px-1 mb-1">
         <div className="text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">
-          BTC netflow
+          BTC NETFLOW (USD)
         </div>
         <div className="text-xl font-black font-mono leading-none text-gray-900 dark:text-gray-100">
-          {btcHeadline}
+          {headlineBtcUsd}
         </div>
+
+        {periodTotals && (
+          <div className="mt-1 text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest opacity-80">
+            Período: {formatUsd(periodTotals.totalUsd)}
+          </div>
+        )}
       </div>
 
-      {/* chart: sem eixos, sem tooltip */}
       <div className="flex-1 min-h-[130px]">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={chartData} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
             <XAxis hide dataKey="date" />
             <YAxis hide />
-            <Bar dataKey="btc">
+            <Bar dataKey="totalUsd">
               {chartData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.btc >= 0 ? 'var(--color-success)' : 'var(--color-danger)'} />
+                <Cell
+                  key={`cell-${index}`}
+                  fill={entry.totalUsd >= 0 ? 'var(--color-success)' : 'var(--color-danger)'}
+                />
               ))}
             </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
 
-      {/* footer: ETH à esquerda, Total USD à direita */}
       <div className="flex justify-between items-center pt-2 mt-2 border-t border-tech-700/50 px-1">
         <div className="flex flex-col">
           <div className="text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">
-            ETH netflow
+            ETH NETFLOW (USD)
           </div>
           <div className="text-sm font-black font-mono text-gray-700 dark:text-gray-200">
-            {ethFooter}
+            {footerEthUsd}
           </div>
         </div>
 
         <div className="flex flex-col text-right">
           <div className="text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">
-            NetFlow (USD)
+            NETFLOW TOTAL (USD)
           </div>
           <div className="text-sm font-black font-mono text-gray-700 dark:text-gray-200">
-            {usdFooter}
+            {footerTotalUsd}
           </div>
         </div>
       </div>
