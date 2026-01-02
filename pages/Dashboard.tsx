@@ -855,7 +855,15 @@ const LiveCoinRow: React.FC<{ coin: any; color: string }> = ({ coin, color }) =>
 const GainersLosersWidget = ({ language, onNavigate }: { language: Language; onNavigate: () => void }) => {
     const [data, setData] = useState<{ gainers: any[], losers: any[] }>({ gainers: [], losers: [] });
     const [tab, setTab] = useState('gainers');
-    useEffect(() => { fetchGainersLosers().then(setData).catch(() => {}); }, []);
+    useEffect(() => { 
+        fetchWithFallback('/cachecko/top10gnl.json')
+            .then(res => {
+                if (res && res.gainers && res.losers) {
+                    setData(res);
+                }
+            })
+            .catch(() => {}); 
+    }, []);
     
     const list = Array.isArray(tab === 'gainers' ? data.gainers : data.losers) 
         ? (tab === 'gainers' ? data.gainers : data.losers) 
@@ -903,7 +911,11 @@ const GainersLosersWidget = ({ language, onNavigate }: { language: Language; onN
 
 const MarketCapWidget = ({ language, onNavigate }: { language: Language; onNavigate: () => void }) => {
     const [list, setList] = useState<any[]>([]);
-    useEffect(() => { fetchTopCoins().then(data => setList(Array.isArray(data) ? data.slice(0, 10) : [])).catch(() => {}); }, []);
+    useEffect(() => {
+        fetchWithFallback('/cachecko/top10mktcap.json')
+            .then(data => setList(Array.isArray(data) ? data : []))
+            .catch(() => {});
+    }, []);
     return (
         <div className="glass-panel p-3 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 transition-colors overflow-hidden">
             <div className="flex justify-between items-center mb-2 w-full">
