@@ -24,7 +24,7 @@ export const fetchWithFallback = async (url: string): Promise<any | null> => {
 export const isStablecoin = (symbol: string) => STABLECOINS.includes(symbol.toUpperCase());
 
 export const fetchTopCoins = async (): Promise<ApiCoin[]> => {
-  const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko_lite.files.main));
+  const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.main));
   if (!data) return [];
 
   let coins: any[] = [];
