@@ -38,7 +38,7 @@ export const es = {
       etf: { title: "Flujo ETF", netFlow: "Flujo Neto", btcEtf: "BTC ETFs", ethEtf: "ETH ETFs", last7d: "7 Días", last30d: "30 Dias", last90d: "90 Días", lastUpdate: "Actualizado en", dailyFlow: "Flujo Diario" },
       trump: { title: "Trump-o-Meter", viewPost: "Ver Post", sarcastic: { negativeSmall: "Impacto Irrelevante", negativeMedium: "Mercado em Alerta", negativeLarge: "TORMENTA EN X", positiveSmall: "Señal de Fuerza", positiveMedium: "VIBRAS ALCISTAS", positiveLarge: "EL CIELO ES EL LÍMITE", neutral: "Silêncio Estratégico" } },
       gainers: { gainers: "Ganadores", losers: "Perdedores" },
-      calendar: { title: "Calendario Econômico", today: "HOY", tomorrow: "MAÑANA", yesterday: "AYER", previous: "Prev", forecast: "Fore", actual: "Actu" }
+      calendar: { title: "Calendário Econômico", today: "HOY", tomorrow: "MAÑANA", yesterday: "AYER", previous: "Prev", forecast: "Fore", actual: "Actu" }
     },
     magazine: {
       recentStudies: "Estudios Recientes",
@@ -77,6 +77,7 @@ export const es = {
     pages: {
       marketcap: "Cap de Mercado",
       topmovers: "Más Movimientos",
+      swarm: "Market Wind Swarm",
       faq: {
         title: "Metodologia y FAQ",
         fng: {

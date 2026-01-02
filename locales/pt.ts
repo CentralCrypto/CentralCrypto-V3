@@ -60,7 +60,7 @@ export const pt = {
     nav: { features: "Recursos", testimonials: "Depoimentos", backList: "Voltar para Lista", backHome: "Início", legal: "Legal" },
     hero: { badge: "Tecnologia de Ponta", title1: "Indicadores Profissionais", subtitle: "Aumente sua assertividade com ferramentas exclusivas.", btnView: "Ver Scripts", btnSub: "Assinar" },
     list: { title: "Nossos Indicadores", subtitle: "Scripts otimizados para TradingView.", searchPlaceholder: "Buscar indicadores...", strategy: "Estratégia", indicator: "Indicator", emptyTitle: "Nenhum resultado", emptyDesc: "Try another term", clearFilter: "Limpar", loadMore: "Carregar Mais" },
-    details: { back: "Voltar", strategy: "Estratégia", indicator: "Indicador", updated: "Atualizado", openTv: "Abrir no", disclaimerTitle: "Aviso", disclaimerText: "Investir envolve risco.", boosts: "Boosts", boostThanks: "Obrigado!", boostLink: "Ver no TV", type: "Tipo", version: "Versão", access: "Access", getAccess: "Obter Acesso", addFavDesc: "Adicione aos favoritos no", btnAddFav: "Favoritar no TV" },
+    details: { back: "Voltar", strategy: "Estratégia", indicator: "Indicator", updated: "Atualizado", openTv: "Abrir no", disclaimerTitle: "Aviso", disclaimerText: "Investir envolve risco.", boosts: "Boosts", boostThanks: "Obrigado!", boostLink: "Ver no TV", type: "Tipo", version: "Versão", access: "Access", getAccess: "Obter Acesso", addFavDesc: "Adicione aos favoritos no", btnAddFav: "Favoritar no TV" },
     vipModal: { title: "Acesso VIP", successTitle: "Sucesso!", successDesc: "Seu pedido foi enviado.", btnGo: "Ir para TV", labelName: "Nome", placeholderName: "Seu nome", labelUser: "Usuário TV", placeholderUser: "@usuario", btnSending: "Enviando...", btnSubmit: "Solicitar" },
     features: { title: "Arquitetura e Performance", f1: { title: "Latência Zero", desc: "Sinais processados em tempo real sem atrasos no carregamento dos candles." }, f2: { title: "Native Pine Script V6", desc: "Desenvolvimento puro usando as funções mais modernas e eficientes da engine TradingView." }, f3: { title: "UX Premium", desc: "Interface visual limpa, focada em não poluir o gráfico enquanto entrega dados vitais." }, f4: { title: "Algoritmos Adaptativos", desc: "Lógica interna que se ajusta automaticamente à volatilidade de cada ativo e timeframe." } },
     testimonials: { title: "O que dizem os Traders" },
@@ -85,6 +85,7 @@ export const pt = {
     pages: {
       marketcap: "Market Cap",
       topmovers: "Top Movers",
+      swarm: "Market Wind Swarm",
       faq: {
         title: "Metodologia e FAQ",
         fng: {

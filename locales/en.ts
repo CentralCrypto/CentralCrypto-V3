@@ -77,6 +77,7 @@ export const en = {
     pages: {
       marketcap: "Market Cap",
       topmovers: "Top Movers",
+      swarm: "Market Wind Swarm",
       faq: {
         title: "Methodology and FAQ",
         fng: {
