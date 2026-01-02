@@ -125,7 +125,7 @@ const MarketCapHistoryWidget = ({ language, onNavigate, theme }: { language: Lan
                         <stop offset="95%" stopColor={fillColor} stopOpacity={0}/>
                       </linearGradient>
                     </defs>
-                    <Area type="monotone" dataKey="value" stroke={strokeColor} fill="url(#colorMkt)" strokeWidth={2} dot={false} isAnimationActive={true} />
+                    <Area type="monotone" dataKey="value" stroke={strokeColor} fill="url(#colorMkt)" strokeWidth={1} dot={false} isAnimationActive={true} />
                 </AreaChart>
             </ResponsiveContainer>
         ) : (
@@ -222,27 +222,97 @@ const FearAndGreedWidget = ({ language, onNavigate }: { language: Language; onNa
 const RsiWidget = ({ language, onNavigate }: { language: Language; onNavigate: () => void }) => {
   const [data, setData] = useState({ averageRsi: 50, yesterday: 50, days7Ago: 50, days30Ago: 50 });
   const [loading, setLoading] = useState(true);
+
   const timeT = getTranslations(language).dashboard.widgets.time;
   const t = getTranslations(language).dashboard.widgets.rsi;
 
+  const clamp = (v: number, min = 0, max = 100) => Math.min(max, Math.max(min, v));
+  const toRotation = (v: number) => -90 + (clamp(v) / 100) * 180;
+
+  // base do ponteiro (anima quando chega dado novo)
+  const [needleBase, setNeedleBase] = useState(50);
+  const needleBaseRef = useRef(50);
+
+  // jitter para “simular streaming” (±1% do valor)
+  const [jitter, setJitter] = useState(0);
+  const targetRef = useRef(50);
+
   useEffect(() => {
-    fetchRsiAverage().then(res => { if(res) setData(res); setLoading(false); }).catch(() => setLoading(false));
+    needleBaseRef.current = needleBase;
+  }, [needleBase]);
+
+  const refresh = async () => {
+    try {
+      const res = await fetchRsiAverage();
+      if (res) setData(res);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // busca inicial + refresh periódico (se teu /cachecko atualizar, o ponteiro acompanha)
+  useEffect(() => {
+    setLoading(true);
+    refresh();
+    const id = window.setInterval(refresh, 60_000);
+    return () => window.clearInterval(id);
   }, []);
 
-  const rsiVal = data.averageRsi ?? 50;
-  const rotation = -90 + (rsiVal / 100) * 180;
+  const rsiVal = clamp(data.averageRsi ?? 50);
   const label = rsiVal < 30 ? t.oversold : rsiVal > 70 ? t.overbought : t.neutral;
+
+  // animação suave quando o valor muda (de onde está -> valor novo)
+  useEffect(() => {
+    const from = needleBaseRef.current;
+    const to = rsiVal;
+    targetRef.current = to;
+
+    let raf = 0;
+    const start = performance.now();
+    const duration = 900;
+
+    const easeOutCubic = (x: number) => 1 - Math.pow(1 - x, 3);
+
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - start) / duration);
+      const eased = easeOutCubic(p);
+      setNeedleBase(from + (to - from) * eased);
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [rsiVal]);
+
+  // vibração “viva”: atualiza jitter entre -1% e +1% do valor alvo
+  useEffect(() => {
+    if (loading) return;
+    const id = window.setInterval(() => {
+      const base = targetRef.current;
+      const amp = Math.max(0.2, base * 0.01); // 1% (com mínimo pra não ficar “morto” em valores baixos)
+      const offset = (Math.random() * 2 - 1) * amp;
+      setJitter(offset);
+    }, 650);
+
+    return () => window.clearInterval(id);
+  }, [loading]);
+
+  const needleVal = clamp(needleBase + jitter);
+  const rotation = toRotation(needleVal);
 
   return (
     <div className="glass-panel p-2 rounded-xl flex flex-col h-full relative overflow-hidden bg-tech-800 border-tech-700 hover:border-[#dd9933]/50 transition-all">
       <div className="flex justify-between items-start absolute top-2 left-2 right-2 z-10">
-          <span className="text-[11px] leading-tight text-gray-500 dark:text-gray-400 font-black uppercase tracking-wider truncate">RSI Tracker</span>
-          <WorkspaceLink onClick={onNavigate} />
+        <span className="text-[11px] leading-tight text-gray-500 dark:text-gray-400 font-black uppercase tracking-wider truncate">
+          {t.title}
+        </span>
+        <WorkspaceLink onClick={onNavigate} />
       </div>
+
       {loading ? (
-          <div className="flex-1 flex items-center justify-center text-xs text-gray-500 animate-pulse">Loading...</div>
+        <div className="flex-1 flex items-center justify-center text-xs text-gray-500 animate-pulse">Loading...</div>
       ) : (
-      <>
+        <>
           <div className="flex-1 relative w-full flex justify-center items-center pb-1 mt-4">
             <svg viewBox="0 0 200 125" className="w-full h-full overflow-visible" preserveAspectRatio="xMidYMax meet">
               <defs>
@@ -252,18 +322,68 @@ const RsiWidget = ({ language, onNavigate }: { language: Language; onNavigate: (
                   <stop offset="100%" stopColor="#CD534B" />
                 </linearGradient>
               </defs>
-              <path d={`M ${GAUGE_CX-GAUGE_R} ${GAUGE_CY} A ${GAUGE_R} ${GAUGE_RY} 0 0 1 ${GAUGE_CX+GAUGE_R} ${GAUGE_CY}`} fill="none" stroke="currentColor" className="text-gray-200 dark:text-tech-700" strokeWidth={GAUGE_STROKE} strokeLinecap="round" />
-              <path d={`M ${GAUGE_CX-GAUGE_R} ${GAUGE_CY} A ${GAUGE_R} ${GAUGE_RY} 0 0 1 ${GAUGE_CX+GAUGE_R} ${GAUGE_CY}`} fill="none" stroke="url(#rsiGradient)" strokeWidth={GAUGE_STROKE} strokeLinecap="round" />
+
+              <path
+                d={`M ${GAUGE_CX - GAUGE_R} ${GAUGE_CY} A ${GAUGE_R} ${GAUGE_RY} 0 0 1 ${GAUGE_CX + GAUGE_R} ${GAUGE_CY}`}
+                fill="none"
+                stroke="currentColor"
+                className="text-gray-200 dark:text-tech-700"
+                strokeWidth={GAUGE_STROKE}
+                strokeLinecap="round"
+              />
+              <path
+                d={`M ${GAUGE_CX - GAUGE_R} ${GAUGE_CY} A ${GAUGE_R} ${GAUGE_RY} 0 0 1 ${GAUGE_CX + GAUGE_R} ${GAUGE_CY}`}
+                fill="none"
+                stroke="url(#rsiGradient)"
+                strokeWidth={GAUGE_STROKE}
+                strokeLinecap="round"
+              />
+
               <g transform={`rotate(${rotation} ${GAUGE_CX} ${GAUGE_CY})`}>
-                <path d={`M ${GAUGE_CX} ${GAUGE_CY} L ${GAUGE_CX} ${GAUGE_CY - GAUGE_RY + 2}`} stroke="var(--color-text-main)" strokeWidth="4" strokeLinecap="round" />
+                <path
+                  d={`M ${GAUGE_CX} ${GAUGE_CY} L ${GAUGE_CX} ${GAUGE_CY - GAUGE_RY + 2}`}
+                  stroke="var(--color-text-main)"
+                  strokeWidth="4"
+                  strokeLinecap="round"
+                />
                 <circle cx={GAUGE_CX} cy={GAUGE_CY} r="5" fill="var(--color-text-main)" />
               </g>
-              <text x={GAUGE_CX} y={TEXT_VAL_Y} textAnchor="middle" fill="var(--color-gauge-val)" fontSize="24" fontWeight="900" fontFamily="monospace">{(rsiVal).toFixed(0)}</text>
-              <text x={GAUGE_CX} y={TEXT_LBL_Y} textAnchor="middle" fill="var(--color-text-main)" fontSize="12" fontWeight="900" letterSpacing="1" className="uppercase">{label}</text>
+
+              <text
+                x={GAUGE_CX}
+                y={TEXT_VAL_Y}
+                textAnchor="middle"
+                fill="var(--color-gauge-val)"
+                fontSize="24"
+                fontWeight="900"
+                fontFamily="monospace"
+              >
+                {rsiVal.toFixed(0)}
+              </text>
+              <text
+                x={GAUGE_CX}
+                y={TEXT_LBL_Y}
+                textAnchor="middle"
+                fill="var(--color-text-main)"
+                fontSize="12"
+                fontWeight="900"
+                letterSpacing="1"
+                className="uppercase"
+              >
+                {label}
+              </text>
             </svg>
           </div>
-          <HorizontalHistoryRow labels={[timeT.yesterday, timeT.d7, timeT.d30]} data={[(data.yesterday ?? 0).toFixed(0), (data.days7Ago ?? 0).toFixed(0), (data.days30Ago ?? 0).toFixed(0)]} />
-      </>
+
+          <HorizontalHistoryRow
+            labels={[timeT.yesterday, timeT.d7, timeT.d30]}
+            data={[
+              (data.yesterday ?? 0).toFixed(0),
+              (data.days7Ago ?? 0).toFixed(0),
+              (data.days30Ago ?? 0).toFixed(0),
+            ]}
+          />
+        </>
       )}
     </div>
   );
@@ -280,202 +400,60 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
   }, [symbol, period]);
 
   const val = data?.lsr ?? 1;
-
-  // ---- Mini gauge geometry ----
-  const GAUGE_CX = 100;
-  const GAUGE_CY = 100;
+  const clampedVal = Math.min(Math.max(val, 1), 5);
+  const rotation = -90 + ((clampedVal - 1) / 4) * 180;
 
   const MINI_GAUGE_R = 55;
   const MINI_GAUGE_RY = 55;
 
-  const GAUGE_STROKE = 12;
-  const TEXT_VAL_Y = 86;
-
-  const arcPath = `M ${GAUGE_CX - MINI_GAUGE_R} ${GAUGE_CY}
-                   A ${MINI_GAUGE_R} ${MINI_GAUGE_RY} 0 0 1 ${GAUGE_CX + MINI_GAUGE_R} ${GAUGE_CY}`;
-
-  const rotationForValue = (v: number) => {
-    const clamped = Math.min(Math.max(v, 1), 5);
-    return -90 + ((clamped - 1) / 4) * 180;
-  };
-
-  const targetRotation = rotationForValue(val);
-
-  // ---- Needle animation (always sweep from 1 to new value on data change) ----
-  const [needleRotation, setNeedleRotation] = useState<number>(rotationForValue(1));
-  const rafRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (!Number.isFinite(data?.lsr)) return;
-
-    const startRot = rotationForValue(1);
-    const endRot = rotationForValue(data.lsr);
-
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-
-    // Reset to 1 immediately, then animate to target
-    setNeedleRotation(startRot);
-
-    const durationMs = 650;
-    const t0 = performance.now();
-    const easeOutCubic = (x: number) => 1 - Math.pow(1 - x, 3);
-
-    const tick = (now: number) => {
-      const p = Math.min(1, (now - t0) / durationMs);
-      const eased = easeOutCubic(p);
-      const cur = startRot + (endRot - startRot) * eased;
-      setNeedleRotation(cur);
-
-      if (p < 1) rafRef.current = requestAnimationFrame(tick);
-      else rafRef.current = null;
-    };
-
-    rafRef.current = requestAnimationFrame(tick);
-
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    };
-  }, [data?.lsr]);
-
-  const labelR = MINI_GAUGE_R + 14;
-
   return (
     <div className="glass-panel p-2 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 hover:border-[#dd9933]/50 transition-all relative overflow-hidden">
-      <div className="w-full flex justify-between items-center mb-1">
-        <span className="text-[11px] leading-tight text-gray-500 dark:text-gray-400 uppercase tracking-wider font-black ml-1">
-          {t.title}
-        </span>
-        <WorkspaceLink onClick={onNavigate} />
-      </div>
-
-      <div className="flex justify-center gap-1 mb-1">
-        <select
-          value={symbol}
-          onChange={e => setSymbol(e.target.value)}
-          className="bg-gray-100 dark:bg-tech-900 text-gray-800 dark:text-gray-200 text-[10px] font-bold rounded px-1.5 py-0.5 border border-transparent dark:border-tech-700 outline-none"
-        >
-          <option value="BTCUSDT">BTC</option>
-          <option value="ETHUSDT">ETH</option>
-          <option value="SOLUSDT">SOL</option>
-        </select>
-
-        <select
-          value={period}
-          onChange={e => setPeriod(e.target.value)}
-          className="bg-gray-100 dark:bg-tech-900 text-gray-800 dark:text-gray-200 text-[10px] font-bold rounded px-1.5 py-0.5 border border-transparent dark:border-tech-700 outline-none"
-        >
-          <option value="5m">5m</option>
-          <option value="1h">1h</option>
-          <option value="1D">1D</option>
-        </select>
-      </div>
-
-      <div className="flex-1 relative w-full flex justify-center items-center pb-1 overflow-visible">
-        <svg viewBox="0 0 200 110" className="w-full h-full overflow-visible" preserveAspectRatio="xMidYMax meet">
-          <defs>
-            <linearGradient id="lsrGradient" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor="#CD534B" />
-              <stop offset="50%" stopColor="#eab308" />
-              <stop offset="100%" stopColor="#548f3f" />
-            </linearGradient>
-          </defs>
-
-          {/* Background arc */}
-          <path
-            d={arcPath}
-            fill="none"
-            stroke="currentColor"
-            className="text-gray-200 dark:text-tech-700"
-            strokeWidth={GAUGE_STROKE}
-            strokeLinecap="round"
-          />
-
-          {/* Gradient arc */}
-          <path
-            d={arcPath}
-            fill="none"
-            stroke="url(#lsrGradient)"
-            strokeWidth={GAUGE_STROKE}
-            strokeLinecap="round"
-          />
-
-          {/* Scale labels (on top) */}
-          {[1, 2, 3, 4, 5].map(v => {
-            const angleDeg = 180 - ((v - 1) / 4) * 180;
-            const rad = (angleDeg * Math.PI) / 180;
-
-            let tx = GAUGE_CX + labelR * Math.cos(rad);
-            let ty = GAUGE_CY - labelR * Math.sin(rad) + 8;
-
-            const isLeft = v === 1;
-            const isRight = v === 5;
-
-            if (isLeft) tx += 3;
-            if (isRight) tx -= 3;
-
-            const anchor: 'start' | 'middle' | 'end' = isLeft ? 'start' : isRight ? 'end' : 'middle';
-
-            return (
-              <text
-                key={v}
-                x={tx}
-                y={ty}
-                textAnchor={anchor}
-                dominantBaseline="middle"
-                fill="currentColor"
-                className="text-gray-500 font-black"
-                fontSize="8"
-                paintOrder="stroke"
-                stroke="rgba(0,0,0,0.35)"
-                strokeWidth="2"
-              >
-                {v}
-              </text>
-            );
-          })}
-
-          {/* Needle (animated rotation state) */}
-          <g transform={`rotate(${needleRotation} ${GAUGE_CX} ${GAUGE_CY})`}>
-            <path
-              d={`M ${GAUGE_CX} ${GAUGE_CY} L ${GAUGE_CX} ${GAUGE_CY - MINI_GAUGE_RY + 4}`}
-              stroke="var(--color-text-main)"
-              strokeWidth="4"
-              strokeLinecap="round"
-            />
-            <circle cx={GAUGE_CX} cy={GAUGE_CY} r="5" fill="var(--color-text-main)" />
-          </g>
-
-          {/* Value */}
-          <text
-            x={GAUGE_CX}
-            y={TEXT_VAL_Y}
-            textAnchor="middle"
-            fill="var(--color-gauge-val)"
-            fontSize="22"
-            fontWeight="900"
-            fontFamily="monospace"
-          >
-            {Number.isFinite(val) ? val.toFixed(2) : '--'}
-          </text>
-        </svg>
-      </div>
-
-      <div className="flex justify-between px-2 pt-1 border-t border-tech-700/50 mt-1">
-        <div className="text-center">
-          <div className="text-[10px] text-gray-500 font-black uppercase tracking-tighter">Shorts</div>
-          <div className="text-s font-mono font-black text-tech-danger">
-            {data?.shorts != null ? `${data.shorts.toFixed(1)}%` : '--'}
-          </div>
+        <div className="w-full flex justify-between items-center mb-1">
+            <span className="text-[11px] leading-tight text-gray-500 dark:text-gray-400 uppercase tracking-wider font-black ml-1">{t.title}</span>
+            <WorkspaceLink onClick={onNavigate} />
         </div>
-
-        <div className="text-center">
-          <div className="text-[10px] text-gray-500 font-black uppercase tracking-tighter">Longs</div>
-          <div className="text-s font-mono font-black text-tech-success">
-            {data?.longs != null ? `${data.longs.toFixed(1)}%` : '--'}
-          </div>
+        <div className="flex justify-center gap-1 mb-1">
+            <select value={symbol} onChange={e => setSymbol(e.target.value)} className="bg-gray-100 dark:bg-tech-900 text-gray-800 dark:text-gray-200 text-[10px] font-bold rounded px-1.5 py-0.5 border border-transparent dark:border-tech-700 outline-none">
+                <option value="BTCUSDT">BTC</option><option value="ETHUSDT">ETH</option><option value="SOLUSDT">SOL</option>
+            </select>
+            <select value={period} onChange={e => setPeriod(e.target.value)} className="bg-gray-100 dark:bg-tech-900 text-gray-800 dark:text-gray-200 text-[10px] font-bold rounded px-1.5 py-0.5 border border-transparent dark:border-tech-700 outline-none">
+                <option value="5m">5m</option><option value="1h">1h</option><option value="1D">1D</option>
+            </select>
         </div>
-      </div>
+        <div className="flex-1 relative w-full flex justify-center items-center pb-1 overflow-visible">
+            <svg viewBox="0 0 200 110" className="w-full h-full overflow-visible" preserveAspectRatio="xMidYMax meet">
+                <defs><linearGradient id="lsrGradient" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#CD534B" /><stop offset="50%" stopColor="#eab308" /><stop offset="100%" stopColor="#548f3f" /></linearGradient></defs>
+                <path d={`M ${GAUGE_CX-MINI_GAUGE_R} ${GAUGE_CY} A ${MINI_GAUGE_R} ${MINI_GAUGE_RY} 0 0 1 ${GAUGE_CX+GAUGE_R} ${GAUGE_CY}`} fill="none" stroke="currentColor" className="text-gray-200 dark:text-tech-700" strokeWidth={GAUGE_STROKE} strokeLinecap="round" />
+                
+                {[1, 2, 3, 4, 5].map(v => {
+                    const angle = ((v - 1) / 4) * 180;
+                    const rad = (angle - 180) * (Math.PI / 180);
+                    const tx = GAUGE_CX + (MINI_GAUGE_R + 10) * Math.cos(rad);
+                    const ty = GAUGE_CY + (MINI_GAUGE_R + 10) * Math.sin(rad);
+                    return (
+                        <text key={v} x={tx} y={ty} textAnchor="middle" fill="currentColor" className="text-gray-500 font-black" fontSize="8">{v}</text>
+                    );
+                })}
+
+                <path d={`M ${GAUGE_CX-MINI_GAUGE_R} ${GAUGE_CY} A ${MINI_GAUGE_R} ${MINI_GAUGE_RY} 0 0 1 ${GAUGE_CX+GAUGE_R} ${GAUGE_CY}`} fill="none" stroke="url(#lsrGradient)" strokeWidth={GAUGE_STROKE} strokeLinecap="round" />
+                
+                <g transform={`rotate(${rotation} ${GAUGE_CX} ${GAUGE_CY})`}>
+                    <path d={`M ${GAUGE_CX} ${GAUGE_CY} L ${GAUGE_CX} ${GAUGE_CY - MINI_GAUGE_RY + 2}`} stroke="var(--color-text-main)" strokeWidth="4" strokeLinecap="round" />
+                    <circle cx={GAUGE_CX} cy={GAUGE_CY} r="5" fill="var(--color-text-main)" />
+                </g>
+                <text x={GAUGE_CX} y={TEXT_VAL_Y - 3} textAnchor="middle" fill="var(--color-gauge-val)" fontSize="22" fontWeight="900" fontFamily="monospace">{val.toFixed(2)}</text>
+            </svg>
+        </div>
+        <div className="flex justify-between px-2 pt-1 border-t border-tech-700/50 mt-1">
+            <div className="text-center">
+                <div className="text-[10px] text-gray-500 font-black uppercase tracking-tighter">Shorts</div>
+                <div className="text-s font-mono font-black text-tech-danger">{data?.shorts ? `${data.shorts.toFixed(1)}%` : '--'}</div>
+            </div>
+            <div className="text-center">
+                <div className="text-[10px] text-gray-500 font-black uppercase tracking-tighter">Longs</div>
+                <div className="text-s font-mono font-black text-tech-success">{data?.longs ? `${data.longs.toFixed(1)}%` : '--'}</div>
+            </div>
+        </div>
     </div>
   );
 };
