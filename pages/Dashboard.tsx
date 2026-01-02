@@ -280,60 +280,202 @@ const LongShortRatioWidget = ({ language, onNavigate }: { language: Language; on
   }, [symbol, period]);
 
   const val = data?.lsr ?? 1;
-  const clampedVal = Math.min(Math.max(val, 1), 5);
-  const rotation = -90 + ((clampedVal - 1) / 4) * 180;
+
+  // ---- Mini gauge geometry ----
+  const GAUGE_CX = 100;
+  const GAUGE_CY = 100;
 
   const MINI_GAUGE_R = 55;
   const MINI_GAUGE_RY = 55;
 
+  const GAUGE_STROKE = 12;
+  const TEXT_VAL_Y = 86;
+
+  const arcPath = `M ${GAUGE_CX - MINI_GAUGE_R} ${GAUGE_CY}
+                   A ${MINI_GAUGE_R} ${MINI_GAUGE_RY} 0 0 1 ${GAUGE_CX + MINI_GAUGE_R} ${GAUGE_CY}`;
+
+  const rotationForValue = (v: number) => {
+    const clamped = Math.min(Math.max(v, 1), 5);
+    return -90 + ((clamped - 1) / 4) * 180;
+  };
+
+  const targetRotation = rotationForValue(val);
+
+  // ---- Needle animation (always sweep from 1 to new value on data change) ----
+  const [needleRotation, setNeedleRotation] = useState<number>(rotationForValue(1));
+  const rafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!Number.isFinite(data?.lsr)) return;
+
+    const startRot = rotationForValue(1);
+    const endRot = rotationForValue(data.lsr);
+
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+
+    // Reset to 1 immediately, then animate to target
+    setNeedleRotation(startRot);
+
+    const durationMs = 650;
+    const t0 = performance.now();
+    const easeOutCubic = (x: number) => 1 - Math.pow(1 - x, 3);
+
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - t0) / durationMs);
+      const eased = easeOutCubic(p);
+      const cur = startRot + (endRot - startRot) * eased;
+      setNeedleRotation(cur);
+
+      if (p < 1) rafRef.current = requestAnimationFrame(tick);
+      else rafRef.current = null;
+    };
+
+    rafRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    };
+  }, [data?.lsr]);
+
+  const labelR = MINI_GAUGE_R + 14;
+
   return (
     <div className="glass-panel p-2 rounded-xl flex flex-col h-full bg-tech-800 border-tech-700 hover:border-[#dd9933]/50 transition-all relative overflow-hidden">
-        <div className="w-full flex justify-between items-center mb-1">
-            <span className="text-[11px] leading-tight text-gray-500 dark:text-gray-400 uppercase tracking-wider font-black ml-1">{t.title}</span>
-            <WorkspaceLink onClick={onNavigate} />
-        </div>
-        <div className="flex justify-center gap-1 mb-1">
-            <select value={symbol} onChange={e => setSymbol(e.target.value)} className="bg-gray-100 dark:bg-tech-900 text-gray-800 dark:text-gray-200 text-[10px] font-bold rounded px-1.5 py-0.5 border border-transparent dark:border-tech-700 outline-none">
-                <option value="BTCUSDT">BTC</option><option value="ETHUSDT">ETH</option><option value="SOLUSDT">SOL</option>
-            </select>
-            <select value={period} onChange={e => setPeriod(e.target.value)} className="bg-gray-100 dark:bg-tech-900 text-gray-800 dark:text-gray-200 text-[10px] font-bold rounded px-1.5 py-0.5 border border-transparent dark:border-tech-700 outline-none">
-                <option value="5m">5m</option><option value="1h">1h</option><option value="1D">1D</option>
-            </select>
-        </div>
-        <div className="flex-1 relative w-full flex justify-center items-center pb-1 overflow-visible">
-            <svg viewBox="0 0 200 110" className="w-full h-full overflow-visible" preserveAspectRatio="xMidYMax meet">
-                <defs><linearGradient id="lsrGradient" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#CD534B" /><stop offset="50%" stopColor="#eab308" /><stop offset="100%" stopColor="#548f3f" /></linearGradient></defs>
-                <path d={`M ${GAUGE_CX-MINI_GAUGE_R} ${GAUGE_CY} A ${MINI_GAUGE_R} ${MINI_GAUGE_RY} 0 0 1 ${GAUGE_CX+GAUGE_R} ${GAUGE_CY}`} fill="none" stroke="currentColor" className="text-gray-200 dark:text-tech-700" strokeWidth={GAUGE_STROKE} strokeLinecap="round" />
-                
-                {[1, 2, 3, 4, 5].map(v => {
-                    const angle = ((v - 1) / 4) * 180;
-                    const rad = (angle - 180) * (Math.PI / 180);
-                    const tx = GAUGE_CX + (MINI_GAUGE_R + 10) * Math.cos(rad);
-                    const ty = GAUGE_CY + (MINI_GAUGE_R + 10) * Math.sin(rad);
-                    return (
-                        <text key={v} x={tx} y={ty} textAnchor="middle" fill="currentColor" className="text-gray-500 font-black" fontSize="8">{v}</text>
-                    );
-                })}
+      <div className="w-full flex justify-between items-center mb-1">
+        <span className="text-[11px] leading-tight text-gray-500 dark:text-gray-400 uppercase tracking-wider font-black ml-1">
+          {t.title}
+        </span>
+        <WorkspaceLink onClick={onNavigate} />
+      </div>
 
-                <path d={`M ${GAUGE_CX-MINI_GAUGE_R} ${GAUGE_CY} A ${MINI_GAUGE_R} ${MINI_GAUGE_RY} 0 0 1 ${GAUGE_CX+GAUGE_R} ${GAUGE_CY}`} fill="none" stroke="url(#lsrGradient)" strokeWidth={GAUGE_STROKE} strokeLinecap="round" />
-                
-                <g transform={`rotate(${rotation} ${GAUGE_CX} ${GAUGE_CY})`}>
-                    <path d={`M ${GAUGE_CX} ${GAUGE_CY} L ${GAUGE_CX} ${GAUGE_CY - MINI_GAUGE_RY + 2}`} stroke="var(--color-text-main)" strokeWidth="4" strokeLinecap="round" />
-                    <circle cx={GAUGE_CX} cy={GAUGE_CY} r="5" fill="var(--color-text-main)" />
-                </g>
-                <text x={GAUGE_CX} y={TEXT_VAL_Y - 3} textAnchor="middle" fill="var(--color-gauge-val)" fontSize="22" fontWeight="900" fontFamily="monospace">{val.toFixed(2)}</text>
-            </svg>
+      <div className="flex justify-center gap-1 mb-1">
+        <select
+          value={symbol}
+          onChange={e => setSymbol(e.target.value)}
+          className="bg-gray-100 dark:bg-tech-900 text-gray-800 dark:text-gray-200 text-[10px] font-bold rounded px-1.5 py-0.5 border border-transparent dark:border-tech-700 outline-none"
+        >
+          <option value="BTCUSDT">BTC</option>
+          <option value="ETHUSDT">ETH</option>
+          <option value="SOLUSDT">SOL</option>
+        </select>
+
+        <select
+          value={period}
+          onChange={e => setPeriod(e.target.value)}
+          className="bg-gray-100 dark:bg-tech-900 text-gray-800 dark:text-gray-200 text-[10px] font-bold rounded px-1.5 py-0.5 border border-transparent dark:border-tech-700 outline-none"
+        >
+          <option value="5m">5m</option>
+          <option value="1h">1h</option>
+          <option value="1D">1D</option>
+        </select>
+      </div>
+
+      <div className="flex-1 relative w-full flex justify-center items-center pb-1 overflow-visible">
+        <svg viewBox="0 0 200 110" className="w-full h-full overflow-visible" preserveAspectRatio="xMidYMax meet">
+          <defs>
+            <linearGradient id="lsrGradient" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="#CD534B" />
+              <stop offset="50%" stopColor="#eab308" />
+              <stop offset="100%" stopColor="#548f3f" />
+            </linearGradient>
+          </defs>
+
+          {/* Background arc */}
+          <path
+            d={arcPath}
+            fill="none"
+            stroke="currentColor"
+            className="text-gray-200 dark:text-tech-700"
+            strokeWidth={GAUGE_STROKE}
+            strokeLinecap="round"
+          />
+
+          {/* Gradient arc */}
+          <path
+            d={arcPath}
+            fill="none"
+            stroke="url(#lsrGradient)"
+            strokeWidth={GAUGE_STROKE}
+            strokeLinecap="round"
+          />
+
+          {/* Scale labels (on top) */}
+          {[1, 2, 3, 4, 5].map(v => {
+            const angleDeg = 180 - ((v - 1) / 4) * 180;
+            const rad = (angleDeg * Math.PI) / 180;
+
+            let tx = GAUGE_CX + labelR * Math.cos(rad);
+            let ty = GAUGE_CY - labelR * Math.sin(rad) + 8;
+
+            const isLeft = v === 1;
+            const isRight = v === 5;
+
+            if (isLeft) tx += 3;
+            if (isRight) tx -= 3;
+
+            const anchor: 'start' | 'middle' | 'end' = isLeft ? 'start' : isRight ? 'end' : 'middle';
+
+            return (
+              <text
+                key={v}
+                x={tx}
+                y={ty}
+                textAnchor={anchor}
+                dominantBaseline="middle"
+                fill="currentColor"
+                className="text-gray-500 font-black"
+                fontSize="8"
+                paintOrder="stroke"
+                stroke="rgba(0,0,0,0.35)"
+                strokeWidth="2"
+              >
+                {v}
+              </text>
+            );
+          })}
+
+          {/* Needle (animated rotation state) */}
+          <g transform={`rotate(${needleRotation} ${GAUGE_CX} ${GAUGE_CY})`}>
+            <path
+              d={`M ${GAUGE_CX} ${GAUGE_CY} L ${GAUGE_CX} ${GAUGE_CY - MINI_GAUGE_RY + 4}`}
+              stroke="var(--color-text-main)"
+              strokeWidth="4"
+              strokeLinecap="round"
+            />
+            <circle cx={GAUGE_CX} cy={GAUGE_CY} r="5" fill="var(--color-text-main)" />
+          </g>
+
+          {/* Value */}
+          <text
+            x={GAUGE_CX}
+            y={TEXT_VAL_Y}
+            textAnchor="middle"
+            fill="var(--color-gauge-val)"
+            fontSize="22"
+            fontWeight="900"
+            fontFamily="monospace"
+          >
+            {Number.isFinite(val) ? val.toFixed(2) : '--'}
+          </text>
+        </svg>
+      </div>
+
+      <div className="flex justify-between px-2 pt-1 border-t border-tech-700/50 mt-1">
+        <div className="text-center">
+          <div className="text-[10px] text-gray-500 font-black uppercase tracking-tighter">Shorts</div>
+          <div className="text-s font-mono font-black text-tech-danger">
+            {data?.shorts != null ? `${data.shorts.toFixed(1)}%` : '--'}
+          </div>
         </div>
-        <div className="flex justify-between px-2 pt-1 border-t border-tech-700/50 mt-1">
-            <div className="text-center">
-                <div className="text-[10px] text-gray-500 font-black uppercase tracking-tighter">Shorts</div>
-                <div className="text-s font-mono font-black text-tech-danger">{data?.shorts ? `${data.shorts.toFixed(1)}%` : '--'}</div>
-            </div>
-            <div className="text-center">
-                <div className="text-[10px] text-gray-500 font-black uppercase tracking-tighter">Longs</div>
-                <div className="text-s font-mono font-black text-tech-success">{data?.longs ? `${data.longs.toFixed(1)}%` : '--'}</div>
-            </div>
+
+        <div className="text-center">
+          <div className="text-[10px] text-gray-500 font-black uppercase tracking-tighter">Longs</div>
+          <div className="text-s font-mono font-black text-tech-success">
+            {data?.longs != null ? `${data.longs.toFixed(1)}%` : '--'}
+          </div>
         </div>
+      </div>
     </div>
   );
 };
@@ -366,9 +508,23 @@ const AltSeasonWidget = ({ language, onNavigate, theme }: { language: Language; 
       </div>
       <div className="relative flex-1 bg-white/50 dark:bg-black/40 rounded-lg mb-1 overflow-hidden min-h-[90px] w-full">
         <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data.history} margin={{top:5, right:5, left:5, bottom:5}}>
-                <Line type="monotone" dataKey="value" stroke={strokeColor} strokeWidth={1} dot={false} isAnimationActive={false} />
-            </LineChart>
+            <AreaChart data={data.history} margin={{top:5, right:5, left:5, bottom:5}}>
+                <defs>
+                    <linearGradient id="colorAltSeason" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={strokeColor} stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor={strokeColor} stopOpacity={0}/>
+                    </linearGradient>
+                </defs>
+                <Area 
+                    type="monotone" 
+                    dataKey="value" 
+                    stroke={strokeColor} 
+                    fill="url(#colorAltSeason)" 
+                    strokeWidth={1} 
+                    dot={false} 
+                    isAnimationActive={false} 
+                />
+            </AreaChart>
         </ResponsiveContainer>
       </div>
       <HorizontalHistoryRow labels={[t.yesterday, t.week, t.month]} data={[data.yesterday ?? '-', data.lastWeek ?? '-', data.lastMonth ?? '-']} />
@@ -540,7 +696,7 @@ const EtfFlowWidget = ({ language, onNavigate, theme }: { language: Language; on
       {/* headline: abaixo do título e acima do gráfico */}
       <div className="px-1 mb-2">
         <div className="text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">
-          BTC netflow (último dia)
+          BTC netflow
         </div>
         <div className="text-xl font-black font-mono leading-none text-gray-900 dark:text-gray-100">
           {btcHeadline}
@@ -566,7 +722,7 @@ const EtfFlowWidget = ({ language, onNavigate, theme }: { language: Language; on
       <div className="flex justify-between items-center pt-2 mt-2 border-t border-tech-700/50 px-1">
         <div className="flex flex-col">
           <div className="text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">
-            ETH netflow (último)
+            ETH netflow
           </div>
           <div className="text-sm font-black font-mono text-gray-700 dark:text-gray-200">
             {ethFooter}
@@ -575,7 +731,7 @@ const EtfFlowWidget = ({ language, onNavigate, theme }: { language: Language; on
 
         <div className="flex flex-col text-right">
           <div className="text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">
-            NetFlow Total (USD)
+            NetFlow (USD)
           </div>
           <div className="text-sm font-black font-mono text-gray-700 dark:text-gray-200">
             {usdFooter}
