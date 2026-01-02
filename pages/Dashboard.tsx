@@ -190,7 +190,7 @@ const FearAndGreedWidget = ({ language, onNavigate }: { language: Language; onNa
         <div className="flex-1 flex items-center justify-center text-xs text-gray-500 animate-pulse">Loading...</div>
       ) : (
         <>
-           <div className="flex-1 relative w-full flex justify-center items-center pb-1 mt-4">
+           <div className="flex-1 min-h-0 relative w-full flex justify-center items-center py-2">
              <svg viewBox="0 0 200 135" className="w-full h-full overflow-visible" preserveAspectRatio="xMidYMax meet">
                <defs>
                  <linearGradient id="fngGradient" x1="0" y1="0" x2="1" y2="0">
@@ -250,7 +250,7 @@ const RsiWidget = ({ language, onNavigate }: { language: Language; onNavigate: (
     }
   };
 
-  // busca inicial + refresh periódico (se teu /cachecko atualizar, o ponteiro acompanha)
+  // busca inicial + refresh periódico
   useEffect(() => {
     setLoading(true);
     refresh();
@@ -289,7 +289,7 @@ const RsiWidget = ({ language, onNavigate }: { language: Language; onNavigate: (
     if (loading) return;
     const id = window.setInterval(() => {
       const base = targetRef.current;
-      const amp = Math.max(0.2, base * 0.01); // 1% (com mínimo pra não ficar “morto” em valores baixos)
+      const amp = Math.max(0.2, base * 0.01);
       const offset = (Math.random() * 2 - 1) * amp;
       setJitter(offset);
     }, 650);
@@ -301,7 +301,7 @@ const RsiWidget = ({ language, onNavigate }: { language: Language; onNavigate: (
   const rotation = toRotation(needleVal);
 
   return (
-    <div className="glass-panel p-2 rounded-xl flex flex-col h-full relative overflow-hidden bg-tech-800 border-tech-700 hover:border-[#dd9933]/50 transition-all">
+    <div className="glass-panel p-2 pt-7 rounded-xl flex flex-col h-full relative overflow-hidden bg-tech-800 border-tech-700 hover:border-[#dd9933]/50 transition-all">
       <div className="flex justify-between items-start absolute top-2 left-2 right-2 z-10">
         <span className="text-[11px] leading-tight text-gray-500 dark:text-gray-400 font-black uppercase tracking-wider truncate">
           {t.title}
@@ -313,7 +313,8 @@ const RsiWidget = ({ language, onNavigate }: { language: Language; onNavigate: (
         <div className="flex-1 flex items-center justify-center text-xs text-gray-500 animate-pulse">Loading...</div>
       ) : (
         <>
-          <div className="flex-1 relative w-full flex justify-center items-center pb-1 mt-4">
+          {/* 🔥 AJUSTE: centraliza melhor no card, sem empurrar pra baixo */}
+          <div className="flex-1 min-h-0 relative w-full flex justify-center items-center py-2 -translate-y-1">
             <svg viewBox="0 0 200 125" className="w-full h-full overflow-visible" preserveAspectRatio="xMidYMax meet">
               <defs>
                 <linearGradient id="rsiGradient" x1="0" y1="0" x2="1" y2="0">
@@ -806,15 +807,15 @@ const TrumpOMeterWidget = ({ language, onNavigate }: { language: Language; onNav
     
     const score = data.trump_rank_50 || 0;
     const percent = ((score + 50) / 100) * 100;
-    const impactColor = percent > 60 ? '#009E4F' : percent < 40 ? '#E03A3E' : '#dd9933';
+    const impactColor = percent > 60 ? '#548f3f' : percent < 40 ? '#CD534B' : '#dd9933';
     const ticks = [-50, -30, -15, 0, 15, 30, 50];
 
     const getTickColor = (tick: number) => {
-        if (tick <= -30) return '#E03A3E';
-        if (tick < 0) return '#eda05d';
-        if (tick === 0) return '#FFD700';
-        if (tick <= 30) return '#a4bd29';
-        return '#009E4F';
+        if (tick <= -30) return '#CD534B'; 
+        if (tick < 0) return '#e5987d'; 
+        if (tick === 0) return '#dd9933';
+        if (tick <= 30) return '#a9b86d'; 
+        return '#548f3f';
     };
 
     return (
@@ -824,7 +825,7 @@ const TrumpOMeterWidget = ({ language, onNavigate }: { language: Language; onNav
                 <WorkspaceLink onClick={onNavigate} />
             </div>
             <div className="flex-1 flex flex-col justify-center px-2 w-full">
-                <div className="relative h-2 w-full rounded-full bg-gradient-to-r from-[#E03A3E] via-yellow-500 to-[#009E4F] mt-4">
+                <div className="relative h-2 w-full rounded-full bg-gradient-to-r from-[#CD534B] via-[#dd9933] to-[#548f3f] mt-4">
                     <div className="absolute top-[-8px] transition-all duration-700 ease-out z-20" style={{ left: `calc(${percent}% - 6px)` }}>
                         <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[10px] border-t-gray-800 dark:border-t-white drop-shadow-md"></div>
                     </div>
@@ -886,7 +887,7 @@ const LiveCoinRow: React.FC<{ coin: any; color: string }> = ({ coin, color }) =>
             <div className="flex items-center gap-3">
                 <img src={coin.image} className="w-7 h-7 rounded-full bg-white p-0.5 border border-gray-100 dark:border-transparent" alt="" />
                 <div className="flex flex-col">
-                    <span className="text-lg font-black text-gray-900 dark:text-white leading-none group-hover:text-tech-accent transition-colors">
+                    <span className="text-lg font-bold text-gray-900 dark:text-white leading-none group-hover:text-tech-accent transition-colors">
                         {coin.symbol?.toUpperCase()}
                     </span>
                     <span className="text-[11px] text-gray-500 font-mono font-bold">
@@ -894,7 +895,7 @@ const LiveCoinRow: React.FC<{ coin: any; color: string }> = ({ coin, color }) =>
                     </span>
                 </div>
             </div>
-            <div className={`text-lg font-black font-mono transition-colors duration-500 ${color}`}>
+            <div className={`text-lg font-bold font-mono transition-colors duration-500 ${color}`}>
                 {displayPercent > 0 ? '+' : ''}{displayPercent.toFixed(2)}%
             </div>
         </div>
@@ -920,13 +921,13 @@ const GainersLosersWidget = ({ language, onNavigate }: { language: Language; onN
             <div className="flex bg-gray-100 dark:bg-tech-900 rounded p-1 mb-2 border border-transparent dark:border-tech-700 w-full">
                 <button 
                     onClick={() => setTab('gainers')} 
-                    className={`flex-1 py-1 text-sm font-black uppercase rounded transition-all ${tab === 'gainers' ? 'bg-tech-success text-white shadow' : 'text-gray-500'}`}
+                    className={`flex-1 py-1 text-sm font-bold uppercase rounded transition-all ${tab === 'gainers' ? 'bg-tech-success text-white shadow' : 'text-gray-500'}`}
                 >
                     Gainers
                 </button>
                 <button 
                     onClick={() => setTab('losers')} 
-                    className={`flex-1 py-1 text-sm font-black uppercase rounded transition-all ${tab === 'losers' ? 'bg-tech-danger text-white shadow' : 'text-gray-500'}`}
+                    className={`flex-1 py-1 text-sm font-bold uppercase rounded transition-all ${tab === 'losers' ? 'bg-tech-danger text-white shadow' : 'text-gray-500'}`}
                 >
                     Losers
                 </button>
@@ -964,11 +965,11 @@ const MarketCapWidget = ({ language, onNavigate }: { language: Language; onNavig
                     <div key={i} className="flex items-center justify-between px-2 py-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded transition-colors group">
                         <div className="flex items-center gap-3">
                             <img src={coin.image} className="w-7 h-7 rounded-full bg-white p-0.5 border border-gray-100 dark:border-transparent" alt="" />
-                            <div className="flex flex-col"><span className="text-lg font-black text-gray-900 dark:text-white leading-none group-hover:text-tech-accent">{coin.name}</span><span className="text-[11px] font-bold text-gray-500 uppercase">{coin.symbol}</span></div>
+                            <div className="flex flex-col"><span className="text-lg font-bold text-gray-900 dark:text-white leading-none group-hover:text-tech-accent">{coin.name}</span><span className="text-[11px] font-bold text-gray-500 uppercase">{coin.symbol}</span></div>
                         </div>
                         <div className="text-right">
-                            <div className="text-lg font-black text-gray-900 dark:text-white font-mono leading-none">${(coin.current_price ?? 0).toLocaleString()}</div>
-                            <div className={`text-[11px] font-black font-mono ${(coin.price_change_percentage_24h ?? 0) >= 0 ? 'text-tech-success' : 'text-tech-danger'}`}>{(coin.price_change_percentage_24h ?? 0).toFixed(2)}%</div>
+                            <div className="text-lg font-bold text-gray-900 dark:text-white font-mono leading-none">${(coin.current_price ?? 0).toLocaleString()}</div>
+                            <div className={`text-[11px] font-bold font-mono ${(coin.price_change_percentage_24h ?? 0) >= 0 ? 'text-tech-success' : 'text-tech-danger'}`}>{(coin.price_change_percentage_24h ?? 0).toFixed(2)}%</div>
                         </div>
                     </div>
                 ))}
@@ -1032,7 +1033,7 @@ const EconomicCalendarWidget = ({ language, onNavigate }: { language: Language; 
                     <select 
                         value={dateFilter} 
                         onChange={(e) => setDateFilter(e.target.value as any)}
-                        className="bg-gray-100 dark:bg-tech-900 text-gray-700 dark:text-gray-300 text-[10px] font-black uppercase rounded px-2 py-1 outline-none border border-transparent dark:border-tech-700"
+                        className="bg-gray-100 dark:bg-tech-900 text-gray-700 dark:text-gray-300 text-[10px] font-bold uppercase rounded px-2 py-1 outline-none border border-transparent dark:border-tech-700"
                     >
                         <option value="ALL">{language === 'en' ? 'ALL' : 'TODOS'}</option>
                         <option value="YESTERDAY">{t.yesterday || 'ONTEM'}</option>
@@ -1042,13 +1043,13 @@ const EconomicCalendarWidget = ({ language, onNavigate }: { language: Language; 
                     <div className="flex items-center gap-1.5 border-l border-gray-200 dark:border-tech-700 pl-3">
                         <button onClick={() => setFilter('BRL')} className={`transition-all ${filter==='BRL'?'ring-2 ring-[#dd9933] rounded-full':'opacity-40 grayscale'}`}><img src={getFlag('BRL')} className="w-5 h-5 rounded-full" /></button>
                         <button onClick={() => setFilter('USD')} className={`transition-all ${filter==='USD'?'ring-2 ring-[#dd9933] rounded-full':'opacity-40 grayscale'}`}><img src={getFlag('USD')} className="w-5 h-5 rounded-full" /></button>
-                        <button onClick={() => setFilter('ALL')} className={`text-[10px] font-black uppercase ${filter==='ALL'?'text-[#dd9933]':'text-gray-500'}`}>ALL</button>
+                        <button onClick={() => setFilter('ALL')} className={`text-[10px] font-bold uppercase ${filter==='ALL'?'text-[#dd9933]':'text-gray-500'}`}>ALL</button>
                     </div>
                     <WorkspaceLink onClick={onNavigate} />
                 </div>
             </div>
             
-            <div className="grid grid-cols-[100px_2px_1fr_180px] gap-3 px-2 py-1 mb-1 border-b border-gray-200 dark:border-white/10 text-[9px] font-black text-gray-500 uppercase tracking-widest w-full">
+            <div className="grid grid-cols-[100px_2px_1fr_180px] gap-3 px-2 py-1 mb-1 border-b border-gray-200 dark:border-white/10 text-[9px] font-bold text-gray-500 uppercase tracking-widest w-full">
                 <span>Data/Hora</span><span></span><span>Evento</span>
                 <div className="grid grid-cols-3 gap-2 text-right">
                     <span>{t.previous}</span><span>{t.forecast}</span><span>{t.actual}</span>
@@ -1067,7 +1068,7 @@ const EconomicCalendarWidget = ({ language, onNavigate }: { language: Language; 
                             <div className={`w-1 h-8 rounded-full shrink-0 ${getImpactColor(e.impact)}`} />
                             <div className="flex-1 flex items-center gap-2 min-w-0">
                                 <img src={getFlag(e.country)} className="w-4 h-4 rounded-full shadow-sm" />
-                                <span className="text-base font-black text-gray-800 dark:text-gray-200 truncate leading-none group-hover:text-[#dd9933] transition-colors uppercase">{e.title}</span>
+                                <span className="text-base font-bold text-gray-800 dark:text-gray-200 truncate leading-none group-hover:text-[#dd9933] transition-colors uppercase">{e.title}</span>
                             </div>
                             <div className="w-[180px] grid grid-cols-3 gap-2 shrink-0 text-right">
                                 <span className="text-sm font-mono font-bold text-gray-500">{e.previous || '--'}</span>
