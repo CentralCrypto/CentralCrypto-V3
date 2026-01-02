@@ -858,8 +858,19 @@ const GainersLosersWidget = ({ language, onNavigate }: { language: Language; onN
     useEffect(() => { 
         fetchWithFallback('/cachecko/top10gnl.json')
             .then(res => {
-                if (res && res.gainers && res.losers) {
-                    setData(res);
+                const dataRoot = res?.[0];
+                if (dataRoot && Array.isArray(dataRoot.gainers) && Array.isArray(dataRoot.losers)) {
+                    const mapCoinData = (coin: any) => ({
+                        ...coin,
+                        current_price: coin.price,
+                        price_change_percentage_24h: coin.change,
+                        image: coin.logo,
+                    });
+
+                    setData({
+                        gainers: dataRoot.gainers.map(mapCoinData),
+                        losers: dataRoot.losers.map(mapCoinData),
+                    });
                 }
             })
             .catch(() => {}); 
@@ -913,7 +924,18 @@ const MarketCapWidget = ({ language, onNavigate }: { language: Language; onNavig
     const [list, setList] = useState<any[]>([]);
     useEffect(() => {
         fetchWithFallback('/cachecko/top10mktcap.json')
-            .then(data => setList(Array.isArray(data) ? data : []))
+            .then(data => {
+                const coinList = data?.[0]?.top_mktcap;
+                if (Array.isArray(coinList)) {
+                    const mappedList = coinList.map((coin: any) => ({
+                        ...coin,
+                        current_price: coin.price,
+                        price_change_percentage_24h: coin.change,
+                        image: coin.logo,
+                    }));
+                    setList(mappedList);
+                }
+            })
             .catch(() => {});
     }, []);
     return (
