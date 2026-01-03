@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Loader2, TrendingUp, TrendingDown, AlertTriangle, RefreshCw, ChevronsUpDown } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts';
@@ -16,8 +17,9 @@ const formatCompactNumber = (number: number) => {
   return shortValue + suffixes[suffixNum];
 };
 
-// Fix: Corrected function call on string `type()` to `type === 'gainers'` and improved prop type.
+// Fix: Updated type to accept 'gainers' | 'losers' for consistency.
 const TickerList: React.FC<{ tickers: ApiCoin[], type: 'gainers' | 'losers' }> = ({ tickers, type }) => {
+    // Fix: Updated logic to check for 'gainers'.
     const color = type === 'gainers' ? 'text-green-500' : 'text-red-500';
     return (
         <div className="flex flex-col gap-1.5">
