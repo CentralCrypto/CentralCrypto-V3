@@ -217,13 +217,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   );
 
-  const fetchJsonSafe = async (url: string) => {
-    const r = await fetch(url, { cache: 'no-store' });
-    if (!r.ok) throw new Error(`${url} -> ${r.status}`);
-    return r.json();
-  };
-
-  const load = useCallback(async () => {
+  const load = async () => {
     setLoading(true);
     try {
       const data = await fetchTopCoins();
@@ -233,16 +227,26 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  };
 
-  const loadCategoriesLocal = useCallback(async () => {
+  const fetchJsonSafe = async (url: string) => {
+    const r = await fetch(url, { cache: 'no-store' });
+    if (!r.ok) throw new Error(`${url} -> ${r.status}`);
+    return r.json();
+  };
+
+  const loadCategoriesLocal = async () => {
     if (catLoading) return;
     setCatLoading(true);
     setCatWarn('');
 
     try {
       const base = '/cachecko/categories';
-      const [taxonomyJson, listJson, marketJson] = await Promise.all([
+      const [
+        taxonomyJson,
+        listJson,
+        marketJson,
+      ] = await Promise.all([
         fetchJsonSafe(`${base}/taxonomy-master.json`).catch(() => null),
         fetchJsonSafe(`${base}/coingecko_categories_list.json`).catch(() => []),
         fetchJsonSafe(`${base}/coingecko_categories_market.json`).catch(() => []),
@@ -252,6 +256,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
       setCatList(Array.isArray(listJson) ? listJson : []);
       setCatMarket(Array.isArray(marketJson) ? marketJson : []);
 
+      // mapping é opcional (snapshot)
       const mapJson = await fetchJsonSafe(`${base}/category_coins_map.json`).catch(() => null);
 
       if (mapJson && typeof mapJson === 'object') {
@@ -259,23 +264,26 @@ const MarketCapTable = ({ language }: { language: Language }) => {
           ? (mapJson as any).categories
           : mapJson;
 
-        if (categories && typeof categories === 'object') setCatCoinMap(categories as Record<string, string[]>);
-        else setCatCoinMap(null);
+        if (categories && typeof categories === 'object') {
+          setCatCoinMap(categories as Record<string, string[]>);
+        } else {
+          setCatCoinMap(null);
+        }
       } else {
         setCatCoinMap(null);
         if (!catWarnDismissed) {
-          setCatWarn('Dados de categoria não indexados localmente (category_coins_map.json ausente). A lista funciona, mas o filtro por moedas pode ficar limitado.');
+          setCatWarn('Dados de categoria não indexados localmente (category_coins_map.json ausente). A lista de categorias funciona, mas o filtro por moedas pode ficar limitado.');
         }
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Categories load error', e);
       setCatWarn('Falha ao carregar categorias locais em /cachecko/categories/.');
     } finally {
       setCatLoading(false);
     }
-  }, [catLoading, catWarnDismissed]);
+  };
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, []);
 
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
@@ -286,9 +294,10 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     return () => document.removeEventListener('mousedown', onDocClick);
   }, []);
 
+  // ao entrar na view categories, carrega os JSONs locais
   useEffect(() => {
     if (viewMode === 'categories') loadCategoriesLocal();
-  }, [viewMode, loadCategoriesLocal]);
+  }, [viewMode]);
 
   const applyQuickSort = (mode: 'none' | 'gainers' | 'losers') => {
     setQuickSort(mode);
@@ -302,6 +311,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
       setSortConfig({ key: 'price_change_percentage_24h', direction: 'asc' });
       return;
     }
+
     setSortConfig({ key: 'market_cap_rank', direction: 'asc' });
   };
 
@@ -581,11 +591,15 @@ const MarketCapTable = ({ language }: { language: Language }) => {
       items = items.filter(c => c.name?.toLowerCase().includes(q) || c.symbol?.toLowerCase().includes(q));
     }
 
-    if (favOnly) items = items.filter(c => !!favorites[c.id]);
+    if (favOnly) {
+      items = items.filter(c => !!favorites[c.id]);
+    }
 
     if (activeCategoryId !== '__all__') {
       const setIds = categoryCoinIds.get(activeCategoryId);
-      if (setIds && setIds.size > 0) items = items.filter(c => setIds.has(String(c.id)));
+      if (setIds && setIds.size > 0) {
+        items = items.filter(c => setIds.has(String(c.id)));
+      }
     }
 
     const getVal = (c: ApiCoin, key: string) => {
@@ -651,7 +665,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
         <div className="flex items-center gap-2">
           <button
-            type="button"
             onClick={() => setPage(p => Math.max(0, p - 1))}
             disabled={safePage === 0}
             className={`px-2.5 py-2 rounded-lg border text-sm font-black transition-colors
@@ -669,7 +682,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
           </div>
 
           <button
-            type="button"
             onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
             disabled={safePage >= totalPages - 1}
             className={`px-2.5 py-2 rounded-lg border text-sm font-black transition-colors
@@ -711,6 +723,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     <ChevronsUpDown size={14} className={`text-gray-400 group-hover:text-tech-accent ${active ? 'text-tech-accent' : ''}`} />
   );
 
+  // Header: puxador sempre à esquerda, TEXTO SEMPRE CENTRALIZADO no espaço total da coluna
   const SortableTh = ({
     colId,
     label,
@@ -720,6 +733,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     colId: string;
     label: string;
     sortKey?: string;
+    align?: 'left' | 'center' | 'right';
     w: string;
   }) => {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useDndKitSortable({ id: colId });
@@ -736,6 +750,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
         className={`relative h-[54px] p-0 select-none group border-b border-gray-100 dark:border-slate-800 ${w}
           hover:bg-gray-100 dark:hover:bg-white/5 transition-colors text-center`}
       >
+        {/* Grip fixo à esquerda */}
         <span
           className="absolute left-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-7 h-7 rounded-md
             hover:bg-gray-200 dark:hover:bg-white/10 text-gray-400"
@@ -747,6 +762,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
           <GripVertical size={16} />
         </span>
 
+        {/* Botão ocupa toda a coluna e centraliza o texto */}
         <button
           type="button"
           className="w-full h-full inline-flex items-center justify-center gap-1 font-black uppercase tracking-widest text-xs
@@ -795,7 +811,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     const rows = visibleCategoryIds
       .map((id) => computeCategoryStats(id))
       .filter((r) => r && r.name)
-      .filter((r: any) => Number(r.coinsCount || 0) > 0);
+      .filter((r: any) => Number(r.coinsCount || 0) > 0); // <-- some categorias com 0 moedas
 
     const q = (searchTerm || '').toLowerCase().trim();
     const filtered = q
@@ -805,7 +821,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     filtered.sort((a, b) => (Number(b.marketCap || 0) - Number(a.marketCap || 0)));
 
     return (
-      <div style={{ overflowX: 'auto', overflowY: 'visible', maxHeight: 'none', height: 'auto' }}>
+      <div className="overflow-x-auto">
         {catLoading && filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-gray-500">
             <Loader2 className="animate-spin mb-2" size={32} />
@@ -844,12 +860,15 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                         setQuickSort('none');
                         setSortConfig({ key: 'market_cap', direction: 'desc' });
                       } else {
-                        if (!catWarnDismissed) setCatWarn('Sem snapshot/mapping local para aplicar filtro de moedas nessa categoria. Gere category_coins_map.json.');
+                        if (!catWarnDismissed) {
+                          setCatWarn('Sem snapshot/mapping local para aplicar filtro de moedas nessa categoria. Gere category_coins_map.json.');
+                        }
                       }
                     }}
                     title="Clique para filtrar a tabela principal"
                   >
                     <td className="p-3 w-[360px]">
+                      {/* Só o nome. SEM ID técnico embaixo. */}
                       <div className="flex flex-col min-w-0">
                         <span className="text-[14px] font-black text-gray-900 dark:text-white truncate">
                           {r.name}
@@ -857,8 +876,13 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                       </div>
                     </td>
 
-                    <td className="p-3 text-center w-[160px]"><CategoryRowLogos arr={r.gainers || []} /></td>
-                    <td className="p-3 text-center w-[160px]"><CategoryRowLogos arr={r.losers || []} /></td>
+                    <td className="p-3 text-center w-[160px]">
+                      <CategoryRowLogos arr={r.gainers || []} />
+                    </td>
+
+                    <td className="p-3 text-center w-[160px]">
+                      <CategoryRowLogos arr={r.losers || []} />
+                    </td>
 
                     <td className={`p-3 text-center font-mono text-[13px] font-black w-[90px] ${!isFinite(r.ch1h) ? 'text-gray-400 dark:text-slate-500' : (r.ch1h >= 0 ? 'text-green-500' : 'text-red-500')}`}>
                       {safePct(Number(r.ch1h))}
@@ -934,26 +958,24 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     );
   };
 
+  // helper pra dropdown ficar dark de verdade
   const darkSelectClass =
     "bg-white dark:bg-[#2f3032] border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-black " +
     "text-gray-800 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 outline-none";
 
-  const darkSelectStyle: React.CSSProperties = { colorScheme: 'dark' };
+  const darkSelectStyle: React.CSSProperties = {
+    // isso força o navegador a renderizar o dropdown nativo em dark quando o tema está dark
+    colorScheme: 'dark',
+  };
 
   return (
-    // 🔥 ROOT: não deixa a porra do componente virar scroll-container
-    <div
-      className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-100 dark:border-slate-800 shadow-xl"
-      style={{
-        overflow: 'visible',
-        maxHeight: 'none',
-        height: 'auto',
-      }}
-    >
+    <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-100 dark:border-slate-800 shadow-xl overflow-hidden flex flex-col">
+
       {/* Header */}
-      <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col gap-3 bg-gray-50/50 dark:bg-black/20">
+      <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col gap-3 bg-gray-50/50 dark:bg-black/20 shrink-0">
         <div className="flex flex-col lg:flex-row justify-between items-center gap-3">
-          {/* LEFT */}
+
+          {/* LEFT GROUP */}
           <div className="flex items-center gap-2 w-full lg:w-auto">
             <div className="relative w-full lg:w-[420px]">
               <Search size={18} className="absolute left-3 top-2.5 text-gray-500" />
@@ -988,6 +1010,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                     setQuickSort('none');
                   }}
                   className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 font-black hover:bg-gray-100 dark:hover:bg-white/5 transition-colors whitespace-nowrap"
+                  title="Abrir categorias"
                 >
                   Categorias
                 </button>
@@ -1000,6 +1023,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                       ? 'bg-[#dd9933] text-black border-transparent'
                       : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5'
                     }`}
+                  title="Ordenar por 24h% (maior → menor)"
                 >
                   Top Gainers
                 </button>
@@ -1012,6 +1036,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                       ? 'bg-[#dd9933] text-black border-transparent'
                       : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5'
                     }`}
+                  title="Ordenar por 24h% (menor → maior)"
                 >
                   Top Losers
                 </button>
@@ -1023,6 +1048,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                   onChange={(e) => setMasterKey(e.target.value)}
                   className={darkSelectClass}
                   style={darkSelectStyle}
+                  title="Master"
                 >
                   {masterOptions.map((o: any) => (
                     <option key={o.id} value={o.id} className="bg-[#2f3032] text-slate-200">
@@ -1037,6 +1063,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                     onChange={(e) => setSubKey(e.target.value)}
                     className={darkSelectClass}
                     style={darkSelectStyle}
+                    title="Subcategoria"
                   >
                     {subOptions.map((o: any) => (
                       <option key={o.id} value={o.id} className="bg-[#2f3032] text-slate-200">
@@ -1050,6 +1077,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                   type="button"
                   onClick={() => setViewMode('coins')}
                   className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 font-black hover:bg-gray-100 dark:hover:bg-white/5 transition-colors whitespace-nowrap"
+                  title="Voltar para Marketcap"
                 >
                   Voltar
                 </button>
@@ -1061,6 +1089,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                 type="button"
                 onClick={() => setActiveCategoryId('__all__')}
                 className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 font-black hover:bg-gray-100 dark:hover:bg-white/5 transition-colors whitespace-nowrap"
+                title="Limpar filtro de categoria"
               >
                 Limpar
               </button>
@@ -1069,9 +1098,9 @@ const MarketCapTable = ({ language }: { language: Language }) => {
             {/* BUY */}
             <div className="relative" ref={buyRef}>
               <button
-                type="button"
                 onClick={() => setBuyOpen(v => !v)}
                 className="px-3 py-2 rounded-lg bg-[#dd9933] text-black font-black hover:opacity-90 transition-opacity flex items-center gap-2 whitespace-nowrap"
+                title="BUY"
               >
                 BUY <ChevronDown size={16} />
               </button>
@@ -1092,7 +1121,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
             </div>
           </div>
 
-          {/* RIGHT */}
+          {/* RIGHT GROUP */}
           <div className="flex items-center gap-2 w-full lg:w-auto justify-end">
             <div className="flex items-center gap-2">
               <span className="text-xs font-black text-gray-500 dark:text-slate-400 uppercase tracking-widest">
@@ -1103,6 +1132,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                 onChange={(e) => setPageSize(parseInt(e.target.value, 10))}
                 className={darkSelectClass}
                 style={darkSelectStyle}
+                title="Quantidade por página"
               >
                 <option value={25} className="bg-[#2f3032] text-slate-200">25</option>
                 <option value={50} className="bg-[#2f3032] text-slate-200">50</option>
@@ -1113,9 +1143,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
             <Paginator compact />
 
-            {/* ✅ Refresh volta a funcionar */}
             <button
-              type="button"
               onClick={() => {
                 if (viewMode === 'categories') loadCategoriesLocal();
                 else load();
@@ -1148,8 +1176,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
       {viewMode === 'categories' ? (
         <CategoriesTable />
       ) : (
-        // 🔥 aqui: só horizontal, vertical SEMPRE visível
-        <div style={{ overflowX: 'auto', overflowY: 'visible', maxHeight: 'none', height: 'auto' }}>
+        <div className="overflow-x-auto">
           {loading && coins.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-gray-500">
               <Loader2 className="animate-spin mb-2" size={32} />
@@ -1175,6 +1202,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                             colId={c.id}
                             label={c.label}
                             sortKey={c.sortKey}
+                            align={c.align}
                             w={c.w}
                           />
                         );
@@ -1376,7 +1404,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
       )}
 
       {/* Footer */}
-      <div className="p-3 border-t border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-black/20">
+      <div className="p-3 border-t border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-black/20 shrink-0">
         <Paginator />
       </div>
     </div>
