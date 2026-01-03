@@ -1,7 +1,8 @@
 
+
 import React from 'react';
 
-// Define Layout manualmente to avoid type confusion with react-grid-layout exports
+// Define Layout manually to avoid type confusion with react-grid-layout exports
 export interface Layout {
   i: string;
   x: number;
@@ -66,6 +67,14 @@ export interface UserProfileData {
   description: string;
   avatar_url?: string;
   roles: string[];
+}
+
+// Fix: Add missing RsiAvgData interface export
+export interface RsiAvgData {
+  averageRsi: number;
+  yesterday: number;
+  days7Ago: number;
+  days30Ago: number;
 }
 
 // --- ACADEMY TYPES ---
