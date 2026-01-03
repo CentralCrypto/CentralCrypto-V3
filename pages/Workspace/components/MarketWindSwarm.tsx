@@ -75,6 +75,8 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   const [chartMode, setChartMode] = useState<ChartMode>('performance');
   const [trailLength, setTrailLength] = useState(10);
   
+  // Dimensions state to trigger re-renders on resize
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [chartVersion, setChartVersion] = useState(0);
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
   
@@ -91,6 +93,24 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   hoveredParticleRef.current = hoveredParticle;
   const selectedParticleRef = useRef(selectedParticle);
   selectedParticleRef.current = selectedParticle;
+
+  // Handle Resize - CRITICAL FIX FOR RESOLUTION
+  useEffect(() => {
+    const handleResize = () => {
+        if (containerRef.current && canvasRef.current) {
+            const { clientWidth, clientHeight } = containerRef.current;
+            // Set internal canvas resolution to match display size
+            canvasRef.current.width = clientWidth;
+            canvasRef.current.height = clientHeight;
+            setDimensions({ width: clientWidth, height: clientHeight });
+        }
+    };
+
+    window.addEventListener('resize', handleResize);
+    handleResize(); // Initial sizing
+
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Reset particles on mode switch
   useEffect(() => {
@@ -145,14 +165,13 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     const canvas = canvasRef.current;
     if (!canvas || coins.length === 0) return null;
     
+    // Use dimensions from state or canvas direct
     const { width, height } = canvas;
+    if (width === 0 || height === 0) return null; // Wait for resize
+
     const pad = 80;
 
     const topCoins = coins.slice(0, numCoins);
-    
-    // Configurações baseadas no modo selecionado
-    // Mode 'performance' (Default): Size=MktCap, X=Change, Y=Volume
-    // Mode 'valuation' (Var Preço): Size=Abs(Change), X=MktCap, Y=Volume
     
     let xData: number[], radiusData: number[];
     const yData = topCoins.map(p => p.total_volume || 1); // Y sempre Volume
@@ -171,13 +190,11 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     const minY = Math.min(...yData), maxY = Math.max(...yData);
     const minR = Math.min(...radiusData), maxR = Math.max(...radiusData);
     
-    // Log scales where appropriate
     const logMinX = (chartMode === 'valuation' && minX > 0) ? Math.log10(minX) : 0;
     const logMaxX = (chartMode === 'valuation' && maxX > 0) ? Math.log10(maxX) : 0;
     const logMinY = (minY > 0) ? Math.log10(minY) : 0;
     const logMaxY = (maxY > 0) ? Math.log10(maxY) : 0;
     
-    // Radius scaling needs to be logarithmic for Market Cap, Linear for Percent
     const logMinR = (chartMode === 'performance' && minR > 0) ? Math.log10(minR) : minR;
     const logMaxR = (chartMode === 'performance' && maxR > 0) ? Math.log10(maxR) : maxR;
 
@@ -186,12 +203,10 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
             if (v <= 0) return pad;
             return pad + (Math.log10(v) - logMinX) / (logMaxX - logMinX || 1) * (width - pad * 2);
         }
-        // Linear X for Performance (% change)
         return pad + (v - minX) / (maxX - minX || 1) * (width - pad * 2);
     };
     
     const baseMapY = (v: number) => {
-        // Log Y for Volume
         if (v <= 0) return height - pad;
         return height - pad - (Math.log10(v) - logMinY) / (logMaxY - logMinY || 1) * (height - pad * 2);
     };
@@ -202,16 +217,14 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     const mapRadius = (v: number) => {
         if (v <= 0) return 8;
         if (chartMode === 'performance') {
-            // Mkt Cap -> Log Radius
             return (8 + (Math.log10(v) - logMinR) / (logMaxR - logMinR || 1) * 42);
         } else {
-            // Change % -> Linear Radius (abs)
             return (8 + (v - minR) / (maxR - minR || 1) * 42);
         }
     };
     
     return { mapX, mapY, mapRadius, topCoins, minX, maxX, minY, maxY, pad, width, height };
-  }, [coins, numCoins, chartMode, chartVersion]);
+  }, [coins, numCoins, chartMode, chartVersion, dimensions]); // Added dimensions dependency
 
   // --- PARTICLE UPDATE ---
   useEffect(() => {
@@ -283,7 +296,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       }
     });
     particlesRef.current = newParticles;
-  }, [coins, numCoins, chartMode, chartVersion, calculateMappings]);
+  }, [coins, numCoins, chartMode, chartVersion, calculateMappings, dimensions]);
 
   // --- DRAW LOOP ---
   useEffect(() => {
@@ -332,7 +345,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
           
           // X-Axis
           if (chartMode === 'performance') {
-              // Linear Scale %
               for (let i = 0; i <= 10; i++) {
                 const val = minX + i * (maxX - minX) / 10;
                 const x = mappings.mapX(val);
@@ -342,7 +354,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
                 }
               }
           } else {
-              // Log Scale Market Cap
               for (let i = 0; i <= 5; i++) {
                 const val = Math.pow(10, Math.log10(minX) + i * (Math.log10(maxX) - Math.log10(minX)) / 5);
                 const x = mappings.mapX(val);
@@ -363,8 +374,8 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         particles.forEach(p => {
             // Update Position
             if (p.isReturning && p.animProgress < 1) {
-                // Slower lerp return as requested
-                p.animProgress = Math.min(1, p.animProgress + delta * 0.7); // Was 2.5, now 0.7 for smoother/slower return
+                // Slower lerp return as requested - Adjusted from 0.7 to 0.5 for smoother
+                p.animProgress = Math.min(1, p.animProgress + delta * 0.5); 
                 const easedProgress = easeOutCubic(p.animProgress);
                 p.x = lerp(p.startX, p.targetX, easedProgress);
                 p.y = lerp(p.startY, p.targetY, easedProgress);
@@ -372,12 +383,10 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
             } else if (isFreeMode) {
                 if (!p.isFixed) {
                     p.x += p.vx * delta; p.y += p.vy * delta;
-                    // Bouncing walls
                     if (p.x < p.radius || p.x > canvas.width - p.radius) p.vx *= -0.9;
                     if (p.y < p.radius || p.y > canvas.height - p.radius) p.vy *= -0.9;
                 }
             } else {
-                // Standard mode move to target
                 if (p.animProgress < 1) {
                     p.animProgress = Math.min(1, p.animProgress + delta * animSpeed);
                     const easedProgress = easeOutCubic(p.animProgress);
@@ -386,19 +395,16 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
                 } else {
                     p.x = p.targetX;
                     p.y = p.targetY;
-                    // Reset start for next animation if needed
                     p.startX = p.x; p.startY = p.y;
                 }
             }
 
-            // Update Trail
             p.trail.push({ x: p.x, y: p.y });
             while (p.trail.length > trailLength) { p.trail.shift(); }
             
             const isMatch = searchResultRef.current && p.id === searchResultRef.current.id;
             ctx.globalAlpha = (searchTerm && !isMatch) ? 0.05 : 1.0;
             
-            // Draw Trail
             if (p.trail.length > 1 && trailLength > 0) {
                 ctx.beginPath(); ctx.moveTo(p.trail[0].x, p.trail[0].y);
                 for (let i = 1; i < p.trail.length; i++) {
@@ -407,7 +413,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
                 ctx.strokeStyle = `${p.color}80`; ctx.lineWidth = 1 * zoom; ctx.stroke();
             }
             
-            // Draw Particle
             const drawRadius = p.radius * (isFreeMode ? 1.8 : zoom);
             ctx.save(); ctx.beginPath(); ctx.arc(p.x, p.y, drawRadius, 0, Math.PI * 2); ctx.clip();
             const img = imageCache.current.get(p.coin.image);
@@ -416,7 +421,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
             ctx.restore();
             
             ctx.globalAlpha = 1.0;
-            // Highlight
             if (selectedParticleRef.current?.id === p.id || hoveredParticleRef.current?.id === p.id) {
                 ctx.beginPath(); ctx.arc(p.x, p.y, drawRadius + 4, 0, Math.PI * 2);
                 ctx.strokeStyle = '#dd9933'; 
@@ -425,22 +429,19 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
             }
         });
 
-        // Tooltip Drawing (Crypto Bubbles Style)
         const particleForTooltip = selectedParticleRef.current || hoveredParticleRef.current;
         if (particleForTooltip) {
             const p = particleForTooltip; 
             const drawRadius = p.radius * (isFreeMode ? 1.8 : zoom);
-            const ttWidth = 280, ttHeight = 220; // Increased size for rich content
+            const ttWidth = 280, ttHeight = 220; 
             
             let ttX = p.x + drawRadius + 15;
             let ttY = p.y - ttHeight / 2;
             
-            // Collision detection for tooltip
             if (ttX + ttWidth > canvas.width - 10) ttX = p.x - drawRadius - ttWidth - 15;
             ttX = clamp(ttX, 10, canvas.width - ttWidth - 10);
             ttY = clamp(ttY, 10, canvas.height - ttHeight - 10);
             
-            // Background & Border
             ctx.fillStyle = isDark ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.95)';
             ctx.strokeStyle = '#dd9933';
             ctx.lineWidth = 1;
@@ -448,7 +449,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
             ctx.fill();
             ctx.stroke();
 
-            // Header
             const img = imageCache.current.get(p.coin.image);
             if (img?.complete) ctx.drawImage(img, ttX + 15, ttY + 20, 50, 50);
             
@@ -457,7 +457,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
             ctx.font = 'bold 14px Inter'; ctx.fillStyle = '#dd9933';
             ctx.fillText(p.coin.symbol.toUpperCase(), ttX + 75, ttY + 62);
 
-            // Data Grid
             const change = p.coin.price_change_percentage_24h || 0;
             const price = p.coin.current_price || 0;
             
@@ -489,7 +488,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
             });
         }
     };
-  }, [animSpeed, trailLength, isDark, calculateMappings, searchTerm, chartMode, isFreeMode]);
+  }, [animSpeed, trailLength, isDark, calculateMappings, searchTerm, chartMode, isFreeMode, dimensions]);
 
   useEffect(() => {
     let frameId: number;
@@ -509,17 +508,13 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     const mouseY = e.clientY - rect.top;
     lastMousePosRef.current = { x: mouseX, y: mouseY };
 
-    // Dragging Logic
     if (draggedParticleRef.current) {
         const p = draggedParticleRef.current;
-        p.x = mouseX;
-        p.y = mouseY;
-        // Reset velocity
+        p.x = mouseX; p.y = mouseY;
         p.vx = 0; p.vy = 0;
         return;
     }
     
-    // Panning Logic
     if (isPanningRef.current) {
         const dx = e.clientX - panStartRef.current.clientX;
         const dy = e.clientY - panStartRef.current.clientY;
@@ -527,14 +522,11 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         return;
     }
     
-    // Hover Logic - Precise Hitbox
     let found: Particle | null = null;
-    // Iterate backwards to find top-most particle
     for (let i = particlesRef.current.length - 1; i >= 0; i--) {
         const p = particlesRef.current[i];
         const drawRadius = p.radius * (isFreeMode ? 1.8 : zoomRef.current);
-        // Ensure hitbox matches visual size, minimum 16px for usability
-        const hitRadius = Math.max(drawRadius * 1.4, 16); 
+        const hitRadius = Math.max(drawRadius * 1.4, 16); // Hitbox matches visual + margin
         
         const dx = p.x - mouseX;
         const dy = p.y - mouseY;
@@ -592,7 +584,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     const newZoom = e.deltaY < 0 ? oldZoom * zoomFactor : oldZoom / zoomFactor;
     zoomRef.current = clamp(newZoom, 0.2, 8.0);
     
-    // Zoom towards mouse
     const zoomRatio = zoomRef.current / oldZoom;
     
     panRef.current.x = mouseX - (mouseX - panRef.current.x) * zoomRatio;
