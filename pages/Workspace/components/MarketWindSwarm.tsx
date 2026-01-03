@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ApiCoin, Language } from '../../../types';
-import { Search, XCircle, Settings, Droplets, FastForward, Activity, Wind, X, Atom, Scaling, Coins } from 'lucide-react';
+import { Search, XCircle, Settings, Droplets, FastForward, Activity, Wind, X as CloseIcon, Atom, Scaling, Coins } from 'lucide-react';
 import { fetchTopCoins } from '../services/api';
 
 // --- TYPES ---
@@ -30,7 +30,7 @@ interface MarketWindSwarmProps { language: Language; onClose: () => void; }
 // --- HELPERS ---
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
-const clamp = (val: number, min: number, max: number) => Math.max(min, Math.min(val, max));
+const mathClamp = (val: number, min: number, max: number) => Math.max(min, Math.min(val, max));
 
 const formatCompact = (v?: number) => {
     const n = Number(v);
@@ -75,6 +75,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   const [chartMode, setChartMode] = useState<ChartMode>('performance');
   const [trailLength, setTrailLength] = useState(10);
   
+  const [dpr, setDpr] = useState(1); // Device Pixel Ratio
   const [chartVersion, setChartVersion] = useState(0);
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
   
@@ -135,25 +136,45 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   useEffect(() => {
     loadData();
     const interval = setInterval(loadData, 60000);
+    
+    // HiDPI Resize Handler
+    const handleResize = () => {
+        if (containerRef.current && canvasRef.current) {
+            const ratio = window.devicePixelRatio || 1;
+            setDpr(ratio);
+            
+            const rect = containerRef.current.getBoundingClientRect();
+            // Set Physical Size
+            canvasRef.current.width = rect.width * ratio;
+            canvasRef.current.height = rect.height * ratio;
+            
+            // Set CSS Size
+            canvasRef.current.style.width = `${rect.width}px`;
+            canvasRef.current.style.height = `${rect.height}px`;
+        }
+    };
+    
+    window.addEventListener('resize', handleResize);
+    handleResize(); // Initial size
+
     const observer = new MutationObserver(() => setIsDark(document.documentElement.classList.contains('dark')));
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => { clearInterval(interval); observer.disconnect(); };
+    return () => { clearInterval(interval); observer.disconnect(); window.removeEventListener('resize', handleResize); };
   }, [loadData]);
   
   // --- MAPPING LOGIC ---
   const calculateMappings = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || coins.length === 0) return null;
+    if (!containerRef.current || coins.length === 0) return null;
     
-    const { width, height } = canvas;
+    // Use LOGICAL dimensions (clientWidth/clientHeight) for calculations
+    const width = containerRef.current.clientWidth;
+    const height = containerRef.current.clientHeight;
+    
     const pad = 80;
 
     const topCoins = coins.slice(0, numCoins);
     
     // Configurações baseadas no modo selecionado
-    // Mode 'performance' (Default): Size=MktCap, X=Change, Y=Volume
-    // Mode 'valuation' (Var Preço): Size=Abs(Change), X=MktCap, Y=Volume
-    
     let xData: number[], radiusData: number[];
     const yData = topCoins.map(p => p.total_volume || 1); // Y sempre Volume
 
@@ -177,7 +198,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     const logMinY = (minY > 0) ? Math.log10(minY) : 0;
     const logMaxY = (maxY > 0) ? Math.log10(maxY) : 0;
     
-    // Radius scaling needs to be logarithmic for Market Cap, Linear for Percent
     const logMinR = (chartMode === 'performance' && minR > 0) ? Math.log10(minR) : minR;
     const logMaxR = (chartMode === 'performance' && maxR > 0) ? Math.log10(maxR) : maxR;
 
@@ -186,12 +206,10 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
             if (v <= 0) return pad;
             return pad + (Math.log10(v) - logMinX) / (logMaxX - logMinX || 1) * (width - pad * 2);
         }
-        // Linear X for Performance (% change)
         return pad + (v - minX) / (maxX - minX || 1) * (width - pad * 2);
     };
     
     const baseMapY = (v: number) => {
-        // Log Y for Volume
         if (v <= 0) return height - pad;
         return height - pad - (Math.log10(v) - logMinY) / (logMaxY - logMinY || 1) * (height - pad * 2);
     };
@@ -199,13 +217,14 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     const mapX = (v: number) => panRef.current.x + (baseMapX(v) - width / 2) * zoomRef.current + width / 2;
     const mapY = (v: number) => panRef.current.y + (baseMapY(v) - height / 2) * zoomRef.current + height / 2;
     
+    // VARIABLE RADIUS LOGIC - CRITICAL FOR USER
     const mapRadius = (v: number) => {
         if (v <= 0) return 8;
         if (chartMode === 'performance') {
-            // Mkt Cap -> Log Radius
+            // Mkt Cap -> Log Radius (Larger Cap = Larger Bubble)
             return (8 + (Math.log10(v) - logMinR) / (logMaxR - logMinR || 1) * 42);
         } else {
-            // Change % -> Linear Radius (abs)
+            // Change % -> Linear Radius (More Change = Larger Bubble)
             return (8 + (v - minR) / (maxR - minR || 1) * 42);
         }
     };
@@ -215,8 +234,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
   // --- PARTICLE UPDATE ---
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || coins.length === 0 || canvas.width === 0) return;
+    if (coins.length === 0) return;
 
     const mappings = calculateMappings();
     if (!mappings) return;
@@ -290,6 +308,10 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     const canvas = canvasRef.current; const ctx = canvas?.getContext('2d');
     if (!ctx || !canvas) return;
     
+    // Enable High Quality Scaling
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    
     let lastUpdateTime = Date.now();
 
     const drawRoundedRect = (x:number, y:number, w:number, h:number, r:number) => {
@@ -305,7 +327,16 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         const delta = Math.min(0.05, (now - lastUpdateTime) / 1000);
         lastUpdateTime = now;
 
+        // Reset transform to identity for clearing
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Scale to DPR
+        ctx.scale(dpr, dpr);
+
+        // Define Logical Dimensions for Physics & Drawing
+        const logicalWidth = canvas.width / dpr;
+        const logicalHeight = canvas.height / dpr;
 
         const particles = particlesRef.current;
         if (particles.length === 0) return;
@@ -315,16 +346,17 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
         // Draw Axes if mapped
         if (!isFreeMode && mappings) {
-          const { pad, width, height, minX, maxX, minY, maxY } = mappings;
+          const { pad, minX, maxX, minY, maxY } = mappings;
+          // Use logic width/height for axes
           ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
           ctx.lineWidth = 1; ctx.font = `bold ${10 * Math.max(1, zoom * 0.5)}px Inter`;
           ctx.fillStyle = isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)';
           
-          // Y-Axis (Volume)
+          // Y-Axis
           for (let i = 0; i <= 5; i++) {
             const val = Math.pow(10, Math.log10(minY) + i * (Math.log10(maxY) - Math.log10(minY)) / 5);
             const y = mappings.mapY(val);
-            if (y > pad * 0.5 && y < height - pad * 0.5) {
+            if (y > pad * 0.5 && y < logicalHeight - pad * 0.5) {
               ctx.beginPath(); ctx.moveTo(mappings.mapX(minX) - 5, y); ctx.lineTo(mappings.mapX(maxX), y); ctx.stroke();
               ctx.fillText(`${formatCompact(val)}`, 15, y + 3);
             }
@@ -332,39 +364,36 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
           
           // X-Axis
           if (chartMode === 'performance') {
-              // Linear Scale %
               for (let i = 0; i <= 10; i++) {
                 const val = minX + i * (maxX - minX) / 10;
                 const x = mappings.mapX(val);
-                if (x > pad * 0.5 && x < width - pad * 0.5) {
+                if (x > pad * 0.5 && x < logicalWidth - pad * 0.5) {
                   ctx.beginPath(); ctx.moveTo(x, mappings.mapY(minY)); ctx.lineTo(x, mappings.mapY(maxY) + 5); ctx.stroke();
-                  ctx.textAlign = 'center'; ctx.fillText(`${val.toFixed(1)}%`, x, height - pad + 15);
+                  ctx.textAlign = 'center'; ctx.fillText(`${val.toFixed(1)}%`, x, logicalHeight - pad + 15);
                 }
               }
           } else {
-              // Log Scale Market Cap
               for (let i = 0; i <= 5; i++) {
                 const val = Math.pow(10, Math.log10(minX) + i * (Math.log10(maxX) - Math.log10(minX)) / 5);
                 const x = mappings.mapX(val);
-                if (x > pad * 0.5 && x < width - pad * 0.5) {
+                if (x > pad * 0.5 && x < logicalWidth - pad * 0.5) {
                   ctx.beginPath(); ctx.moveTo(x, mappings.mapY(minY)); ctx.lineTo(x, mappings.mapY(maxY) + 5); ctx.stroke();
-                  ctx.textAlign = 'center'; ctx.fillText(`${formatCompact(val)}`, x, height - pad + 15);
+                  ctx.textAlign = 'center'; ctx.fillText(`${formatCompact(val)}`, x, logicalHeight - pad + 15);
                 }
               }
           }
 
           ctx.fillStyle = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'; ctx.font = 'bold 12px Inter'; ctx.textAlign = 'center';
           const xLabel = chartMode === 'performance' ? 'Variação de Preço 24h (%)' : 'Market Cap (Log)';
-          ctx.fillText(xLabel, width / 2, height - 15);
-          ctx.save(); ctx.translate(25, height / 2); ctx.rotate(-Math.PI / 2);
+          ctx.fillText(xLabel, logicalWidth / 2, logicalHeight - 15);
+          ctx.save(); ctx.translate(25, logicalHeight / 2); ctx.rotate(-Math.PI / 2);
           ctx.fillText('Volume 24h (Log)', 0, 0); ctx.restore();
         }
 
         particles.forEach(p => {
             // Update Position
             if (p.isReturning && p.animProgress < 1) {
-                // Slower lerp return as requested
-                p.animProgress = Math.min(1, p.animProgress + delta * 0.7); // Was 2.5, now 0.7 for smoother/slower return
+                p.animProgress = Math.min(1, p.animProgress + delta * 0.7); 
                 const easedProgress = easeOutCubic(p.animProgress);
                 p.x = lerp(p.startX, p.targetX, easedProgress);
                 p.y = lerp(p.startY, p.targetY, easedProgress);
@@ -372,21 +401,18 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
             } else if (isFreeMode) {
                 if (!p.isFixed) {
                     p.x += p.vx * delta; p.y += p.vy * delta;
-                    // Bouncing walls
-                    if (p.x < p.radius || p.x > canvas.width - p.radius) p.vx *= -0.9;
-                    if (p.y < p.radius || p.y > canvas.height - p.radius) p.vy *= -0.9;
+                    // Bouncing walls (using logical dimensions)
+                    if (p.x < p.radius || p.x > logicalWidth - p.radius) p.vx *= -0.9;
+                    if (p.y < p.radius || p.y > logicalHeight - p.radius) p.vy *= -0.9;
                 }
             } else {
-                // Standard mode move to target
                 if (p.animProgress < 1) {
                     p.animProgress = Math.min(1, p.animProgress + delta * animSpeed);
                     const easedProgress = easeOutCubic(p.animProgress);
                     p.x = lerp(p.startX, p.targetX, easedProgress);
                     p.y = lerp(p.startY, p.targetY, easedProgress);
                 } else {
-                    p.x = p.targetX;
-                    p.y = p.targetY;
-                    // Reset start for next animation if needed
+                    p.x = p.targetX; p.y = p.targetY;
                     p.startX = p.x; p.startY = p.y;
                 }
             }
@@ -430,15 +456,14 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         if (particleForTooltip) {
             const p = particleForTooltip; 
             const drawRadius = p.radius * (isFreeMode ? 1.8 : zoom);
-            const ttWidth = 280, ttHeight = 220; // Increased size for rich content
+            const ttWidth = 280, ttHeight = 220; 
             
             let ttX = p.x + drawRadius + 15;
             let ttY = p.y - ttHeight / 2;
             
-            // Collision detection for tooltip
-            if (ttX + ttWidth > canvas.width - 10) ttX = p.x - drawRadius - ttWidth - 15;
-            ttX = clamp(ttX, 10, canvas.width - ttWidth - 10);
-            ttY = clamp(ttY, 10, canvas.height - ttHeight - 10);
+            if (ttX + ttWidth > logicalWidth - 10) ttX = p.x - drawRadius - ttWidth - 15;
+            ttX = mathClamp(ttX, 10, logicalWidth - ttWidth - 10);
+            ttY = mathClamp(ttY, 10, logicalHeight - ttHeight - 10);
             
             // Background & Border
             ctx.fillStyle = isDark ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.95)';
@@ -489,7 +514,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
             });
         }
     };
-  }, [animSpeed, trailLength, isDark, calculateMappings, searchTerm, chartMode, isFreeMode]);
+  }, [animSpeed, trailLength, isDark, calculateMappings, searchTerm, chartMode, isFreeMode, dpr]);
 
   useEffect(() => {
     let frameId: number;
@@ -509,17 +534,14 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     const mouseY = e.clientY - rect.top;
     lastMousePosRef.current = { x: mouseX, y: mouseY };
 
-    // Dragging Logic
     if (draggedParticleRef.current) {
         const p = draggedParticleRef.current;
         p.x = mouseX;
         p.y = mouseY;
-        // Reset velocity
         p.vx = 0; p.vy = 0;
         return;
     }
     
-    // Panning Logic
     if (isPanningRef.current) {
         const dx = e.clientX - panStartRef.current.clientX;
         const dy = e.clientY - panStartRef.current.clientY;
@@ -527,18 +549,13 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         return;
     }
     
-    // Hover Logic - Precise Hitbox
     let found: Particle | null = null;
-    // Iterate backwards to find top-most particle
     for (let i = particlesRef.current.length - 1; i >= 0; i--) {
         const p = particlesRef.current[i];
         const drawRadius = p.radius * (isFreeMode ? 1.8 : zoomRef.current);
-        // Ensure hitbox matches visual size, minimum 16px for usability
         const hitRadius = Math.max(drawRadius * 1.4, 16); 
-        
         const dx = p.x - mouseX;
         const dy = p.y - mouseY;
-        
         if (dx * dx + dy * dy < hitRadius * hitRadius) {
             found = p;
             break;
@@ -590,11 +607,9 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     const zoomFactor = 1.1;
     const oldZoom = zoomRef.current;
     const newZoom = e.deltaY < 0 ? oldZoom * zoomFactor : oldZoom / zoomFactor;
-    zoomRef.current = clamp(newZoom, 0.2, 8.0);
+    zoomRef.current = mathClamp(newZoom, 0.2, 8.0);
     
-    // Zoom towards mouse
     const zoomRatio = zoomRef.current / oldZoom;
-    
     panRef.current.x = mouseX - (mouseX - panRef.current.x) * zoomRatio;
     panRef.current.y = mouseY - (mouseY - panRef.current.y) * zoomRatio;
   };
@@ -613,7 +628,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         </div>
         <div className="flex items-center gap-3">
             <button onClick={() => setSettingsOpen(!settingsOpen)} className={`p-3 rounded-lg border transition-colors backdrop-blur-sm ${settingsOpen ? 'bg-[#dd9933] text-black border-[#dd9933]' : 'bg-gray-100 dark:bg-black/50 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10'}`}><Settings size={20} /></button>
-            <button onClick={() => onClose()} className="p-3 bg-gray-100 dark:bg-black/50 rounded-lg border border-gray-200 dark:border-white/10 hover:bg-red-500/10 text-gray-600 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors" title="Close"><X size={20} /></button>
+            <button onClick={() => onClose()} className="p-3 bg-gray-100 dark:bg-black/50 rounded-lg border border-gray-200 dark:border-white/10 hover:bg-red-500/10 text-gray-600 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors" title="Close"><CloseIcon size={20} /></button>
         </div>
       </div>
       
