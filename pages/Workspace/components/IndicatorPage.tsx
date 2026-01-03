@@ -1,40 +1,40 @@
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ApiCoin, Language, WidgetType, UserTier } from '../../../types';
 import { getTranslations } from '../../../locales';
 import CryptoWidget from './CryptoWidget';
 import MarketWindSwarm from './MarketWindSwarm';
 
 import {
+  Activity,
+  ArrowUpRight,
+  BarChart2,
+  Calendar,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronsUpDown,
+  CircleDashed,
   ExternalLink,
   GripVertical,
+  LayoutGrid,
+  List,
   Loader2,
+  Lock,
+  PieChart,
   RefreshCw,
   Search,
   Star,
-  Lock,
-  List,
   TrendingUp,
-  LayoutGrid,
-  CircleDashed,
-  Wind,
-  Activity,
-  BarChart2,
-  Calendar,
-  ArrowUpRight,
-  PieChart,
-  User
+  User,
+  Wind
 } from 'lucide-react';
 
 import { fetchTopCoins } from '../services/api';
 
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
-import { SortableContext, arrayMove, horizontalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+// @ts-ignore FIX: Alias useSortable to avoid potential naming collisions.
+import { SortableContext, arrayMove, horizontalListSortingStrategy, useSortable as useDndKitSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
 import { Area, AreaChart, ResponsiveContainer, YAxis } from 'recharts';
