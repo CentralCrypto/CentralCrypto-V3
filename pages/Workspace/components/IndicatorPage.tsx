@@ -215,11 +215,11 @@ const MarketCapTable = ({ language }: { language: Language }) => {
   );
 
   // altura visível da tabela (sem scroll vertical interno)
-  const ROW_H = 56;
-  const HEAD_H = 54;
+  const ROW_H = 56; // h-14
   const tableViewportH = useMemo(() => {
     const rows = Math.max(0, Math.min(pageSize, 100));
-    return HEAD_H + rows * ROW_H;
+    // +1 para o header (também h-14)
+    return (rows + 1) * ROW_H;
   }, [pageSize]);
 
   const load = async () => {
@@ -745,35 +745,45 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     const textAlign =
       align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left';
 
+    // reserva espaço pro grip apenas em alinhamento à esquerda (pra não sobrepor o texto)
+    const labelPad = align === 'left' ? 'pl-10' : '';
+
     return (
       <th
         ref={setNodeRef}
         style={style}
-        className={`p-3 select-none group border-b border-gray-100 dark:border-slate-800 ${w} ${textAlign}
+        className={`relative p-3 h-14 align-middle select-none group border-b border-gray-100 dark:border-slate-800 ${w} ${textAlign}
           hover:bg-gray-100 dark:hover:bg-white/5 transition-colors`}
       >
-        <div className={`flex items-center gap-2 ${justify}`}>
-          <span
-            className="inline-flex items-center justify-center w-6 h-6 rounded-md hover:bg-gray-200 dark:hover:bg-white/10 text-gray-400"
-            onClick={(e) => e.stopPropagation()}
-            {...attributes}
-            {...listeners}
-            title="Arraste para reordenar"
-          >
-            <GripVertical size={16} />
-          </span>
+        {/* Grip ABSOLUTO (não empurra o título) */}
+        <span
+          className="absolute left-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-7 h-7 rounded-md hover:bg-gray-200 dark:hover:bg-white/10 text-gray-400"
+          onClick={(e) => e.stopPropagation()}
+          {...attributes}
+          {...listeners}
+          title="Arraste para reordenar"
+        >
+          <GripVertical size={16} />
+        </span>
 
+        {sortKey ? (
           <button
             type="button"
-            className={`inline-flex items-center gap-1 font-black uppercase tracking-widest text-xs text-gray-400 dark:text-slate-400 ${justify}`}
-            onClick={() => sortKey && handleSort(sortKey)}
-            disabled={!sortKey}
-            title={sortKey ? 'Ordenar' : ''}
+            className={`w-full h-full inline-flex items-center gap-1 ${justify} ${labelPad}
+              font-black uppercase tracking-widest text-xs text-gray-400 dark:text-slate-400`}
+            onClick={() => handleSort(sortKey)}
+            title="Ordenar"
           >
             <span className="whitespace-nowrap">{label}</span>
-            {sortKey ? <SortIcon active={sortConfig.key === sortKey} /> : null}
+            <SortIcon active={sortConfig.key === sortKey} />
           </button>
-        </div>
+        ) : (
+          <div className={`w-full h-full flex items-center ${justify} ${labelPad}`}>
+            <span className="whitespace-nowrap font-black uppercase tracking-widest text-xs text-gray-400 dark:text-slate-400">
+              {label}
+            </span>
+          </div>
+        )}
       </th>
     );
   };
@@ -834,17 +844,17 @@ const MarketCapTable = ({ language }: { language: Language }) => {
         ) : (
           <table className="w-full text-left border-collapse min-w-[1200px] table-fixed">
             <thead className="sticky top-0 z-20 bg-white dark:bg-[#2f3032]">
-              <tr className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-slate-400 border-b border-gray-100 dark:border-slate-800">
-                <th className="p-3 w-[360px]">Categoria</th>
-                <th className="p-3 text-center w-[160px]">Top Gainers</th>
-                <th className="p-3 text-center w-[160px]">Top Losers</th>
-                <th className="p-3 text-right w-[90px]">1h</th>
-                <th className="p-3 text-right w-[90px]">24h</th>
-                <th className="p-3 text-right w-[90px]">7d</th>
-                <th className="p-3 text-right w-[160px]">Market Cap</th>
-                <th className="p-3 text-right w-[150px]">24h Volume</th>
-                <th className="p-3 text-right w-[110px]"># Coins</th>
-                <th className="p-3 text-center w-[240px]">Gráfico (7d)</th>
+              <tr className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-slate-400 border-b border-gray-100 dark:border-slate-800 h-14">
+                <th className="p-3 w-[360px] align-middle">Categoria</th>
+                <th className="p-3 text-center w-[160px] align-middle">Top Gainers</th>
+                <th className="p-3 text-center w-[160px] align-middle">Top Losers</th>
+                <th className="p-3 text-right w-[90px] align-middle">1h</th>
+                <th className="p-3 text-right w-[90px] align-middle">24h</th>
+                <th className="p-3 text-right w-[90px] align-middle">7d</th>
+                <th className="p-3 text-right w-[160px] align-middle">Market Cap</th>
+                <th className="p-3 text-right w-[150px] align-middle">24h Volume</th>
+                <th className="p-3 text-right w-[110px] align-middle"># Coins</th>
+                <th className="p-3 text-center w-[240px] align-middle">Gráfico (7d)</th>
               </tr>
             </thead>
 
@@ -855,7 +865,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                 return (
                   <tr
                     key={r.id}
-                    className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors cursor-pointer"
+                    className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors cursor-pointer h-14"
                     onClick={() => {
                       // ao clicar: aplica filtro e volta pra tabela principal
                       if (categoryCoinIds.get(r.id)?.size) {
@@ -871,7 +881,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                     }}
                     title="Clique para filtrar a tabela principal"
                   >
-                    <td className="p-3 w-[360px]">
+                    <td className="p-3 w-[360px] align-middle">
                       <div className="flex flex-col min-w-0">
                         <span className="text-[14px] font-black text-gray-900 dark:text-white truncate">
                           {r.name}
@@ -882,39 +892,39 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                       </div>
                     </td>
 
-                    <td className="p-3 text-center w-[160px]">
+                    <td className="p-3 text-center w-[160px] align-middle">
                       <CategoryRowLogos arr={r.gainers || []} />
                     </td>
 
-                    <td className="p-3 text-center w-[160px]">
+                    <td className="p-3 text-center w-[160px] align-middle">
                       <CategoryRowLogos arr={r.losers || []} />
                     </td>
 
-                    <td className={`p-3 text-right font-mono text-[13px] font-black w-[90px] ${!isFinite(r.ch1h) ? 'text-gray-400 dark:text-slate-500' : (r.ch1h >= 0 ? 'text-green-500' : 'text-red-500')}`}>
+                    <td className={`p-3 text-right font-mono text-[13px] font-black w-[90px] align-middle ${!isFinite(r.ch1h) ? 'text-gray-400 dark:text-slate-500' : (r.ch1h >= 0 ? 'text-green-500' : 'text-red-500')}`}>
                       {safePct(Number(r.ch1h))}
                     </td>
 
-                    <td className={`p-3 text-right font-mono text-[13px] font-black w-[90px] ${!isFinite(r.ch24h) ? 'text-gray-400 dark:text-slate-500' : (pos24 ? 'text-green-500' : 'text-red-500')}`}>
+                    <td className={`p-3 text-right font-mono text-[13px] font-black w-[90px] align-middle ${!isFinite(r.ch24h) ? 'text-gray-400 dark:text-slate-500' : (pos24 ? 'text-green-500' : 'text-red-500')}`}>
                       {safePct(Number(r.ch24h))}
                     </td>
 
-                    <td className={`p-3 text-right font-mono text-[13px] font-black w-[90px] ${!isFinite(r.ch7d) ? 'text-gray-400 dark:text-slate-500' : (r.ch7d >= 0 ? 'text-green-500' : 'text-red-500')}`}>
+                    <td className={`p-3 text-right font-mono text-[13px] font-black w-[90px] align-middle ${!isFinite(r.ch7d) ? 'text-gray-400 dark:text-slate-500' : (r.ch7d >= 0 ? 'text-green-500' : 'text-red-500')}`}>
                       {safePct(Number(r.ch7d))}
                     </td>
 
-                    <td className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[160px]">
+                    <td className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[160px] align-middle">
                       {formatUSD(Number(r.marketCap || 0), true)}
                     </td>
 
-                    <td className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[150px]">
+                    <td className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[150px] align-middle">
                       {formatUSD(Number(r.volume24h || 0), true)}
                     </td>
 
-                    <td className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[110px]">
+                    <td className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[110px] align-middle">
                       {Number(r.coinsCount || 0).toLocaleString()}
                     </td>
 
-                    <td className="p-3 w-[240px]">
+                    <td className="p-3 w-[240px] align-middle">
                       <div className="w-full h-10">
                         {Array.isArray(r.spark) && r.spark.length > 5 ? (
                           <ResponsiveContainer width="100%" height="100%">
@@ -951,7 +961,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               })}
 
               {filtered.length === 0 && (
-                <tr>
+                <tr className="h-14">
                   <td colSpan={10} className="p-8 text-center text-sm font-bold text-gray-500 dark:text-slate-400">
                     Nenhuma categoria encontrada.
                   </td>
@@ -965,7 +975,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
   };
 
   return (
-    <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-100 dark:border-slate-800 shadow-xl overflow-hidden flex flex-col">
+    <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-100 dark:border-slate-800 shadow-xl overflow-x-hidden overflow-y-visible flex flex-col">
 
       {/* Header */}
       <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col gap-3 bg-gray-50/50 dark:bg-black/20 shrink-0">
@@ -984,7 +994,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               />
             </div>
 
-            {/* Favoritos (só faz sentido na tabela de coins, mas pode ficar sempre) */}
+            {/* Favoritos */}
             <button
               type="button"
               onClick={() => setFavOnly(v => !v)}
@@ -1010,7 +1020,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               </button>
             ) : (
               <>
-                {/* dropdown master (substitui o botão categorias) */}
                 <select
                   value={masterKey}
                   onChange={(e) => setMasterKey(e.target.value)}
@@ -1022,7 +1031,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                   ))}
                 </select>
 
-                {/* dropdown 3º nível (se existir) */}
                 {subOptions.length > 1 && (
                   <select
                     value={subKey}
@@ -1087,7 +1095,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
           {/* RIGHT GROUP */}
           <div className="flex items-center gap-2 w-full lg:w-auto justify-end">
-            {/* page size dropdown */}
             <div className="flex items-center gap-2">
               <span className="text-xs font-black text-gray-500 dark:text-slate-400 uppercase tracking-widest">
                 Itens
@@ -1105,7 +1112,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               </select>
             </div>
 
-            {/* paginação só faz sentido em coins, mas pode ficar; aqui deixo sempre */}
             <Paginator compact />
 
             <button
@@ -1121,7 +1127,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
           </div>
         </div>
 
-        {/* warning (não spamma) */}
         {viewMode === 'categories' && catWarn && !catWarnDismissed && (
           <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-900/20">
             <div className="text-xs font-bold text-amber-900 dark:text-amber-200">
@@ -1138,7 +1143,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
         )}
       </div>
 
-      {/* BODY: troca a tabela aqui */}
+      {/* BODY */}
       {viewMode === 'categories' ? (
         <CategoriesTable />
       ) : (
@@ -1154,9 +1159,9 @@ const MarketCapTable = ({ language }: { language: Language }) => {
           ) : (
             <table className="w-full text-left border-collapse min-w-[1440px] table-fixed">
               <thead className="sticky top-0 z-20 bg-white dark:bg-[#2f3032]">
-                <tr className="border-b border-gray-100 dark:border-slate-800">
+                <tr className="border-b border-gray-100 dark:border-slate-800 h-14">
                   {/* ⭐ coluna fixa */}
-                  <th className="p-3 w-[48px] text-center">
+                  <th className="p-3 w-[48px] text-center h-14 align-middle">
                     <span className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-slate-400">
                       Fav
                     </span>
@@ -1203,7 +1208,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                   return (
                     <tr key={coin.id} className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors group h-14">
                       {/* ⭐ fav */}
-                      <td className="p-3 w-[48px] text-center">
+                      <td className="p-3 w-[48px] text-center align-middle">
                         <button
                           type="button"
                           onClick={() => setFavorites(prev => ({ ...prev, [coin.id]: !prev[coin.id] }))}
@@ -1217,7 +1222,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                       {colOrder.map((cid) => {
                         if (cid === 'rank') {
                           return (
-                            <td key={cid} className="p-3 text-[13px] font-black text-gray-400 w-[72px] text-center">
+                            <td key={cid} className="p-3 text-[13px] font-black text-gray-400 w-[72px] text-center align-middle">
                               #{coin.market_cap_rank}
                             </td>
                           );
@@ -1225,7 +1230,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
                         if (cid === 'asset') {
                           return (
-                            <td key={cid} className="p-3 w-[320px]">
+                            <td key={cid} className="p-3 w-[320px] align-middle">
                               <div className="flex items-center gap-3 min-w-0">
                                 <img
                                   src={coin.image}
@@ -1248,7 +1253,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
                         if (cid === 'price') {
                           return (
-                            <td key={cid} className="p-3 text-right font-mono text-[15px] font-black text-gray-900 dark:text-slate-200 w-[140px]">
+                            <td key={cid} className="p-3 text-right font-mono text-[15px] font-black text-gray-900 dark:text-slate-200 w-[140px] align-middle">
                               {formatUSD(coin.current_price)}
                             </td>
                           );
@@ -1258,7 +1263,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                           return (
                             <td
                               key={cid}
-                              className={`p-3 text-right font-mono text-[13px] font-black w-[92px] ${!isFinite(c1h) ? 'text-gray-400 dark:text-slate-500' : (c1h >= 0 ? 'text-green-500' : 'text-red-500')}`}
+                              className={`p-3 text-right font-mono text-[13px] font-black w-[92px] align-middle ${!isFinite(c1h) ? 'text-gray-400 dark:text-slate-500' : (c1h >= 0 ? 'text-green-500' : 'text-red-500')}`}
                               title="Estimativa via sparkline 7d"
                             >
                               {safePct(c1h)}
@@ -1268,7 +1273,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
                         if (cid === 'ch24h') {
                           return (
-                            <td key={cid} className={`p-3 text-right font-mono text-[15px] font-black w-[100px] ${isPos24 ? 'text-green-500' : 'text-red-500'}`}>
+                            <td key={cid} className={`p-3 text-right font-mono text-[15px] font-black w-[100px] align-middle ${isPos24 ? 'text-green-500' : 'text-red-500'}`}>
                               {isPos24 ? '+' : ''}{Number(change24 || 0).toFixed(2)}%
                             </td>
                           );
@@ -1278,7 +1283,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                           return (
                             <td
                               key={cid}
-                              className={`p-3 text-right font-mono text-[13px] font-black w-[100px] ${!isFinite(c7d) ? 'text-gray-400 dark:text-slate-500' : (c7d >= 0 ? 'text-green-500' : 'text-red-500')}`}
+                              className={`p-3 text-right font-mono text-[13px] font-black w-[100px] align-middle ${!isFinite(c7d) ? 'text-gray-400 dark:text-slate-500' : (c7d >= 0 ? 'text-green-500' : 'text-red-500')}`}
                               title="Estimativa via sparkline 7d"
                             >
                               {safePct(c7d)}
@@ -1288,7 +1293,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
                         if (cid === 'mcap') {
                           return (
-                            <td key={cid} className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[150px]">
+                            <td key={cid} className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[150px] align-middle">
                               {formatUSD(coin.market_cap, true)}
                             </td>
                           );
@@ -1296,7 +1301,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
                         if (cid === 'vol24h') {
                           return (
-                            <td key={cid} className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[130px]">
+                            <td key={cid} className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[130px] align-middle">
                               {formatUSD(coin.total_volume, true)}
                             </td>
                           );
@@ -1304,7 +1309,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
                         if (cid === 'vol7d') {
                           return (
-                            <td key={cid} className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[130px]" title="Estimativa simples: Vol(24h) * 7">
+                            <td key={cid} className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[130px] align-middle" title="Estimativa simples: Vol(24h) * 7">
                               {formatUSD(vol7d, true)}
                             </td>
                           );
@@ -1312,7 +1317,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
                         if (cid === 'supply') {
                           return (
-                            <td key={cid} className="p-3 text-right font-mono text-[12px] font-bold text-gray-500 dark:text-slate-500 w-[170px]">
+                            <td key={cid} className="p-3 text-right font-mono text-[12px] font-bold text-gray-500 dark:text-slate-500 w-[170px] align-middle">
                               {coin.circulating_supply?.toLocaleString()} <span className="uppercase opacity-50">{coin.symbol}</span>
                             </td>
                           );
@@ -1320,7 +1325,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
                         if (cid === 'spark7d') {
                           return (
-                            <td key={cid} className="p-3 w-[360px]">
+                            <td key={cid} className="p-3 w-[360px] align-middle">
                               <div className="w-full h-12 min-w-0">
                                 {sparkData.length > 1 ? (
                                   <ResponsiveContainer width="100%" height="100%">
