@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ApiCoin, Language } from '../../../types';
-import { Loader2, Search, XCircle, Settings, Droplets, FastForward, Activity, Wind, X } from 'lucide-react';
+import { Loader2, Search, XCircle, Settings, Droplets, FastForward, Activity, Wind, X, Atom } from 'lucide-react';
 import { fetchTopCoins } from '../services/api';
 
 // --- TYPES ---
 interface Particle {
   id: string;
   x: number; y: number;
+  vx: number; vy: number; // Velocity for free mode
   startX: number; startY: number; 
   targetX: number; targetY: number;
   animProgress: number;
@@ -26,7 +27,6 @@ interface MarketWindSwarmProps { language: Language; onClose: () => void; }
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 const clamp = (val: number, min: number, max: number) => Math.max(min, Math.min(val, max));
-// @fix(46): `toFixed` was missing an argument and `$` prefix was inconsistent.
 const formatCompact = (v?: number) => {
     const n = Number(v);
     if (!isFinite(n)) return '-';
@@ -57,6 +57,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   
   // Settings
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [isFreeMode, setIsFreeMode] = useState(false);
   const [numCoins, setNumCoins] = useState(150);
   const [animSpeed, setAnimSpeed] = useState(2.0);
   const [yAxisMode, setYAxisMode] = useState<YAxisMode>('total_volume');
@@ -138,7 +139,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     const yValues = topCoins.map(p => p[yAxisMode] || 1);
     const minX = Math.min(...xValues), maxX = Math.max(...xValues);
     const minY = Math.min(...yValues), maxY = Math.max(...yValues);
-    // @fix(140, 141): Removed redundant check as `yAxisMode` can't be 'price_change_percentage_24h'.
     const logMinY = (minY > 0) ? Math.log10(minY) : 0;
     const logMaxY = (maxY > 0) ? Math.log10(maxY) : 0;
 
@@ -159,7 +159,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     return { mapX, mapY, mapRadius, topCoins, minX, maxX, minY, maxY, pad, width, height };
   }, [coins, numCoins, yAxisMode, chartVersion]);
 
-
   // --- PARTICLE MANAGEMENT ---
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -178,29 +177,32 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       const newTargetY = mapY(coin[yAxisMode] || 1);
       
       const prevCoin = prevCoinMap.get(coin.id);
-      const trailStartX = prevCoin ? mapX(prevCoin.price_change_percentage_24h || 0) : newTargetX;
-      const trailStartY = prevCoin ? mapY(prevCoin[yAxisMode] || 1) : newTargetY;
-
+      
       if (existing) {
         existing.coin = coin;
         existing.radius = mapRadius(coin.market_cap);
         existing.color = (coin.price_change_percentage_24h || 0) > 0 ? '#089981' : '#f23645';
         existing.targetX = newTargetX;
         existing.targetY = newTargetY;
-        existing.trailStartX = trailStartX;
-        existing.trailStartY = trailStartY;
+        existing.trailStartX = prevCoin ? mapX(prevCoin.price_change_percentage_24h || 0) : existing.x;
+        existing.trailStartY = prevCoin ? mapY(prevCoin[yAxisMode] || 1) : existing.y;
         return existing;
       } else {
         if (!imageCache.current.has(coin.image)) {
           const img = new Image(); img.src = coin.image;
           imageCache.current.set(coin.image, img);
         }
-        const centerX = canvas.width / 2;
-        const centerY = canvas.height / 2;
+        const radiusForOffset = mapRadius(coin.market_cap);
+        const offsetX = (Math.random() - 0.5) * radiusForOffset * 0.5;
+        const offsetY = (Math.random() - 0.5) * radiusForOffset * 0.5;
+        
         return {
-          id: coin.id, x: centerX, y: centerY, startX: centerX, startY: centerY,
-          targetX: newTargetX, targetY: newTargetY, trailStartX: newTargetX, trailStartY: newTargetY,
-          animProgress: 0, radius: mapRadius(coin.market_cap),
+          id: coin.id, x: newTargetX, y: newTargetY,
+          vx: (Math.random() - 0.5) * 50, vy: (Math.random() - 0.5) * 50,
+          startX: newTargetX, startY: newTargetY,
+          targetX: newTargetX, targetY: newTargetY,
+          trailStartX: newTargetX + offsetX, trailStartY: newTargetY + offsetY,
+          animProgress: 1, radius: mapRadius(coin.market_cap),
           color: (coin.price_change_percentage_24h || 0) > 0 ? '#089981' : '#f23645',
           coin, trail: [], phase: Math.random() * Math.PI * 2,
         };
@@ -234,53 +236,68 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         if (particles.length === 0) return;
 
         const mappings = calculateMappings();
-        if (!mappings) return;
-        const { pad, width, height, minX, maxX, minY, maxY } = mappings;
-
         const zoom = zoomRef.current;
-        ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
-        ctx.lineWidth = 1; ctx.font = `bold ${10 * Math.max(1, zoom * 0.5)}px Inter`;
-        ctx.fillStyle = isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)';
-        for (let i = 0; i <= 5; i++) {
-          const val = Math.pow(10, Math.log10(minY) + i * (Math.log10(maxY) - Math.log10(minY)) / 5);
-          const y = mappings.mapY(val);
-          if (y > pad * 0.5 && y < height - pad * 0.5) {
-            ctx.beginPath(); ctx.moveTo(mappings.mapX(minX) - 5, y); ctx.lineTo(mappings.mapX(maxX), y); ctx.stroke();
-            ctx.fillText(`$${formatCompact(val)}`, 15, y + 3);
+
+        if (!isFreeMode && mappings) {
+          const { pad, width, height, minX, maxX, minY, maxY } = mappings;
+          ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+          ctx.lineWidth = 1; ctx.font = `bold ${10 * Math.max(1, zoom * 0.5)}px Inter`;
+          ctx.fillStyle = isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)';
+          for (let i = 0; i <= 5; i++) {
+            const val = Math.pow(10, Math.log10(minY) + i * (Math.log10(maxY) - Math.log10(minY)) / 5);
+            const y = mappings.mapY(val);
+            if (y > pad * 0.5 && y < height - pad * 0.5) {
+              ctx.beginPath(); ctx.moveTo(mappings.mapX(minX) - 5, y); ctx.lineTo(mappings.mapX(maxX), y); ctx.stroke();
+              // FIX: The call to formatCompact was missing its argument.
+              ctx.fillText(`$${formatCompact(val)}`, 15, y + 3);
+            }
           }
-        }
-        for (let i = 0; i <= 10; i++) {
-          const val = minX + i * (maxX - minX) / 10;
-          const x = mappings.mapX(val);
-          if (x > pad * 0.5 && x < width - pad * 0.5) {
-            ctx.beginPath(); ctx.moveTo(x, mappings.mapY(minY)); ctx.lineTo(x, mappings.mapY(maxY) + 5); ctx.stroke();
-            ctx.textAlign = 'center'; ctx.fillText(`${val.toFixed(1)}%`, x, height - pad + 15);
+          for (let i = 0; i <= 10; i++) {
+            const val = minX + i * (maxX - minX) / 10;
+            const x = mappings.mapX(val);
+            if (x > pad * 0.5 && x < width - pad * 0.5) {
+              ctx.beginPath(); ctx.moveTo(x, mappings.mapY(minY)); ctx.lineTo(x, mappings.mapY(maxY) + 5); ctx.stroke();
+              ctx.textAlign = 'center'; ctx.fillText(`${val.toFixed(1)}%`, x, height - pad + 15);
+            }
           }
+          ctx.fillStyle = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'; ctx.font = 'bold 12px Inter'; ctx.textAlign = 'center';
+          ctx.fillText('Variação de Preço 24h (%)', width / 2, height - 15);
+          ctx.save(); ctx.translate(25, height / 2); ctx.rotate(-Math.PI / 2);
+          const yLabel = yAxisMode === 'total_volume' ? 'Volume 24h (Log)' : 'Market Cap (Log)';
+          ctx.fillText(yLabel, 0, 0); ctx.restore();
         }
 
-        ctx.fillStyle = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'; ctx.font = 'bold 12px Inter'; ctx.textAlign = 'center';
-        ctx.fillText('Variação de Preço 24h (%)', width / 2, height - 15);
-        ctx.save(); ctx.translate(25, height / 2); ctx.rotate(-Math.PI / 2);
-        const yLabel = yAxisMode === 'total_volume' ? 'Volume 24h (Log)' : 'Market Cap (Log)';
-        ctx.fillText(yLabel, 0, 0); ctx.restore();
+        if (isFreeMode) {
+            for (let i = 0; i < particles.length; i++) {
+                const p = particles[i];
+                p.x += p.vx * delta; p.y += p.vy * delta;
+                if (p.x - p.radius < 0 || p.x + p.radius > canvas.width) p.vx *= -1;
+                if (p.y - p.radius < 0 || p.y + p.radius > canvas.height) p.vy *= -1;
+            }
+            for (let i = 0; i < particles.length; i++) {
+                for (let j = i + 1; j < particles.length; j++) {
+                    const p1 = particles[i]; const p2 = particles[j];
+                    const dx = p2.x - p1.x; const dy = p2.y - p1.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < p1.radius + p2.radius) {
+                        [p1.vx, p2.vx] = [p2.vx, p1.vx]; [p1.vy, p2.vy] = [p2.vy, p1.vy];
+                    }
+                }
+            }
+        }
 
         particles.forEach(p => {
             const isMatch = searchResultRef.current && p.id === searchResultRef.current.id;
             ctx.globalAlpha = (searchTerm && !isMatch) ? 0.05 : 1.0;
 
-            if (p.animProgress < 1) {
-                p.animProgress = Math.min(1, p.animProgress + delta * 2.5);
-                const easedProgress = easeOutCubic(p.animProgress);
-                p.x = lerp(p.startX, p.targetX, easedProgress);
-                p.y = lerp(p.startY, p.targetY, easedProgress);
-            } else {
+            if (!isFreeMode) {
                 p.phase += delta * animSpeed;
                 const t = (Math.sin(p.phase) + 1) / 2;
                 p.x = lerp(p.trailStartX, p.targetX, t);
                 p.y = lerp(p.trailStartY, p.targetY, t);
             }
 
-            if (p.animProgress >=1 && (p.trailStartX !== p.targetX || p.trailStartY !== p.targetY)) {
+            if (!isFreeMode && (p.trailStartX !== p.targetX || p.trailStartY !== p.targetY)) {
                 ctx.beginPath(); ctx.moveTo(p.trailStartX, p.trailStartY); ctx.lineTo(p.targetX, p.targetY);
                 const baseColor = p.color === '#089981' ? '8, 153, 129' : '242, 54, 69';
                 ctx.strokeStyle = `rgba(${baseColor}, 0.2)`; ctx.lineWidth = 1 * zoom; ctx.stroke();
@@ -294,7 +311,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
                 for (let i = 1; i < p.trail.length; i++) {
                     const alpha = Math.pow(i / p.trail.length, 2) * 0.7;
                     ctx.beginPath(); ctx.moveTo(p.trail[i-1].x, p.trail[i-1].y); ctx.lineTo(p.trail[i].x, p.trail[i].y);
-                    ctx.strokeStyle = `rgba(${baseColor}, ${alpha})`; ctx.lineWidth = 2.5 * zoom; ctx.stroke();
+                    ctx.strokeStyle = `rgba(${baseColor}, ${alpha})`; ctx.lineWidth = isFreeMode ? 2.5 : 2.5 * zoom; ctx.stroke();
                 }
             }
 
@@ -305,8 +322,11 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
             ctx.restore();
             
             ctx.globalAlpha = 1.0;
+            const effectiveLineWidth = isFreeMode ? 4 : 4 * zoom;
             if (selectedParticleRef.current?.id === p.id || hoveredParticleRef.current?.id === p.id) {
-                ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2); ctx.strokeStyle = '#dd9933'; ctx.lineWidth = selectedParticleRef.current?.id === p.id ? 4 * zoom : 2 * zoom; ctx.stroke();
+                ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2); ctx.strokeStyle = '#dd9933'; 
+                ctx.lineWidth = selectedParticleRef.current?.id === p.id ? effectiveLineWidth : effectiveLineWidth / 2;
+                ctx.stroke();
             }
         });
 
@@ -314,8 +334,8 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         if (particleForTooltip) {
             const p = particleForTooltip; const ttWidth = 240, ttHeight = 145;
             let ttX = p.x + p.radius + 15; let ttY = p.y - ttHeight / 2;
-            if (ttX + ttWidth > width - 10) ttX = p.x - p.radius - ttWidth - 15;
-            ttX = clamp(ttX, 10, width - ttWidth - 10); ttY = clamp(ttY, 10, height - ttHeight - 10);
+            if (ttX + ttWidth > canvas.width - 10) ttX = p.x - p.radius - ttWidth - 15;
+            ttX = clamp(ttX, 10, canvas.width - ttWidth - 10); ttY = clamp(ttY, 10, canvas.height - ttHeight - 10);
             
             ctx.fillStyle = isDark ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.95)'; ctx.strokeStyle = '#dd9933'; ctx.lineWidth = 1;
             drawRoundedRect(ttX, ttY, ttWidth, ttHeight, 12); ctx.fill(); ctx.stroke();
@@ -334,7 +354,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
             data.forEach((d, i) => { const yPos = ttY + 75 + (i * 18); ctx.fillStyle = isDark ? '#999' : '#666'; ctx.fillText(d.label, ttX + 15, yPos); ctx.fillStyle = d.color; ctx.font = 'bold 12px Inter'; ctx.fillText(d.value, ttX + 90, yPos); ctx.font = '12px Inter'; });
         }
     };
-  }, [animSpeed, trailLength, isDark, calculateMappings, searchTerm, yAxisMode]);
+  }, [animSpeed, trailLength, isDark, calculateMappings, searchTerm, yAxisMode, isFreeMode]);
 
   // --- EFFECT FOR SETUP & RUNNING THE ANIMATION LOOP ---
   useEffect(() => {
@@ -360,14 +380,15 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     let found: Particle | null = null;
     for (let i = particlesRef.current.length - 1; i >= 0; i--) {
         const p = particlesRef.current[i]; const dx = p.x - mouseX; const dy = p.y - mouseY;
-        const hitRadius = Math.max(p.radius, 12); 
+        const hitRadius = p.radius * 1.2 + 4;
         if (dx * dx + dy * dy < hitRadius * hitRadius) { found = p; break; }
     }
     setHoveredParticle(found);
   };
 
-  const handleMouseDown = (e: React.MouseEvent) => { if (e.button !== 0) return; isPanningRef.current = true; panStartRef.current = { clientX: e.clientX, clientY: e.clientY, panX: panRef.current.x, panY: panRef.current.y }; };
+  const handleMouseDown = (e: React.MouseEvent) => { if (e.button !== 0 || isFreeMode) return; isPanningRef.current = true; panStartRef.current = { clientX: e.clientX, clientY: e.clientY, panX: panRef.current.x, panY: panRef.current.y }; };
   const handleWheel = (e: React.WheelEvent) => {
+    if (isFreeMode) return;
     const canvas = canvasRef.current; if (!canvas) return; e.preventDefault();
     const zoomSpeed = 0.1; const direction = e.deltaY < 0 ? 1 : -1; const newZoom = clamp(zoomRef.current * (1 + direction * zoomSpeed), 0.2, 10);
     const rect = canvas.getBoundingClientRect(); const mouseX = e.clientX - rect.left; const mouseY = e.clientY - rect.top;
@@ -380,7 +401,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
   const handleMouseUp = (e: React.MouseEvent) => {
     const dx = e.clientX - panStartRef.current.clientX; const dy = e.clientY - panStartRef.current.clientY;
-    if (isPanningRef.current && Math.sqrt(dx * dx + dy * dy) < 5) {
+    if (!isPanningRef.current || Math.sqrt(dx * dx + dy * dy) < 5) {
         if (hoveredParticleRef.current) setSelectedParticle(p => p?.id === hoveredParticleRef.current?.id ? null : hoveredParticleRef.current);
         else setSelectedParticle(null);
     }
@@ -409,7 +430,8 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       
       {settingsOpen && (
           <div className="absolute top-24 right-4 bg-white/90 dark:bg-black/80 p-4 rounded-lg border border-gray-200 dark:border-white/10 backdrop-blur-md w-64 z-20 space-y-4 animate-in fade-in slide-in-from-top-4 shadow-xl">
-              <div className="space-y-2"><label className="text-xs font-bold flex items-center gap-2"><FastForward size={14} /> Flutuação</label><input type="range" min="0.1" max="3" step="0.1" value={animSpeed} onChange={e => setAnimSpeed(parseFloat(e.target.value))} className="w-full accent-[#dd9933]" /></div>
+              <div className="flex justify-between items-center"><label className="text-xs font-bold flex items-center gap-2"><Atom size={14} /> Modo Livre</label><button onClick={()=> setIsFreeMode(!isFreeMode)} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isFreeMode ? 'bg-[#dd9933]' : 'bg-gray-200 dark:bg-tech-700'}`}><span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isFreeMode ? 'translate-x-6' : 'translate-x-1'}`}/></button></div>
+              <div className="space-y-2"><label className="text-xs font-bold flex items-center gap-2"><FastForward size={14} /> Flutuação</label><input type="range" min="0.1" max="5" step="0.1" value={animSpeed} onChange={e => setAnimSpeed(parseFloat(e.target.value))} className="w-full accent-[#dd9933]" /></div>
               <div className="space-y-2"><label className="text-xs font-bold flex items-center gap-2"><Droplets size={14} /> Rastro</label><input type="range" min="0" max="50" step="1" value={trailLength} onChange={e => setTrailLength(parseInt(e.target.value))} className="w-full accent-[#dd9933]" /></div>
               <div className="space-y-2"><label className="text-xs font-bold flex items-center gap-2"><Activity size={14} /> Eixo Y (Log)</label>
                   <select value={yAxisMode} onChange={e => setYAxisMode(e.target.value as YAxisMode)} className="w-full bg-gray-100 dark:bg-tech-800 text-gray-900 dark:text-gray-100 p-2 rounded text-xs border border-gray-200 dark:border-white/10 outline-none">
