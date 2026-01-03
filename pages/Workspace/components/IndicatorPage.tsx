@@ -1,5 +1,4 @@
-
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiCoin, Language, WidgetType, UserTier } from '../../../types';
 import { getTranslations } from '../../../locales';
 import CryptoWidget from './CryptoWidget';
