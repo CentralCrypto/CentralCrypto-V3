@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ApiCoin, Language } from '../../../types';
-import { Search, XCircle, Settings, Droplets, FastForward, Activity, Wind, X, Atom, Scaling, Coins } from 'lucide-react';
+import { Search, XCircle, Settings, Droplets, FastForward, Activity, Wind, X as CloseIcon, Atom, Scaling, Coins } from 'lucide-react';
 import { fetchTopCoins } from '../services/api';
 
 // --- TYPES ---
@@ -42,10 +42,10 @@ const formatPrice = (v?: number) => {
     return `$${n.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
 }
 
-const clamp = (val: number, min: number, max: number) => Math.min(Math.max(val, min), max);
+const mathClamp = (val: number, min: number, max: number) => Math.min(Math.max(val, min), max);
 
 // --- MAIN COMPONENT ---
-const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
+const MarketWindSwarm: React.FC<MarketWindSwarmProps> = ({ language, onClose }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
@@ -677,7 +677,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     const zoomFactor = 1.1;
     const oldZoom = zoomRef.current;
     const newZoom = e.deltaY < 0 ? oldZoom * zoomFactor : oldZoom / zoomFactor;
-    zoomRef.current = clamp(newZoom, 0.2, 8.0);
+    zoomRef.current = mathClamp(newZoom, 0.2, 8.0);
   };
   
   return (
@@ -694,7 +694,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         </div>
         <div className="flex items-center gap-3">
             <button onClick={() => setSettingsOpen(!settingsOpen)} className={`p-3 rounded-lg border transition-colors backdrop-blur-sm ${settingsOpen ? 'bg-[#dd9933] text-black border-[#dd9933]' : 'bg-gray-100 dark:bg-black/50 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10'}`}><Settings size={20} /></button>
-            <button onClick={() => onClose()} className="p-3 bg-gray-100 dark:bg-black/50 rounded-lg border border-gray-200 dark:border-white/10 hover:bg-red-500/10 text-gray-600 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors" title="Close"><X size={20} /></button>
+            <button onClick={() => onClose()} className="p-3 bg-gray-100 dark:bg-black/50 rounded-lg border border-gray-200 dark:border-white/10 hover:bg-red-500/10 text-gray-600 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors" title="Close"><CloseIcon size={20} /></button>
         </div>
       </div>
       

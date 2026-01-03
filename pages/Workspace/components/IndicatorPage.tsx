@@ -1,40 +1,40 @@
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
 import { ApiCoin, Language, WidgetType, UserTier } from '../../../types';
 import { getTranslations } from '../../../locales';
 import CryptoWidget from './CryptoWidget';
 import MarketWindSwarm from './MarketWindSwarm';
 
 import {
-  Activity,
-  ArrowUpRight,
-  BarChart2,
-  Calendar,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronsUpDown,
-  CircleDashed,
   ExternalLink,
   GripVertical,
-  LayoutGrid,
-  List,
   Loader2,
-  Lock,
-  PieChart,
   RefreshCw,
   Search,
   Star,
+  Lock,
+  List,
   TrendingUp,
-  User,
-  Wind
+  LayoutGrid,
+  CircleDashed,
+  Wind,
+  Activity,
+  BarChart2,
+  Calendar,
+  ArrowUpRight,
+  PieChart,
+  User
 } from 'lucide-react';
 
 import { fetchTopCoins } from '../services/api';
 
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
-// @ts-ignore FIX: Alias useSortable to avoid potential naming collisions.
-import { SortableContext, arrayMove, horizontalListSortingStrategy, useSortable as useDndKitSortable } from '@dnd-kit/sortable';
+import { SortableContext, arrayMove, horizontalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
 import { Area, AreaChart, ResponsiveContainer, YAxis } from 'recharts';
@@ -170,7 +170,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
   const [page, setPage] = useState(0);
 
   // quick sort buttons
-  const [quickSort, setQuickSort] = useState<'none' | 'gainers' | 'losers'>('none');
+  const [moversMode, setMoversMode] = useState<'none' | 'gainers' | 'losers'>('none');
 
   // BUY
   const [buyOpen, setBuyOpen] = useState(false);
@@ -217,12 +217,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   );
 
-  const fetchJsonSafe = async (url: string) => {
-    const r = await fetch(url, { cache: 'no-store' });
-    if (!r.ok) throw new Error(`${url} -> ${r.status}`);
-    return r.json();
-  };
-
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -233,6 +227,12 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  const fetchJsonSafe = useCallback(async (url: string) => {
+    const r = await fetch(url, { cache: 'no-store' });
+    if (!r.ok) throw new Error(`${url} -> ${r.status}`);
+    return r.json();
   }, []);
 
   const loadCategoriesLocal = useCallback(async () => {
@@ -252,28 +252,35 @@ const MarketCapTable = ({ language }: { language: Language }) => {
       setCatList(Array.isArray(listJson) ? listJson : []);
       setCatMarket(Array.isArray(marketJson) ? marketJson : []);
 
+      // mapping é opcional (snapshot)
       const mapJson = await fetchJsonSafe(`${base}/category_coins_map.json`).catch(() => null);
 
       if (mapJson && typeof mapJson === 'object') {
-        const categories = (mapJson as any).categories && typeof (mapJson as any).categories === 'object'
-          ? (mapJson as any).categories
-          : mapJson;
+        const categories =
+          (mapJson as any).categories && typeof (mapJson as any).categories === 'object'
+            ? (mapJson as any).categories
+            : mapJson;
 
-        if (categories && typeof categories === 'object') setCatCoinMap(categories as Record<string, string[]>);
-        else setCatCoinMap(null);
+        if (categories && typeof categories === 'object') {
+          setCatCoinMap(categories as Record<string, string[]>);
+        } else {
+          setCatCoinMap(null);
+        }
       } else {
         setCatCoinMap(null);
         if (!catWarnDismissed) {
-          setCatWarn('Dados de categoria não indexados localmente (category_coins_map.json ausente). A lista funciona, mas o filtro por moedas pode ficar limitado.');
+          setCatWarn(
+            'Dados de categoria não indexados localmente (category_coins_map.json ausente). A lista de categorias funciona, mas o filtro por moedas pode ficar limitado.'
+          );
         }
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Categories load error', e);
       setCatWarn('Falha ao carregar categorias locais em /cachecko/categories/.');
     } finally {
       setCatLoading(false);
     }
-  }, [catLoading, catWarnDismissed]);
+  }, [catLoading, catWarnDismissed, fetchJsonSafe]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -286,33 +293,19 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     return () => document.removeEventListener('mousedown', onDocClick);
   }, []);
 
+  // ao entrar na view categories, carrega os JSONs locais
   useEffect(() => {
     if (viewMode === 'categories') loadCategoriesLocal();
   }, [viewMode, loadCategoriesLocal]);
 
-  const applyQuickSort = (mode: 'none' | 'gainers' | 'losers') => {
-    setQuickSort(mode);
-    setPage(0);
-
-    if (mode === 'gainers') {
-      setSortConfig({ key: 'price_change_percentage_24h', direction: 'desc' });
-      return;
+  const handleSort = useCallback((key: string, forcedDirection?: 'asc' | 'desc') => {
+    let direction: 'asc' | 'desc' = forcedDirection ?? 'desc';
+    if (!forcedDirection) {
+      if (sortConfig.key === key && sortConfig.direction === 'desc') direction = 'asc';
     }
-    if (mode === 'losers') {
-      setSortConfig({ key: 'price_change_percentage_24h', direction: 'asc' });
-      return;
-    }
-    setSortConfig({ key: 'market_cap_rank', direction: 'asc' });
-  };
-
-  const handleSort = (key: string) => {
-    setQuickSort('none');
-
-    let direction: 'asc' | 'desc' = 'desc';
-    if (sortConfig.key === key && sortConfig.direction === 'desc') direction = 'asc';
     setSortConfig({ key, direction });
     setPage(0);
-  };
+  }, [sortConfig.key, sortConfig.direction]);
 
   // ---------- Taxonomy parsing (suporta 2 ou 3 níveis) ----------
   const parsedTaxonomy = useMemo(() => {
@@ -335,7 +328,12 @@ const MarketCapTable = ({ language }: { language: Language }) => {
   }, [taxonomy]);
 
   const masterOptions = useMemo(() => {
-    const opts = parsedTaxonomy.map((m: any) => ({ id: m.id, name: m.name, children: m.children, categoryIds: m.categoryIds }));
+    const opts = parsedTaxonomy.map((m: any) => ({
+      id: m.id,
+      name: m.name,
+      children: m.children,
+      categoryIds: m.categoryIds
+    }));
     return [{ id: '__all__', name: 'Todas' }, ...opts];
   }, [parsedTaxonomy]);
 
@@ -397,6 +395,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     return arr.map((x: any) => String(x));
   }, [catList, catMarket, masterKey, selectedMaster, subKey, subOptions]);
 
+  // category name resolver
   const categoryNameById = useMemo(() => {
     const map = new Map<string, string>();
     for (const c of catList) {
@@ -572,7 +571,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     };
   };
 
-  // ---------- Coin table filtering ----------
+  // ---------- Coin table filtering (search + fav + activeCategoryId) ----------
   const filteredSortedCoins = useMemo(() => {
     let items = [...coins];
 
@@ -581,25 +580,22 @@ const MarketCapTable = ({ language }: { language: Language }) => {
       items = items.filter(c => c.name?.toLowerCase().includes(q) || c.symbol?.toLowerCase().includes(q));
     }
 
-    if (favOnly) items = items.filter(c => !!favorites[c.id]);
+    if (favOnly) {
+      items = items.filter(c => !!favorites[c.id]);
+    }
 
     if (activeCategoryId !== '__all__') {
       const setIds = categoryCoinIds.get(activeCategoryId);
-      if (setIds && setIds.size > 0) items = items.filter(c => setIds.has(String(c.id)));
+      if (setIds && setIds.size > 0) {
+        items = items.filter(c => setIds.has(String(c.id)));
+      }
     }
 
     const getVal = (c: ApiCoin, key: string) => {
       const prices = c.sparkline_in_7d?.price;
-
       if (key === 'change_1h_est') return pctFromSpark(prices, 1);
       if (key === 'change_7d_est') return pct7dFromSpark(prices);
       if (key === 'vol_7d_est') return (c.total_volume || 0) * 7;
-
-      if (key === 'price_change_percentage_24h') {
-        const v = (c as any).price_change_percentage_24h_in_currency ?? c.price_change_percentage_24h;
-        return isFinite(v) ? Number(v) : 0;
-      }
-
       // @ts-ignore
       return c[key];
     };
@@ -651,7 +647,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
         <div className="flex items-center gap-2">
           <button
-            type="button"
             onClick={() => setPage(p => Math.max(0, p - 1))}
             disabled={safePage === 0}
             className={`px-2.5 py-2 rounded-lg border text-sm font-black transition-colors
@@ -669,7 +664,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
           </div>
 
           <button
-            type="button"
             onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
             disabled={safePage >= totalPages - 1}
             className={`px-2.5 py-2 rounded-lg border text-sm font-black transition-colors
@@ -686,7 +680,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     );
   };
 
-  // widths ajustados
   const COLS: Record<string, {
     id: string;
     label: string;
@@ -694,17 +687,17 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     align?: 'left' | 'center' | 'right';
     w: string;
   }> = {
-    rank: { id: 'rank', label: '#', sortKey: 'market_cap_rank', align: 'center', w: 'w-[64px]' },
-    asset: { id: 'asset', label: 'Ativo', sortKey: 'name', align: 'left', w: 'w-[260px]' },
-    price: { id: 'price', label: 'Preço', sortKey: 'current_price', align: 'right', w: 'w-[120px]' },
-    ch1h: { id: 'ch1h', label: '1h %', sortKey: 'change_1h_est', align: 'right', w: 'w-[80px]' },
-    ch24h: { id: 'ch24h', label: '24h %', sortKey: 'price_change_percentage_24h', align: 'right', w: 'w-[90px]' },
-    ch7d: { id: 'ch7d', label: '7d %', sortKey: 'change_7d_est', align: 'right', w: 'w-[90px]' },
-    mcap: { id: 'mcap', label: 'Market Cap', sortKey: 'market_cap', align: 'right', w: 'w-[140px]' },
-    vol24h: { id: 'vol24h', label: 'Vol (24h)', sortKey: 'total_volume', align: 'right', w: 'w-[120px]' },
-    vol7d: { id: 'vol7d', label: 'Vol (7d)', sortKey: 'vol_7d_est', align: 'right', w: 'w-[120px]' },
-    supply: { id: 'supply', label: 'Circ. Supply', sortKey: 'circulating_supply', align: 'right', w: 'w-[150px]' },
-    spark7d: { id: 'spark7d', label: 'Mini-chart (7d)', sortKey: undefined, align: 'center', w: 'w-[300px]' },
+    rank: { id: 'rank', label: '#', sortKey: 'market_cap_rank', align: 'center', w: 'w-[72px]' },
+    asset: { id: 'asset', label: 'Ativo', sortKey: 'name', align: 'left', w: 'w-[240px]' }, // ✅ mais estreita
+    price: { id: 'price', label: 'Preço', sortKey: 'current_price', align: 'right', w: 'w-[140px]' },
+    ch1h: { id: 'ch1h', label: '1h %', sortKey: 'change_1h_est', align: 'right', w: 'w-[92px]' },
+    ch24h: { id: 'ch24h', label: '24h %', sortKey: 'price_change_percentage_24h', align: 'right', w: 'w-[100px]' },
+    ch7d: { id: 'ch7d', label: '7d %', sortKey: 'change_7d_est', align: 'right', w: 'w-[100px]' },
+    mcap: { id: 'mcap', label: 'Market Cap', sortKey: 'market_cap', align: 'right', w: 'w-[150px]' },
+    vol24h: { id: 'vol24h', label: 'Vol (24h)', sortKey: 'total_volume', align: 'right', w: 'w-[130px]' },
+    vol7d: { id: 'vol7d', label: 'Vol (7d)', sortKey: 'vol_7d_est', align: 'right', w: 'w-[130px]' },
+    supply: { id: 'supply', label: 'Circ. Supply', sortKey: 'circulating_supply', align: 'right', w: 'w-[170px]' },
+    spark7d: { id: 'spark7d', label: 'Mini-chart (7d)', sortKey: undefined, align: 'center', w: 'w-[320px]' }, // ✅ não empurra
   };
 
   const SortIcon = ({ active }: { active: boolean }) => (
@@ -722,7 +715,8 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     sortKey?: string;
     w: string;
   }) => {
-    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useDndKitSortable({ id: colId });
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: colId });
+
     const style: React.CSSProperties = {
       transform: CSS.Transform.toString(transform),
       transition,
@@ -733,31 +727,32 @@ const MarketCapTable = ({ language }: { language: Language }) => {
       <th
         ref={setNodeRef}
         style={style}
-        className={`relative h-[54px] p-0 select-none group border-b border-gray-100 dark:border-slate-800 ${w}
-          hover:bg-gray-100 dark:hover:bg-white/5 transition-colors text-center`}
+        className={`p-3 select-none group border-b border-gray-100 dark:border-slate-800 ${w}
+          hover:bg-gray-100 dark:hover:bg-white/5 transition-colors align-middle`}
       >
-        <span
-          className="absolute left-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-7 h-7 rounded-md
-            hover:bg-gray-200 dark:hover:bg-white/10 text-gray-400"
-          onClick={(e) => e.stopPropagation()}
-          {...attributes}
-          {...listeners}
-          title="Arraste para reordenar"
-        >
-          <GripVertical size={16} />
-        </span>
+        {/* ✅ puxador à esquerda + texto centralizado na largura da coluna */}
+        <div className="relative w-full flex items-center">
+          <span
+            className="absolute left-0 inline-flex items-center justify-center w-6 h-6 rounded-md hover:bg-gray-200 dark:hover:bg-white/10 text-gray-400"
+            onClick={(e) => e.stopPropagation()}
+            {...attributes}
+            {...listeners}
+            title="Arraste para reordenar"
+          >
+            <GripVertical size={16} />
+          </span>
 
-        <button
-          type="button"
-          className="w-full h-full inline-flex items-center justify-center gap-1 font-black uppercase tracking-widest text-xs
-            text-gray-400 dark:text-slate-400 px-10 text-center"
-          onClick={() => sortKey && handleSort(sortKey)}
-          disabled={!sortKey}
-          title={sortKey ? 'Ordenar' : ''}
-        >
-          <span className="whitespace-nowrap">{label}</span>
-          {sortKey ? <SortIcon active={sortConfig.key === sortKey} /> : null}
-        </button>
+          <button
+            type="button"
+            className="w-full inline-flex items-center justify-center gap-1 font-black uppercase tracking-widest text-xs text-gray-400 dark:text-slate-400"
+            onClick={() => sortKey && handleSort(sortKey)}
+            disabled={!sortKey}
+            title={sortKey ? 'Ordenar' : ''}
+          >
+            <span className="whitespace-nowrap">{label}</span>
+            {sortKey ? <SortIcon active={sortConfig.key === sortKey} /> : null}
+          </button>
+        </div>
       </th>
     );
   };
@@ -792,29 +787,32 @@ const MarketCapTable = ({ language }: { language: Language }) => {
   };
 
   const CategoriesTable = () => {
-    const rows = visibleCategoryIds
+    let rows = visibleCategoryIds
       .map((id) => computeCategoryStats(id))
-      .filter((r) => r && r.name)
-      .filter((r: any) => Number(r.coinsCount || 0) > 0);
+      .filter((r) => r && r.name);
+
+    // ✅ remove categorias com 0 moedas
+    rows = rows.filter((r: any) => Number(r.coinsCount || 0) > 0);
 
     const q = (searchTerm || '').toLowerCase().trim();
     const filtered = q
-      ? rows.filter(r => String(r.name).toLowerCase().includes(q) || String(r.id).toLowerCase().includes(q))
+      ? rows.filter((r: any) => String(r.name).toLowerCase().includes(q) || String(r.id).toLowerCase().includes(q))
       : rows;
 
-    filtered.sort((a, b) => (Number(b.marketCap || 0) - Number(a.marketCap || 0)));
+    filtered.sort((a: any, b: any) => (Number(b.marketCap || 0) - Number(a.marketCap || 0)));
 
     return (
-      <div style={{ overflowX: 'auto', overflowY: 'visible', maxHeight: 'none', height: 'auto' }}>
+      // ✅ sem altura travada e sem overflow Y => NUNCA corta linha nem cria scrollbar interna
+      <div className="custom-scrollbar overflow-x-auto overflow-y-visible">
         {catLoading && filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-gray-500">
             <Loader2 className="animate-spin mb-2" size={32} />
             <span className="font-bold text-sm uppercase tracking-widest animate-pulse">Carregando Categorias...</span>
           </div>
         ) : (
-          <table className="w-full text-left border-collapse min-w-[1400px] table-fixed">
+          <table className="w-full text-left border-collapse min-w-[1200px] table-fixed">
             <thead className="sticky top-0 z-20 bg-white dark:bg-[#2f3032]">
-              <tr className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-slate-400 border-b border-gray-100 dark:border-slate-800 h-[54px]">
+              <tr className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-slate-400 border-b border-gray-100 dark:border-slate-800">
                 <th className="p-3 w-[360px] text-center">Categoria</th>
                 <th className="p-3 text-center w-[160px]">Top Gainers</th>
                 <th className="p-3 text-center w-[160px]">Top Losers</th>
@@ -835,30 +833,38 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                 return (
                   <tr
                     key={r.id}
-                    className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors cursor-pointer h-[56px]"
+                    className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors cursor-pointer h-14"
                     onClick={() => {
                       if (categoryCoinIds.get(r.id)?.size) {
                         setActiveCategoryId(r.id);
                         setViewMode('coins');
                         setPage(0);
-                        setQuickSort('none');
+                        setMoversMode('none');
                         setSortConfig({ key: 'market_cap', direction: 'desc' });
                       } else {
-                        if (!catWarnDismissed) setCatWarn('Sem snapshot/mapping local para aplicar filtro de moedas nessa categoria. Gere category_coins_map.json.');
+                        if (!catWarnDismissed) {
+                          setCatWarn('Sem snapshot/mapping local para aplicar filtro de moedas nessa categoria. Gere category_coins_map.json.');
+                        }
                       }
                     }}
                     title="Clique para filtrar a tabela principal"
                   >
                     <td className="p-3 w-[360px]">
-                      <div className="flex flex-col min-w-0">
-                        <span className="text-[14px] font-black text-gray-900 dark:text-white truncate">
+                      <div className="flex flex-col min-w-0 items-center text-center">
+                        <span className="text-[14px] font-black text-gray-900 dark:text-white truncate w-full">
                           {r.name}
                         </span>
+                        {/* ✅ removido o ID técnico */}
                       </div>
                     </td>
 
-                    <td className="p-3 text-center w-[160px]"><CategoryRowLogos arr={r.gainers || []} /></td>
-                    <td className="p-3 text-center w-[160px]"><CategoryRowLogos arr={r.losers || []} /></td>
+                    <td className="p-3 text-center w-[160px]">
+                      <CategoryRowLogos arr={r.gainers || []} />
+                    </td>
+
+                    <td className="p-3 text-center w-[160px]">
+                      <CategoryRowLogos arr={r.losers || []} />
+                    </td>
 
                     <td className={`p-3 text-center font-mono text-[13px] font-black w-[90px] ${!isFinite(r.ch1h) ? 'text-gray-400 dark:text-slate-500' : (r.ch1h >= 0 ? 'text-green-500' : 'text-red-500')}`}>
                       {safePct(Number(r.ch1h))}
@@ -934,29 +940,40 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     );
   };
 
-  const darkSelectClass =
-    "bg-white dark:bg-[#2f3032] border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-black " +
-    "text-gray-800 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 outline-none";
+  const onRefresh = useCallback(() => {
+    if (viewMode === 'categories') loadCategoriesLocal();
+    else load();
+  }, [viewMode, loadCategoriesLocal, load]);
 
-  const darkSelectStyle: React.CSSProperties = { colorScheme: 'dark' };
+  const onTopGainers = useCallback(() => {
+    setMoversMode('gainers');
+    setSortConfig({ key: 'price_change_percentage_24h', direction: 'desc' });
+    setPage(0);
+  }, []);
+
+  const onTopLosers = useCallback(() => {
+    setMoversMode('losers');
+    setSortConfig({ key: 'price_change_percentage_24h', direction: 'asc' });
+    setPage(0);
+  }, []);
+
+  const onDefaultSort = useCallback(() => {
+    setMoversMode('none');
+    setSortConfig({ key: 'market_cap_rank', direction: 'asc' });
+    setPage(0);
+  }, []);
 
   return (
-    // 🔥 ROOT: não deixa a porra do componente virar scroll-container
-    <div
-      className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-100 dark:border-slate-800 shadow-xl"
-      style={{
-        overflow: 'visible',
-        maxHeight: 'none',
-        height: 'auto',
-      }}
-    >
+    <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-100 dark:border-slate-800 shadow-xl overflow-hidden flex flex-col">
+
       {/* Header */}
-      <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col gap-3 bg-gray-50/50 dark:bg-black/20">
+      <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col gap-3 bg-gray-50/50 dark:bg-black/20 shrink-0">
         <div className="flex flex-col lg:flex-row justify-between items-center gap-3">
-          {/* LEFT */}
+
+          {/* LEFT GROUP */}
           <div className="flex items-center gap-2 w-full lg:w-auto">
             <div className="relative w-full lg:w-[420px]">
-              <Search size={18} className="absolute left-3 top-2.5 text-gray-500" />
+              <Search size={18} className="absolute left-3 top-2.5 text-gray-500 dark:text-slate-400" />
               <input
                 type="text"
                 placeholder={viewMode === 'categories' ? 'Buscar categoria...' : 'Buscar ativo...'}
@@ -966,6 +983,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               />
             </div>
 
+            {/* Favoritos */}
             <button
               type="button"
               onClick={() => setFavOnly(v => !v)}
@@ -979,55 +997,66 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               Favoritos
             </button>
 
+            {/* CATEGORIAS / DROPDOWNS */}
             {viewMode === 'coins' ? (
               <>
                 <button
                   type="button"
-                  onClick={() => {
-                    setViewMode('categories');
-                    setQuickSort('none');
-                  }}
+                  onClick={() => { setViewMode('categories'); }}
                   className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 font-black hover:bg-gray-100 dark:hover:bg-white/5 transition-colors whitespace-nowrap"
+                  title="Abrir categorias"
                 >
                   Categorias
                 </button>
 
+                {/* ✅ novos botões */}
                 <button
                   type="button"
-                  onClick={() => applyQuickSort(quickSort === 'gainers' ? 'none' : 'gainers')}
+                  onClick={onTopGainers}
                   className={`px-3 py-2 rounded-lg border font-black transition-colors whitespace-nowrap
-                    ${quickSort === 'gainers'
+                    ${moversMode === 'gainers'
                       ? 'bg-[#dd9933] text-black border-transparent'
                       : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5'
                     }`}
+                  title="Ordenar por 24h% (maior→menor)"
                 >
                   Top Gainers
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => applyQuickSort(quickSort === 'losers' ? 'none' : 'losers')}
+                  onClick={onTopLosers}
                   className={`px-3 py-2 rounded-lg border font-black transition-colors whitespace-nowrap
-                    ${quickSort === 'losers'
+                    ${moversMode === 'losers'
                       ? 'bg-[#dd9933] text-black border-transparent'
                       : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5'
                     }`}
+                  title="Ordenar por 24h% (menor→maior)"
                 >
                   Top Losers
                 </button>
+
+                {moversMode !== 'none' && (
+                  <button
+                    type="button"
+                    onClick={onDefaultSort}
+                    className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 font-black hover:bg-gray-100 dark:hover:bg-white/5 transition-colors whitespace-nowrap"
+                    title="Voltar ao padrão"
+                  >
+                    Padrão
+                  </button>
+                )}
               </>
             ) : (
               <>
                 <select
                   value={masterKey}
                   onChange={(e) => setMasterKey(e.target.value)}
-                  className={darkSelectClass}
-                  style={darkSelectStyle}
+                  className="bg-white dark:bg-[#2f3032] border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-black text-gray-800 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 outline-none"
+                  title="Master"
                 >
                   {masterOptions.map((o: any) => (
-                    <option key={o.id} value={o.id} className="bg-[#2f3032] text-slate-200">
-                      {o.name}
-                    </option>
+                    <option key={o.id} value={o.id}>{o.name}</option>
                   ))}
                 </select>
 
@@ -1035,13 +1064,11 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                   <select
                     value={subKey}
                     onChange={(e) => setSubKey(e.target.value)}
-                    className={darkSelectClass}
-                    style={darkSelectStyle}
+                    className="bg-white dark:bg-[#2f3032] border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-black text-gray-800 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 outline-none"
+                    title="Subcategoria"
                   >
                     {subOptions.map((o: any) => (
-                      <option key={o.id} value={o.id} className="bg-[#2f3032] text-slate-200">
-                        {o.name}
-                      </option>
+                      <option key={o.id} value={o.id}>{o.name}</option>
                     ))}
                   </select>
                 )}
@@ -1050,6 +1077,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                   type="button"
                   onClick={() => setViewMode('coins')}
                   className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 font-black hover:bg-gray-100 dark:hover:bg-white/5 transition-colors whitespace-nowrap"
+                  title="Voltar para Marketcap"
                 >
                   Voltar
                 </button>
@@ -1061,6 +1089,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                 type="button"
                 onClick={() => setActiveCategoryId('__all__')}
                 className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 font-black hover:bg-gray-100 dark:hover:bg-white/5 transition-colors whitespace-nowrap"
+                title="Limpar filtro de categoria"
               >
                 Limpar
               </button>
@@ -1069,9 +1098,9 @@ const MarketCapTable = ({ language }: { language: Language }) => {
             {/* BUY */}
             <div className="relative" ref={buyRef}>
               <button
-                type="button"
                 onClick={() => setBuyOpen(v => !v)}
                 className="px-3 py-2 rounded-lg bg-[#dd9933] text-black font-black hover:opacity-90 transition-opacity flex items-center gap-2 whitespace-nowrap"
+                title="BUY"
               >
                 BUY <ChevronDown size={16} />
               </button>
@@ -1092,7 +1121,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
             </div>
           </div>
 
-          {/* RIGHT */}
+          {/* RIGHT GROUP */}
           <div className="flex items-center gap-2 w-full lg:w-auto justify-end">
             <div className="flex items-center gap-2">
               <span className="text-xs font-black text-gray-500 dark:text-slate-400 uppercase tracking-widest">
@@ -1101,26 +1130,21 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               <select
                 value={pageSize}
                 onChange={(e) => setPageSize(parseInt(e.target.value, 10))}
-                className={darkSelectClass}
-                style={darkSelectStyle}
+                className="bg-white dark:bg-[#2f3032] border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-black text-gray-800 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 outline-none"
+                title="Quantidade por página"
               >
-                <option value={25} className="bg-[#2f3032] text-slate-200">25</option>
-                <option value={50} className="bg-[#2f3032] text-slate-200">50</option>
-                <option value={75} className="bg-[#2f3032] text-slate-200">75</option>
-                <option value={100} className="bg-[#2f3032] text-slate-200">100</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={75}>75</option>
+                <option value={100}>100</option>
               </select>
             </div>
 
             <Paginator compact />
 
-            {/* ✅ Refresh volta a funcionar */}
             <button
-              type="button"
-              onClick={() => {
-                if (viewMode === 'categories') loadCategoriesLocal();
-                else load();
-              }}
-              className="p-2.5 hover:bg-gray-200 dark:hover:bg-slate-700 rounded-lg text-gray-500 transition-colors"
+              onClick={onRefresh}
+              className="p-2.5 hover:bg-gray-200 dark:hover:bg-slate-700 rounded-lg text-gray-500 dark:text-slate-300 transition-colors"
               title="Atualizar"
             >
               <RefreshCw size={22} className={(loading || catLoading) ? 'animate-spin' : ''} />
@@ -1148,24 +1172,23 @@ const MarketCapTable = ({ language }: { language: Language }) => {
       {viewMode === 'categories' ? (
         <CategoriesTable />
       ) : (
-        // 🔥 aqui: só horizontal, vertical SEMPRE visível
-        <div style={{ overflowX: 'auto', overflowY: 'visible', maxHeight: 'none', height: 'auto' }}>
+        <div className="custom-scrollbar overflow-x-auto overflow-y-visible">
           {loading && coins.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-gray-500">
               <Loader2 className="animate-spin mb-2" size={32} />
               <span className="font-bold text-sm uppercase tracking-widest animate-pulse">Sincronizando Mercado...</span>
             </div>
           ) : (
-            <table className="w-full text-left border-collapse min-w-[1480px] table-fixed">
-              <thead className="sticky top-0 z-20 bg-white dark:bg-[#2f3032]">
-                <tr className="border-b border-gray-100 dark:border-slate-800 h-[54px]">
-                  <th className="p-0 w-[48px] text-center">
-                    <span className="inline-flex w-full h-full items-center justify-center text-xs font-black uppercase tracking-widest text-gray-400 dark:text-slate-400">
-                      Fav
-                    </span>
-                  </th>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+              <table className="w-full text-left border-collapse min-w-[1360px] table-fixed">
+                <thead className="sticky top-0 z-20 bg-white dark:bg-[#2f3032]">
+                  <tr className="border-b border-gray-100 dark:border-slate-800">
+                    <th className="p-3 w-[48px] text-center">
+                      <span className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-slate-400">
+                        Fav
+                      </span>
+                    </th>
 
-                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
                     <SortableContext items={colOrder} strategy={horizontalListSortingStrategy}>
                       {colOrder.map((cid) => {
                         const c = COLS[cid];
@@ -1180,203 +1203,203 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                         );
                       })}
                     </SortableContext>
-                  </DndContext>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
-                {pageCoins.map((coin) => {
-                  const change24 =
-                    (coin as any).price_change_percentage_24h_in_currency ??
-                    coin.price_change_percentage_24h ??
-                    0;
-
-                  const isPos24 = Number(change24 || 0) >= 0;
-
-                  const prices = coin.sparkline_in_7d?.price;
-                  const c1h = pctFromSpark(prices, 1);
-                  const c7d = pct7dFromSpark(prices);
-                  const vol7d = (coin.total_volume || 0) * 7;
-
-                  const sparkData = Array.isArray(prices) ? prices.map((v, i) => ({ i, v })) : [];
-
-                  const isFav = !!favorites[coin.id];
-
-                  return (
-                    <tr key={coin.id} className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors group h-[56px]">
-                      <td className="p-0 w-[48px] text-center">
-                        <button
-                          type="button"
-                          onClick={() => setFavorites(prev => ({ ...prev, [coin.id]: !prev[coin.id] }))}
-                          className="inline-flex items-center justify-center w-full h-[56px] hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"
-                          title="Favoritar"
-                        >
-                          <Star size={18} className={isFav ? 'text-[#dd9933]' : 'text-gray-400'} />
-                        </button>
-                      </td>
-
-                      {colOrder.map((cid) => {
-                        if (cid === 'rank') {
-                          return (
-                            <td key={cid} className={`p-3 text-[13px] font-black text-gray-400 ${COLS.rank.w} text-center`}>
-                              #{coin.market_cap_rank}
-                            </td>
-                          );
-                        }
-
-                        if (cid === 'asset') {
-                          return (
-                            <td key={cid} className={`p-3 ${COLS.asset.w}`}>
-                              <div className="flex items-center gap-3 min-w-0">
-                                <img
-                                  src={coin.image}
-                                  alt=""
-                                  className="w-9 h-9 rounded-full bg-slate-100 dark:bg-[#242628] p-1 border border-slate-200 dark:border-white/10 shadow-sm shrink-0"
-                                  onError={(e) => (e.currentTarget.style.display = 'none')}
-                                />
-                                <div className="flex flex-col min-w-0">
-                                  <span className="text-[15px] font-black text-gray-900 dark:text-white leading-none group-hover:text-[#dd9933] transition-colors truncate">
-                                    {coin.name}
-                                  </span>
-                                  <span className="text-xs font-bold text-gray-500 uppercase mt-1 truncate">
-                                    {coin.symbol}
-                                  </span>
-                                </div>
-                              </div>
-                            </td>
-                          );
-                        }
-
-                        if (cid === 'price') {
-                          return (
-                            <td key={cid} className={`p-3 text-right font-mono text-[15px] font-black text-gray-900 dark:text-slate-200 ${COLS.price.w}`}>
-                              {formatUSD(coin.current_price)}
-                            </td>
-                          );
-                        }
-
-                        if (cid === 'ch1h') {
-                          return (
-                            <td
-                              key={cid}
-                              className={`p-3 text-right font-mono text-[13px] font-black ${COLS.ch1h.w} ${!isFinite(c1h) ? 'text-gray-400 dark:text-slate-500' : (c1h >= 0 ? 'text-green-500' : 'text-red-500')}`}
-                              title="Estimativa via sparkline 7d"
-                            >
-                              {safePct(c1h)}
-                            </td>
-                          );
-                        }
-
-                        if (cid === 'ch24h') {
-                          return (
-                            <td key={cid} className={`p-3 text-right font-mono text-[15px] font-black ${COLS.ch24h.w} ${isPos24 ? 'text-green-500' : 'text-red-500'}`}>
-                              {isPos24 ? '+' : ''}{Number(change24 || 0).toFixed(2)}%
-                            </td>
-                          );
-                        }
-
-                        if (cid === 'ch7d') {
-                          return (
-                            <td
-                              key={cid}
-                              className={`p-3 text-right font-mono text-[13px] font-black ${COLS.ch7d.w} ${!isFinite(c7d) ? 'text-gray-400 dark:text-slate-500' : (c7d >= 0 ? 'text-green-500' : 'text-red-500')}`}
-                              title="Estimativa via sparkline 7d"
-                            >
-                              {safePct(c7d)}
-                            </td>
-                          );
-                        }
-
-                        if (cid === 'mcap') {
-                          return (
-                            <td key={cid} className={`p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 ${COLS.mcap.w}`}>
-                              {formatUSD(coin.market_cap, true)}
-                            </td>
-                          );
-                        }
-
-                        if (cid === 'vol24h') {
-                          return (
-                            <td key={cid} className={`p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 ${COLS.vol24h.w}`}>
-                              {formatUSD(coin.total_volume, true)}
-                            </td>
-                          );
-                        }
-
-                        if (cid === 'vol7d') {
-                          return (
-                            <td key={cid} className={`p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 ${COLS.vol7d.w}`} title="Estimativa simples: Vol(24h) * 7">
-                              {formatUSD(vol7d, true)}
-                            </td>
-                          );
-                        }
-
-                        if (cid === 'supply') {
-                          return (
-                            <td key={cid} className={`p-3 text-right font-mono text-[12px] font-bold text-gray-500 dark:text-slate-500 ${COLS.supply.w}`}>
-                              {coin.circulating_supply?.toLocaleString()} <span className="uppercase opacity-50">{coin.symbol}</span>
-                            </td>
-                          );
-                        }
-
-                        if (cid === 'spark7d') {
-                          return (
-                            <td key={cid} className={`p-3 ${COLS.spark7d.w}`}>
-                              <div className="w-full h-12 min-w-0">
-                                {sparkData.length > 1 ? (
-                                  <ResponsiveContainer width="100%" height="100%">
-                                    <AreaChart data={sparkData}>
-                                      <defs>
-                                        <linearGradient id={`g_${coin.id}`} x1="0" y1="0" x2="0" y2="1">
-                                          <stop offset="0%" stopColor={isPos24 ? '#26a269' : '#e01b24'} stopOpacity={0.55} />
-                                          <stop offset="75%" stopColor={isPos24 ? '#26a269' : '#e01b24'} stopOpacity={0.18} />
-                                          <stop offset="100%" stopColor={isPos24 ? '#26a269' : '#e01b24'} stopOpacity={0.02} />
-                                        </linearGradient>
-                                      </defs>
-                                      <Area
-                                        type="monotone"
-                                        dataKey="v"
-                                        stroke={isPos24 ? '#26a269' : '#e01b24'}
-                                        strokeWidth={2}
-                                        fill={`url(#g_${coin.id})`}
-                                        fillOpacity={1}
-                                        isAnimationActive={false}
-                                        dot={false}
-                                      />
-                                      <YAxis domain={['auto', 'auto']} hide />
-                                    </AreaChart>
-                                  </ResponsiveContainer>
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center text-xs font-bold text-gray-400 dark:text-slate-500">
-                                    —
-                                  </div>
-                                )}
-                              </div>
-                            </td>
-                          );
-                        }
-
-                        return <td key={cid} className="p-3" />;
-                      })}
-                    </tr>
-                  );
-                })}
-
-                {pageCoins.length === 0 && (
-                  <tr>
-                    <td colSpan={1 + colOrder.length} className="p-8 text-center text-sm font-bold text-gray-500 dark:text-slate-400">
-                      Nenhum resultado.
-                    </td>
                   </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+
+                <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
+                  {pageCoins.map((coin) => {
+                    const change24 =
+                      (coin as any).price_change_percentage_24h_in_currency ??
+                      coin.price_change_percentage_24h ??
+                      0;
+
+                    const isPos24 = Number(change24 || 0) >= 0;
+
+                    const prices = coin.sparkline_in_7d?.price;
+                    const c1h = pctFromSpark(prices, 1);
+                    const c7d = pct7dFromSpark(prices);
+                    const vol7d = (coin.total_volume || 0) * 7;
+
+                    const sparkData = Array.isArray(prices) ? prices.map((v, i) => ({ i, v })) : [];
+
+                    const isFav = !!favorites[coin.id];
+
+                    return (
+                      <tr key={coin.id} className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors group h-14">
+                        <td className="p-3 w-[48px] text-center">
+                          <button
+                            type="button"
+                            onClick={() => setFavorites(prev => ({ ...prev, [coin.id]: !prev[coin.id] }))}
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"
+                            title="Favoritar"
+                          >
+                            <Star size={18} className={isFav ? 'text-[#dd9933]' : 'text-gray-400'} />
+                          </button>
+                        </td>
+
+                        {colOrder.map((cid) => {
+                          if (cid === 'rank') {
+                            return (
+                              <td key={cid} className="p-3 text-[13px] font-black text-gray-400 w-[72px] text-center">
+                                #{coin.market_cap_rank}
+                              </td>
+                            );
+                          }
+
+                          if (cid === 'asset') {
+                            return (
+                              <td key={cid} className="p-3 w-[240px]">
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <img
+                                    src={coin.image}
+                                    alt=""
+                                    className="w-9 h-9 rounded-full bg-slate-100 dark:bg-[#242628] p-1 border border-slate-200 dark:border-white/10 shadow-sm shrink-0"
+                                    onError={(e) => (e.currentTarget.style.display = 'none')}
+                                  />
+                                  <div className="flex flex-col min-w-0">
+                                    <span className="text-[15px] font-black text-gray-900 dark:text-white leading-none group-hover:text-[#dd9933] transition-colors truncate">
+                                      {coin.name}
+                                    </span>
+                                    <span className="text-xs font-bold text-gray-500 uppercase mt-1 truncate">
+                                      {coin.symbol}
+                                    </span>
+                                  </div>
+                                </div>
+                              </td>
+                            );
+                          }
+
+                          if (cid === 'price') {
+                            return (
+                              <td key={cid} className="p-3 text-right font-mono text-[15px] font-black text-gray-900 dark:text-slate-200 w-[140px]">
+                                {formatUSD(coin.current_price)}
+                              </td>
+                            );
+                          }
+
+                          if (cid === 'ch1h') {
+                            return (
+                              <td
+                                key={cid}
+                                className={`p-3 text-right font-mono text-[13px] font-black w-[92px] ${!isFinite(c1h) ? 'text-gray-400 dark:text-slate-500' : (c1h >= 0 ? 'text-green-500' : 'text-red-500')}`}
+                                title="Estimativa via sparkline 7d"
+                              >
+                                {safePct(c1h)}
+                              </td>
+                            );
+                          }
+
+                          if (cid === 'ch24h') {
+                            return (
+                              <td key={cid} className={`p-3 text-right font-mono text-[15px] font-black w-[100px] ${isPos24 ? 'text-green-500' : 'text-red-500'}`}>
+                                {isPos24 ? '+' : ''}{Number(change24 || 0).toFixed(2)}%
+                              </td>
+                            );
+                          }
+
+                          if (cid === 'ch7d') {
+                            return (
+                              <td
+                                key={cid}
+                                className={`p-3 text-right font-mono text-[13px] font-black w-[100px] ${!isFinite(c7d) ? 'text-gray-400 dark:text-slate-500' : (c7d >= 0 ? 'text-green-500' : 'text-red-500')}`}
+                                title="Estimativa via sparkline 7d"
+                              >
+                                {safePct(c7d)}
+                              </td>
+                            );
+                          }
+
+                          if (cid === 'mcap') {
+                            return (
+                              <td key={cid} className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[150px]">
+                                {formatUSD(coin.market_cap, true)}
+                              </td>
+                            );
+                          }
+
+                          if (cid === 'vol24h') {
+                            return (
+                              <td key={cid} className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[130px]">
+                                {formatUSD(coin.total_volume, true)}
+                              </td>
+                            );
+                          }
+
+                          if (cid === 'vol7d') {
+                            return (
+                              <td key={cid} className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[130px]" title="Estimativa simples: Vol(24h) * 7">
+                                {formatUSD(vol7d, true)}
+                              </td>
+                            );
+                          }
+
+                          if (cid === 'supply') {
+                            return (
+                              <td key={cid} className="p-3 text-right font-mono text-[12px] font-bold text-gray-500 dark:text-slate-500 w-[170px]">
+                                {coin.circulating_supply?.toLocaleString()} <span className="uppercase opacity-50">{coin.symbol}</span>
+                              </td>
+                            );
+                          }
+
+                          if (cid === 'spark7d') {
+                            return (
+                              <td key={cid} className="p-3 w-[320px]">
+                                <div className="w-full h-12 min-w-0">
+                                  {sparkData.length > 1 ? (
+                                    <ResponsiveContainer width="100%" height="100%">
+                                      <AreaChart data={sparkData}>
+                                        <defs>
+                                          <linearGradient id={`g_${coin.id}`} x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="0%" stopColor={isPos24 ? '#26a269' : '#e01b24'} stopOpacity={0.55} />
+                                            <stop offset="75%" stopColor={isPos24 ? '#26a269' : '#e01b24'} stopOpacity={0.18} />
+                                            <stop offset="100%" stopColor={isPos24 ? '#26a269' : '#e01b24'} stopOpacity={0.02} />
+                                          </linearGradient>
+                                        </defs>
+                                        <Area
+                                          type="monotone"
+                                          dataKey="v"
+                                          stroke={isPos24 ? '#26a269' : '#e01b24'}
+                                          strokeWidth={2}
+                                          fill={`url(#g_${coin.id})`}
+                                          fillOpacity={1}
+                                          isAnimationActive={false}
+                                          dot={false}
+                                        />
+                                        <YAxis domain={['auto', 'auto']} hide />
+                                      </AreaChart>
+                                    </ResponsiveContainer>
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-xs font-bold text-gray-400 dark:text-slate-500">
+                                      —
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            );
+                          }
+
+                          return <td key={cid} className="p-3" />;
+                        })}
+                      </tr>
+                    );
+                  })}
+
+                  {pageCoins.length === 0 && (
+                    <tr>
+                      <td colSpan={1 + colOrder.length} className="p-8 text-center text-sm font-bold text-gray-500 dark:text-slate-400">
+                        Nenhum resultado.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </DndContext>
           )}
         </div>
       )}
 
-      {/* Footer */}
-      <div className="p-3 border-t border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-black/20">
+      {/* Footer paginator */}
+      <div className="p-3 border-t border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-black/20 shrink-0">
         <Paginator />
       </div>
     </div>
