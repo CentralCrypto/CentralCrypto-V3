@@ -217,18 +217,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   );
 
-  // altura visível da tabela (sem scroll vertical interno)
-  const ROW_H = 56;
-  const HEAD_H = 54;
-  const rowsWanted = useMemo(() => {
-    // você controla isso via dropdown (pageSize). Mantém estável mesmo com filtros.
-    return Math.max(0, Math.min(pageSize, 100));
-  }, [pageSize]);
-
-  const tableViewportH = useMemo(() => {
-    return HEAD_H + rowsWanted * ROW_H;
-  }, [rowsWanted]);
-
   const load = async () => {
     setLoading(true);
     try {
@@ -272,7 +260,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
       const mapJson = await fetchJsonSafe(`${base}/category_coins_map.json`).catch(() => null);
 
       if (mapJson && typeof mapJson === 'object') {
-        // aceita { categories: {...} } ou diretamente {...}
         const categories = (mapJson as any).categories && typeof (mapJson as any).categories === 'object'
           ? (mapJson as any).categories
           : mapJson;
@@ -325,7 +312,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
       return;
     }
 
-    // padrão
     setSortConfig({ key: 'market_cap_rank', direction: 'asc' });
   };
 
@@ -340,7 +326,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
   // ---------- Taxonomy parsing (suporta 2 ou 3 níveis) ----------
   const parsedTaxonomy = useMemo(() => {
-    // normaliza para lista de masters
     const raw = taxonomy;
     let masters: any[] = [];
 
@@ -348,7 +333,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     else if (raw && Array.isArray((raw as any).masters)) masters = (raw as any).masters;
     else if (raw && Array.isArray((raw as any).items)) masters = (raw as any).items;
 
-    // garante campos básicos
     return masters
       .filter(Boolean)
       .map((m: any) => ({
@@ -362,7 +346,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
   const masterOptions = useMemo(() => {
     const opts = parsedTaxonomy.map((m: any) => ({ id: m.id, name: m.name, children: m.children, categoryIds: m.categoryIds }));
-    // não cria linha "masters" nenhuma, só options reais
     return [{ id: '__all__', name: 'Todas' }, ...opts];
   }, [parsedTaxonomy]);
 
@@ -372,7 +355,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
   }, [parsedTaxonomy, masterKey]);
 
   const subOptions = useMemo(() => {
-    // 3º nível: se master tiver children (subgrupos), cria dropdown
     if (!selectedMaster || !Array.isArray(selectedMaster.children) || selectedMaster.children.length === 0) {
       return [{ id: '__all__', name: 'Todas' }];
     }
@@ -388,13 +370,10 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     return [{ id: '__all__', name: 'Todas' }, ...opts];
   }, [selectedMaster]);
 
-  // se trocar master, reseta subKey
   useEffect(() => { setSubKey('__all__'); }, [masterKey]);
 
   const visibleCategoryIds = useMemo(() => {
-    // retorna lista de categoryIds para a tabela de categorias
     if (masterKey === '__all__') {
-      // todas categorias conhecidas no list/market
       const ids = new Set<string>();
       for (const c of catList) {
         const id = String((c as any).category_id ?? (c as any).id ?? '').trim();
@@ -412,7 +391,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
     if (hasChildren) {
       if (subKey === '__all__') {
-        // união de todos os subgrupos
         const ids = new Set<string>();
         for (const sg of selectedMaster.children) {
           const arr = Array.isArray(sg.categoryIds) ? sg.categoryIds : Array.isArray(sg.categories) ? sg.categories : [];
@@ -425,12 +403,10 @@ const MarketCapTable = ({ language }: { language: Language }) => {
       return arr.map((x: any) => String(x));
     }
 
-    // master direto com categoryIds
     const arr = Array.isArray(selectedMaster.categoryIds) ? selectedMaster.categoryIds : [];
     return arr.map((x: any) => String(x));
   }, [catList, catMarket, masterKey, selectedMaster, subKey, subOptions]);
 
-  // category name resolver
   const categoryNameById = useMemo(() => {
     const map = new Map<string, string>();
     for (const c of catList) {
@@ -478,7 +454,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
   const getCoinPct1h = (c: ApiCoin) => {
     const v = (c as any).price_change_percentage_1h_in_currency;
     if (isFinite(v)) return Number(v);
-    // fallback via spark
     return pctFromSpark(c.sparkline_in_7d?.price, 1);
   };
 
@@ -490,16 +465,13 @@ const MarketCapTable = ({ language }: { language: Language }) => {
   const getCoinPct7d = (c: ApiCoin) => {
     const v = (c as any).price_change_percentage_7d_in_currency;
     if (isFinite(v)) return Number(v);
-    // fallback via spark
     return pct7dFromSpark(c.sparkline_in_7d?.price);
   };
 
   const buildCategorySpark = (members: ApiCoin[]) => {
-    // tenta criar um "índice" 7d por média ponderada de % vs primeiro ponto
     const valid = members.filter(c => Array.isArray(c.sparkline_in_7d?.price) && c.sparkline_in_7d!.price!.length > 10);
     if (valid.length < 2) return null;
 
-    // escolhe N mínimo para alinhar
     const N = Math.min(...valid.map(c => c.sparkline_in_7d!.price!.length));
     if (!isFinite(N) || N < 10) return null;
 
@@ -537,12 +509,13 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     const name = categoryNameById.get(categoryId) || categoryId;
 
     if (!setIds || setIds.size === 0) {
-      // fallback: tenta usar o coingecko_categories_market.json
       const mk = catMarketById.get(categoryId);
-      const fallback = {
+      const coinsCount = Number((mk as any)?.coin_counter ?? (mk as any)?.coins ?? 0) || 0;
+
+      return {
         id: categoryId,
         name,
-        coinsCount: Number((mk as any)?.coin_counter ?? (mk as any)?.coins ?? 0) || 0,
+        coinsCount,
         marketCap: Number((mk as any)?.market_cap ?? (mk as any)?.marketCap ?? 0) || 0,
         volume24h: Number((mk as any)?.volume_24h ?? (mk as any)?.volume24h ?? (mk as any)?.total_volume ?? 0) || 0,
         ch1h: Number((mk as any)?.market_cap_change_1h ?? (mk as any)?.change_1h ?? (mk as any)?.price_change_percentage_1h_in_currency ?? NaN),
@@ -553,7 +526,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
         spark: null as any,
         hasMap: false,
       };
-      return fallback;
     }
 
     const members: ApiCoin[] = [];
@@ -567,7 +539,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     const marketCap = members.reduce((s, c) => s + (Number(c.market_cap || 0) || 0), 0);
     const volume24h = members.reduce((s, c) => s + (Number(c.total_volume || 0) || 0), 0);
 
-    // weighted pct by marketCap (fallback simple)
     const wSum = members.reduce((s, c) => s + (Number(c.market_cap || 0) || 0), 0);
     const wAvg = (getter: (c: ApiCoin) => number) => {
       if (wSum > 0) {
@@ -580,7 +551,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
         }
         return acc / wSum;
       }
-      // simple
       const vals = members.map(getter).filter(v => isFinite(v));
       if (vals.length === 0) return NaN;
       return vals.reduce((a, b) => a + b, 0) / vals.length;
@@ -590,7 +560,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     const ch24h = wAvg(getCoinPct24h);
     const ch7d = wAvg(getCoinPct7d);
 
-    // top gainers/losers by 24h
     const by24h = [...members].sort((a, b) => (getCoinPct24h(b) - getCoinPct24h(a)));
     const gainers = by24h.slice(0, 3);
     const losers = by24h.slice(-3).reverse();
@@ -613,7 +582,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     };
   };
 
-  // ---------- Coin table filtering (search + fav + activeCategoryId) ----------
+  // ---------- Coin table filtering ----------
   const filteredSortedCoins = useMemo(() => {
     let items = [...coins];
 
@@ -640,7 +609,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
       if (key === 'change_7d_est') return pct7dFromSpark(prices);
       if (key === 'vol_7d_est') return (c.total_volume || 0) * 7;
 
-      // 24h%: usa o mesmo fallback que a célula
       if (key === 'price_change_percentage_24h') {
         const v = (c as any).price_change_percentage_24h_in_currency ?? c.price_change_percentage_24h;
         return isFinite(v) ? Number(v) : 0;
@@ -730,7 +698,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     );
   };
 
-  // widths ajustados pra caber e não empurrar o mini-chart pra fora
+  // widths ajustados
   const COLS: Record<string, {
     id: string;
     label: string;
@@ -755,7 +723,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     <ChevronsUpDown size={14} className={`text-gray-400 group-hover:text-tech-accent ${active ? 'text-tech-accent' : ''}`} />
   );
 
-  // Header: puxador sempre à esquerda, texto sempre centralizado
+  // Header: puxador sempre à esquerda, TEXTO SEMPRE CENTRALIZADO no espaço total da coluna
   const SortableTh = ({
     colId,
     label,
@@ -779,11 +747,13 @@ const MarketCapTable = ({ language }: { language: Language }) => {
       <th
         ref={setNodeRef}
         style={style}
-        className={`relative h-[54px] p-3 select-none group border-b border-gray-100 dark:border-slate-800 ${w} text-center
-          hover:bg-gray-100 dark:hover:bg-white/5 transition-colors`}
+        className={`relative h-[54px] p-0 select-none group border-b border-gray-100 dark:border-slate-800 ${w}
+          hover:bg-gray-100 dark:hover:bg-white/5 transition-colors text-center`}
       >
+        {/* Grip fixo à esquerda */}
         <span
-          className="absolute left-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-7 h-7 rounded-md hover:bg-gray-200 dark:hover:bg-white/10 text-gray-400"
+          className="absolute left-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-7 h-7 rounded-md
+            hover:bg-gray-200 dark:hover:bg-white/10 text-gray-400"
           onClick={(e) => e.stopPropagation()}
           {...attributes}
           {...listeners}
@@ -792,9 +762,11 @@ const MarketCapTable = ({ language }: { language: Language }) => {
           <GripVertical size={16} />
         </span>
 
+        {/* Botão ocupa toda a coluna e centraliza o texto */}
         <button
           type="button"
-          className="w-full inline-flex items-center justify-center gap-1 font-black uppercase tracking-widest text-xs text-gray-400 dark:text-slate-400 px-8"
+          className="w-full h-full inline-flex items-center justify-center gap-1 font-black uppercase tracking-widest text-xs
+            text-gray-400 dark:text-slate-400 px-10 text-center"
           onClick={() => sortKey && handleSort(sortKey)}
           disabled={!sortKey}
           title={sortKey ? 'Ordenar' : ''}
@@ -838,24 +810,20 @@ const MarketCapTable = ({ language }: { language: Language }) => {
   const CategoriesTable = () => {
     const rows = visibleCategoryIds
       .map((id) => computeCategoryStats(id))
-      .filter((r) => r && r.name);
+      .filter((r) => r && r.name)
+      .filter((r: any) => Number(r.coinsCount || 0) > 0); // <-- some categorias com 0 moedas
 
-    // busca por nome dentro da view categories também
     const q = (searchTerm || '').toLowerCase().trim();
     const filtered = q
       ? rows.filter(r => String(r.name).toLowerCase().includes(q) || String(r.id).toLowerCase().includes(q))
       : rows;
 
-    // ordena por market cap desc (padrão mais útil aqui)
     filtered.sort((a, b) => (Number(b.marketCap || 0) - Number(a.marketCap || 0)));
 
     return (
-      <div
-        className="overflow-x-auto !overflow-y-hidden shrink-0"
-        style={{ height: tableViewportH, maxHeight: tableViewportH }}
-      >
+      <div className="overflow-x-auto">
         {catLoading && filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-500">
+          <div className="flex flex-col items-center justify-center py-16 text-gray-500">
             <Loader2 className="animate-spin mb-2" size={32} />
             <span className="font-bold text-sm uppercase tracking-widest animate-pulse">Carregando Categorias...</span>
           </div>
@@ -883,9 +851,8 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                 return (
                   <tr
                     key={r.id}
-                    className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors cursor-pointer h-14"
+                    className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors cursor-pointer h-[56px]"
                     onClick={() => {
-                      // ao clicar: aplica filtro e volta pra tabela principal
                       if (categoryCoinIds.get(r.id)?.size) {
                         setActiveCategoryId(r.id);
                         setViewMode('coins');
@@ -901,12 +868,10 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                     title="Clique para filtrar a tabela principal"
                   >
                     <td className="p-3 w-[360px]">
+                      {/* Só o nome. SEM ID técnico embaixo. */}
                       <div className="flex flex-col min-w-0">
                         <span className="text-[14px] font-black text-gray-900 dark:text-white truncate">
                           {r.name}
-                        </span>
-                        <span className="text-xs font-bold text-gray-500 dark:text-slate-400 truncate">
-                          {r.id}
                         </span>
                       </div>
                     </td>
@@ -993,6 +958,16 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     );
   };
 
+  // helper pra dropdown ficar dark de verdade
+  const darkSelectClass =
+    "bg-white dark:bg-[#2f3032] border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-black " +
+    "text-gray-800 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 outline-none";
+
+  const darkSelectStyle: React.CSSProperties = {
+    // isso força o navegador a renderizar o dropdown nativo em dark quando o tema está dark
+    colorScheme: 'dark',
+  };
+
   return (
     <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-100 dark:border-slate-800 shadow-xl overflow-hidden flex flex-col">
 
@@ -1013,7 +988,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               />
             </div>
 
-            {/* Favoritos (só faz sentido na tabela de coins, mas pode ficar sempre) */}
             <button
               type="button"
               onClick={() => setFavOnly(v => !v)}
@@ -1027,7 +1001,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               Favoritos
             </button>
 
-            {/* CATEGORIAS: troca a tabela */}
             {viewMode === 'coins' ? (
               <>
                 <button
@@ -1042,7 +1015,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                   Categorias
                 </button>
 
-                {/* Top Gainers / Losers */}
                 <button
                   type="button"
                   onClick={() => applyQuickSort(quickSort === 'gainers' ? 'none' : 'gainers')}
@@ -1071,28 +1043,32 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               </>
             ) : (
               <>
-                {/* dropdown master (substitui o botão categorias) */}
                 <select
                   value={masterKey}
                   onChange={(e) => setMasterKey(e.target.value)}
-                  className="bg-white dark:bg-[#2f3032] border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-black text-gray-800 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 outline-none dark:[color-scheme:dark]"
+                  className={darkSelectClass}
+                  style={darkSelectStyle}
                   title="Master"
                 >
                   {masterOptions.map((o: any) => (
-                    <option key={o.id} value={o.id}>{o.name}</option>
+                    <option key={o.id} value={o.id} className="bg-[#2f3032] text-slate-200">
+                      {o.name}
+                    </option>
                   ))}
                 </select>
 
-                {/* dropdown 3º nível (se existir) */}
                 {subOptions.length > 1 && (
                   <select
                     value={subKey}
                     onChange={(e) => setSubKey(e.target.value)}
-                    className="bg-white dark:bg-[#2f3032] border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-black text-gray-800 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 outline-none dark:[color-scheme:dark]"
+                    className={darkSelectClass}
+                    style={darkSelectStyle}
                     title="Subcategoria"
                   >
                     {subOptions.map((o: any) => (
-                      <option key={o.id} value={o.id}>{o.name}</option>
+                      <option key={o.id} value={o.id} className="bg-[#2f3032] text-slate-200">
+                        {o.name}
+                      </option>
                     ))}
                   </select>
                 )}
@@ -1108,7 +1084,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               </>
             )}
 
-            {/* limpar filtro ativo de categoria (na tabela coins) */}
             {viewMode === 'coins' && activeCategoryId !== '__all__' && (
               <button
                 type="button"
@@ -1148,7 +1123,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
           {/* RIGHT GROUP */}
           <div className="flex items-center gap-2 w-full lg:w-auto justify-end">
-            {/* page size dropdown */}
             <div className="flex items-center gap-2">
               <span className="text-xs font-black text-gray-500 dark:text-slate-400 uppercase tracking-widest">
                 Itens
@@ -1156,17 +1130,17 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               <select
                 value={pageSize}
                 onChange={(e) => setPageSize(parseInt(e.target.value, 10))}
-                className="bg-white dark:bg-[#2f3032] border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-black text-gray-800 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 outline-none dark:[color-scheme:dark]"
+                className={darkSelectClass}
+                style={darkSelectStyle}
                 title="Quantidade por página"
               >
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-                <option value={75}>75</option>
-                <option value={100}>100</option>
+                <option value={25} className="bg-[#2f3032] text-slate-200">25</option>
+                <option value={50} className="bg-[#2f3032] text-slate-200">50</option>
+                <option value={75} className="bg-[#2f3032] text-slate-200">75</option>
+                <option value={100} className="bg-[#2f3032] text-slate-200">100</option>
               </select>
             </div>
 
-            {/* paginação */}
             <Paginator compact />
 
             <button
@@ -1182,7 +1156,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
           </div>
         </div>
 
-        {/* warning (não spamma) */}
         {viewMode === 'categories' && catWarn && !catWarnDismissed && (
           <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-900/20">
             <div className="text-xs font-bold text-amber-900 dark:text-amber-200">
@@ -1199,16 +1172,13 @@ const MarketCapTable = ({ language }: { language: Language }) => {
         )}
       </div>
 
-      {/* BODY: troca a tabela aqui */}
+      {/* BODY */}
       {viewMode === 'categories' ? (
         <CategoriesTable />
       ) : (
-        <div
-          className="overflow-x-auto !overflow-y-hidden shrink-0"
-          style={{ height: tableViewportH, maxHeight: tableViewportH }}
-        >
+        <div className="overflow-x-auto">
           {loading && coins.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-gray-500">
+            <div className="flex flex-col items-center justify-center py-16 text-gray-500">
               <Loader2 className="animate-spin mb-2" size={32} />
               <span className="font-bold text-sm uppercase tracking-widest animate-pulse">Sincronizando Mercado...</span>
             </div>
@@ -1216,9 +1186,8 @@ const MarketCapTable = ({ language }: { language: Language }) => {
             <table className="w-full text-left border-collapse min-w-[1480px] table-fixed">
               <thead className="sticky top-0 z-20 bg-white dark:bg-[#2f3032]">
                 <tr className="border-b border-gray-100 dark:border-slate-800 h-[54px]">
-                  {/* ⭐ coluna fixa */}
-                  <th className="p-3 w-[48px] text-center">
-                    <span className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-slate-400">
+                  <th className="p-0 w-[48px] text-center">
+                    <span className="inline-flex w-full h-full items-center justify-center text-xs font-black uppercase tracking-widest text-gray-400 dark:text-slate-400">
                       Fav
                     </span>
                   </th>
@@ -1262,13 +1231,12 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                   const isFav = !!favorites[coin.id];
 
                   return (
-                    <tr key={coin.id} className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors group h-14">
-                      {/* ⭐ fav */}
-                      <td className="p-3 w-[48px] text-center">
+                    <tr key={coin.id} className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors group h-[56px]">
+                      <td className="p-0 w-[48px] text-center">
                         <button
                           type="button"
                           onClick={() => setFavorites(prev => ({ ...prev, [coin.id]: !prev[coin.id] }))}
-                          className="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"
+                          className="inline-flex items-center justify-center w-full h-[56px] hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"
                           title="Favoritar"
                         >
                           <Star size={18} className={isFav ? 'text-[#dd9933]' : 'text-gray-400'} />
@@ -1435,7 +1403,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
         </div>
       )}
 
-      {/* Footer paginator */}
+      {/* Footer */}
       <div className="p-3 border-t border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-black/20 shrink-0">
         <Paginator />
       </div>
