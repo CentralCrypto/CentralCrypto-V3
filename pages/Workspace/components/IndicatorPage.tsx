@@ -24,6 +24,7 @@ import {
   RefreshCw,
   Search,
   Star,
+  TrendingUp,
   User
 } from 'lucide-react';
 
@@ -1111,6 +1112,19 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     setTopMode('none');
   };
 
+  const goBackToCoins = () => {
+    setViewMode('coins');
+    setSearchTerm('');
+  };
+
+  const canShowBack =
+    viewMode === 'categories' || (viewMode === 'coins' && !!activeMasterId);
+
+  const handleBack = () => {
+    if (viewMode === 'categories') goBackToCoins();
+    else goBackToCategories();
+  };
+
   return (
     <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-100 dark:border-slate-800 shadow-xl overflow-hidden flex flex-col">
       {/* Header */}
@@ -1118,6 +1132,37 @@ const MarketCapTable = ({ language }: { language: Language }) => {
         <div className="flex flex-col lg:flex-row justify-between items-center gap-3">
           {/* LEFT GROUP */}
           <div className="flex items-center gap-2 w-full lg:w-auto">
+            {/* ✅ 1) BACK ICON BUTTON (quando aplicável) */}
+            {canShowBack && (
+              <button
+                type="button"
+                onClick={handleBack}
+                className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+                title="Voltar"
+              >
+                <ChevronLeft size={20} className="text-gray-700 dark:text-slate-200" />
+              </button>
+            )}
+
+            {/* ✅ 2) FAVORITES ICON BUTTON (estrela cheia) */}
+            <button
+              type="button"
+              onClick={() => setFavOnly(v => !v)}
+              className={`p-2 rounded-lg border font-black transition-colors
+                ${favOnly
+                  ? 'bg-[#dd9933] text-black border-transparent'
+                  : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] hover:bg-gray-100 dark:hover:bg-white/5'
+                }`}
+              title="Filtrar favoritos"
+            >
+              <Star
+                size={20}
+                color={favOnly ? '#000000' : '#dd9933'}
+                fill={favOnly ? '#000000' : '#dd9933'}
+              />
+            </button>
+
+            {/* ✅ 3) SEARCH INPUT */}
             <div className="relative w-full lg:w-[420px]">
               <Search size={18} className="absolute left-3 top-2.5 text-gray-500" />
               <input
@@ -1129,111 +1174,69 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               />
             </div>
 
-            <button
-              type="button"
-              onClick={() => setFavOnly(v => !v)}
-              className={`px-3 py-2 rounded-lg border font-black transition-colors whitespace-nowrap
-                ${favOnly
-                  ? 'bg-[#dd9933] text-black border-transparent'
-                  : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5'
-                }`}
-              title="Filtrar favoritos"
-            >
-              Favoritos
-            </button>
+            {/* Subcategorias (mantém depois do search) */}
+            {viewMode === 'coins' && activeMasterId && subOptions.length > 1 && (
+              <select
+                value={activeSubId}
+                onChange={(e) => {
+                  setActiveSubId(e.target.value);
+                  setPage(0);
+                }}
+                className="appearance-none bg-white text-gray-900 dark:!bg-[#2f3032] dark:text-slate-200 dark:[color-scheme:dark]
+                  border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-black
+                  hover:bg-gray-100 dark:hover:bg-white/5 outline-none"
+                title="Subcategorias"
+              >
+                {subOptions.map((o: any) => (
+                  <option key={o.id} value={o.id}>{o.name}</option>
+                ))}
+              </select>
+            )}
 
-            {/* ✅ Navegação e dropdown de subcategorias */}
-            {viewMode === 'coins' ? (
-              <>
-                {!activeMasterId ? (
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('categories')}
-                    className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 font-black hover:bg-gray-100 dark:hover:bg-white/5 transition-colors whitespace-nowrap"
-                    title="Abrir categorias"
-                  >
-                    Categorias
-                  </button>
-                ) : (
-                  <>
-                    {subOptions.length > 1 ? (
-                      <select
-                        value={activeSubId}
-                        onChange={(e) => {
-                          setActiveSubId(e.target.value);
-                          setPage(0);
-                        }}
-                        className="appearance-none bg-white text-gray-900 dark:bg-[#2f3032] dark:text-slate-200 dark:[color-scheme:dark]
-                          border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-black
-                          hover:bg-gray-100 dark:hover:bg-white/5 outline-none"
-                        title="Subcategorias"
-                      >
-                        {subOptions.map((o: any) => (
-                          <option key={o.id} value={o.id}>{o.name}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className="text-xs font-black text-gray-500 dark:text-slate-400 uppercase tracking-widest px-2">
-                        {selectedMaster?.name || 'Categoria'}
-                      </span>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={goBackToCategories}
-                      className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 font-black hover:bg-gray-100 dark:hover:bg-white/5 transition-colors whitespace-nowrap"
-                      title="Voltar"
-                    >
-                      Voltar
-                    </button>
-                  </>
-                )}
-
-                {/* ✅ Top movers APENAS na tabela principal (sem filtro de categoria) */}
-                {!activeMasterId && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setTop('gainers')}
-                      className={`px-3 py-2 rounded-lg border font-black transition-colors whitespace-nowrap
-                        ${topMode === 'gainers'
-                          ? 'bg-[#dd9933] text-black border-transparent'
-                          : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5'
-                        }`}
-                      title="Ordenar por Top Gainers (24h%)"
-                    >
-                      Top Gainers
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setTop('losers')}
-                      className={`px-3 py-2 rounded-lg border font-black transition-colors whitespace-nowrap
-                        ${topMode === 'losers'
-                          ? 'bg-[#dd9933] text-black border-transparent'
-                          : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5'
-                        }`}
-                      title="Ordenar por Top Losers (24h%)"
-                    >
-                      Top Losers
-                    </button>
-                  </>
-                )}
-              </>
-            ) : (
+            {/* Categorias (mantém quando está na tabela principal de coins) */}
+            {viewMode === 'coins' && !activeMasterId && (
               <button
                 type="button"
-                onClick={() => {
-                  setViewMode('coins');
-                  setSearchTerm('');
-                }}
+                onClick={() => setViewMode('categories')}
                 className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 font-black hover:bg-gray-100 dark:hover:bg-white/5 transition-colors whitespace-nowrap"
-                title="Voltar para moedas"
+                title="Abrir categorias"
               >
-                Voltar
+                Categorias
               </button>
             )}
 
+            {/* ✅ Top movers só na tabela principal */}
+            {viewMode === 'coins' && !activeMasterId && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setTop('gainers')}
+                  className={`px-3 py-2 rounded-lg border font-black transition-colors whitespace-nowrap
+                    ${topMode === 'gainers'
+                      ? 'bg-[#dd9933] text-black border-transparent'
+                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5'
+                    }`}
+                  title="Ordenar por Top Gainers (24h%)"
+                >
+                  Top Gainers
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setTop('losers')}
+                  className={`px-3 py-2 rounded-lg border font-black transition-colors whitespace-nowrap
+                    ${topMode === 'losers'
+                      ? 'bg-[#dd9933] text-black border-transparent'
+                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5'
+                    }`}
+                  title="Ordenar por Top Losers (24h%)"
+                >
+                  Top Losers
+                </button>
+              </>
+            )}
+
+            {/* BUY dropdown */}
             <div className="relative" ref={buyRef}>
               <button
                 onClick={() => setBuyOpen(v => !v)}
@@ -1265,11 +1268,14 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               <span className="text-xs font-black text-gray-500 dark:text-slate-400 uppercase tracking-widest">
                 Itens
               </span>
+
+              {/* ✅ FIX: background do select no dark (fechado) */}
               <select
                 value={pageSize}
                 onChange={(e) => setPageSize(parseInt(e.target.value, 10))}
-                className="appearance-none bg-white text-gray-900 dark:bg-[#2f3032] dark:text-slate-200 dark:[color-scheme:dark]
-                  border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-black hover:bg-gray-100 dark:hover:bg-white/5 outline-none"
+                className="appearance-none bg-white text-gray-900 dark:!bg-[#2f3032] dark:!text-slate-200 dark:[color-scheme:dark]
+                  border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-black
+                  hover:bg-gray-100 dark:hover:bg-white/5 outline-none"
                 title="Quantidade por página"
               >
                 <option value={25}>25</option>
@@ -1328,7 +1334,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                       </span>
                     </th>
 
-                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={() => {}}>
                       <SortableContext items={colOrder} strategy={horizontalListSortingStrategy}>
                         {colOrder.map((cid) => {
                           const c = COLS[cid];
@@ -1368,14 +1374,19 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
                     return (
                       <tr key={coin.id} className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors group h-[56px]">
+                        {/* ✅ Star: normal = borda #dd9933 + fill transparente | fav = fill #dd9933 */}
                         <td className="p-3 w-[48px] text-center">
                           <button
                             type="button"
                             onClick={() => setFavorites(prev => ({ ...prev, [coin.id]: !prev[coin.id] }))}
                             className="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"
-                            title="Favoritar"
+                            title={isFav ? 'Remover dos favoritos' : 'Favoritar'}
                           >
-                            <Star size={18} className={isFav ? 'text-[#dd9933]' : 'text-gray-400'} />
+                            <Star
+                              size={18}
+                              color="#dd9933"
+                              fill={isFav ? '#dd9933' : 'transparent'}
+                            />
                           </button>
                         </td>
 
@@ -1555,7 +1566,7 @@ interface IndicatorPageProps {
   userTier: UserTier;
 }
 
-type PageType = 'MARKETCAP' | 'RSI' | 'MACD' | 'FNG' | 'LSR' | 'ALTSEASON' | 'ETF' | 'HEATMAP' | 'BUBBLES' | 'CALENDAR' | 'TRUMP';
+type PageType = 'MARKETCAP' | 'RSI' | 'MACD' | 'FNG' | 'LSR' | 'ALTSEASON' | 'ETF' | 'GAINERS' | 'HEATMAP' | 'BUBBLES' | 'CALENDAR' | 'TRUMP';
 
 function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageProps) {
   const [activePage, setActivePage] = useState<PageType>('MARKETCAP');
@@ -1565,6 +1576,7 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
   const GROUPS = [
     { title: 'Market', items: [
       { id: 'MARKETCAP' as PageType, label: tPages.marketcap, icon: <List size={18} /> },
+      { id: 'GAINERS' as PageType, label: tPages.topmovers, icon: <TrendingUp size={18} /> },
       { id: 'HEATMAP' as PageType, label: 'Heatmap Square', icon: <LayoutGrid size={18} /> },
       { id: 'BUBBLES' as PageType, label: 'Crypto Bubbles', icon: <CircleDashed size={18} /> },
       { id: 'RSI' as PageType, label: tWs.rsi.title, icon: <Activity size={18} /> },
@@ -1625,6 +1637,7 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
             {activePage === 'FNG' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'fng-page', type: WidgetType.FEAR_GREED, title: 'Fear & Greed Index', symbol: 'GLOBAL', isMaximized: true }} language={language} /></div>}
             {activePage === 'RSI' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'rsi-page', type: WidgetType.RSI_AVG, title: 'RSI Average Tracker', symbol: 'MARKET', isMaximized: true }} language={language} /></div>}
             {activePage === 'MACD' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'macd-page', type: WidgetType.MACD_AVG, title: 'MACD Average Tracker', symbol: 'MARKET', isMaximized: true }} language={language} /></div>}
+            {activePage === 'GAINERS' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'gainers-page', type: WidgetType.GAINERS_LOSERS, title: 'Top Movers (24h)', symbol: 'MARKET', isMaximized: true }} language={language} /></div>}
             {activePage === 'HEATMAP' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'heatmap-page', type: WidgetType.HEATMAP, title: 'Crypto Heatmap', symbol: 'MARKET', isMaximized: true }} language={language} /></div>}
             {activePage === 'CALENDAR' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'cal-page', type: WidgetType.CALENDAR, title: 'Calendar', symbol: 'CAL', isMaximized: true }} language={language} /></div>}
             {activePage === 'TRUMP' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'trump-page', type: WidgetType.TRUMP_METER, title: 'Trump-o-Meter', symbol: 'SENTIMENT', isMaximized: true }} language={language} /></div>}
