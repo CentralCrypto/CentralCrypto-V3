@@ -164,7 +164,12 @@ function PageFaq({ language, pageType }: { language: Language; pageType: string 
 
 // --- MARKET CAP TABLE ---
 
-const MarketCapTable = ({ language }: { language: Language }) => {
+type MarketCapTableProps = {
+  language: Language;
+  scrollContainerRef?: React.RefObject<HTMLDivElement>;
+};
+
+const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) => {
   const [coins, setCoins] = useState<ApiCoin[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -193,7 +198,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
   const [activeMasterId, setActiveMasterId] = useState<string | null>(null);
   const [activeSubId, setActiveSubId] = useState<string>('__all__');
 
-  // Fallback single category (quando não tem master)
+  // Fallback single category
   const [activeCategoryId, setActiveCategoryId] = useState<string>('__all__');
 
   // categories datasets
@@ -250,6 +255,13 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   );
 
+  // ✅ Scroll-to-top helper (corrige abrir “lá embaixo”)
+  const scrollToTop = useCallback(() => {
+    const el = scrollContainerRef?.current;
+    if (el) el.scrollTo({ top: 0, behavior: 'auto' });
+    else window.scrollTo({ top: 0, behavior: 'auto' });
+  }, [scrollContainerRef]);
+
   const fetchJsonSafe = async (url: string) => {
     const r = await fetch(url, { cache: 'no-store' });
     if (!r.ok) throw new Error(`${url} -> ${r.status}`);
@@ -290,7 +302,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
       setCatList(Array.isArray(listJson) ? listJson : []);
       setCatMarket(Array.isArray(marketJson) ? marketJson : []);
 
-      // mapping opcional
       const mapJson = await fetchJsonSafe(`${base}/category_coins_map.json`).catch(() => null);
 
       if (mapJson && typeof mapJson === 'object') {
@@ -334,6 +345,11 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     if (viewMode === 'categories') loadCategoriesLocal();
   }, [viewMode, loadCategoriesLocal]);
 
+  // ✅ Sempre que trocar “view” ou “nível”, sobe pro topo
+  useEffect(() => {
+    scrollToTop();
+  }, [viewMode, activeMasterId, activeSubId, activeCategoryId, scrollToTop]);
+
   const refresh = useCallback(() => {
     if (viewMode === 'categories') loadCategoriesLocal();
     else loadCoins();
@@ -345,12 +361,14 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     setSortConfig({ key, direction });
     setTopMode('none');
     setPage(0);
+    scrollToTop();
   };
 
   const handleCatSort = (key: string) => {
     let direction: 'asc' | 'desc' = 'desc';
     if (catSortConfig.key === key && catSortConfig.direction === 'desc') direction = 'asc';
     setCatSortConfig({ key, direction });
+    scrollToTop();
   };
 
   // ---------- Taxonomy parsing (masters + subs) ----------
@@ -658,10 +676,11 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
     if (favOnly) {
       items = items.filter(c => !!favorites[c.id]);
-    }
-
-    if (allowedCoinIdsSet) {
-      items = items.filter(c => allowedCoinIdsSet.has(String(c.id)));
+      // ✅ UNIVERSAL FAVORITES: quando favOnly=true, NÃO aplica filtro de categoria
+    } else {
+      if (allowedCoinIdsSet) {
+        items = items.filter(c => allowedCoinIdsSet.has(String(c.id)));
+      }
     }
 
     const getVal = (c: ApiCoin, key: string) => {
@@ -728,7 +747,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setPage(p => Math.max(0, p - 1))}
+            onClick={() => { setPage(p => Math.max(0, p - 1)); scrollToTop(); }}
             disabled={safePage === 0}
             className={`px-2.5 py-2 rounded-lg border text-sm font-black transition-colors
               ${safePage === 0
@@ -745,7 +764,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
           </div>
 
           <button
-            onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+            onClick={() => { setPage(p => Math.min(totalPages - 1, p + 1)); scrollToTop(); }}
             disabled={safePage >= totalPages - 1}
             className={`px-2.5 py-2 rounded-lg border text-sm font-black transition-colors
               ${safePage >= totalPages - 1
@@ -850,6 +869,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     );
   };
 
+  // ✅ FIX drag coins (faltava ligar o handler)
   const onDragEnd = (event: any) => {
     const { active, over } = event;
     if (!over) return;
@@ -941,6 +961,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                         setPage(0);
                         setTopMode('none');
                         setSortConfig({ key: 'market_cap', direction: 'desc' });
+                        scrollToTop();
 
                         if (!catCoinMap && !catWarnDismissed) {
                           setCatWarn('Sem category_coins_map.json: não dá pra listar moedas por categoria. Gere o mapping.');
@@ -1102,6 +1123,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
       key: 'price_change_percentage_24h',
       direction: mode === 'gainers' ? 'desc' : 'asc',
     });
+    scrollToTop();
   };
 
   const goBackToCategories = () => {
@@ -1110,11 +1132,13 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     setActiveCategoryId('__all__');
     setViewMode('categories');
     setTopMode('none');
+    scrollToTop();
   };
 
   const goBackToCoins = () => {
     setViewMode('coins');
     setSearchTerm('');
+    scrollToTop();
   };
 
   const canShowBack =
@@ -1132,7 +1156,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
         <div className="flex flex-col lg:flex-row justify-between items-center gap-3">
           {/* LEFT GROUP */}
           <div className="flex items-center gap-2 w-full lg:w-auto">
-            {/* ✅ 1) BACK ICON BUTTON (quando aplicável) */}
+            {/* BACK ICON BUTTON */}
             {canShowBack && (
               <button
                 type="button"
@@ -1144,16 +1168,16 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               </button>
             )}
 
-            {/* ✅ 2) FAVORITES ICON BUTTON (estrela cheia) */}
+            {/* FAVORITES ICON BUTTON */}
             <button
               type="button"
-              onClick={() => setFavOnly(v => !v)}
+              onClick={() => { setFavOnly(v => !v); setPage(0); scrollToTop(); }}
               className={`p-2 rounded-lg border font-black transition-colors
                 ${favOnly
                   ? 'bg-[#dd9933] text-black border-transparent'
                   : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] hover:bg-gray-100 dark:hover:bg-white/5'
                 }`}
-              title="Filtrar favoritos"
+              title="Filtrar favoritos (universal)"
             >
               <Star
                 size={20}
@@ -1162,25 +1186,26 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               />
             </button>
 
-            {/* ✅ 3) SEARCH INPUT */}
+            {/* SEARCH INPUT */}
             <div className="relative w-full lg:w-[420px]">
               <Search size={18} className="absolute left-3 top-2.5 text-gray-500" />
               <input
                 type="text"
                 placeholder={viewMode === 'categories' ? 'Buscar categoria...' : 'Buscar ativo...'}
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => { setSearchTerm(e.target.value); setPage(0); }}
                 className="w-full bg-white dark:bg-[#2f3032] rounded-lg py-2.5 pl-11 pr-4 text-[15px] text-gray-900 dark:text-white focus:border-[#dd9933] outline-none transition-all shadow-inner border border-slate-100 dark:border-slate-700"
               />
             </div>
 
-            {/* Subcategorias (mantém depois do search) */}
+            {/* Subcategorias */}
             {viewMode === 'coins' && activeMasterId && subOptions.length > 1 && (
               <select
                 value={activeSubId}
                 onChange={(e) => {
                   setActiveSubId(e.target.value);
                   setPage(0);
+                  scrollToTop();
                 }}
                 className="appearance-none bg-white text-gray-900 dark:!bg-[#2f3032] dark:text-slate-200 dark:[color-scheme:dark]
                   border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-black
@@ -1193,11 +1218,11 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               </select>
             )}
 
-            {/* Categorias (mantém quando está na tabela principal de coins) */}
+            {/* Categorias */}
             {viewMode === 'coins' && !activeMasterId && (
               <button
                 type="button"
-                onClick={() => setViewMode('categories')}
+                onClick={() => { setViewMode('categories'); scrollToTop(); }}
                 className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 font-black hover:bg-gray-100 dark:hover:bg-white/5 transition-colors whitespace-nowrap"
                 title="Abrir categorias"
               >
@@ -1205,7 +1230,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               </button>
             )}
 
-            {/* ✅ Top movers só na tabela principal */}
+            {/* Top movers só na tabela principal */}
             {viewMode === 'coins' && !activeMasterId && (
               <>
                 <button
@@ -1269,10 +1294,9 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                 Itens
               </span>
 
-              {/* ✅ FIX: background do select no dark (fechado) */}
               <select
                 value={pageSize}
-                onChange={(e) => setPageSize(parseInt(e.target.value, 10))}
+                onChange={(e) => { setPageSize(parseInt(e.target.value, 10)); setPage(0); scrollToTop(); }}
                 className="appearance-none bg-white text-gray-900 dark:!bg-[#2f3032] dark:!text-slate-200 dark:[color-scheme:dark]
                   border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-black
                   hover:bg-gray-100 dark:hover:bg-white/5 outline-none"
@@ -1334,7 +1358,8 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                       </span>
                     </th>
 
-                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={() => {}}>
+                    {/* ✅ FIX: agora o onDragEnd real está ligado */}
+                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
                       <SortableContext items={colOrder} strategy={horizontalListSortingStrategy}>
                         {colOrder.map((cid) => {
                           const c = COLS[cid];
@@ -1346,7 +1371,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                               sortKey={c.sortKey}
                               w={c.w}
                               activeKey={sortConfig.key}
-                              onSort={handleSort}
+                              onSort={(k) => { handleSort(k); }}
                             />
                           );
                         })}
@@ -1374,7 +1399,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
                     return (
                       <tr key={coin.id} className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors group h-[56px]">
-                        {/* ✅ Star: normal = borda #dd9933 + fill transparente | fav = fill #dd9933 */}
                         <td className="p-3 w-[48px] text-center">
                           <button
                             type="button"
@@ -1573,12 +1597,15 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
   const tWs = getTranslations(language).workspace.widgets;
   const tPages = getTranslations(language).workspace.pages;
 
+  // ✅ Ref do container que realmente rola (fix “abre lá embaixo”)
+  const mainScrollRef = useRef<HTMLDivElement | null>(null);
+
   const GROUPS = [
     { title: 'Market', items: [
       { id: 'MARKETCAP' as PageType, label: tPages.marketcap, icon: <List size={18} /> },
       { id: 'GAINERS' as PageType, label: tPages.topmovers, icon: <TrendingUp size={18} /> },
-      { id: 'HEATMAP' as PageType, label: 'Heatmap Square', icon: <LayoutGrid size={18} /> },
-      { id: 'BUBBLES' as PageType, label: 'Crypto Bubbles', icon: <CircleDashed size={18} /> },
+      { id: 'HEATMAP' as PageType, label: "Heatmap Square", icon: <LayoutGrid size={18} /> },
+      { id: 'BUBBLES' as PageType, label: "Crypto Bubbles", icon: <CircleDashed size={18} /> },
       { id: 'RSI' as PageType, label: tWs.rsi.title, icon: <Activity size={18} /> },
       { id: 'MACD' as PageType, label: tWs.macd.title, icon: <BarChart2 size={18} /> },
       { id: 'LSR' as PageType, label: tWs.lsr.title, icon: <BarChart2 size={18} /> },
@@ -1590,7 +1617,7 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
     { title: 'Sentiment', items: [
       { id: 'FNG' as PageType, label: tWs.fng.title, icon: <PieChart size={18} /> },
       { id: 'ALTSEASON' as PageType, label: tWs.altseason.title, icon: <Activity size={18} /> },
-      { id: 'TRUMP' as PageType, label: 'Trump-o-Meter', icon: <User size={18} /> },
+      { id: 'TRUMP' as PageType, label: "Trump-o-Meter", icon: <User size={18} /> },
     ] }
   ];
 
@@ -1614,7 +1641,11 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
                   {group.items.map((item) => (
                     <button
                       key={item.id}
-                      onClick={() => setActivePage(item.id)}
+                      onClick={() => {
+                        setActivePage(item.id);
+                        // também sobe pro topo ao trocar páginas
+                        if (mainScrollRef.current) mainScrollRef.current.scrollTo({ top: 0, behavior: 'auto' });
+                      }}
                       className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-black transition-all tracking-wide ${activePage === item.id ? 'bg-[#dd9933] text-black shadow-md' : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-[#2f3032]'}`}
                     >
                       {item.icon}{item.label}
@@ -1627,11 +1658,14 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
         </div>
 
         {/* Main Content Area */}
-        <div className={`flex-1 flex-col min-w-0 h-full overflow-y-auto custom-scrollbar pr-1 ${activePage === 'BUBBLES' ? 'hidden' : 'flex'}`}>
+        <div
+          ref={mainScrollRef}
+          className={`flex-1 flex-col min-w-0 h-full overflow-y-auto custom-scrollbar pr-1 ${activePage === 'BUBBLES' ? 'hidden' : 'flex'}`}
+        >
           <PageHeader title={currentPage.label} description="Dados analíticos e ferramentas de mercado em tempo real." />
 
           <div className="flex-1 min-h-[600px] relative">
-            {activePage === 'MARKETCAP' && <MarketCapTable language={language} />}
+            {activePage === 'MARKETCAP' && <MarketCapTable language={language} scrollContainerRef={mainScrollRef} />}
             {activePage === 'ALTSEASON' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'altseason-page', type: WidgetType.ALTCOIN_SEASON, title: 'Altcoin Season Index', symbol: 'GLOBAL', isMaximized: true }} language={language} /></div>}
             {activePage === 'ETF' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'etf-page', type: WidgetType.ETF_NET_FLOW, title: 'ETF Net Flow', symbol: 'GLOBAL', isMaximized: true }} language={language} /></div>}
             {activePage === 'FNG' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'fng-page', type: WidgetType.FEAR_GREED, title: 'Fear & Greed Index', symbol: 'GLOBAL', isMaximized: true }} language={language} /></div>}
