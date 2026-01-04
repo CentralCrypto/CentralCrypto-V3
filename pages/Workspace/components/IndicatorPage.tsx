@@ -58,7 +58,7 @@ const safePct = (v: number) => {
   return `${s}${v.toFixed(2)}%`;
 };
 
-// CoinGecko sparkline_in_7d geralmente vem em pontos horários (168).
+// sparkline 7d (168 pts) => estimativas
 const pctFromSpark = (prices?: number[], pointsBack: number = 1) => {
   const arr = Array.isArray(prices) ? prices.filter(n => typeof n === 'number' && isFinite(n)) : [];
   if (arr.length < 2) return NaN;
@@ -151,7 +151,7 @@ function PageFaq({ language, pageType }: { language: Language; pageType: string 
   );
 }
 
-// --- MARKET CAP TABLE (FULL) ---
+// --- MARKET CAP TABLE ---
 
 const MarketCapTable = ({ language }: { language: Language }) => {
   const [coins, setCoins] = useState<ApiCoin[]>([]);
@@ -178,7 +178,11 @@ const MarketCapTable = ({ language }: { language: Language }) => {
   const [favorites, setFavorites] = useState<Record<string, boolean>>({});
   const [favOnly, setFavOnly] = useState(false);
 
-  // category filter (applies in coins view)
+  // Category context (MASTER -> SUB -> categoryIds)
+  const [activeMasterId, setActiveMasterId] = useState<string | null>(null);
+  const [activeSubId, setActiveSubId] = useState<string>('__all__');
+
+  // Fallback single category (quando não tem master)
   const [activeCategoryId, setActiveCategoryId] = useState<string>('__all__');
 
   // categories datasets
@@ -191,11 +195,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
   const [catMarket, setCatMarket] = useState<any[]>([]);
   const [catCoinMap, setCatCoinMap] = useState<Record<string, string[]> | null>(null);
 
-  // taxonomy dropdown levels
-  const [masterKey, setMasterKey] = useState<string>('__all__');
-  const [subKey, setSubKey] = useState<string>('__all__');
-
-  // top buttons (coins view)
+  // top buttons
   const [topMode, setTopMode] = useState<'none' | 'gainers' | 'losers'>('none');
 
   // Column reorder - coins
@@ -245,7 +245,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     return r.json();
   };
 
-  const load = useCallback(async () => {
+  const loadCoins = useCallback(async () => {
     setLoading(true);
     try {
       const data = await fetchTopCoins();
@@ -257,8 +257,12 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     }
   }, []);
 
+  // ✅ Fix do loop infinito (pisca/pisca + spinner)
+  const catInFlightRef = useRef(false);
   const loadCategoriesLocal = useCallback(async () => {
-    if (catLoading) return;
+    if (catInFlightRef.current) return;
+    catInFlightRef.current = true;
+
     setCatLoading(true);
     setCatWarn('');
 
@@ -291,7 +295,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
       } else {
         setCatCoinMap(null);
         if (!catWarnDismissed) {
-          setCatWarn('Dados de categoria sem mapping local (category_coins_map.json ausente). A tabela funciona, mas o filtro por moedas pode ficar limitado.');
+          setCatWarn('Dados de categoria sem mapping local (category_coins_map.json ausente). Gainers/Losers e filtro por moedas dependem desse mapping.');
         }
       }
     } catch (e: any) {
@@ -299,10 +303,11 @@ const MarketCapTable = ({ language }: { language: Language }) => {
       setCatWarn('Falha ao carregar categorias locais em /cachecko/categories/.');
     } finally {
       setCatLoading(false);
+      catInFlightRef.current = false;
     }
-  }, [catLoading, catWarnDismissed]);
+  }, [catWarnDismissed]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadCoins(); }, [loadCoins]);
 
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
@@ -313,14 +318,15 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     return () => document.removeEventListener('mousedown', onDocClick);
   }, []);
 
+  // ✅ Carrega categorias apenas quando entra no modo categories
   useEffect(() => {
     if (viewMode === 'categories') loadCategoriesLocal();
   }, [viewMode, loadCategoriesLocal]);
 
   const refresh = useCallback(() => {
     if (viewMode === 'categories') loadCategoriesLocal();
-    else load();
-  }, [viewMode, loadCategoriesLocal, load]);
+    else loadCoins();
+  }, [viewMode, loadCategoriesLocal, loadCoins]);
 
   const handleSort = (key: string) => {
     let direction: 'asc' | 'desc' = 'desc';
@@ -336,7 +342,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     setCatSortConfig({ key, direction });
   };
 
-  // ---------- Taxonomy parsing (2 níveis) ----------
+  // ---------- Taxonomy parsing (masters + subs) ----------
   const parsedTaxonomy = useMemo(() => {
     const raw = taxonomy;
     let masters: any[] = [];
@@ -350,39 +356,36 @@ const MarketCapTable = ({ language }: { language: Language }) => {
       .map((m: any) => ({
         id: String(m.id ?? m.key ?? m.name ?? '').trim(),
         name: String(m.name ?? m.title ?? m.id ?? '').trim(),
-        categoryIds: Array.isArray(m.categoryIds) ? m.categoryIds : Array.isArray(m.categories) ? m.categories : [],
+        categoryIds: Array.isArray(m.categoryIds) ? m.categoryIds.map(String) : Array.isArray(m.categories) ? m.categories.map(String) : [],
         children: Array.isArray(m.children) ? m.children : Array.isArray(m.groups) ? m.groups : [],
       }))
       .filter((m: any) => m.id);
   }, [taxonomy]);
 
-  const masterOptions = useMemo(() => {
-    const opts = parsedTaxonomy.map((m: any) => ({ id: m.id, name: m.name, children: m.children, categoryIds: m.categoryIds }));
-    return [{ id: '__all__', name: 'Todas' }, ...opts];
+  const masterById = useMemo(() => {
+    const map = new Map<string, any>();
+    for (const m of parsedTaxonomy) map.set(m.id, m);
+    return map;
   }, [parsedTaxonomy]);
 
   const selectedMaster = useMemo(() => {
-    if (masterKey === '__all__') return null;
-    return parsedTaxonomy.find((m: any) => m.id === masterKey) || null;
-  }, [parsedTaxonomy, masterKey]);
+    if (!activeMasterId) return null;
+    return masterById.get(activeMasterId) || null;
+  }, [activeMasterId, masterById]);
 
   const subOptions = useMemo(() => {
-    if (!selectedMaster || !Array.isArray(selectedMaster.children) || selectedMaster.children.length === 0) {
-      return [{ id: '__all__', name: 'Todas' }];
-    }
-    const opts = selectedMaster.children
+    if (!selectedMaster || !Array.isArray(selectedMaster.children) || selectedMaster.children.length === 0) return [];
+    const subs = selectedMaster.children
       .filter(Boolean)
       .map((c: any) => ({
         id: String(c.id ?? c.key ?? c.name ?? '').trim(),
         name: String(c.name ?? c.title ?? c.id ?? '').trim(),
-        categoryIds: Array.isArray(c.categoryIds) ? c.categoryIds : Array.isArray(c.categories) ? c.categories : [],
+        categoryIds: Array.isArray(c.categoryIds) ? c.categoryIds.map(String) : Array.isArray(c.categories) ? c.categories.map(String) : [],
       }))
       .filter((x: any) => x.id);
 
-    return [{ id: '__all__', name: 'Todas' }, ...opts];
+    return [{ id: '__all__', name: 'Todas', categoryIds: [] as string[] }, ...subs];
   }, [selectedMaster]);
-
-  useEffect(() => { setSubKey('__all__'); }, [masterKey]);
 
   // category name resolver
   const categoryNameById = useMemo(() => {
@@ -400,16 +403,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     return map;
   }, [catList, catMarket]);
 
-  const catMarketById = useMemo(() => {
-    const map = new Map<string, any>();
-    for (const c of catMarket) {
-      const id = String((c as any).category_id ?? (c as any).id ?? (c as any).categoryId ?? '').trim();
-      if (id) map.set(id, c);
-    }
-    return map;
-  }, [catMarket]);
-
-  // ---------- Category map -> sets ----------
+  // ---------- Coin map -> sets ----------
   const coinById = useMemo(() => {
     const m = new Map<string, ApiCoin>();
     for (const c of coins) {
@@ -424,20 +418,20 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
     for (const [catId, arr] of Object.entries(catCoinMap)) {
       if (!catId || !Array.isArray(arr)) continue;
-      map.set(catId, new Set(arr.map(x => String(x))));
+      map.set(String(catId), new Set(arr.map(x => String(x))));
     }
     return map;
   }, [catCoinMap]);
+
+  const getCoinPct24h = (c: ApiCoin) => {
+    const v = (c as any).price_change_percentage_24h_in_currency ?? c.price_change_percentage_24h;
+    return isFinite(v) ? Number(v) : 0;
+  };
 
   const getCoinPct1h = (c: ApiCoin) => {
     const v = (c as any).price_change_percentage_1h_in_currency;
     if (isFinite(v)) return Number(v);
     return pctFromSpark(c.sparkline_in_7d?.price, 1);
-  };
-
-  const getCoinPct24h = (c: ApiCoin) => {
-    const v = (c as any).price_change_percentage_24h_in_currency ?? c.price_change_percentage_24h;
-    return isFinite(v) ? Number(v) : 0;
   };
 
   const getCoinPct7d = (c: ApiCoin) => {
@@ -482,36 +476,27 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     return series;
   };
 
-  const computeCategoryStats = useCallback((categoryId: string) => {
-    const setIds = categoryCoinIds.get(categoryId);
-    const name = categoryNameById.get(categoryId) || categoryId;
-
-    // fallback: usa catMarket se não existir mapping
-    if (!setIds || setIds.size === 0) {
-      const mk = catMarketById.get(categoryId);
-      const coinsCount = Number((mk as any)?.coin_counter ?? (mk as any)?.coins ?? 0) || 0;
-
-      return {
-        id: categoryId,
-        name,
-        coinsCount,
-        marketCap: Number((mk as any)?.market_cap ?? (mk as any)?.marketCap ?? 0) || 0,
-        volume24h: Number((mk as any)?.volume_24h ?? (mk as any)?.volume24h ?? (mk as any)?.total_volume ?? 0) || 0,
-        ch1h: Number((mk as any)?.market_cap_change_1h ?? (mk as any)?.change_1h ?? NaN),
-        ch24h: Number((mk as any)?.market_cap_change_24h ?? (mk as any)?.change_24h ?? NaN),
-        ch7d: Number((mk as any)?.market_cap_change_7d ?? (mk as any)?.change_7d ?? NaN),
-        gainers: [] as ApiCoin[],
-        losers: [] as ApiCoin[],
-        spark: null as any,
-        hasMap: false,
-      };
-    }
-
+  const membersFromCategoryIds = useCallback((catIds: string[]) => {
+    const seen = new Set<string>();
     const members: ApiCoin[] = [];
-    for (const id of setIds) {
-      const c = coinById.get(id);
-      if (c) members.push(c);
+
+    for (const cid of catIds) {
+      const setIds = categoryCoinIds.get(cid);
+      if (!setIds) continue;
+
+      for (const id of setIds) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+
+        const c = coinById.get(id);
+        if (c) members.push(c);
+      }
     }
+    return members;
+  }, [categoryCoinIds, coinById]);
+
+  const computeStatsFromCatIds = useCallback((catIds: string[], displayName: string) => {
+    const members = membersFromCategoryIds(catIds);
 
     const coinsCount = members.length;
     const marketCap = members.reduce((s, c) => s + (Number(c.market_cap || 0) || 0), 0);
@@ -538,6 +523,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     const ch24h = wAvg(getCoinPct24h);
     const ch7d = wAvg(getCoinPct7d);
 
+    // top gainers / losers (24h)
     const by24h = [...members].sort((a, b) => (getCoinPct24h(b) - getCoinPct24h(a)));
     const gainers = by24h.slice(0, 3);
     const losers = by24h.slice(-3).reverse();
@@ -545,8 +531,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     const spark = buildCategorySpark(members);
 
     return {
-      id: categoryId,
-      name,
+      name: displayName,
       coinsCount,
       marketCap,
       volume24h,
@@ -556,11 +541,107 @@ const MarketCapTable = ({ language }: { language: Language }) => {
       gainers,
       losers,
       spark,
-      hasMap: true,
+      members
     };
-  }, [categoryCoinIds, categoryNameById, catMarketById, coinById]);
+  }, [membersFromCategoryIds]);
 
-  // ---------- COINS table filtering ----------
+  // --------- category rows (MASTERS ONLY) ----------
+  const masterRows = useMemo(() => {
+    const q = (searchTerm || '').toLowerCase().trim();
+
+    const rows = parsedTaxonomy
+      .filter(m => {
+        if (!q) return true;
+        return String(m.name || '').toLowerCase().includes(q) || String(m.id || '').toLowerCase().includes(q);
+      })
+      .map((m) => {
+        const masterCatIds: string[] = [];
+
+        // master itself
+        for (const id of (Array.isArray(m.categoryIds) ? m.categoryIds : [])) masterCatIds.push(String(id));
+
+        // children
+        const kids = Array.isArray(m.children) ? m.children : [];
+        for (const k of kids) {
+          const arr = Array.isArray((k as any).categoryIds) ? (k as any).categoryIds : Array.isArray((k as any).categories) ? (k as any).categories : [];
+          for (const id of arr) masterCatIds.push(String(id));
+        }
+
+        const uniqueCatIds = Array.from(new Set(masterCatIds)).filter(Boolean);
+        const stats = computeStatsFromCatIds(uniqueCatIds, m.name || m.id);
+
+        return {
+          id: m.id,
+          displayName: m.name || m.id,
+          catIds: uniqueCatIds,
+          ...stats
+        };
+      })
+      .filter(r => Number(r.coinsCount || 0) > 0);
+
+    const dir = catSortConfig.direction === 'asc' ? 1 : -1;
+    rows.sort((a: any, b: any) => {
+      const av = a[catSortConfig.key];
+      const bv = b[catSortConfig.key];
+
+      if (typeof av === 'string' || typeof bv === 'string') {
+        const r = String(av ?? '').localeCompare(String(bv ?? ''));
+        return r * dir;
+      }
+
+      const an = isFinite(av) ? Number(av) : 0;
+      const bn = isFinite(bv) ? Number(bv) : 0;
+      if (an < bn) return -1 * dir;
+      if (an > bn) return 1 * dir;
+      return 0;
+    });
+
+    return rows;
+  }, [parsedTaxonomy, searchTerm, computeStatsFromCatIds, catSortConfig]);
+
+  // --------- COINS table filtering ----------
+  const activeFilter = useMemo(() => {
+    // Master ativo: "__all__" = união do master + filhos; sub = apenas sub
+    if (activeMasterId && selectedMaster) {
+      if (activeSubId && activeSubId !== '__all__') {
+        const sub = (subOptions || []).find(s => s.id === activeSubId);
+        const catIds = sub?.categoryIds && sub.categoryIds.length > 0 ? sub.categoryIds : [];
+        return { mode: 'master-sub', catIds };
+      }
+
+      const catIds: string[] = [];
+      for (const id of (Array.isArray(selectedMaster.categoryIds) ? selectedMaster.categoryIds : [])) catIds.push(String(id));
+
+      const kids = Array.isArray(selectedMaster.children) ? selectedMaster.children : [];
+      for (const k of kids) {
+        const arr = Array.isArray((k as any).categoryIds) ? (k as any).categoryIds : Array.isArray((k as any).categories) ? (k as any).categories : [];
+        for (const id of arr) catIds.push(String(id));
+      }
+
+      const unique = Array.from(new Set(catIds)).filter(Boolean);
+      return { mode: 'master-all', catIds: unique };
+    }
+
+    // Sem master: usa activeCategoryId
+    if (activeCategoryId !== '__all__') {
+      return { mode: 'single', catIds: [activeCategoryId] };
+    }
+
+    return { mode: 'none', catIds: [] as string[] };
+  }, [activeMasterId, selectedMaster, activeSubId, subOptions, activeCategoryId]);
+
+  const allowedCoinIdsSet = useMemo(() => {
+    if (!activeFilter.catIds || activeFilter.catIds.length === 0) return null;
+
+    const union = new Set<string>();
+    for (const cid of activeFilter.catIds) {
+      const setIds = categoryCoinIds.get(cid);
+      if (!setIds) continue;
+      for (const id of setIds) union.add(id);
+    }
+    return union;
+  }, [activeFilter, categoryCoinIds]);
+
   const filteredSortedCoins = useMemo(() => {
     let items = [...coins];
 
@@ -573,11 +654,8 @@ const MarketCapTable = ({ language }: { language: Language }) => {
       items = items.filter(c => !!favorites[c.id]);
     }
 
-    if (activeCategoryId !== '__all__') {
-      const setIds = categoryCoinIds.get(activeCategoryId);
-      if (setIds && setIds.size > 0) {
-        items = items.filter(c => setIds.has(String(c.id)));
-      }
+    if (allowedCoinIdsSet) {
+      items = items.filter(c => allowedCoinIdsSet.has(String(c.id)));
     }
 
     const getVal = (c: ApiCoin, key: string) => {
@@ -609,7 +687,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     });
 
     return items;
-  }, [coins, searchTerm, favOnly, favorites, activeCategoryId, categoryCoinIds, sortConfig]);
+  }, [coins, searchTerm, favOnly, favorites, allowedCoinIdsSet, sortConfig]);
 
   const totalCount = filteredSortedCoins.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
@@ -620,7 +698,15 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     return filteredSortedCoins.slice(start, start + pageSize);
   }, [filteredSortedCoins, safePage, pageSize]);
 
-  useEffect(() => { setPage(0); }, [searchTerm, favOnly, pageSize, activeCategoryId, viewMode]);
+  useEffect(() => { setPage(0); }, [
+    searchTerm,
+    favOnly,
+    pageSize,
+    activeMasterId,
+    activeSubId,
+    activeCategoryId,
+    viewMode
+  ]);
 
   const Paginator = ({ compact = false }: { compact?: boolean }) => {
     const start = safePage * pageSize + 1;
@@ -673,29 +759,23 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     id: string;
     label: string;
     sortKey?: string;
-    align?: 'left' | 'center' | 'right';
     w: string;
   }> = {
-    rank: { id: 'rank', label: '#', sortKey: 'market_cap_rank', align: 'center', w: 'w-[72px]' },
-    asset: { id: 'asset', label: 'Ativo', sortKey: 'name', align: 'left', w: 'w-[220px]' },
-    price: { id: 'price', label: 'Preço', sortKey: 'current_price', align: 'right', w: 'w-[140px]' },
-    ch1h: { id: 'ch1h', label: '1h %', sortKey: 'change_1h_est', align: 'right', w: 'w-[92px]' },
-    ch24h: { id: 'ch24h', label: '24h %', sortKey: 'price_change_percentage_24h', align: 'right', w: 'w-[100px]' },
-    ch7d: { id: 'ch7d', label: '7d %', sortKey: 'change_7d_est', align: 'right', w: 'w-[100px]' },
-    mcap: { id: 'mcap', label: 'Market Cap', sortKey: 'market_cap', align: 'right', w: 'w-[150px]' },
-    vol24h: { id: 'vol24h', label: 'Vol (24h)', sortKey: 'total_volume', align: 'right', w: 'w-[130px]' },
-    vol7d: { id: 'vol7d', label: 'Vol (7d)', sortKey: 'vol_7d_est', align: 'right', w: 'w-[130px]' },
-    supply: { id: 'supply', label: 'Circ. Supply', sortKey: 'circulating_supply', align: 'right', w: 'w-[170px]' },
-    spark7d: { id: 'spark7d', label: 'Mini-chart (7d)', sortKey: undefined, align: 'center', w: 'w-[380px]' },
+    rank: { id: 'rank', label: '#', sortKey: 'market_cap_rank', w: 'w-[72px]' },
+    asset: { id: 'asset', label: 'Ativo', sortKey: 'name', w: 'w-[220px]' },
+    price: { id: 'price', label: 'Preço', sortKey: 'current_price', w: 'w-[140px]' },
+    ch1h: { id: 'ch1h', label: '1h %', sortKey: 'change_1h_est', w: 'w-[92px]' },
+    ch24h: { id: 'ch24h', label: '24h %', sortKey: 'price_change_percentage_24h', w: 'w-[100px]' },
+    ch7d: { id: 'ch7d', label: '7d %', sortKey: 'change_7d_est', w: 'w-[100px]' },
+    mcap: { id: 'mcap', label: 'Market Cap', sortKey: 'market_cap', w: 'w-[150px]' },
+    vol24h: { id: 'vol24h', label: 'Vol (24h)', sortKey: 'total_volume', w: 'w-[130px]' },
+    vol7d: { id: 'vol7d', label: 'Vol (7d)', sortKey: 'vol_7d_est', w: 'w-[130px]' },
+    supply: { id: 'supply', label: 'Circ. Supply', sortKey: 'circulating_supply', w: 'w-[170px]' },
+    spark7d: { id: 'spark7d', label: 'Mini-chart (7d)', sortKey: undefined, w: 'w-[380px]' },
   };
 
-  const CAT_COLS: Record<string, {
-    id: string;
-    label: string;
-    sortKey?: string;
-    w: string;
-  }> = {
-    category: { id: 'category', label: 'Categoria', sortKey: 'name', w: 'w-[360px]' },
+  const CAT_COLS: Record<string, { id: string; label: string; sortKey?: string; w: string; }> = {
+    category: { id: 'category', label: 'Categoria', sortKey: 'displayName', w: 'w-[360px]' },
     gainers: { id: 'gainers', label: 'Top Gainers', sortKey: undefined, w: 'w-[160px]' },
     losers: { id: 'losers', label: 'Top Losers', sortKey: undefined, w: 'w-[160px]' },
     ch1h: { id: 'ch1h', label: '1h', sortKey: 'ch1h', w: 'w-[90px]' },
@@ -809,108 +889,11 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     );
   };
 
-  // --------- CATEGORY LIST (hierarchy) ----------
-  const getPrimaryCategoryId = (obj: any) => {
-    const arr = Array.isArray(obj?.categoryIds) ? obj.categoryIds : [];
-    if (arr.length > 0) return String(arr[0]);
-    return String(obj?.id ?? '');
-  };
-
-  type CatRowItem = {
-    kind: 'master' | 'sub';
-    masterId: string;
-    categoryId: string;
-    name: string;
-  };
-
-  const isMasterList = masterKey === '__all__';
-
-  const categoryRowItems: CatRowItem[] = useMemo(() => {
-    if (!parsedTaxonomy || parsedTaxonomy.length === 0) {
-      const ids = new Set<string>();
-      for (const c of catMarket) {
-        const id = String((c as any).category_id ?? (c as any).id ?? (c as any).categoryId ?? '').trim();
-        if (id) ids.add(id);
-      }
-      return Array.from(ids).map((id) => ({
-        kind: 'master',
-        masterId: id,
-        categoryId: id,
-        name: categoryNameById.get(id) || id,
-      }));
-    }
-
-    // “Todas” => só 1º nível (masters)
-    if (isMasterList) {
-      return parsedTaxonomy
-        .map((m: any) => {
-          const catId = getPrimaryCategoryId(m);
-          const nm = (m.name && String(m.name).trim()) ? String(m.name).trim() : (categoryNameById.get(catId) || catId);
-          return { kind: 'master', masterId: m.id, categoryId: catId, name: nm };
-        })
-        .filter(x => x.categoryId && x.categoryId !== 'undefined');
-    }
-
-    // master selecionado => lista subcategorias
-    if (selectedMaster && Array.isArray(selectedMaster.children) && selectedMaster.children.length > 0) {
-      return selectedMaster.children
-        .map((c: any) => {
-          const catId = getPrimaryCategoryId(c);
-          const nm = (c.name && String(c.name).trim()) ? String(c.name).trim() : (categoryNameById.get(catId) || catId);
-          return { kind: 'sub', masterId: selectedMaster.id, categoryId: catId, name: nm };
-        })
-        .filter(x => x.categoryId && x.categoryId !== 'undefined');
-    }
-
-    // master sem filhos => clicar vai direto pras moedas
-    if (selectedMaster) {
-      const catId = getPrimaryCategoryId(selectedMaster);
-      const nm = selectedMaster.name || categoryNameById.get(catId) || catId;
-      return [{ kind: 'sub', masterId: selectedMaster.id, categoryId: catId, name: nm }];
-    }
-
-    return [];
-  }, [parsedTaxonomy, selectedMaster, isMasterList, catMarket, categoryNameById]);
-
-  // --------- CATEGORY ROWS MEMO (reduz flicker/lag) ----------
-  const categoryRows = useMemo(() => {
-    const q = (searchTerm || '').toLowerCase().trim();
-    const items = q
-      ? categoryRowItems.filter(r => r.name.toLowerCase().includes(q) || r.categoryId.toLowerCase().includes(q))
-      : categoryRowItems;
-
-    const rows = items
-      .map((it) => {
-        const stats = computeCategoryStats(it.categoryId);
-        return { ...stats, kind: it.kind, masterId: it.masterId, displayName: it.name };
-      })
-      .filter((r: any) => Number(r.coinsCount || 0) > 0);
-
-    const dir = catSortConfig.direction === 'asc' ? 1 : -1;
-    rows.sort((a: any, b: any) => {
-      const av = a[catSortConfig.key];
-      const bv = b[catSortConfig.key];
-
-      if (typeof av === 'string' || typeof bv === 'string') {
-        const r = String(av ?? '').localeCompare(String(bv ?? ''));
-        return r * dir;
-      }
-
-      const an = isFinite(av) ? Number(av) : 0;
-      const bn = isFinite(bv) ? Number(bv) : 0;
-      if (an < bn) return -1 * dir;
-      if (an > bn) return 1 * dir;
-      return 0;
-    });
-
-    return rows;
-  }, [categoryRowItems, searchTerm, computeCategoryStats, catSortConfig]);
-
   const CategoriesTable = () => {
     return (
       <div className="custom-scrollbar overflow-x-auto overflow-y-hidden">
         <div className="overflow-visible">
-          {catLoading && categoryRows.length === 0 ? (
+          {catLoading && masterRows.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-gray-500">
               <Loader2 className="animate-spin mb-2" size={32} />
               <span className="font-bold text-sm uppercase tracking-widest animate-pulse">Carregando Categorias...</span>
@@ -941,7 +924,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               </thead>
 
               <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
-                {categoryRows.map((r: any) => {
+                {masterRows.map((r: any) => {
                   const pos24 = isFinite(r.ch24h) ? (Number(r.ch24h) >= 0) : true;
 
                   return (
@@ -949,25 +932,21 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                       key={r.id}
                       className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors cursor-pointer h-[56px]"
                       onClick={() => {
-                        // master list: clique abre subcategorias
-                        if (isMasterList) {
-                          setMasterKey(r.masterId);
-                          setSubKey('__all__');
-                          return;
-                        }
-
-                        // sub list: clique vai direto pra lista de moedas
-                        setActiveCategoryId(r.id);
+                        // ✅ Clique vai direto pra lista de moedas (SEM passo intermediário)
+                        setActiveMasterId(r.id);
+                        setActiveSubId('__all__');
+                        setActiveCategoryId('__all__');
                         setViewMode('coins');
                         setPage(0);
                         setTopMode('none');
                         setSortConfig({ key: 'market_cap', direction: 'desc' });
 
-                        if (!categoryCoinIds.get(r.id)?.size && !catWarnDismissed) {
-                          setCatWarn('Sem mapping local para filtrar moedas nessa categoria. Gere category_coins_map.json.');
+                        // se não há mapping, vai mostrar warning e lista vazia
+                        if (!catCoinMap && !catWarnDismissed) {
+                          setCatWarn('Sem category_coins_map.json: não dá pra listar moedas por categoria. Gere o mapping.');
                         }
                       }}
-                      title={isMasterList ? 'Abrir subcategorias' : 'Ver moedas desta subcategoria'}
+                      title="Ver moedas desta categoria"
                     >
                       {catColOrder.map((cid) => {
                         if (cid === 'category') {
@@ -1101,7 +1080,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                   );
                 })}
 
-                {categoryRows.length === 0 && (
+                {masterRows.length === 0 && (
                   <tr>
                     <td colSpan={catColOrder.length} className="p-8 text-center text-sm font-bold text-gray-500 dark:text-slate-400">
                       Nenhuma categoria encontrada.
@@ -1124,6 +1103,22 @@ const MarketCapTable = ({ language }: { language: Language }) => {
       direction: mode === 'gainers' ? 'desc' : 'asc',
     });
   };
+
+  const clearCategoryFilter = () => {
+    setActiveMasterId(null);
+    setActiveSubId('__all__');
+    setActiveCategoryId('__all__');
+  };
+
+  // dropdown close
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (buyRef.current && !buyRef.current.contains(t)) setBuyOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, []);
 
   return (
     <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-100 dark:border-slate-800 shadow-xl overflow-hidden flex flex-col">
@@ -1156,20 +1151,64 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               Favoritos
             </button>
 
+            {/* ✅ Navegação e dropdown de subcategorias */}
             {viewMode === 'coins' ? (
               <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setViewMode('categories');
-                    setMasterKey('__all__');
-                    setSubKey('__all__');
-                  }}
-                  className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 font-black hover:bg-gray-100 dark:hover:bg-white/5 transition-colors whitespace-nowrap"
-                  title="Abrir categorias"
-                >
-                  Categorias
-                </button>
+                {/* Se NÃO tem filtro de master ativo: botão Categorias */}
+                {!activeMasterId ? (
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('categories')}
+                    className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 font-black hover:bg-gray-100 dark:hover:bg-white/5 transition-colors whitespace-nowrap"
+                    title="Abrir categorias"
+                  >
+                    Categorias
+                  </button>
+                ) : (
+                  <>
+                    {/* ✅ No lugar do botão Categorias: dropdown de subcategorias */}
+                    {subOptions.length > 1 ? (
+                      <select
+                        value={activeSubId}
+                        onChange={(e) => {
+                          setActiveSubId(e.target.value);
+                          setPage(0);
+                        }}
+                        className="appearance-none bg-white text-gray-900 dark:bg-[#2f3032] dark:text-slate-200 dark:[color-scheme:dark]
+                          border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-black
+                          hover:bg-gray-100 dark:hover:bg-white/5 outline-none"
+                        title="Subcategorias"
+                      >
+                        {subOptions.map((o: any) => (
+                          <option key={o.id} value={o.id}>{o.name}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="text-xs font-black text-gray-500 dark:text-slate-400 uppercase tracking-widest px-2">
+                        {selectedMaster?.name || 'Categoria'}
+                      </span>
+                    )}
+
+                    {/* Botão discreto para trocar master (voltar pra tabela de categorias) */}
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('categories')}
+                      className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 font-black hover:bg-gray-100 dark:hover:bg-white/5 transition-colors whitespace-nowrap"
+                      title="Trocar categoria master"
+                    >
+                      Trocar
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={clearCategoryFilter}
+                      className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 font-black hover:bg-gray-100 dark:hover:bg-white/5 transition-colors whitespace-nowrap"
+                      title="Limpar filtro"
+                    >
+                      Limpar
+                    </button>
+                  </>
+                )}
 
                 <button
                   type="button"
@@ -1199,76 +1238,18 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               </>
             ) : (
               <>
-                {/* Master select */}
-                <select
-                  value={masterKey}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setMasterKey(v);
-                    setSubKey('__all__');
-                  }}
-                  className="appearance-none bg-white text-gray-900 dark:bg-[#2f3032] dark:text-slate-200 dark:[color-scheme:dark] border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-black hover:bg-gray-100 dark:hover:bg-white/5 outline-none"
-                  title="Master"
-                >
-                  {masterOptions.map((o: any) => (
-                    <option key={o.id} value={o.id}>{o.name}</option>
-                  ))}
-                </select>
-
-                {/* Sub select: escolher sub => vai direto pras moedas */}
-                {subOptions.length > 1 && (
-                  <select
-                    value={subKey}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setSubKey(v);
-
-                      if (v !== '__all__' && masterKey !== '__all__') {
-                        const sg = subOptions.find((x: any) => x.id === v);
-                        const catId = sg && Array.isArray((sg as any).categoryIds) && (sg as any).categoryIds.length > 0
-                          ? String((sg as any).categoryIds[0])
-                          : v;
-
-                        setActiveCategoryId(catId);
-                        setViewMode('coins');
-                        setPage(0);
-                        setTopMode('none');
-                        setSortConfig({ key: 'market_cap', direction: 'desc' });
-
-                        if (!categoryCoinIds.get(catId)?.size && !catWarnDismissed) {
-                          setCatWarn('Sem mapping local para filtrar moedas nessa categoria. Gere category_coins_map.json.');
-                        }
-                      }
-                    }}
-                    className="appearance-none bg-white text-gray-900 dark:bg-[#2f3032] dark:text-slate-200 dark:[color-scheme:dark] border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-black hover:bg-gray-100 dark:hover:bg-white/5 outline-none"
-                    title="Subcategoria"
-                  >
-                    {subOptions.map((o: any) => (
-                      <option key={o.id} value={o.id}>{o.name}</option>
-                    ))}
-                  </select>
-                )}
-
                 <button
                   type="button"
-                  onClick={() => setViewMode('coins')}
+                  onClick={() => {
+                    setViewMode('coins');
+                    setSearchTerm('');
+                  }}
                   className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 font-black hover:bg-gray-100 dark:hover:bg-white/5 transition-colors whitespace-nowrap"
-                  title="Voltar"
+                  title="Voltar para moedas"
                 >
                   Voltar
                 </button>
               </>
-            )}
-
-            {viewMode === 'coins' && activeCategoryId !== '__all__' && (
-              <button
-                type="button"
-                onClick={() => setActiveCategoryId('__all__')}
-                className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 font-black hover:bg-gray-100 dark:hover:bg-white/5 transition-colors whitespace-nowrap"
-                title="Limpar filtro de categoria"
-              >
-                Limpar
-              </button>
             )}
 
             <div className="relative" ref={buyRef}>
@@ -1305,7 +1286,8 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               <select
                 value={pageSize}
                 onChange={(e) => setPageSize(parseInt(e.target.value, 10))}
-                className="appearance-none bg-white text-gray-900 dark:bg-[#2f3032] dark:text-slate-200 dark:[color-scheme:dark] border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-black hover:bg-gray-100 dark:hover:bg-white/5 outline-none"
+                className="appearance-none bg-white text-gray-900 dark:bg-[#2f3032] dark:text-slate-200 dark:[color-scheme:dark]
+                  border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-black hover:bg-gray-100 dark:hover:bg-white/5 outline-none"
                 title="Quantidade por página"
               >
                 <option value={25}>25</option>
