@@ -1,9 +1,8 @@
-
 import React, { useMemo } from 'react';
 import { WidgetType, DashboardItem, Language } from '../../../types';
 import WidgetErrorBoundary from '../widgets/WidgetErrorBoundary';
 
-// Main Board Widgets (Untouched, loaded from their own files)
+// Main Board Widgets
 import RsiWidget from '../widgets/RsiWidget';
 import MacdWidget from '../widgets/MacdWidget';
 import FearGreedWidget from '../widgets/FearGreedWidget';
@@ -14,9 +13,8 @@ import EtfFlowWidget from '../widgets/EtfFlowWidget';
 import GainersLosersWidget from '../widgets/GainersLosersWidget';
 import CalendarWidget from '../widgets/CalendarWidget';
 import HeatmapWidget from '../widgets/HeatmapWidget';
-import BubbleHeatmapWidget from '../widgets/BubbleHeatmapWidget';
 
-// Board 2 Widgets (Restored from your backup into separate files)
+// Board 2 Widgets
 import PriceWidget from '../widgets/PriceWidget';
 import VolumeWidget from '../widgets/VolumeWidget';
 import TrendWidget from '../widgets/TrendWidget';
@@ -61,8 +59,6 @@ const CryptoWidget: React.FC<Props> = (props) => {
         return <CalendarWidget item={item} language={language} />;
       case WidgetType.HEATMAP:
         return <HeatmapWidget item={item} language={language} />;
-      case WidgetType.BUBBLE_HEATMAP:
-        return <BubbleHeatmapWidget item={item} language={language} />;
       
       // --- "BOARD 2" WIDGETS ---
       case WidgetType.PRICE:

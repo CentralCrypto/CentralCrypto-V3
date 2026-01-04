@@ -1,4 +1,3 @@
-
 import { WidgetType, DashboardItem, Dashboard, UserTier, Layout } from '../../types';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -48,7 +47,6 @@ export const AVAILABLE_WIDGETS = [
   { type: WidgetType.ORDER_BOOK, label: 'Order Book', icon: 'List' },
   { type: WidgetType.NEWS, label: 'Crypto News', icon: 'Newspaper' },
   { type: WidgetType.HEATMAP, label: 'Crypto Heatmap', icon: 'LayoutGrid' },
-  { type: WidgetType.BUBBLE_HEATMAP, label: 'Crypto Bubbles', icon: 'CircleDashed' },
 ];
 
 // Initial items for MAIN BOARD 
@@ -63,7 +61,6 @@ export const getMainBoardItems = (): DashboardItem[] => [
   { id: `main-gainers`, type: WidgetType.GAINERS_LOSERS, title: 'Top Movers (24h)', symbol: 'MARKET' },
   { id: `main-calendar`, type: WidgetType.CALENDAR, title: 'Economic Calendar', symbol: 'GLOBAL' },
   { id: `main-heatmap`, type: WidgetType.HEATMAP, title: 'Crypto Heatmap Square', symbol: 'MARKET' },
-  { id: `main-bubblemap`, type: WidgetType.BUBBLE_HEATMAP, title: 'Crypto Bubbles', symbol: 'MARKET' }
 ];
 
 // Helper to generate default layout
@@ -79,8 +76,7 @@ export const generateDefaultLayout = (items: DashboardItem[], isMain: boolean = 
         { i: items[6].id, x: 4, y: 3.1, w: 4, h: 3.1, minW: 2, minH: 2 }, // ETF
         { i: items[7].id, x: 8, y: 3.1, w: 4, h: 3.1, minW: 2, minH: 2 }, // Gainers
         { i: items[8].id, x: 12, y: 3.1, w: 8, h: 3.1, minW: 2, minH: 2 }, // Calendar (Expanded)
-        { i: items[9].id, x: 0, y: 6.2, w: 10, h: 6.2, minW: 4, minH: 4 }, // HEATMAP - HALF WIDTH (10/20)
-        { i: items[10].id, x: 10, y: 6.2, w: 10, h: 6.2, minW: 4, minH: 4 }, // BUBBLES - HALF WIDTH (10/20)
+        { i: items[9].id, x: 0, y: 6.2, w: 20, h: 6.2, minW: 4, minH: 4 }, // HEATMAP FULL
     ];
   }
 
