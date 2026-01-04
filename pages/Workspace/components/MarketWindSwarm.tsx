@@ -44,6 +44,7 @@ const formatPrice = (v?: number) => {
   return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
+// --- MAIN COMPONENT ---
 const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -54,7 +55,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   const animationLoopFn = useRef<(() => void) | null>(null);
   const reqIdRef = useRef<number>(0);
 
-  const dprRef = useRef<number>(1);
+  const dprRef = useRef(1);
 
   // State
   const [status, setStatus] = useState<Status>('loading');
@@ -69,7 +70,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   const [isFreeMode, setIsFreeMode] = useState(false);
   const [numCoins, setNumCoins] = useState(50);
 
-  // ✅ default 50%
+  // ✅ defaults em 50%
   const [animSpeedRaw, setAnimSpeedRaw] = useState(0.5);
   const [trailLength, setTrailLength] = useState(25);
 
@@ -99,7 +100,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     logMinR: number, logMaxR: number
   } | null>(null);
 
-  // ✅ mata scrollbar inútil do body/html enquanto o modal tá aberto
+  // ✅ trava scroll do body pra não aparecer barra inútil
   useEffect(() => {
     const prevBody = document.body.style.overflow;
     const prevHtml = document.documentElement.style.overflow;
@@ -111,6 +112,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     };
   }, []);
 
+  // Load Data
   const loadData = useCallback(async () => {
     if (particlesRef.current.length === 0) setStatus('loading');
     try {
@@ -118,15 +120,13 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       if (data && data.length > 0) {
         setCoins(data);
         setStatus('running');
-      } else if (particlesRef.current.length === 0) {
-        setStatus('demo');
-      }
+      } else if (particlesRef.current.length === 0) setStatus('demo');
     } catch (error) {
       if (particlesRef.current.length === 0) setStatus('error');
     }
   }, []);
 
-  // ✅ resize baseado no stageRef (área útil exata)
+  // Resize canvas baseado no stage (área útil)
   useEffect(() => {
     loadData();
     const interval = setInterval(loadData, 60000);
@@ -167,7 +167,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     };
   }, [loadData]);
 
-  // ✅ mouseup global pra não “prender”
+  // Global mouseup
   useEffect(() => {
     const up = () => handleMouseUp();
     window.addEventListener('mouseup', up);
@@ -204,12 +204,11 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       logMaxR: (maxR > 0) ? Math.log10(maxR) : maxR
     };
 
-    const { logMinR, logMaxR } = statsRef.current;
+    const { logMinR, logMaxR } = statsRef.current!;
     const existingMap = new Map(particlesRef.current.map(p => [p.id, p] as const));
 
-    const stage = stageRef.current;
-    const w = stage?.clientWidth || 1000;
-    const h = stage?.clientHeight || 800;
+    const w = stageRef.current?.clientWidth || 1000;
+    const h = stageRef.current?.clientHeight || 800;
 
     const newParticles = topCoins.map(coin => {
       const existing = existingMap.get(coin.id);
@@ -233,14 +232,14 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
       const color = (coin.price_change_percentage_24h || 0) >= 0 ? '#089981' : '#f23645';
 
-      const vx = (Math.random() - 0.5) * 40;
-      const vy = (Math.random() - 0.5) * 40;
+      let vx = (Math.random() - 0.5) * 40;
+      let vy = (Math.random() - 0.5) * 40;
 
       if (existing) {
         existing.coin = coin;
         existing.targetRadius = targetRadius;
         existing.color = color;
-        existing.mass = targetRadius;
+        existing.mass = Math.max(1, targetRadius);
 
         if (isFreeMode && (Math.abs(existing.vx) < 2 && Math.abs(existing.vy) < 2)) {
           existing.vx = (Math.random() - 0.5) * 50;
@@ -261,7 +260,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         coin,
         trail: [],
         phase: Math.random() * Math.PI * 2,
-        mass: targetRadius
+        mass: Math.max(1, targetRadius)
       };
     });
 
@@ -296,19 +295,18 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         if (!statsRef.current) return;
         const s = statsRef.current;
 
-        // ✅ AQUI estava o teu “const m” quebrado.
-        // Tem que ser isso aqui:
-        const margin = { top: 18, right: 18, bottom: 88, left: 86 };
-
+        // ✅ margens estáveis pra eixo X não sumir
+        const margin = { top: 18, right: 18, bottom: 92, left: 86 };
         const chartW = Math.max(50, width - margin.left - margin.right);
         const chartH = Math.max(50, height - margin.top - margin.bottom);
 
         const originX = margin.left;
         const originY = margin.top + chartH;
 
+        // velocidades
         const physicsSpeed = 0.1 + (animSpeedRaw * 0.4);
 
-        // ✅ mapped float: min=0, max +30% (4 -> 5.2)
+        // ✅ flutuação no modo mapeado: max +30% (antes ~4, agora 5.2)
         const mappedFloatMaxAmp = 5.2;
         const mappedFloatAmp = animSpeedRaw * mappedFloatMaxAmp;
 
@@ -332,6 +330,15 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         const toScreenX = (val: number) => val * k + panX;
         const toScreenY = (val: number) => val * k + panY;
 
+        const particles = particlesRef.current;
+
+        // ✅ atualiza raio ANTES da física (colisão usa raio atual)
+        for (const p of particles) {
+          const viewRadius = p.targetRadius * Math.pow(k, 0.25);
+          p.radius += (viewRadius - p.radius) * 0.15;
+          p.mass = Math.max(1, p.radius);
+        }
+
         // --- AXES ---
         if (!isFreeMode) {
           ctx.save();
@@ -342,7 +349,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
           ctx.fillStyle = isDark ? 'rgba(255,255,255,0.78)' : 'rgba(0,0,0,0.72)';
           ctx.textBaseline = 'middle';
 
-          // X ticks + labels
+          // X grid + labels
           const xSteps = 6;
           for (let i = 0; i <= xSteps; i++) {
             const percent = i / xSteps;
@@ -359,13 +366,15 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
             ctx.lineTo(screenX, toScreenY(originY));
             ctx.stroke();
 
-            const tickY = mathClamp(toScreenY(originY) + 18, 12, height - 12);
             ctx.textAlign = 'center';
             const label = (chartMode === 'performance') ? `${val.toFixed(1)}%` : formatCompact(val);
+
+            // ✅ garante dentro da tela
+            const tickY = mathClamp(toScreenY(originY) + 18, 12, height - 14);
             ctx.fillText(label, screenX, tickY);
           }
 
-          // Y ticks + labels
+          // Y grid + labels
           const ySteps = 5;
           for (let i = 0; i <= ySteps; i++) {
             const percent = i / ySteps;
@@ -399,7 +408,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
           ctx.fillStyle = isDark ? '#dd9933' : '#333';
 
           const xLabel = chartMode === 'performance' ? 'Variação 24h (%)' : 'Market Cap (Log)';
-          const xLabelY = mathClamp(toScreenY(originY) + 56, 16, height - 10);
+          const xLabelY = mathClamp(toScreenY(originY) + 56, 20, height - 10);
           ctx.fillText(xLabel, width / 2, xLabelY);
 
           ctx.save();
@@ -411,13 +420,12 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
           ctx.restore();
         }
 
-        const particles = particlesRef.current;
-
-        // --- PHYSICS / MOVEMENT ---
+        // --- PHYSICS ---
         if (isFreeMode) {
           const worldW = width / k;
           const worldH = height / k;
 
+          // 1) movement + wall bounce
           for (const p of particles) {
             if (p.isFixed) continue;
 
@@ -430,7 +438,67 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
             if (p.y < p.radius) { p.y = p.radius; p.vy *= -1; }
             else if (p.y > worldH - p.radius) { p.y = worldH - p.radius; p.vy *= -1; }
           }
+
+          // 2) collisions: rigid separation + elastic impulse (bilhar)
+          for (let i = 0; i < particles.length; i++) {
+            const p1 = particles[i];
+            for (let j = i + 1; j < particles.length; j++) {
+              const p2 = particles[j];
+
+              const dx = p2.x - p1.x;
+              const dy = p2.y - p1.y;
+              const minDist = p1.radius + p2.radius;
+
+              const distSq = dx * dx + dy * dy;
+              if (distSq >= minDist * minDist) continue;
+
+              const dist = Math.sqrt(distSq) || 0.001;
+              const nx = dx / dist;
+              const ny = dy / dist;
+
+              // static resolution (remove overlap)
+              const overlap = minDist - dist;
+              const totalMass = (p1.mass + p2.mass) || 1;
+
+              const move1 = (p2.mass / totalMass);
+              const move2 = (p1.mass / totalMass);
+
+              if (!p1.isFixed) {
+                p1.x -= nx * overlap * move1;
+                p1.y -= ny * overlap * move1;
+              }
+              if (!p2.isFixed) {
+                p2.x += nx * overlap * move2;
+                p2.y += ny * overlap * move2;
+              }
+
+              // dynamic resolution (impulse) - elastic
+              const rvx = p2.vx - p1.vx;
+              const rvy = p2.vy - p1.vy;
+              const velAlongNormal = rvx * nx + rvy * ny;
+
+              // se já estão se afastando, não aplica impulso
+              if (velAlongNormal > 0) continue;
+
+              const restitution = 1.0; // elastic
+              let impulse = -(1 + restitution) * velAlongNormal;
+              impulse /= (1 / p1.mass + 1 / p2.mass);
+
+              const impulseX = impulse * nx;
+              const impulseY = impulse * ny;
+
+              if (!p1.isFixed) {
+                p1.vx -= impulseX / p1.mass;
+                p1.vy -= impulseY / p1.mass;
+              }
+              if (!p2.isFixed) {
+                p2.vx += impulseX / p2.mass;
+                p2.vy += impulseY / p2.mass;
+              }
+            }
+          }
         } else {
+          // Mapped Mode Logic
           for (const p of particles) {
             let xVal = 0;
             const yVal = p.coin.total_volume || 1;
@@ -453,11 +521,8 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
           }
         }
 
-        // --- RENDER ---
+        // --- RENDER PARTICLES ---
         for (const p of particles) {
-          const viewRadius = p.targetRadius * Math.pow(k, 0.25);
-          p.radius += (viewRadius - p.radius) * 0.1;
-
           const screenX = toScreenX(p.x);
           const screenY = toScreenY(p.y);
 
@@ -499,6 +564,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
           if (isDimmed) ctx.globalAlpha = 0.1;
 
+          // bubble
           ctx.beginPath();
           ctx.arc(screenX, screenY, p.radius, 0, Math.PI * 2);
 
@@ -543,7 +609,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         if (p) {
           const sx = toScreenX(p.x);
           const sy = toScreenY(p.y);
-          drawTooltip(ctx, p, sx, sy, width, height, isDark);
+          drawTooltip(ctx, p, sx, sy, width, height);
         }
       } catch (e) {
         console.error('Animation Loop Error', e);
@@ -551,15 +617,8 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     };
   }, [animSpeedRaw, trailLength, isDark, chartMode, isFreeMode, numCoins, searchTerm]);
 
-  const drawTooltip = (
-    ctx: CanvasRenderingContext2D,
-    p: Particle,
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    isDarkTheme: boolean
-  ) => {
+  const drawTooltip = (ctx: CanvasRenderingContext2D, p: Particle, x: number, y: number, width: number, height: number) => {
+    // ✅ tooltip maior e legível
     const boxW = 260;
     const boxH = 138;
 
@@ -572,7 +631,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     if (by + boxH > height) by = height - boxH - 12;
 
     ctx.save();
-    ctx.fillStyle = isDarkTheme ? 'rgba(20, 20, 25, 0.96)' : 'rgba(255, 255, 255, 0.97)';
+    ctx.fillStyle = isDark ? 'rgba(20, 20, 25, 0.96)' : 'rgba(255, 255, 255, 0.97)';
     ctx.strokeStyle = p.color;
     ctx.lineWidth = 1;
     ctx.shadowColor = 'rgba(0,0,0,0.35)';
@@ -590,16 +649,16 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
 
-    ctx.fillStyle = isDarkTheme ? '#fff' : '#000';
+    ctx.fillStyle = isDark ? '#fff' : '#000';
     ctx.font = 'bold 16px Inter';
     ctx.fillText(p.coin.name, bx + 14, by + 26);
 
-    ctx.fillStyle = isDarkTheme ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.55)';
+    ctx.fillStyle = isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.55)';
     ctx.font = '13px Inter';
     ctx.fillText(p.coin.symbol.toUpperCase(), bx + 14, by + 46);
 
     ctx.font = 'bold 20px Inter';
-    ctx.fillStyle = isDarkTheme ? '#eee' : '#111';
+    ctx.fillStyle = isDark ? '#eee' : '#111';
     ctx.fillText(formatPrice(p.coin.current_price), bx + 14, by + 76);
 
     const change = p.coin.price_change_percentage_24h || 0;
@@ -609,7 +668,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     ctx.fillText(`${change > 0 ? '+' : ''}${change.toFixed(2)}%`, bx + boxW - 14, by + 28);
 
     ctx.textAlign = 'left';
-    ctx.fillStyle = isDarkTheme ? 'rgba(255,255,255,0.70)' : 'rgba(0,0,0,0.60)';
+    ctx.fillStyle = isDark ? 'rgba(255,255,255,0.70)' : 'rgba(0,0,0,0.60)';
     ctx.font = '12px Inter';
     ctx.fillText('Vol 24h: ' + formatCompact(p.coin.total_volume), bx + 14, by + 108);
     ctx.fillText('Mkt Cap: ' + formatCompact(p.coin.market_cap), bx + 14, by + 126);
@@ -632,9 +691,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
   // --- EVENTS ---
   const handleMouseMove = (e: React.MouseEvent) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
+    const canvas = canvasRef.current; if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
@@ -711,9 +768,8 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
-    const canvas = canvasRef.current;
-    if (!canvas) return;
 
+    const canvas = canvasRef.current; if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
@@ -749,16 +805,10 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
           <div className="w-px h-8 bg-gray-200 dark:bg-white/10 mx-4"></div>
 
           <div className="flex bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10 mr-4">
-            <button
-              onClick={() => setChartMode('performance')}
-              className={`px-4 py-1.5 text-xs font-bold rounded transition-colors ${chartMode === 'performance' ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500'}`}
-            >
+            <button onClick={() => setChartMode('performance')} className={`px-4 py-1.5 text-xs font-bold rounded transition-colors ${chartMode === 'performance' ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500'}`}>
               Market Cap
             </button>
-            <button
-              onClick={() => setChartMode('valuation')}
-              className={`px-4 py-1.5 text-xs font-bold rounded transition-colors ${chartMode === 'valuation' ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500'}`}
-            >
+            <button onClick={() => setChartMode('valuation')} className={`px-4 py-1.5 text-xs font-bold rounded transition-colors ${chartMode === 'valuation' ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500'}`}>
               Variação 24h
             </button>
           </div>
@@ -781,82 +831,82 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            onClick={resetZoom}
-            className="p-3 bg-[#dd9933]/10 hover:bg-[#dd9933]/20 text-[#dd9933] rounded-lg border border-[#dd9933]/30 transition-colors"
-            title="Reset Zoom"
-          >
+          <button onClick={resetZoom} className="p-3 bg-[#dd9933]/10 hover:bg-[#dd9933]/20 text-[#dd9933] rounded-lg border border-[#dd9933]/30 transition-colors" title="Reset Zoom">
             <Maximize size={20} />
           </button>
 
           <button
             onClick={() => setSettingsOpen(!settingsOpen)}
             className={`p-3 rounded-lg border transition-colors backdrop-blur-sm ${settingsOpen ? 'bg-[#dd9933] text-black border-[#dd9933]' : 'bg-gray-100 dark:bg-black/50 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10'}`}
+            title="Settings"
           >
             <Settings size={20} />
           </button>
 
-          <button
-            onClick={() => onClose()}
-            className="p-3 bg-gray-100 dark:bg-black/50 rounded-lg border border-gray-200 dark:border-white/10 hover:bg-red-500/10 text-gray-600 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
-            title="Close"
-          >
+          <button onClick={() => onClose()} className="p-3 bg-gray-100 dark:bg-black/50 rounded-lg border border-gray-200 dark:border-white/10 hover:bg-red-500/10 text-gray-600 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors" title="Close">
             <CloseIcon size={20} />
           </button>
         </div>
       </div>
 
+      {/* SETTINGS POPUP (2 barras dentro) */}
       {settingsOpen && (
-        <div className="absolute top-24 right-4 bg-white/90 dark:bg-black/80 p-4 rounded-lg border border-gray-200 dark:border-white/10 backdrop-blur-md w-72 z-30 space-y-4 animate-in fade-in slide-in-from-top-4 shadow-xl">
-          <div className="flex justify-between items-center">
-            <label className="text-xs font-bold flex items-center gap-2"><Atom size={14} /> Modo Livre (Sem Alvo)</label>
-            <button
-              onClick={() => setIsFreeMode(!isFreeMode)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isFreeMode ? 'bg-[#dd9933]' : 'bg-gray-200 dark:bg-tech-700'}`}
-            >
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isFreeMode ? 'translate-x-6' : 'translate-x-1'}`} />
-            </button>
+        <div
+          className="absolute top-24 right-4 bg-white/90 dark:bg-black/80 p-3 rounded-lg border border-gray-200 dark:border-white/10 backdrop-blur-md w-80 z-30 space-y-3 animate-in fade-in slide-in-from-top-4 shadow-xl"
+          onWheel={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          {/* Barra 1 */}
+          <div className="bg-gray-100 dark:bg-black/50 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Atom size={14} />
+              <span className="text-xs font-black uppercase tracking-wider">Modo</span>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold">Livre</span>
+                <button onClick={() => setIsFreeMode(!isFreeMode)} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isFreeMode ? 'bg-[#dd9933]' : 'bg-gray-200 dark:bg-tech-700'}`}>
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isFreeMode ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+
+              <div className="w-px h-6 bg-gray-200 dark:bg-white/10" />
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold">#</span>
+                <select
+                  value={numCoins}
+                  onChange={e => setNumCoins(parseInt(e.target.value))}
+                  className="bg-white/70 dark:bg-tech-800 text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs border border-gray-200 dark:border-white/10 outline-none"
+                  onWheel={(e) => e.stopPropagation()}
+                >
+                  {[50, 100, 150, 200, 250].map(n => <option key={n} value={n}>{n} moedas</option>)}
+                </select>
+              </div>
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-xs font-bold flex items-center gap-2"><Coins size={14} /> # Moedas</label>
-            <select
-              value={numCoins}
-              onChange={e => setNumCoins(parseInt(e.target.value))}
-              className="w-full bg-gray-100 dark:bg-tech-800 text-gray-900 dark:text-gray-100 p-2 rounded text-xs border border-gray-200 dark:border-white/10 outline-none"
-            >
-              {[50, 100, 150, 200, 250].map(n => <option key={n} value={n}>{n} Moedas</option>)}
-            </select>
-          </div>
+          {/* Barra 2 */}
+          <div className="bg-gray-100 dark:bg-black/50 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-3 space-y-3">
+            <div className="flex items-center gap-2">
+              <FastForward size={14} />
+              <span className="text-xs font-black uppercase tracking-wider">Flutuação / Velocidade</span>
+              <span className="ml-auto text-xs font-bold text-gray-500 dark:text-gray-400">{Math.round(animSpeedRaw * 100)}%</span>
+            </div>
+            <input type="range" min="0" max="1" step="0.05" value={animSpeedRaw} onChange={e => setAnimSpeedRaw(parseFloat(e.target.value))} className="w-full accent-[#dd9933]" />
 
-          <div className="space-y-2">
-            <label className="text-xs font-bold flex items-center gap-2"><FastForward size={14} /> Flutuação / Velocidade</label>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.05"
-              value={animSpeedRaw}
-              onChange={e => setAnimSpeedRaw(parseFloat(e.target.value))}
-              className="w-full accent-[#dd9933]"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-xs font-bold flex items-center gap-2"><Droplets size={14} /> Rastro (Trail)</label>
-            <input
-              type="range"
-              min="0"
-              max="50"
-              step="1"
-              value={trailLength}
-              onChange={e => setTrailLength(parseInt(e.target.value))}
-              className="w-full accent-[#dd9933]"
-            />
+            <div className="flex items-center gap-2 pt-1">
+              <Droplets size={14} />
+              <span className="text-xs font-black uppercase tracking-wider">Rastro (Trail)</span>
+              <span className="ml-auto text-xs font-bold text-gray-500 dark:text-gray-400">{trailLength}</span>
+            </div>
+            <input type="range" min="0" max="50" step="1" value={trailLength} onChange={e => setTrailLength(parseInt(e.target.value))} className="w-full accent-[#dd9933]" />
           </div>
         </div>
       )}
 
+      {/* STAGE */}
       <div ref={stageRef} className="flex-1 w-full relative cursor-crosshair overflow-hidden">
         <canvas
           ref={canvasRef}
