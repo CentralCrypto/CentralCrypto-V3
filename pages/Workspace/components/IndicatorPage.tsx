@@ -26,55 +26,43 @@ import {
   Star,
   TrendingUp,
   User,
-  Wind,
+  Wind
 } from 'lucide-react';
 
 import { fetchTopCoins } from '../services/api';
 
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 // @ts-ignore FIX: Alias useSortable to avoid potential naming collisions.
-import {
-  SortableContext,
-  arrayMove,
-  horizontalListSortingStrategy,
-  useSortable as useDndKitSortable,
-} from '@dnd-kit/sortable';
+import { SortableContext, arrayMove, horizontalListSortingStrategy, useSortable as useDndKitSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
 import { Area, AreaChart, ResponsiveContainer, YAxis } from 'recharts';
 
 // --- HELPERS ---
 
-const formatUSD = (val: number | undefined | null, compact = false) => {
-  const n = Number(val);
-  if (!isFinite(n)) return '---';
-
+const formatUSD = (val: number, compact = false) => {
+  if (val === undefined || val === null) return "---";
   if (compact) {
-    const abs = Math.abs(n);
-    if (abs >= 1e12) return `$${(n / 1e12).toFixed(2)}T`;
-    if (abs >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
-    if (abs >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
+    if (val >= 1e12) return `$${(val / 1e12).toFixed(2)}T`;
+    if (val >= 1e9) return `$${(val / 1e9).toFixed(2)}B`;
+    if (val >= 1e6) return `$${(val / 1e6).toFixed(2)}M`;
   }
-
-  return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
 const safePct = (v: number) => {
-  const n = Number(v);
-  if (!isFinite(n)) return '--';
-  const s = n >= 0 ? '+' : '';
-  return `${s}${n.toFixed(2)}%`;
+  if (!isFinite(v)) return '--';
+  const s = v >= 0 ? '+' : '';
+  return `${s}${v.toFixed(2)}%`;
 };
 
 // CoinGecko sparkline_in_7d geralmente vem em pontos horários (168).
 const pctFromSpark = (prices?: number[], pointsBack: number = 1) => {
   const arr = Array.isArray(prices) ? prices.filter(n => typeof n === 'number' && isFinite(n)) : [];
   if (arr.length < 2) return NaN;
-
   const last = arr[arr.length - 1];
   const idx = Math.max(0, arr.length - 1 - Math.max(1, pointsBack));
   const prev = arr[idx];
-
   if (!isFinite(prev) || prev === 0) return NaN;
   return ((last - prev) / prev) * 100;
 };
@@ -82,10 +70,8 @@ const pctFromSpark = (prices?: number[], pointsBack: number = 1) => {
 const pct7dFromSpark = (prices?: number[]) => {
   const arr = Array.isArray(prices) ? prices.filter(n => typeof n === 'number' && isFinite(n)) : [];
   if (arr.length < 2) return NaN;
-
   const first = arr[0];
   const last = arr[arr.length - 1];
-
   if (!isFinite(first) || first === 0) return NaN;
   return ((last - first) / first) * 100;
 };
@@ -100,7 +86,7 @@ function LockOverlay() {
   );
 }
 
-function PageHeader({ title, description }: { title: string; description: string }) {
+function PageHeader({ title, description }: { title: string, description: string }) {
   return (
     <div className="bg-white dark:bg-[#1a1c1e] p-6 rounded-xl border border-gray-100 dark:border-slate-800 shadow-sm transition-colors mb-4 shrink-0">
       <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{title}</h2>
@@ -111,34 +97,23 @@ function PageHeader({ title, description }: { title: string; description: string
 
 // --- FAQ COMPONENT ---
 
-function PageFaq({ language, pageType }: { language: Language; pageType: string }) {
+function PageFaq({ language, pageType }: { language: Language, pageType: string }) {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
   const t = getTranslations(language).workspace.pages.faq;
 
   const faqData = useMemo(() => {
-    switch (pageType) {
-      case 'FNG':
-        return t.fng;
-      case 'RSI':
-        return t.rsi;
-      case 'MACD':
-        return t.macd;
-      case 'ALTSEASON':
-        return t.altseason;
-      case 'ETF':
-        return t.etf;
-      case 'LSR':
-        return t.lsr;
-      case 'TRUMP':
-        return t.trump;
-      case 'CALENDAR':
-        return t.calendar;
-      case 'HEATMAP':
-        return t.heatmap;
-      case 'BUBBLE_HEATMAP':
-        return t.bubble;
-      default:
-        return null;
+    switch(pageType) {
+      case 'FNG': return t.fng;
+      case 'RSI': return t.rsi;
+      case 'MACD': return t.macd;
+      case 'ALTSEASON': return t.altseason;
+      case 'ETF': return t.etf;
+      case 'LSR': return t.lsr;
+      case 'TRUMP': return t.trump;
+      case 'CALENDAR': return t.calendar;
+      case 'HEATMAP': return t.heatmap;
+      case 'BUBBLE_HEATMAP': return t.bubble;
+      default: return null;
     }
   }, [pageType, t]);
 
@@ -146,43 +121,23 @@ function PageFaq({ language, pageType }: { language: Language; pageType: string 
 
   const items = [
     { q: faqData.q1, a: faqData.a1 },
-    { q: faqData.q2, a: faqData.a2 },
+    { q: faqData.q2, a: faqData.a2 }
   ];
 
   return (
     <div className="mt-8 mb-12 max-w-4xl mx-auto px-4">
-      <h3 className="text-xl font-black text-gray-800 dark:text-[#dd9933] uppercase tracking-widest text-center mb-8">
-        Metodologia e FAQ
-      </h3>
+      <h3 className="text-xl font-black text-gray-800 dark:text-[#dd9933] uppercase tracking-widest text-center mb-8">Metodologia e FAQ</h3>
       <div className="space-y-3">
         {items.map((item, i) => (
-          <div
-            key={i}
-            className="bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-tech-800 rounded-xl overflow-hidden shadow-sm transition-all duration-500"
-          >
+          <div key={i} className="bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-tech-800 rounded-xl overflow-hidden shadow-sm transition-all duration-500">
             <button
               onClick={() => setOpenIndex(openIndex === i ? null : i)}
               className="w-full flex items-center justify-between p-5 text-left group"
             >
-              <span
-                className={`font-bold text-base transition-colors ${
-                  openIndex === i ? 'text-[#dd9933]' : 'text-gray-700 dark:text-gray-300'
-                }`}
-              >
-                {item.q}
-              </span>
-              <ChevronDown
-                size={20}
-                className={`text-gray-400 transition-transform duration-500 ${
-                  openIndex === i ? 'rotate-180 text-[#dd9933]' : ''
-                }`}
-              />
+              <span className={`font-bold text-base transition-colors ${openIndex === i ? 'text-[#dd9933]' : 'text-gray-700 dark:text-gray-300'}`}>{item.q}</span>
+              <ChevronDown size={20} className={`text-gray-400 transition-transform duration-500 ${openIndex === i ? 'rotate-180 text-[#dd9933]' : ''}`} />
             </button>
-            <div
-              className={`transition-all duration-500 ease-in-out ${
-                openIndex === i ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
-              }`}
-            >
+            <div className={`transition-all duration-500 ease-in-out ${openIndex === i ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}>
               <div className="p-5 pt-0 text-base text-gray-500 dark:text-slate-400 leading-relaxed border-t border-transparent dark:border-white/5">
                 <div dangerouslySetInnerHTML={{ __html: item.a }} />
               </div>
@@ -192,7 +147,7 @@ function PageFaq({ language, pageType }: { language: Language; pageType: string 
       </div>
     </div>
   );
-}
+};
 
 // --- MARKET CAP TABLE ---
 
@@ -208,6 +163,12 @@ const MarketCapTable = ({ language }: { language: Language }) => {
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({
     key: 'market_cap_rank',
     direction: 'asc',
+  });
+
+  // categories sort + reorder
+  const [catSort, setCatSort] = useState<{ key: string; direction: 'asc' | 'desc' }>({
+    key: 'marketCap',
+    direction: 'desc',
   });
 
   const [pageSize, setPageSize] = useState<number>(100);
@@ -241,7 +202,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
   // Top buttons (coins view)
   const [topMode, setTopMode] = useState<'none' | 'gainers' | 'losers'>('none');
 
-  // Column reorder (dnd-kit)
+  // Column reorder (dnd-kit) - COINS TABLE
   const DEFAULT_COLS: string[] = [
     'rank',
     'asset',
@@ -257,7 +218,24 @@ const MarketCapTable = ({ language }: { language: Language }) => {
   ];
   const [colOrder, setColOrder] = useState<string[]>(DEFAULT_COLS);
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  // Column reorder (dnd-kit) - CATEGORIES TABLE
+  const CAT_DEFAULT_COLS: string[] = [
+    'category',
+    'gainers',
+    'losers',
+    'ch1h',
+    'ch24h',
+    'ch7d',
+    'mcap',
+    'vol24h',
+    'coins',
+    'spark',
+  ];
+  const [catColOrder, setCatColOrder] = useState<string[]>(CAT_DEFAULT_COLS);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
+  );
 
   const fetchJsonSafe = async (url: string) => {
     const r = await fetch(url, { cache: 'no-store' });
@@ -277,14 +255,23 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     }
   }, []);
 
+  // IMPORTANT: evita loop infinito de reload (catLoading em deps quebrava tudo)
+  const catLoadingRef = useRef(false);
+
   const loadCategoriesLocal = useCallback(async () => {
-    if (catLoading) return;
+    if (catLoadingRef.current) return;
+    catLoadingRef.current = true;
+
     setCatLoading(true);
     setCatWarn('');
 
     try {
       const base = '/cachecko/categories';
-      const [taxonomyJson, listJson, marketJson] = await Promise.all([
+      const [
+        taxonomyJson,
+        listJson,
+        marketJson,
+      ] = await Promise.all([
         fetchJsonSafe(`${base}/taxonomy-master.json`).catch(() => null),
         fetchJsonSafe(`${base}/coingecko_categories_list.json`).catch(() => []),
         fetchJsonSafe(`${base}/coingecko_categories_market.json`).catch(() => []),
@@ -299,10 +286,9 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
       if (mapJson && typeof mapJson === 'object') {
         // aceita { categories: {...} } ou diretamente {...}
-        const categories =
-          (mapJson as any).categories && typeof (mapJson as any).categories === 'object'
-            ? (mapJson as any).categories
-            : mapJson;
+        const categories = (mapJson as any).categories && typeof (mapJson as any).categories === 'object'
+          ? (mapJson as any).categories
+          : mapJson;
 
         if (categories && typeof categories === 'object') {
           setCatCoinMap(categories as Record<string, string[]>);
@@ -312,9 +298,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
       } else {
         setCatCoinMap(null);
         if (!catWarnDismissed) {
-          setCatWarn(
-            'Dados de categoria não indexados localmente (category_coins_map.json ausente). A lista de categorias funciona, mas o filtro por moedas pode ficar limitado.'
-          );
+          setCatWarn('Dados de categoria não indexados localmente (category_coins_map.json ausente). A lista de categorias funciona, mas o filtro por moedas pode ficar limitado.');
         }
       }
     } catch (e: any) {
@@ -322,12 +306,11 @@ const MarketCapTable = ({ language }: { language: Language }) => {
       setCatWarn('Falha ao carregar categorias locais em /cachecko/categories/.');
     } finally {
       setCatLoading(false);
+      catLoadingRef.current = false;
     }
-  }, [catLoading, catWarnDismissed]);
+  }, [catWarnDismissed]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
@@ -355,6 +338,12 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     setPage(0);
   };
 
+  const handleCatSort = (key: string) => {
+    let direction: 'asc' | 'desc' = 'desc';
+    if (catSort.key === key && catSort.direction === 'desc') direction = 'asc';
+    setCatSort({ key, direction });
+  };
+
   // ---------- Taxonomy parsing (suporta 2 ou 3 níveis) ----------
   const parsedTaxonomy = useMemo(() => {
     const raw = taxonomy;
@@ -369,23 +358,14 @@ const MarketCapTable = ({ language }: { language: Language }) => {
       .map((m: any) => ({
         id: String(m.id ?? m.key ?? m.name ?? '').trim(),
         name: String(m.name ?? m.title ?? m.id ?? '').trim(),
-        categoryIds: Array.isArray(m.categoryIds)
-          ? m.categoryIds
-          : Array.isArray(m.categories)
-            ? m.categories
-            : [],
+        categoryIds: Array.isArray(m.categoryIds) ? m.categoryIds : Array.isArray(m.categories) ? m.categories : [],
         children: Array.isArray(m.children) ? m.children : Array.isArray(m.groups) ? m.groups : [],
       }))
       .filter((m: any) => m.id);
   }, [taxonomy]);
 
   const masterOptions = useMemo(() => {
-    const opts = parsedTaxonomy.map((m: any) => ({
-      id: m.id,
-      name: m.name,
-      children: m.children,
-      categoryIds: m.categoryIds,
-    }));
+    const opts = parsedTaxonomy.map((m: any) => ({ id: m.id, name: m.name, children: m.children, categoryIds: m.categoryIds }));
     return [{ id: '__all__', name: 'Todas' }, ...opts];
   }, [parsedTaxonomy]);
 
@@ -403,55 +383,14 @@ const MarketCapTable = ({ language }: { language: Language }) => {
       .map((c: any) => ({
         id: String(c.id ?? c.key ?? c.name ?? '').trim(),
         name: String(c.name ?? c.title ?? c.id ?? '').trim(),
-        categoryIds: Array.isArray(c.categoryIds)
-          ? c.categoryIds
-          : Array.isArray(c.categories)
-            ? c.categories
-            : [],
+        categoryIds: Array.isArray(c.categoryIds) ? c.categoryIds : Array.isArray(c.categories) ? c.categories : [],
       }))
       .filter((x: any) => x.id);
 
     return [{ id: '__all__', name: 'Todas' }, ...opts];
   }, [selectedMaster]);
 
-  useEffect(() => {
-    setSubKey('__all__');
-  }, [masterKey]);
-
-  const visibleCategoryIds = useMemo(() => {
-    if (masterKey === '__all__') {
-      const ids = new Set<string>();
-      for (const c of catList) {
-        const id = String((c as any).category_id ?? (c as any).id ?? '').trim();
-        if (id) ids.add(id);
-      }
-      for (const c of catMarket) {
-        const id = String((c as any).category_id ?? (c as any).id ?? (c as any).categoryId ?? '').trim();
-        if (id) ids.add(id);
-      }
-      return Array.from(ids);
-    }
-
-    if (!selectedMaster) return [];
-    const hasChildren = Array.isArray(selectedMaster.children) && selectedMaster.children.length > 0;
-
-    if (hasChildren) {
-      if (subKey === '__all__') {
-        const ids = new Set<string>();
-        for (const sg of selectedMaster.children) {
-          const arr = Array.isArray(sg.categoryIds) ? sg.categoryIds : Array.isArray(sg.categories) ? sg.categories : [];
-          for (const id of arr) if (id) ids.add(String(id));
-        }
-        return Array.from(ids);
-      }
-      const sg = subOptions.find((x: any) => x.id === subKey);
-      const arr = sg && Array.isArray((sg as any).categoryIds) ? (sg as any).categoryIds : [];
-      return arr.map((x: any) => String(x));
-    }
-
-    const arr = Array.isArray(selectedMaster.categoryIds) ? selectedMaster.categoryIds : [];
-    return arr.map((x: any) => String(x));
-  }, [catList, catMarket, masterKey, selectedMaster, subKey, subOptions]);
+  useEffect(() => { setSubKey('__all__'); }, [masterKey]);
 
   // category name resolver
   const categoryNameById = useMemo(() => {
@@ -478,7 +417,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     return map;
   }, [catMarket]);
 
-  // ---------- Category aggregates from coins dataset (quando map existe) ----------
+  // ---------- Coin lookups ----------
   const coinById = useMemo(() => {
     const m = new Map<string, ApiCoin>();
     for (const c of coins) {
@@ -486,17 +425,6 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     }
     return m;
   }, [coins]);
-
-  const categoryCoinIds = useMemo(() => {
-    const map = new Map<string, Set<string>>();
-    if (!catCoinMap) return map;
-
-    for (const [catId, arr] of Object.entries(catCoinMap)) {
-      if (!catId || !Array.isArray(arr)) continue;
-      map.set(catId, new Set(arr.map(x => String(x))));
-    }
-    return map;
-  }, [catCoinMap]);
 
   const getCoinPct1h = (c: ApiCoin) => {
     const v = (c as any).price_change_percentage_1h_in_currency;
@@ -551,34 +479,197 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     return series;
   };
 
-  const computeCategoryStats = (categoryId: string) => {
-    const setIds = categoryCoinIds.get(categoryId);
-    const name = categoryNameById.get(categoryId) || categoryId;
+  // ---------- Base categoryCoinIds + taxonomy groups (master/sub) ----------
+  const categoryCoinIds = useMemo(() => {
+    const map = new Map<string, Set<string>>();
 
-    if (!setIds || setIds.size === 0) {
-      const mk = catMarketById.get(categoryId);
-      const coinsCount = Number((mk as any)?.coin_counter ?? (mk as any)?.coins ?? 0) || 0;
+    if (catCoinMap) {
+      for (const [catId, arr] of Object.entries(catCoinMap)) {
+        if (!catId || !Array.isArray(arr)) continue;
+        map.set(catId, new Set(arr.map(x => String(x))));
+      }
+    }
+
+    // adiciona chaves sintéticas para grupos do taxonomy (tax:<master> e tax:<master>:<sub>)
+    if (parsedTaxonomy.length > 0) {
+      const collectMasterAllCategoryIds = (m: any) => {
+        const ids = new Set<string>();
+        const baseArr = Array.isArray(m.categoryIds) ? m.categoryIds : [];
+        for (const id of baseArr) if (id) ids.add(String(id));
+        const children = Array.isArray(m.children) ? m.children : [];
+        for (const ch of children) {
+          const carr = Array.isArray(ch.categoryIds) ? ch.categoryIds : Array.isArray(ch.categories) ? ch.categories : [];
+          for (const id of carr) if (id) ids.add(String(id));
+        }
+        return Array.from(ids);
+      };
+
+      for (const m of parsedTaxonomy) {
+        const masterKeyId = `tax:${m.id}`;
+        const masterCategoryIds = collectMasterAllCategoryIds(m);
+        const union = new Set<string>();
+
+        for (const catId of masterCategoryIds) {
+          const s = map.get(catId);
+          if (!s) continue;
+          for (const coinId of s) union.add(coinId);
+        }
+        if (union.size > 0) map.set(masterKeyId, union);
+
+        const children = Array.isArray(m.children) ? m.children : [];
+        for (const ch of children) {
+          const subKeyId = `tax:${m.id}:${String(ch.id ?? ch.key ?? ch.name ?? '').trim()}`;
+          const carr = Array.isArray(ch.categoryIds) ? ch.categoryIds : Array.isArray(ch.categories) ? ch.categories : [];
+          const subUnion = new Set<string>();
+          for (const catId of carr) {
+            const s = map.get(String(catId));
+            if (!s) continue;
+            for (const coinId of s) subUnion.add(coinId);
+          }
+          if (subUnion.size > 0) map.set(subKeyId, subUnion);
+        }
+      }
+    }
+
+    return map;
+  }, [catCoinMap, parsedTaxonomy]);
+
+  type CatRowDef = {
+    key: string;            // pode ser coingecko id ou tax:* (grupo)
+    name: string;
+    level: 'master' | 'sub' | 'flat';
+    baseCategoryIds: string[]; // usados pra fallback em catMarket (somar market/volume)
+    masterId?: string;
+    subId?: string;
+  };
+
+  const collectMasterAllCategoryIds = useCallback((m: any) => {
+    const ids = new Set<string>();
+    const baseArr = Array.isArray(m.categoryIds) ? m.categoryIds : [];
+    for (const id of baseArr) if (id) ids.add(String(id));
+    const children = Array.isArray(m.children) ? m.children : [];
+    for (const ch of children) {
+      const carr = Array.isArray(ch.categoryIds) ? ch.categoryIds : Array.isArray(ch.categories) ? ch.categories : [];
+      for (const id of carr) if (id) ids.add(String(id));
+    }
+    return Array.from(ids);
+  }, []);
+
+  const categoryRowsDef = useMemo<CatRowDef[]>(() => {
+    // se tiver taxonomy, a tabela de categorias vira “hierárquica”
+    if (parsedTaxonomy.length > 0) {
+      // nível 1: masters
+      if (masterKey === '__all__') {
+        return parsedTaxonomy.map((m: any) => ({
+          key: `tax:${m.id}`,
+          name: String(m.name || m.id),
+          level: 'master',
+          baseCategoryIds: collectMasterAllCategoryIds(m),
+          masterId: m.id,
+        }));
+      }
+
+      // nível 2: subs do master selecionado (ou 1 linha se não tiver sub)
+      if (selectedMaster) {
+        const children = Array.isArray(selectedMaster.children) ? selectedMaster.children : [];
+        if (children.length > 0) {
+          return children
+            .map((ch: any) => {
+              const sid = String(ch.id ?? ch.key ?? ch.name ?? '').trim();
+              const carr = Array.isArray(ch.categoryIds) ? ch.categoryIds : Array.isArray(ch.categories) ? ch.categories : [];
+              return {
+                key: `tax:${selectedMaster.id}:${sid}`,
+                name: String(ch.name ?? ch.title ?? sid),
+                level: 'sub',
+                baseCategoryIds: carr.map((x: any) => String(x)),
+                masterId: selectedMaster.id,
+                subId: sid,
+              };
+            })
+            .filter(r => r.baseCategoryIds.length > 0);
+        }
+
+        // sem subcategorias: mostra só o master como linha única
+        return [{
+          key: `tax:${selectedMaster.id}`,
+          name: String(selectedMaster.name || selectedMaster.id),
+          level: 'master',
+          baseCategoryIds: collectMasterAllCategoryIds(selectedMaster),
+          masterId: selectedMaster.id,
+        }];
+      }
+
+      return [];
+    }
+
+    // fallback (sem taxonomy): lista “flat” (como era antes)
+    const ids = new Set<string>();
+    for (const c of catList) {
+      const id = String((c as any).category_id ?? (c as any).id ?? '').trim();
+      if (id) ids.add(id);
+    }
+    for (const c of catMarket) {
+      const id = String((c as any).category_id ?? (c as any).id ?? (c as any).categoryId ?? '').trim();
+      if (id) ids.add(id);
+    }
+
+    return Array.from(ids).map((id) => ({
+      key: id,
+      name: categoryNameById.get(id) || id,
+      level: 'flat',
+      baseCategoryIds: [id],
+    }));
+  }, [parsedTaxonomy, masterKey, selectedMaster, catList, catMarket, categoryNameById, collectMasterAllCategoryIds]);
+
+  const computeCategoryStats = useCallback((row: CatRowDef) => {
+    const setIds = categoryCoinIds.get(row.key);
+    const name = row.name || row.key;
+
+    // members (via snapshot)
+    const members: ApiCoin[] = [];
+    if (setIds && setIds.size > 0) {
+      for (const id of setIds) {
+        const c = coinById.get(id);
+        if (c) members.push(c);
+      }
+    }
+
+    const hasMap = !!(setIds && setIds.size > 0 && members.length > 0);
+
+    if (!hasMap) {
+      // fallback: soma dados do coingecko_categories_market.json para os ids “base”
+      const mkArr = row.baseCategoryIds
+        .map(id => catMarketById.get(String(id)))
+        .filter(Boolean);
+
+      const coinsCount = mkArr.reduce((s, mk) => s + (Number((mk as any)?.coin_counter ?? (mk as any)?.coins ?? 0) || 0), 0);
+      const marketCap = mkArr.reduce((s, mk) => s + (Number((mk as any)?.market_cap ?? (mk as any)?.marketCap ?? 0) || 0), 0);
+      const volume24h = mkArr.reduce((s, mk) => s + (Number((mk as any)?.volume_24h ?? (mk as any)?.volume24h ?? (mk as any)?.total_volume ?? 0) || 0), 0);
+
+      const avg = (fieldA: string, fieldB?: string) => {
+        const vals = mkArr
+          .map(mk => Number((mk as any)?.[fieldA] ?? (fieldB ? (mk as any)?.[fieldB] : NaN)))
+          .filter(v => isFinite(v));
+        if (vals.length === 0) return NaN;
+        return vals.reduce((a, b) => a + b, 0) / vals.length;
+      };
 
       return {
-        id: categoryId,
+        key: row.key,
         name,
         coinsCount,
-        marketCap: Number((mk as any)?.market_cap ?? (mk as any)?.marketCap ?? 0) || 0,
-        volume24h: Number((mk as any)?.volume_24h ?? (mk as any)?.volume24h ?? (mk as any)?.total_volume ?? 0) || 0,
-        ch1h: Number((mk as any)?.market_cap_change_1h ?? (mk as any)?.change_1h ?? NaN),
-        ch24h: Number((mk as any)?.market_cap_change_24h ?? (mk as any)?.change_24h ?? NaN),
-        ch7d: Number((mk as any)?.market_cap_change_7d ?? (mk as any)?.change_7d ?? NaN),
+        marketCap,
+        volume24h,
+        ch1h: avg('market_cap_change_1h', 'change_1h'),
+        ch24h: avg('market_cap_change_24h', 'change_24h'),
+        ch7d: avg('market_cap_change_7d', 'change_7d'),
         gainers: [] as ApiCoin[],
         losers: [] as ApiCoin[],
         spark: null as any,
         hasMap: false,
+        level: row.level,
+        masterId: row.masterId,
       };
-    }
-
-    const members: ApiCoin[] = [];
-    for (const id of setIds) {
-      const c = coinById.get(id);
-      if (c) members.push(c);
     }
 
     const coinsCount = members.length;
@@ -606,14 +697,14 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     const ch24h = wAvg(getCoinPct24h);
     const ch7d = wAvg(getCoinPct7d);
 
-    const by24h = [...members].sort((a, b) => getCoinPct24h(b) - getCoinPct24h(a));
+    const by24h = [...members].sort((a, b) => (getCoinPct24h(b) - getCoinPct24h(a)));
     const gainers = by24h.slice(0, 3);
     const losers = by24h.slice(-3).reverse();
 
     const spark = buildCategorySpark(members);
 
     return {
-      id: categoryId,
+      key: row.key,
       name,
       coinsCount,
       marketCap,
@@ -625,8 +716,10 @@ const MarketCapTable = ({ language }: { language: Language }) => {
       losers,
       spark,
       hasMap: true,
+      level: row.level,
+      masterId: row.masterId,
     };
-  };
+  }, [categoryCoinIds, coinById, catMarketById]);
 
   // ---------- Coin table filtering (search + fav + activeCategoryId) ----------
   const filteredSortedCoins = useMemo(() => {
@@ -688,9 +781,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     return filteredSortedCoins.slice(start, start + pageSize);
   }, [filteredSortedCoins, safePage, pageSize]);
 
-  useEffect(() => {
-    setPage(0);
-  }, [searchTerm, favOnly, pageSize, activeCategoryId, viewMode]);
+  useEffect(() => { setPage(0); }, [searchTerm, favOnly, pageSize, activeCategoryId, viewMode]);
 
   const Paginator = ({ compact = false }: { compact?: boolean }) => {
     const start = safePage * pageSize + 1;
@@ -709,10 +800,9 @@ const MarketCapTable = ({ language }: { language: Language }) => {
             onClick={() => setPage(p => Math.max(0, p - 1))}
             disabled={safePage === 0}
             className={`px-2.5 py-2 rounded-lg border text-sm font-black transition-colors
-              ${
-                safePage === 0
-                  ? 'opacity-40 cursor-not-allowed border-slate-200 dark:border-slate-700 text-gray-400'
-                  : 'border-slate-200 dark:border-slate-700 text-gray-600 dark:text-slate-200 hover:bg-gray-200 dark:hover:bg-slate-700'
+              ${safePage === 0
+                ? 'opacity-40 cursor-not-allowed border-slate-200 dark:border-slate-700 text-gray-400'
+                : 'border-slate-200 dark:border-slate-700 text-gray-600 dark:text-slate-200 hover:bg-gray-200 dark:hover:bg-slate-700'
               }`}
             title="Página anterior"
           >
@@ -727,10 +817,9 @@ const MarketCapTable = ({ language }: { language: Language }) => {
             onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
             disabled={safePage >= totalPages - 1}
             className={`px-2.5 py-2 rounded-lg border text-sm font-black transition-colors
-              ${
-                safePage >= totalPages - 1
-                  ? 'opacity-40 cursor-not-allowed border-slate-200 dark:border-slate-700 text-gray-400'
-                  : 'border-slate-200 dark:border-slate-700 text-gray-600 dark:text-slate-200 hover:bg-gray-200 dark:hover:bg-slate-700'
+              ${safePage >= totalPages - 1
+                ? 'opacity-40 cursor-not-allowed border-slate-200 dark:border-slate-700 text-gray-400'
+                : 'border-slate-200 dark:border-slate-700 text-gray-600 dark:text-slate-200 hover:bg-gray-200 dark:hover:bg-slate-700'
               }`}
             title="Próxima página"
           >
@@ -741,21 +830,43 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     );
   };
 
-  const COLS: Record<
-    string,
-    { id: string; label: string; sortKey?: string; align?: 'left' | 'center' | 'right'; w: string }
-  > = {
-    rank: { id: 'rank', label: '#', sortKey: 'market_cap_rank', align: 'center', w: 'w-[72px]' },
-    asset: { id: 'asset', label: 'Ativo', sortKey: 'name', align: 'left', w: 'w-[260px]' },
-    price: { id: 'price', label: 'Preço', sortKey: 'current_price', align: 'right', w: 'w-[140px]' },
-    ch1h: { id: 'ch1h', label: '1h %', sortKey: 'change_1h_est', align: 'right', w: 'w-[92px]' },
-    ch24h: { id: 'ch24h', label: '24h %', sortKey: 'price_change_percentage_24h', align: 'right', w: 'w-[100px]' },
-    ch7d: { id: 'ch7d', label: '7d %', sortKey: 'change_7d_est', align: 'right', w: 'w-[100px]' },
-    mcap: { id: 'mcap', label: 'Market Cap', sortKey: 'market_cap', align: 'right', w: 'w-[150px]' },
-    vol24h: { id: 'vol24h', label: 'Vol (24h)', sortKey: 'total_volume', align: 'right', w: 'w-[130px]' },
-    vol7d: { id: 'vol7d', label: 'Vol (7d)', sortKey: 'vol_7d_est', align: 'right', w: 'w-[130px]' },
-    supply: { id: 'supply', label: 'Circ. Supply', sortKey: 'circulating_supply', align: 'right', w: 'w-[170px]' },
-    spark7d: { id: 'spark7d', label: 'Mini-chart (7d)', sortKey: undefined, align: 'center', w: 'w-[320px]' },
+  // AJUSTE DE LARGURAS (1920x1080 + sidebar): reduz Ativo e Mini-chart e evita overflow
+  const COLS: Record<string, {
+    id: string;
+    label: string;
+    sortKey?: string;
+    align?: 'left' | 'center' | 'right';
+    w: string;
+  }> = {
+    rank: { id: 'rank', label: '#', sortKey: 'market_cap_rank', align: 'center', w: 'w-[64px]' },
+    asset: { id: 'asset', label: 'Ativo', sortKey: 'name', align: 'left', w: 'w-[220px]' },
+    price: { id: 'price', label: 'Preço', sortKey: 'current_price', align: 'right', w: 'w-[120px]' },
+    ch1h: { id: 'ch1h', label: '1h %', sortKey: 'change_1h_est', align: 'right', w: 'w-[84px]' },
+    ch24h: { id: 'ch24h', label: '24h %', sortKey: 'price_change_percentage_24h', align: 'right', w: 'w-[92px]' },
+    ch7d: { id: 'ch7d', label: '7d %', sortKey: 'change_7d_est', align: 'right', w: 'w-[92px]' },
+    mcap: { id: 'mcap', label: 'Market Cap', sortKey: 'market_cap', align: 'right', w: 'w-[140px]' },
+    vol24h: { id: 'vol24h', label: 'Vol (24h)', sortKey: 'total_volume', align: 'right', w: 'w-[120px]' },
+    vol7d: { id: 'vol7d', label: 'Vol (7d)', sortKey: 'vol_7d_est', align: 'right', w: 'w-[120px]' },
+    supply: { id: 'supply', label: 'Circ. Supply', sortKey: 'circulating_supply', align: 'right', w: 'w-[150px]' },
+    spark7d: { id: 'spark7d', label: 'Mini-chart (7d)', sortKey: undefined, align: 'center', w: 'w-[240px]' },
+  };
+
+  const CAT_COLS: Record<string, {
+    id: string;
+    label: string;
+    sortKey?: string;
+    w: string;
+  }> = {
+    category: { id: 'category', label: 'Categoria', sortKey: 'name', w: 'w-[320px]' },
+    gainers: { id: 'gainers', label: 'Top Gainers', sortKey: undefined, w: 'w-[150px]' },
+    losers: { id: 'losers', label: 'Top Losers', sortKey: undefined, w: 'w-[150px]' },
+    ch1h: { id: 'ch1h', label: '1h', sortKey: 'ch1h', w: 'w-[90px]' },
+    ch24h: { id: 'ch24h', label: '24h', sortKey: 'ch24h', w: 'w-[90px]' },
+    ch7d: { id: 'ch7d', label: '7d', sortKey: 'ch7d', w: 'w-[90px]' },
+    mcap: { id: 'mcap', label: 'Market Cap', sortKey: 'marketCap', w: 'w-[150px]' },
+    vol24h: { id: 'vol24h', label: '24h Volume', sortKey: 'volume24h', w: 'w-[150px]' },
+    coins: { id: 'coins', label: '# Coins', sortKey: 'coinsCount', w: 'w-[110px]' },
+    spark: { id: 'spark', label: 'Gráfico (7d)', sortKey: undefined, w: 'w-[220px]' },
   };
 
   const SortIcon = ({ active }: { active: boolean }) => (
@@ -785,12 +896,12 @@ const MarketCapTable = ({ language }: { language: Language }) => {
         ref={setNodeRef}
         style={style}
         className={`p-3 select-none group border-b border-gray-100 dark:border-slate-800 ${w}
-        hover:bg-gray-100 dark:hover:bg-white/5 transition-colors`}
+          hover:bg-gray-100 dark:hover:bg-white/5 transition-colors`}
       >
         <div className="flex items-center gap-2">
           <span
             className="inline-flex items-center justify-center w-6 h-6 rounded-md hover:bg-gray-200 dark:hover:bg-white/10 text-gray-400 shrink-0"
-            onClick={e => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
             {...attributes}
             {...listeners}
             title="Arraste para reordenar"
@@ -815,6 +926,61 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     );
   };
 
+  const CatSortableTh = ({
+    colId,
+    label,
+    sortKey,
+    w,
+  }: {
+    colId: string;
+    label: string;
+    sortKey?: string;
+    w: string;
+  }) => {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useDndKitSortable({ id: colId });
+    const style: React.CSSProperties = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+      opacity: isDragging ? 0.6 : 1,
+    };
+
+    const isActive = !!sortKey && catSort.key === sortKey;
+
+    return (
+      <th
+        ref={setNodeRef}
+        style={style}
+        className={`p-3 select-none group border-b border-gray-100 dark:border-slate-800 ${w}
+          hover:bg-gray-100 dark:hover:bg-white/5 transition-colors`}
+      >
+        <div className="flex items-center gap-2">
+          <span
+            className="inline-flex items-center justify-center w-6 h-6 rounded-md hover:bg-gray-200 dark:hover:bg-white/10 text-gray-400 shrink-0"
+            onClick={(e) => e.stopPropagation()}
+            {...attributes}
+            {...listeners}
+            title="Arraste para reordenar"
+          >
+            <GripVertical size={16} />
+          </span>
+
+          <div className="flex-1 flex justify-center min-w-0">
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 font-black uppercase tracking-widest text-xs text-gray-400 dark:text-slate-400 justify-center"
+              onClick={() => sortKey && handleCatSort(sortKey)}
+              disabled={!sortKey}
+              title={sortKey ? 'Ordenar' : ''}
+            >
+              <span className="whitespace-nowrap">{label}</span>
+              {sortKey ? <SortIcon active={isActive} /> : null}
+            </button>
+          </div>
+        </div>
+      </th>
+    );
+  };
+
   const onDragEnd = (event: any) => {
     const { active, over } = event;
     if (!over) return;
@@ -827,67 +993,124 @@ const MarketCapTable = ({ language }: { language: Language }) => {
     setColOrder(prev => arrayMove(prev, oldIndex, newIndex));
   };
 
-  const CategoryRowLogos = ({ arr }: { arr: ApiCoin[] }) => (
-    <div className="flex items-center justify-center gap-1">
-      {arr.slice(0, 3).map((c, i) => (
-        <img
-          key={`${c.id}_${i}`}
-          src={c.image}
-          alt=""
-          className="w-6 h-6 rounded-full bg-slate-100 dark:bg-[#242628] p-0.5 border border-slate-200 dark:border-white/10"
-          onError={e => (e.currentTarget.style.display = 'none')}
-        />
-      ))}
-      {arr.length === 0 && <span className="text-xs font-bold text-gray-400 dark:text-slate-500">—</span>}
-    </div>
-  );
+  const onCatDragEnd = (event: any) => {
+    const { active, over } = event;
+    if (!over) return;
+    if (active.id === over.id) return;
+
+    const oldIndex = catColOrder.indexOf(active.id);
+    const newIndex = catColOrder.indexOf(over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    setCatColOrder(prev => arrayMove(prev, oldIndex, newIndex));
+  };
+
+  const CategoryRowLogos = ({ arr }: { arr: ApiCoin[] }) => {
+    return (
+      <div className="flex items-center justify-center gap-1">
+        {arr.slice(0, 3).map((c, i) => (
+          <img
+            key={`${c.id}_${i}`}
+            src={c.image}
+            alt=""
+            className="w-6 h-6 rounded-full bg-slate-100 dark:bg-[#242628] p-0.5 border border-slate-200 dark:border-white/10"
+            onError={(e) => (e.currentTarget.style.display = 'none')}
+          />
+        ))}
+        {arr.length === 0 && <span className="text-xs font-bold text-gray-400 dark:text-slate-500">—</span>}
+      </div>
+    );
+  };
 
   const CategoriesTable = () => {
-    const rows = visibleCategoryIds
-      .map(id => computeCategoryStats(id))
-      .filter(r => r && r.name)
-      .filter((r: any) => Number(r.coinsCount || 0) > 0); // remove categorias com 0 coins
+    // memoiza pesado pra não “piscar”
+    const rows = useMemo(() => {
+      const base = categoryRowsDef
+        .map((def) => computeCategoryStats(def))
+        .filter((r) => r && r.name)
+        .filter((r: any) => Number(r.coinsCount || 0) > 0);
 
-    const q = (searchTerm || '').toLowerCase().trim();
-    const filtered = q ? rows.filter(r => String(r.name).toLowerCase().includes(q) || String(r.id).toLowerCase().includes(q)) : rows;
+      const q = (searchTerm || '').toLowerCase().trim();
+      const filtered = q
+        ? base.filter((r: any) => String(r.name).toLowerCase().includes(q) || String(r.key).toLowerCase().includes(q))
+        : base;
 
-    filtered.sort((a, b) => Number(b.marketCap || 0) - Number(a.marketCap || 0));
+      const getVal = (r: any, key: string) => {
+        if (key === 'name') return String(r.name || '');
+        const v = r[key];
+        return v;
+      };
+
+      filtered.sort((a: any, b: any) => {
+        const aVal = getVal(a, catSort.key);
+        const bVal = getVal(b, catSort.key);
+
+        if (typeof aVal === 'string' || typeof bVal === 'string') {
+          const r = String(aVal ?? '').localeCompare(String(bVal ?? ''));
+          return catSort.direction === 'asc' ? r : -r;
+        }
+
+        const an = isFinite(aVal) ? Number(aVal) : 0;
+        const bn = isFinite(bVal) ? Number(bVal) : 0;
+        if (an < bn) return catSort.direction === 'asc' ? -1 : 1;
+        if (an > bn) return catSort.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+
+      return filtered;
+    }, [categoryRowsDef, computeCategoryStats, searchTerm, catSort]);
+
+    const isMasterList = parsedTaxonomy.length > 0 && masterKey === '__all__';
 
     return (
       <div className="custom-scrollbar overflow-x-auto overflow-y-visible">
-        {catLoading && filtered.length === 0 ? (
+        {catLoading && rows.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-gray-500">
             <Loader2 className="animate-spin mb-2" size={32} />
             <span className="font-bold text-sm uppercase tracking-widest animate-pulse">Carregando Categorias...</span>
           </div>
         ) : (
-          <table className="w-full text-left border-collapse min-w-[1200px] table-fixed">
+          <table className="w-full text-left border-collapse min-w-[1100px] table-fixed">
             <thead className="sticky top-0 z-20 bg-white dark:bg-[#2f3032]">
-              <tr className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-slate-400 border-b border-gray-100 dark:border-slate-800">
-                <th className="p-3 w-[360px] text-center">Categoria</th>
-                <th className="p-3 text-center w-[160px]">Top Gainers</th>
-                <th className="p-3 text-center w-[160px]">Top Losers</th>
-                <th className="p-3 text-center w-[90px]">1h</th>
-                <th className="p-3 text-center w-[90px]">24h</th>
-                <th className="p-3 text-center w-[90px]">7d</th>
-                <th className="p-3 text-center w-[160px]">Market Cap</th>
-                <th className="p-3 text-center w-[150px]">24h Volume</th>
-                <th className="p-3 text-center w-[110px]"># Coins</th>
-                <th className="p-3 text-center w-[240px]">Gráfico (7d)</th>
+              <tr className="border-b border-gray-100 dark:border-slate-800">
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onCatDragEnd}>
+                  <SortableContext items={catColOrder} strategy={horizontalListSortingStrategy}>
+                    {catColOrder.map((cid) => {
+                      const c = CAT_COLS[cid];
+                      return (
+                        <CatSortableTh
+                          key={c.id}
+                          colId={c.id}
+                          label={c.label}
+                          sortKey={c.sortKey}
+                          w={c.w}
+                        />
+                      );
+                    })}
+                  </SortableContext>
+                </DndContext>
               </tr>
             </thead>
 
             <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
-              {filtered.map((r: any) => {
-                const pos24 = isFinite(r.ch24h) ? Number(r.ch24h) >= 0 : true;
+              {rows.map((r: any) => {
+                const pos24 = isFinite(r.ch24h) ? (Number(r.ch24h) >= 0) : true;
 
                 return (
                   <tr
-                    key={r.id}
+                    key={r.key}
                     className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors cursor-pointer h-[56px]"
                     onClick={() => {
-                      if (categoryCoinIds.get(r.id)?.size) {
-                        setActiveCategoryId(r.id);
+                      // se é lista de masters: clique abre subcategorias
+                      if (isMasterList) {
+                        setMasterKey(r.masterId || r.key.replace('tax:', ''));
+                        setSubKey('__all__');
+                        return;
+                      }
+
+                      // subcategorias: manda pro coins view filtrando pelo grupo
+                      if (categoryCoinIds.get(r.key)?.size) {
+                        setActiveCategoryId(r.key);
                         setViewMode('coins');
                         setPage(0);
                         setTopMode('none');
@@ -898,109 +1121,136 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                         }
                       }
                     }}
-                    title="Clique para filtrar a tabela principal"
+                    title={isMasterList ? 'Clique para ver subcategorias' : 'Clique para filtrar a tabela principal'}
                   >
-                    <td className="p-3 w-[360px]">
-                      <div className="flex flex-col min-w-0">
-                        <span className="text-[14px] font-black text-gray-900 dark:text-white truncate">{r.name}</span>
-                      </div>
-                    </td>
+                    {catColOrder.map((cid) => {
+                      if (cid === 'category') {
+                        return (
+                          <td key={cid} className="p-3 w-[320px]">
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-[14px] font-black text-gray-900 dark:text-white truncate">
+                                {r.name}
+                              </span>
+                              {isMasterList && (
+                                <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-slate-500 mt-1">
+                                  Abrir subcategorias
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        );
+                      }
 
-                    <td className="p-3 text-center w-[160px]">
-                      <CategoryRowLogos arr={r.gainers || []} />
-                    </td>
+                      if (cid === 'gainers') {
+                        return (
+                          <td key={cid} className="p-3 text-center w-[150px]">
+                            <CategoryRowLogos arr={r.gainers || []} />
+                          </td>
+                        );
+                      }
 
-                    <td className="p-3 text-center w-[160px]">
-                      <CategoryRowLogos arr={r.losers || []} />
-                    </td>
+                      if (cid === 'losers') {
+                        return (
+                          <td key={cid} className="p-3 text-center w-[150px]">
+                            <CategoryRowLogos arr={r.losers || []} />
+                          </td>
+                        );
+                      }
 
-                    <td
-                      className={`p-3 text-center font-mono text-[13px] font-black w-[90px] ${
-                        !isFinite(r.ch1h)
-                          ? 'text-gray-400 dark:text-slate-500'
-                          : r.ch1h >= 0
-                            ? 'text-green-500'
-                            : 'text-red-500'
-                      }`}
-                    >
-                      {safePct(Number(r.ch1h))}
-                    </td>
+                      if (cid === 'ch1h') {
+                        return (
+                          <td key={cid} className={`p-3 text-center font-mono text-[13px] font-black w-[90px] ${!isFinite(r.ch1h) ? 'text-gray-400 dark:text-slate-500' : (r.ch1h >= 0 ? 'text-green-500' : 'text-red-500')}`}>
+                            {safePct(Number(r.ch1h))}
+                          </td>
+                        );
+                      }
 
-                    <td
-                      className={`p-3 text-center font-mono text-[13px] font-black w-[90px] ${
-                        !isFinite(r.ch24h)
-                          ? 'text-gray-400 dark:text-slate-500'
-                          : pos24
-                            ? 'text-green-500'
-                            : 'text-red-500'
-                      }`}
-                    >
-                      {safePct(Number(r.ch24h))}
-                    </td>
+                      if (cid === 'ch24h') {
+                        return (
+                          <td key={cid} className={`p-3 text-center font-mono text-[13px] font-black w-[90px] ${!isFinite(r.ch24h) ? 'text-gray-400 dark:text-slate-500' : (pos24 ? 'text-green-500' : 'text-red-500')}`}>
+                            {safePct(Number(r.ch24h))}
+                          </td>
+                        );
+                      }
 
-                    <td
-                      className={`p-3 text-center font-mono text-[13px] font-black w-[90px] ${
-                        !isFinite(r.ch7d)
-                          ? 'text-gray-400 dark:text-slate-500'
-                          : r.ch7d >= 0
-                            ? 'text-green-500'
-                            : 'text-red-500'
-                      }`}
-                    >
-                      {safePct(Number(r.ch7d))}
-                    </td>
+                      if (cid === 'ch7d') {
+                        return (
+                          <td key={cid} className={`p-3 text-center font-mono text-[13px] font-black w-[90px] ${!isFinite(r.ch7d) ? 'text-gray-400 dark:text-slate-500' : (r.ch7d >= 0 ? 'text-green-500' : 'text-red-500')}`}>
+                            {safePct(Number(r.ch7d))}
+                          </td>
+                        );
+                      }
 
-                    <td className="p-3 text-center font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[160px]">
-                      {formatUSD(Number(r.marketCap || 0), true)}
-                    </td>
+                      if (cid === 'mcap') {
+                        return (
+                          <td key={cid} className="p-3 text-center font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[150px]">
+                            {formatUSD(Number(r.marketCap || 0), true)}
+                          </td>
+                        );
+                      }
 
-                    <td className="p-3 text-center font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[150px]">
-                      {formatUSD(Number(r.volume24h || 0), true)}
-                    </td>
+                      if (cid === 'vol24h') {
+                        return (
+                          <td key={cid} className="p-3 text-center font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[150px]">
+                            {formatUSD(Number(r.volume24h || 0), true)}
+                          </td>
+                        );
+                      }
 
-                    <td className="p-3 text-center font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[110px]">
-                      {Number(r.coinsCount || 0).toLocaleString()}
-                    </td>
+                      if (cid === 'coins') {
+                        return (
+                          <td key={cid} className="p-3 text-center font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[110px]">
+                            {Number(r.coinsCount || 0).toLocaleString()}
+                          </td>
+                        );
+                      }
 
-                    <td className="p-3 w-[240px]">
-                      <div className="w-full h-10">
-                        {Array.isArray(r.spark) && r.spark.length > 5 ? (
-                          <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart data={r.spark}>
-                              <defs>
-                                <linearGradient id={`cg_${r.id}`} x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor={pos24 ? '#26a269' : '#e01b24'} stopOpacity={0.55} />
-                                  <stop offset="75%" stopColor={pos24 ? '#26a269' : '#e01b24'} stopOpacity={0.18} />
-                                  <stop offset="100%" stopColor={pos24 ? '#26a269' : '#e01b24'} stopOpacity={0.02} />
-                                </linearGradient>
-                              </defs>
-                              <Area
-                                type="monotone"
-                                dataKey="v"
-                                stroke={pos24 ? '#26a269' : '#e01b24'}
-                                strokeWidth={2}
-                                fill={`url(#cg_${r.id})`}
-                                fillOpacity={1}
-                                isAnimationActive={false}
-                                dot={false}
-                              />
-                              <YAxis domain={['auto', 'auto']} hide />
-                            </AreaChart>
-                          </ResponsiveContainer>
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-xs font-bold text-gray-400 dark:text-slate-500">
-                            —
-                          </div>
-                        )}
-                      </div>
-                    </td>
+                      if (cid === 'spark') {
+                        return (
+                          <td key={cid} className="p-3 w-[220px] overflow-hidden">
+                            <div className="w-full h-10 overflow-hidden">
+                              {Array.isArray(r.spark) && r.spark.length > 5 ? (
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <AreaChart data={r.spark}>
+                                    <defs>
+                                      <linearGradient id={`cg_${String(r.key).replace(/[^a-zA-Z0-9_-]/g, '')}`} x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stopColor={pos24 ? '#26a269' : '#e01b24'} stopOpacity={0.55} />
+                                        <stop offset="75%" stopColor={pos24 ? '#26a269' : '#e01b24'} stopOpacity={0.18} />
+                                        <stop offset="100%" stopColor={pos24 ? '#26a269' : '#e01b24'} stopOpacity={0.02} />
+                                      </linearGradient>
+                                    </defs>
+                                    <Area
+                                      type="monotone"
+                                      dataKey="v"
+                                      stroke={pos24 ? '#26a269' : '#e01b24'}
+                                      strokeWidth={2}
+                                      fill={`url(#cg_${String(r.key).replace(/[^a-zA-Z0-9_-]/g, '')})`}
+                                      fillOpacity={1}
+                                      isAnimationActive={false}
+                                      dot={false}
+                                    />
+                                    <YAxis domain={['auto', 'auto']} hide />
+                                  </AreaChart>
+                                </ResponsiveContainer>
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-xs font-bold text-gray-400 dark:text-slate-500">
+                                  —
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        );
+                      }
+
+                      return <td key={cid} className="p-3" />;
+                    })}
                   </tr>
                 );
               })}
 
-              {filtered.length === 0 && (
+              {rows.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="p-8 text-center text-sm font-bold text-gray-500 dark:text-slate-400">
+                  <td colSpan={catColOrder.length} className="p-8 text-center text-sm font-bold text-gray-500 dark:text-slate-400">
                     Nenhuma categoria encontrada.
                   </td>
                 </tr>
@@ -1023,9 +1273,11 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
   return (
     <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-100 dark:border-slate-800 shadow-xl overflow-hidden flex flex-col">
+
       {/* Header */}
       <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col gap-3 bg-gray-50/50 dark:bg-black/20 shrink-0">
         <div className="flex flex-col lg:flex-row justify-between items-center gap-3">
+
           {/* LEFT GROUP */}
           <div className="flex items-center gap-2 w-full lg:w-auto">
             <div className="relative w-full lg:w-[420px]">
@@ -1034,7 +1286,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                 type="text"
                 placeholder={viewMode === 'categories' ? 'Buscar categoria...' : 'Buscar ativo...'}
                 value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
+                onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full bg-white dark:bg-[#2f3032] rounded-lg py-2.5 pl-11 pr-4 text-[15px] text-gray-900 dark:text-white focus:border-[#dd9933] outline-none transition-all shadow-inner border border-slate-100 dark:border-slate-700"
               />
             </div>
@@ -1043,10 +1295,9 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               type="button"
               onClick={() => setFavOnly(v => !v)}
               className={`px-3 py-2 rounded-lg border font-black transition-colors whitespace-nowrap
-                ${
-                  favOnly
-                    ? 'bg-[#dd9933] text-black border-transparent'
-                    : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5'
+                ${favOnly
+                  ? 'bg-[#dd9933] text-black border-transparent'
+                  : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5'
                 }`}
               title="Filtrar favoritos"
             >
@@ -1068,10 +1319,9 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                   type="button"
                   onClick={() => setTop('gainers')}
                   className={`px-3 py-2 rounded-lg border font-black transition-colors whitespace-nowrap
-                    ${
-                      topMode === 'gainers'
-                        ? 'bg-[#dd9933] text-black border-transparent'
-                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5'
+                    ${topMode === 'gainers'
+                      ? 'bg-[#dd9933] text-black border-transparent'
+                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5'
                     }`}
                   title="Ordenar por Top Gainers (24h%)"
                 >
@@ -1082,10 +1332,9 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                   type="button"
                   onClick={() => setTop('losers')}
                   className={`px-3 py-2 rounded-lg border font-black transition-colors whitespace-nowrap
-                    ${
-                      topMode === 'losers'
-                        ? 'bg-[#dd9933] text-black border-transparent'
-                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5'
+                    ${topMode === 'losers'
+                      ? 'bg-[#dd9933] text-black border-transparent'
+                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5'
                     }`}
                   title="Ordenar por Top Losers (24h%)"
                 >
@@ -1094,30 +1343,38 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               </>
             ) : (
               <>
+                {/* Botão de voltar para lista de masters (quando estiver dentro de um master) */}
+                {parsedTaxonomy.length > 0 && masterKey !== '__all__' && (
+                  <button
+                    type="button"
+                    onClick={() => { setMasterKey('__all__'); setSubKey('__all__'); }}
+                    className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 font-black hover:bg-gray-100 dark:hover:bg-white/5 transition-colors whitespace-nowrap"
+                    title="Voltar para categorias principais"
+                  >
+                    ← Categorias
+                  </button>
+                )}
+
                 <select
                   value={masterKey}
-                  onChange={e => setMasterKey(e.target.value)}
+                  onChange={(e) => setMasterKey(e.target.value)}
                   className="appearance-none bg-white dark:bg-[#2f3032] dark:[color-scheme:dark] border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-black text-gray-800 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 outline-none"
                   title="Master"
                 >
                   {masterOptions.map((o: any) => (
-                    <option key={o.id} value={o.id}>
-                      {o.name}
-                    </option>
+                    <option key={o.id} value={o.id}>{o.name}</option>
                   ))}
                 </select>
 
                 {subOptions.length > 1 && (
                   <select
                     value={subKey}
-                    onChange={e => setSubKey(e.target.value)}
+                    onChange={(e) => setSubKey(e.target.value)}
                     className="appearance-none bg-white dark:bg-[#2f3032] dark:[color-scheme:dark] border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-black text-gray-800 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 outline-none"
                     title="Subcategoria"
                   >
                     {subOptions.map((o: any) => (
-                      <option key={o.id} value={o.id}>
-                        {o.name}
-                      </option>
+                      <option key={o.id} value={o.id}>{o.name}</option>
                     ))}
                   </select>
                 )}
@@ -1172,10 +1429,12 @@ const MarketCapTable = ({ language }: { language: Language }) => {
           {/* RIGHT GROUP */}
           <div className="flex items-center gap-2 w-full lg:w-auto justify-end">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-black text-gray-500 dark:text-slate-400 uppercase tracking-widest">Itens</span>
+              <span className="text-xs font-black text-gray-500 dark:text-slate-400 uppercase tracking-widest">
+                Itens
+              </span>
               <select
                 value={pageSize}
-                onChange={e => setPageSize(parseInt(e.target.value, 10))}
+                onChange={(e) => setPageSize(parseInt(e.target.value, 10))}
                 className="appearance-none bg-white dark:bg-[#2f3032] dark:[color-scheme:dark] border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-black text-gray-800 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 outline-none"
                 title="Quantidade por página"
               >
@@ -1193,14 +1452,16 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               className="p-2.5 hover:bg-gray-200 dark:hover:bg-slate-700 rounded-lg text-gray-500 transition-colors"
               title="Atualizar"
             >
-              <RefreshCw size={22} className={loading || catLoading ? 'animate-spin' : ''} />
+              <RefreshCw size={22} className={(loading || catLoading) ? 'animate-spin' : ''} />
             </button>
           </div>
         </div>
 
         {viewMode === 'categories' && catWarn && !catWarnDismissed && (
           <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-900/20">
-            <div className="text-xs font-bold text-amber-900 dark:text-amber-200">{catWarn}</div>
+            <div className="text-xs font-bold text-amber-900 dark:text-amber-200">
+              {catWarn}
+            </div>
             <button
               type="button"
               onClick={() => setCatWarnDismissed(true)}
@@ -1223,19 +1484,27 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               <span className="font-bold text-sm uppercase tracking-widest animate-pulse">Sincronizando Mercado...</span>
             </div>
           ) : (
-            <table className="w-full text-left border-collapse min-w-[1400px] table-fixed">
+            <table className="w-full text-left border-collapse min-w-[1200px] table-fixed">
               <thead className="sticky top-0 z-20 bg-white dark:bg-[#2f3032]">
                 <tr className="border-b border-gray-100 dark:border-slate-800">
                   <th className="p-3 w-[48px] text-center">
-                    <span className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-slate-400">Fav</span>
+                    <span className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-slate-400">
+                      Fav
+                    </span>
                   </th>
 
                   <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
                     <SortableContext items={colOrder} strategy={horizontalListSortingStrategy}>
-                      {colOrder.map(cid => {
+                      {colOrder.map((cid) => {
                         const c = COLS[cid];
                         return (
-                          <SortableTh key={c.id} colId={c.id} label={c.label} sortKey={c.sortKey} w={c.w} />
+                          <SortableTh
+                            key={c.id}
+                            colId={c.id}
+                            label={c.label}
+                            sortKey={c.sortKey}
+                            w={c.w}
+                          />
                         );
                       })}
                     </SortableContext>
@@ -1244,7 +1513,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
               </thead>
 
               <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
-                {pageCoins.map(coin => {
+                {pageCoins.map((coin) => {
                   const change24 =
                     (coin as any).price_change_percentage_24h_in_currency ??
                     coin.price_change_percentage_24h ??
@@ -1273,10 +1542,10 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                         </button>
                       </td>
 
-                      {colOrder.map(cid => {
+                      {colOrder.map((cid) => {
                         if (cid === 'rank') {
                           return (
-                            <td key={cid} className="p-3 text-[13px] font-black text-gray-400 w-[72px] text-center">
+                            <td key={cid} className="p-3 text-[13px] font-black text-gray-400 w-[64px] text-center">
                               #{coin.market_cap_rank}
                             </td>
                           );
@@ -1284,13 +1553,13 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
                         if (cid === 'asset') {
                           return (
-                            <td key={cid} className="p-3 w-[260px]">
+                            <td key={cid} className="p-3 w-[220px]">
                               <div className="flex items-center gap-3 min-w-0">
                                 <img
                                   src={coin.image}
                                   alt=""
                                   className="w-9 h-9 rounded-full bg-slate-100 dark:bg-[#242628] p-1 border border-slate-200 dark:border-white/10 shadow-sm shrink-0"
-                                  onError={e => (e.currentTarget.style.display = 'none')}
+                                  onError={(e) => (e.currentTarget.style.display = 'none')}
                                 />
                                 <div className="flex flex-col min-w-0">
                                   <span className="text-[15px] font-black text-gray-900 dark:text-white leading-none group-hover:text-[#dd9933] transition-colors truncate">
@@ -1307,7 +1576,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
                         if (cid === 'price') {
                           return (
-                            <td key={cid} className="p-3 text-right font-mono text-[15px] font-black text-gray-900 dark:text-slate-200 w-[140px]">
+                            <td key={cid} className="p-3 text-right font-mono text-[15px] font-black text-gray-900 dark:text-slate-200 w-[120px]">
                               {formatUSD(coin.current_price)}
                             </td>
                           );
@@ -1317,13 +1586,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                           return (
                             <td
                               key={cid}
-                              className={`p-3 text-right font-mono text-[13px] font-black w-[92px] ${
-                                !isFinite(c1h)
-                                  ? 'text-gray-400 dark:text-slate-500'
-                                  : c1h >= 0
-                                    ? 'text-green-500'
-                                    : 'text-red-500'
-                              }`}
+                              className={`p-3 text-right font-mono text-[13px] font-black w-[84px] ${!isFinite(c1h) ? 'text-gray-400 dark:text-slate-500' : (c1h >= 0 ? 'text-green-500' : 'text-red-500')}`}
                               title="Estimativa via sparkline 7d"
                             >
                               {safePct(c1h)}
@@ -1333,9 +1596,8 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
                         if (cid === 'ch24h') {
                           return (
-                            <td key={cid} className={`p-3 text-right font-mono text-[15px] font-black w-[100px] ${isPos24 ? 'text-green-500' : 'text-red-500'}`}>
-                              {isPos24 ? '+' : ''}
-                              {Number(change24 || 0).toFixed(2)}%
+                            <td key={cid} className={`p-3 text-right font-mono text-[15px] font-black w-[92px] ${isPos24 ? 'text-green-500' : 'text-red-500'}`}>
+                              {isPos24 ? '+' : ''}{Number(change24 || 0).toFixed(2)}%
                             </td>
                           );
                         }
@@ -1344,13 +1606,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                           return (
                             <td
                               key={cid}
-                              className={`p-3 text-right font-mono text-[13px] font-black w-[100px] ${
-                                !isFinite(c7d)
-                                  ? 'text-gray-400 dark:text-slate-500'
-                                  : c7d >= 0
-                                    ? 'text-green-500'
-                                    : 'text-red-500'
-                              }`}
+                              className={`p-3 text-right font-mono text-[13px] font-black w-[92px] ${!isFinite(c7d) ? 'text-gray-400 dark:text-slate-500' : (c7d >= 0 ? 'text-green-500' : 'text-red-500')}`}
                               title="Estimativa via sparkline 7d"
                             >
                               {safePct(c7d)}
@@ -1360,7 +1616,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
                         if (cid === 'mcap') {
                           return (
-                            <td key={cid} className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[150px]">
+                            <td key={cid} className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[140px]">
                               {formatUSD(coin.market_cap, true)}
                             </td>
                           );
@@ -1368,7 +1624,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
                         if (cid === 'vol24h') {
                           return (
-                            <td key={cid} className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[130px]">
+                            <td key={cid} className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[120px]">
                               {formatUSD(coin.total_volume, true)}
                             </td>
                           );
@@ -1376,11 +1632,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
                         if (cid === 'vol7d') {
                           return (
-                            <td
-                              key={cid}
-                              className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[130px]"
-                              title="Estimativa simples: Vol(24h) * 7"
-                            >
+                            <td key={cid} className="p-3 text-right font-mono text-[13px] font-bold text-gray-600 dark:text-slate-400 w-[120px]" title="Estimativa simples: Vol(24h) * 7">
                               {formatUSD(vol7d, true)}
                             </td>
                           );
@@ -1388,7 +1640,7 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
                         if (cid === 'supply') {
                           return (
-                            <td key={cid} className="p-3 text-right font-mono text-[12px] font-bold text-gray-500 dark:text-slate-500 w-[170px]">
+                            <td key={cid} className="p-3 text-right font-mono text-[12px] font-bold text-gray-500 dark:text-slate-500 w-[150px]">
                               {coin.circulating_supply?.toLocaleString()} <span className="uppercase opacity-50">{coin.symbol}</span>
                             </td>
                           );
@@ -1396,8 +1648,8 @@ const MarketCapTable = ({ language }: { language: Language }) => {
 
                         if (cid === 'spark7d') {
                           return (
-                            <td key={cid} className="p-3 w-[320px]">
-                              <div className="w-full h-12 min-w-0">
+                            <td key={cid} className="p-3 w-[240px] overflow-hidden">
+                              <div className="w-full h-12 min-w-0 overflow-hidden">
                                 {sparkData.length > 1 ? (
                                   <ResponsiveContainer width="100%" height="100%">
                                     <AreaChart data={sparkData}>
@@ -1422,7 +1674,9 @@ const MarketCapTable = ({ language }: { language: Language }) => {
                                     </AreaChart>
                                   </ResponsiveContainer>
                                 ) : (
-                                  <div className="w-full h-full flex items-center justify-center text-xs font-bold text-gray-400 dark:text-slate-500">—</div>
+                                  <div className="w-full h-full flex items-center justify-center text-xs font-bold text-gray-400 dark:text-slate-500">
+                                    —
+                                  </div>
                                 )}
                               </div>
                             </td>
@@ -1463,97 +1717,59 @@ interface IndicatorPageProps {
   userTier: UserTier;
 }
 
-type PageType =
-  | 'MARKETCAP'
-  | 'RSI'
-  | 'MACD'
-  | 'FNG'
-  | 'LSR'
-  | 'ALTSEASON'
-  | 'ETF'
-  | 'GAINERS'
-  | 'HEATMAP'
-  | 'BUBBLE_HEATMAP'
-  | 'SWARM'
-  | 'CALENDAR'
-  | 'TRUMP';
+type PageType = 'MARKETCAP' | 'RSI' | 'MACD' | 'FNG' | 'LSR' | 'ALTSEASON' | 'ETF' | 'GAINERS' | 'HEATMAP' | 'BUBBLE_HEATMAP' | 'SWARM' | 'CALENDAR' | 'TRUMP';
 
-function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageProps) {
+function IndicatorPage({ language, coinMap, userTier }: IndicatorPageProps) {
   const [activePage, setActivePage] = useState<PageType>('MARKETCAP');
   const tWs = getTranslations(language).workspace.widgets;
   const tPages = getTranslations(language).workspace.pages;
 
   const GROUPS = [
-    {
-      title: 'Market',
-      items: [
-        { id: 'MARKETCAP' as PageType, label: tPages.marketcap, icon: <List size={18} /> },
-        { id: 'GAINERS' as PageType, label: tPages.topmovers, icon: <TrendingUp size={18} /> },
-        { id: 'HEATMAP' as PageType, label: 'Heatmap Square', icon: <LayoutGrid size={18} /> },
-        { id: 'BUBBLE_HEATMAP' as PageType, label: 'Crypto Bubbles', icon: <CircleDashed size={18} /> },
-        { id: 'SWARM' as PageType, label: tPages.swarm, icon: <Wind size={18} /> },
-        { id: 'RSI' as PageType, label: tWs.rsi.title, icon: <Activity size={18} /> },
-        { id: 'MACD' as PageType, label: tWs.macd.title, icon: <BarChart2 size={18} /> },
-        { id: 'LSR' as PageType, label: tWs.lsr.title, icon: <BarChart2 size={18} /> },
-      ],
-    },
-    {
-      title: 'Global',
-      items: [
-        { id: 'CALENDAR' as PageType, label: tWs.calendar.title, icon: <Calendar size={18} /> },
-        { id: 'ETF' as PageType, label: tWs.etf.title, icon: <ArrowUpRight size={18} /> },
-      ],
-    },
-    {
-      title: 'Sentiment',
-      items: [
-        { id: 'FNG' as PageType, label: tWs.fng.title, icon: <PieChart size={18} /> },
-        { id: 'ALTSEASON' as PageType, label: tWs.altseason.title, icon: <Activity size={18} /> },
-        { id: 'TRUMP' as PageType, label: 'Trump-o-Meter', icon: <User size={18} /> },
-      ],
-    },
+    { title: 'Market', items: [
+      { id: 'MARKETCAP' as PageType, label: tPages.marketcap, icon: <List size={18} /> },
+      { id: 'GAINERS' as PageType, label: tPages.topmovers, icon: <TrendingUp size={18} /> },
+      { id: 'HEATMAP' as PageType, label: "Heatmap Square", icon: <LayoutGrid size={18} /> },
+      { id: 'BUBBLE_HEATMAP' as PageType, label: "Crypto Bubbles", icon: <CircleDashed size={18} /> },
+      { id: 'SWARM' as PageType, label: tPages.swarm, icon: <Wind size={18} /> },
+      { id: 'RSI' as PageType, label: tWs.rsi.title, icon: <Activity size={18} /> },
+      { id: 'MACD' as PageType, label: tWs.macd.title, icon: <BarChart2 size={18} /> },
+      { id: 'LSR' as PageType, label: tWs.lsr.title, icon: <BarChart2 size={18} /> },
+    ] },
+    { title: 'Global', items: [
+      { id: 'CALENDAR' as PageType, label: tWs.calendar.title, icon: <Calendar size={18} /> },
+      { id: 'ETF' as PageType, label: tWs.etf.title, icon: <ArrowUpRight size={18} /> },
+    ] },
+    { title: 'Sentiment', items: [
+      { id: 'FNG' as PageType, label: tWs.fng.title, icon: <PieChart size={18} /> },
+      { id: 'ALTSEASON' as PageType, label: tWs.altseason.title, icon: <Activity size={18} /> },
+      { id: 'TRUMP' as PageType, label: "Trump-o-Meter", icon: <User size={18} /> },
+    ] }
   ];
 
   let currentPage = GROUPS[0].items[0];
   for (const group of GROUPS) {
     const found = group.items.find(item => item.id === activePage);
-    if (found) {
-      currentPage = found;
-      break;
-    }
+    if (found) { currentPage = found; break; }
   }
 
   return (
     <div className="flex flex-col w-full h-[calc(100vh-160px)] overflow-hidden">
       <div className="flex h-full w-full gap-4 overflow-hidden">
         {/* Sidebar */}
-        <div
-          className={`w-64 flex-shrink-0 bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-slate-800 rounded-xl flex-col overflow-hidden shadow-sm transition-all duration-300 shrink-0 ${
-            activePage === 'SWARM' ? 'hidden' : 'flex'
-          }`}
-        >
-          <div className="p-4 border-b border-gray-100 dark:border-slate-800 font-black text-gray-500 dark:text-slate-400 text-xs uppercase tracking-wider">
-            Dashboard Pages
-          </div>
+        <div className={`w-64 flex-shrink-0 bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-slate-800 rounded-xl flex-col overflow-hidden shadow-sm transition-all duration-300 shrink-0 ${activePage === 'SWARM' ? 'hidden' : 'flex'}`}>
+          <div className="p-4 border-b border-gray-100 dark:border-slate-800 font-black text-gray-500 dark:text-slate-400 text-xs uppercase tracking-wider">Dashboard Pages</div>
           <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
             {GROUPS.map((group, groupIdx) => (
               <div key={groupIdx} className="mb-4">
-                <div className="px-4 py-2 text-[10px] font-black text-gray-400 dark:text-slate-500 uppercase tracking-widest">
-                  {group.title}
-                </div>
+                <div className="px-4 py-2 text-[10px] font-black text-gray-400 dark:text-slate-500 uppercase tracking-widest">{group.title}</div>
                 <div className="space-y-1">
-                  {group.items.map(item => (
+                  {group.items.map((item) => (
                     <button
                       key={item.id}
                       onClick={() => setActivePage(item.id)}
-                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-black transition-all tracking-wide ${
-                        activePage === item.id
-                          ? 'bg-[#dd9933] text-black shadow-md'
-                          : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-[#2f3032]'
-                      }`}
+                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-black transition-all tracking-wide ${activePage === item.id ? 'bg-[#dd9933] text-black shadow-md' : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-[#2f3032]'}`}
                     >
-                      {item.icon}
-                      {item.label}
+                      {item.icon}{item.label}
                     </button>
                   ))}
                 </div>
@@ -1568,56 +1784,16 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
 
           <div className="flex-1 min-h-[600px] relative">
             {activePage === 'MARKETCAP' && <MarketCapTable language={language} />}
-            {activePage === 'ALTSEASON' && (
-              <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                <CryptoWidget item={{ id: 'altseason-page', type: WidgetType.ALTCOIN_SEASON, title: 'Altcoin Season Index', symbol: 'GLOBAL', isMaximized: true }} language={language} />
-              </div>
-            )}
-            {activePage === 'ETF' && (
-              <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                <CryptoWidget item={{ id: 'etf-page', type: WidgetType.ETF_NET_FLOW, title: 'ETF Net Flow', symbol: 'GLOBAL', isMaximized: true }} language={language} />
-              </div>
-            )}
-            {activePage === 'FNG' && (
-              <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                <CryptoWidget item={{ id: 'fng-page', type: WidgetType.FEAR_GREED, title: 'Fear & Greed Index', symbol: 'GLOBAL', isMaximized: true }} language={language} />
-              </div>
-            )}
-            {activePage === 'RSI' && (
-              <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                <CryptoWidget item={{ id: 'rsi-page', type: WidgetType.RSI_AVG, title: 'RSI Average Tracker', symbol: 'MARKET', isMaximized: true }} language={language} />
-              </div>
-            )}
-            {activePage === 'MACD' && (
-              <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                <CryptoWidget item={{ id: 'macd-page', type: WidgetType.MACD_AVG, title: 'MACD Average Tracker', symbol: 'MARKET', isMaximized: true }} language={language} />
-              </div>
-            )}
-            {activePage === 'GAINERS' && (
-              <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                <CryptoWidget item={{ id: 'gainers-page', type: WidgetType.GAINERS_LOSERS, title: 'Top Movers (24h)', symbol: 'MARKET', isMaximized: true }} language={language} />
-              </div>
-            )}
-            {activePage === 'HEATMAP' && (
-              <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                <CryptoWidget item={{ id: 'heatmap-page', type: WidgetType.HEATMAP, title: 'Crypto Heatmap', symbol: 'MARKET', isMaximized: true }} language={language} />
-              </div>
-            )}
-            {activePage === 'BUBBLE_HEATMAP' && (
-              <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                <CryptoWidget item={{ id: 'bubble-page', type: WidgetType.BUBBLE_HEATMAP, title: 'Crypto Bubbles', symbol: 'MARKET', isMaximized: true }} language={language} />
-              </div>
-            )}
-            {activePage === 'CALENDAR' && (
-              <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                <CryptoWidget item={{ id: 'cal-page', type: WidgetType.CALENDAR, title: 'Calendar', symbol: 'CAL', isMaximized: true }} language={language} />
-              </div>
-            )}
-            {activePage === 'TRUMP' && (
-              <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800">
-                <CryptoWidget item={{ id: 'trump-page', type: WidgetType.TRUMP_METER, title: 'Trump-o-Meter', symbol: 'SENTIMENT', isMaximized: true }} language={language} />
-              </div>
-            )}
+            {activePage === 'ALTSEASON' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'altseason-page', type: WidgetType.ALTCOIN_SEASON, title: 'Altcoin Season Index', symbol: 'GLOBAL', isMaximized: true }} language={language} /></div>}
+            {activePage === 'ETF' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'etf-page', type: WidgetType.ETF_NET_FLOW, title: 'ETF Net Flow', symbol: 'GLOBAL', isMaximized: true }} language={language} /></div>}
+            {activePage === 'FNG' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'fng-page', type: WidgetType.FEAR_GREED, title: 'Fear & Greed Index', symbol: 'GLOBAL', isMaximized: true }} language={language} /></div>}
+            {activePage === 'RSI' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'rsi-page', type: WidgetType.RSI_AVG, title: 'RSI Average Tracker', symbol: 'MARKET', isMaximized: true }} language={language} /></div>}
+            {activePage === 'MACD' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'macd-page', type: WidgetType.MACD_AVG, title: 'MACD Average Tracker', symbol: 'MARKET', isMaximized: true }} language={language} /></div>}
+            {activePage === 'GAINERS' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'gainers-page', type: WidgetType.GAINERS_LOSERS, title: 'Top Movers (24h)', symbol: 'MARKET', isMaximized: true }} language={language} /></div>}
+            {activePage === 'HEATMAP' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'heatmap-page', type: WidgetType.HEATMAP, title: 'Crypto Heatmap', symbol: 'MARKET', isMaximized: true }} language={language} /></div>}
+            {activePage === 'BUBBLE_HEATMAP' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'bubble-page', type: WidgetType.BUBBLE_HEATMAP, title: 'Crypto Bubbles', symbol: 'MARKET', isMaximized: true }} language={language} /></div>}
+            {activePage === 'CALENDAR' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'cal-page', type: WidgetType.CALENDAR, title: 'Calendar', symbol: 'CAL', isMaximized: true }} language={language} /></div>}
+            {activePage === 'TRUMP' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'trump-page', type: WidgetType.TRUMP_METER, title: 'Trump-o-Meter', symbol: 'SENTIMENT', isMaximized: true }} language={language} /></div>}
             {activePage === 'LSR' && (
               <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800 relative">
                 {userTier === UserTier.TIER_1 && <LockOverlay />}
@@ -1627,12 +1803,13 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
               </div>
             )}
           </div>
-
           <PageFaq language={language} pageType={activePage} />
         </div>
 
         {/* Fullscreen SWARM modal */}
-        {activePage === 'SWARM' && <MarketWindSwarm language={language} onClose={() => setActivePage('MARKETCAP')} />}
+        {activePage === 'SWARM' && (
+          <MarketWindSwarm language={language} onClose={() => setActivePage('MARKETCAP')} />
+        )}
       </div>
     </div>
   );
