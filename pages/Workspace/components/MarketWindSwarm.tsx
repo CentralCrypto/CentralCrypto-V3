@@ -9,7 +9,7 @@ interface Particle {
   x: number; y: number;
   vx: number; vy: number;
   radius: number; 
-  targetRadius: number; // For smooth transition
+  targetRadius: number; 
   color: string;
   coin: ApiCoin;
   trail: { x: number, y: number, age: number }[]; 
@@ -73,7 +73,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
   
   // Interaction Refs
-  const transformRef = useRef({ k: 1, x: 0, y: 0 }); // Zoom (k) and Pan (x, y)
+  const transformRef = useRef({ k: 1, x: 0, y: 0 }); 
   const isPanningRef = useRef(false);
   const panStartRef = useRef({ clientX: 0, clientY: 0, x: 0, y: 0 });
   const draggedParticleRef = useRef<Particle | null>(null);
@@ -85,7 +85,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   const selectedParticleRef = useRef(selectedParticle);
   selectedParticleRef.current = selectedParticle;
 
-  // Cache de estatísticas
+  // Cache stats
   const statsRef = useRef<{
       minX: number, maxX: number, 
       minY: number, maxY: number, 
@@ -192,9 +192,8 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
               existing.coin = coin;
               existing.targetRadius = targetRadius;
               existing.color = color;
-              existing.mass = targetRadius; // Mass proportional to radius
+              existing.mass = targetRadius; 
               
-              // Impulse if switching to free mode and stopped
               if (isFreeMode && Math.abs(existing.vx) < 1 && Math.abs(existing.vy) < 1) {
                   existing.vx = (Math.random() - 0.5) * 200;
                   existing.vy = (Math.random() - 0.5) * 200;
@@ -233,29 +232,27 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     animationLoopFn.current = () => {
         try {
             const now = performance.now();
-            const dt = Math.min((now - lastTime) / 1000, 0.05); // Cap dt to prevent physics explosion
+            const dt = Math.min((now - lastTime) / 1000, 0.05); 
             lastTime = now;
 
             const width = canvas.width / dpr;
             const height = canvas.height / dpr;
             
-            // Clear screen
             ctx.setTransform(1, 0, 0, 1, 0, 0);
             ctx.fillStyle = isDark ? '#0b0f14' : '#ffffff';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
-            // Apply Zoom/Pan
             ctx.scale(dpr, dpr);
             
             const { k, x: panX, y: panY } = transformRef.current;
 
             if (!statsRef.current) return;
             const s = statsRef.current;
-            const pad = 100;
+            const pad = 80;
 
-            const physicsSpeed = animSpeedRaw * 5.0; // Multiplier
+            const physicsSpeed = animSpeedRaw * 5.0; 
 
-            // --- PROJECTION FUNCTIONS (World Space) ---
+            // --- PROJECTION ---
             const projectX = (v: number) => {
                 let norm = 0;
                 if (chartMode === 'valuation') {
@@ -264,7 +261,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
                 } else {
                    norm = (v - s.minX) / (s.maxX - s.minX || 1);
                 }
-                // Map to canvas width
                 return pad + norm * (width - pad * 2);
             };
 
@@ -275,17 +271,16 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
                 return height - pad - norm * (height - pad * 2);
             };
 
-            // Transform function: World -> Screen
             const toScreenX = (val: number) => val * k + panX;
             const toScreenY = (val: number) => val * k + panY;
 
-            // --- DRAW AXES (Screen Space) ---
+            // --- AXES ---
             if (!isFreeMode) {
                 ctx.save();
-                ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'; 
+                ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'; 
                 ctx.lineWidth = 1;
                 ctx.font = `bold 10px Inter`;
-                ctx.fillStyle = isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.8)';
+                ctx.fillStyle = isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.9)';
 
                 // X-Axis
                 const xSteps = 6;
@@ -302,14 +297,13 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
                     const screenX = toScreenX(worldX);
 
-                    // Only draw if visible
                     if (screenX >= 0 && screenX <= width) {
                         ctx.beginPath(); ctx.moveTo(screenX, 0); ctx.lineTo(screenX, height); ctx.stroke();
                         ctx.textAlign = 'center';
                         let label = "";
                         if (chartMode === 'performance') label = `${val.toFixed(1)}%`;
                         else label = formatCompact(val);
-                        ctx.fillText(label, screenX, height - 15);
+                        ctx.fillText(label, screenX, height - 10);
                     }
                 }
 
@@ -328,12 +322,11 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
                     }
                 }
 
-                // Axis Titles (Fixed on Screen)
                 ctx.font = 'bold 14px Inter';
                 ctx.textAlign = 'center';
                 ctx.fillStyle = isDark ? '#dd9933' : '#333';
                 const xLabel = chartMode === 'performance' ? 'Variação 24h (%)' : 'Market Cap (Log)';
-                ctx.fillText(xLabel, width / 2, height - 35);
+                ctx.fillText(xLabel, width / 2, height - 25);
                 
                 ctx.save();
                 ctx.translate(20, height / 2);
@@ -348,27 +341,25 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
             // --- PHYSICS ENGINE ---
             if (isFreeMode) {
-                // 1. Update Positions & Wall Bounce
+                // Update
                 for (const p of particles) {
                     if (p.isFixed) continue;
-
-                    // Apply Velocity
                     p.x += p.vx * dt * physicsSpeed;
                     p.y += p.vy * dt * physicsSpeed;
 
-                    // Wall Bounce (Newtonian: Invert Velocity)
-                    const worldW = width; 
-                    const worldH = height;
+                    const worldW = width / k; 
+                    const worldH = height / k;
                     const r = p.radius;
 
                     if (p.x < r) { p.x = r; p.vx *= -0.9; }
-                    else if (p.x > worldW - r) { p.x = worldW - r; p.vx *= -0.9; }
+                    // Bounding to avoid flying off to infinity
+                    else if (p.x > 3000) { p.x = 3000; p.vx *= -0.9; } 
 
                     if (p.y < r) { p.y = r; p.vy *= -0.9; }
-                    else if (p.y > worldH - r) { p.y = worldH - r; p.vy *= -0.9; }
+                    else if (p.y > 2000) { p.y = 2000; p.vy *= -0.9; }
                 }
 
-                // 2. Resolve Collisions (Elastic)
+                // Collisions (Elastic + Separation)
                 for (let i = 0; i < particles.length; i++) {
                     const p1 = particles[i];
                     for (let j = i + 1; j < particles.length; j++) {
@@ -381,34 +372,30 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
                         if (distSq < minDist * minDist) {
                             const dist = Math.sqrt(distSq) || 0.001;
-                            const nx = dx / dist; // Normal X
-                            const ny = dy / dist; // Normal Y
+                            const nx = dx / dist;
+                            const ny = dy / dist;
 
-                            // Separate particles (prevent sticking)
+                            // OVERLAP CORRECTION (Immediate Separation)
                             const overlap = minDist - dist;
-                            const totalMass = p1.mass + p2.mass;
-                            const m1Ratio = p2.mass / totalMass;
-                            const m2Ratio = p1.mass / totalMass;
-
+                            const separationFactor = 0.5; 
+                            
                             if (!p1.isFixed) {
-                                p1.x -= nx * overlap * m1Ratio;
-                                p1.y -= ny * overlap * m1Ratio;
+                                p1.x -= nx * overlap * separationFactor;
+                                p1.y -= ny * overlap * separationFactor;
                             }
                             if (!p2.isFixed) {
-                                p2.x += nx * overlap * m2Ratio;
-                                p2.y += ny * overlap * m2Ratio;
+                                p2.x += nx * overlap * separationFactor;
+                                p2.y += ny * overlap * separationFactor;
                             }
 
-                            // Elastic Collision Response
+                            // Elastic Bounce
                             const dvx = p1.vx - p2.vx;
                             const dvy = p1.vy - p2.vy;
-                            
                             const velAlongNormal = dvx * nx + dvy * ny;
 
                             if (velAlongNormal > 0) continue;
 
-                            const e = 0.9; // Restitution
-
+                            const e = 0.9; 
                             let jImpulse = -(1 + e) * velAlongNormal;
                             jImpulse /= (1 / p1.mass + 1 / p2.mass);
 
@@ -427,7 +414,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
                     }
                 }
             } else {
-                // Mapped Mode Logic (Spring to Target)
+                // Mapped Mode Logic
                 for (const p of particles) {
                     let xVal = 0, yVal = p.coin.total_volume || 1;
                     if (chartMode === 'performance') xVal = p.coin.price_change_percentage_24h || 0;
@@ -436,9 +423,12 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
                     const tx = projectX(xVal);
                     const ty = projectY(yVal);
                     
-                    const floatAmp = 5;
-                    const floatX = Math.sin(now * 0.002 + p.phase) * floatAmp;
-                    const floatY = Math.cos(now * 0.003 + p.phase) * floatAmp;
+                    // Apply animation speed to floating frequency and amplitude
+                    const floatFreq = 0.002 * (0.5 + animSpeedRaw * 2);
+                    const floatAmp = 5 + (animSpeedRaw * 10);
+                    
+                    const floatX = Math.sin(now * floatFreq + p.phase) * floatAmp;
+                    const floatY = Math.cos(now * (floatFreq * 1.5) + p.phase) * floatAmp;
 
                     const targetX = tx + floatX;
                     const targetY = ty + floatY;
@@ -462,8 +452,8 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
                     continue; 
                 }
 
-                // Trail
-                if (trailLength > 0 && isFreeMode) {
+                // Trail - Enabled everywhere
+                if (trailLength > 0) {
                     const last = p.trail[p.trail.length-1];
                     const dx = last ? screenX - last.x : 10;
                     const dy = last ? screenY - last.y : 10;
@@ -472,8 +462,10 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
                         p.trail.push({ x: screenX, y: screenY, age: 1.0 });
                     }
                     
+                    // Adjust decay speed based on animSpeed
+                    const decay = 0.05 + (animSpeedRaw * 0.05);
                     for (let tIdx = 0; tIdx < p.trail.length; tIdx++) {
-                        p.trail[tIdx].age -= 0.05;
+                        p.trail[tIdx].age -= decay;
                     }
                     p.trail = p.trail.filter(t => t.age > 0);
 
@@ -625,12 +617,10 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
     
-    // Convert mouse screen pos to world pos for physics dragging
     const { k, x, y } = transformRef.current;
     const worldMouseX = (mouseX - x) / k;
     const worldMouseY = (mouseY - y) / k;
 
-    // Physics Drag
     if (lastMousePosRef.current && draggedParticleRef.current) {
         const dx = worldMouseX - lastMousePosRef.current.x;
         const dy = worldMouseY - lastMousePosRef.current.y;
@@ -651,19 +641,16 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         return;
     }
     
-    // HIT TEST (Screen Space)
     let found: Particle | null = null;
     for (let i = particlesRef.current.length - 1; i >= 0; i--) {
         const p = particlesRef.current[i];
-        // Screen coords of particle
         const sx = p.x * k + x;
         const sy = p.y * k + y;
-        const sr = p.radius; // Visual radius
+        const sr = p.radius; 
 
         const dx = sx - mouseX;
         const dy = sy - mouseY;
         
-        // Slightly generous hit area
         if (dx*dx + dy*dy < (sr + 5) * (sr + 5)) {
             found = p;
             break;
@@ -678,6 +665,11 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    // Se clicou no nada, limpa a seleção para sumir o tooltip persistente
+    if (!hoveredParticleRef.current) {
+        setSelectedParticle(null);
+    }
+
     if (hoveredParticleRef.current && isFreeMode) {
         draggedParticleRef.current = hoveredParticleRef.current;
         draggedParticleRef.current.isFixed = true;
@@ -708,7 +700,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
     
-    // Current World Point under mouse
     const worldX = (mouseX - transformRef.current.x) / transformRef.current.k;
     const worldY = (mouseY - transformRef.current.y) / transformRef.current.k;
 
@@ -717,7 +708,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     const newK = e.deltaY < 0 ? oldK * zoomFactor : oldK / zoomFactor;
     const clampedK = mathClamp(newK, 0.1, 10.0);
     
-    // New Pan so World Point stays under mouse
     const newX = mouseX - worldX * clampedK;
     const newY = mouseY - worldY * clampedK;
 
@@ -762,7 +752,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       )}
 
       <div className="flex-1 w-full h-full relative cursor-crosshair overflow-hidden">
-        <canvas ref={canvasRef} onMouseMove={handleMouseMove} onMouseDown={handleMouseDown} onMouseUp={handleMouseUp} onMouseLeave={() => { setHoveredParticle(null); handleMouseUp(); }} onWheel={handleWheel} className="absolute inset-0 w-full h-full" />
+        <canvas ref={canvasRef} onMouseMove={handleMouseMove} onMouseDown={handleMouseDown} onMouseUp={handleMouseUp} onMouseLeave={() => { setHoveredParticle(null); handleMouseUp(); }} onWheel={handleWheel} className="absolute inset-0 w-full h-full block" />
         
         {/* Reset Zoom Button */}
         <button onClick={resetZoom} className="absolute bottom-4 right-4 bg-white/10 hover:bg-white/20 backdrop-blur text-white p-2 rounded-lg border border-white/10 transition-colors shadow-lg z-20" title="Reset Zoom">
