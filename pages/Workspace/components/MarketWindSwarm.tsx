@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ApiCoin, Language } from '../../../types';
-import { Search, XCircle, Settings, Droplets, FastForward, X as CloseIcon, Atom, Coins, Maximize } from 'lucide-react';
+import { Search, XCircle, Settings, Droplets, FastForward, X as CloseIcon, Atom, Coins, Maximize, Wind } from 'lucide-react';
 import { fetchTopCoins } from '../services/api';
 
 // --- TYPES ---
@@ -71,9 +71,12 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   const [numCoins, setNumCoins] = useState(50);
 
   // ✅ defaults em 50%
-  const [animSpeedRaw, setAnimSpeedRaw] = useState(0.5);
-  const [trailLength, setTrailLength] = useState(25);
+  // Flutuação: só modo com escala
+  const [floatStrengthRaw, setFloatStrengthRaw] = useState(0.5);
+  // Velocidade: só modo livre
+  const [freeSpeedRaw, setFreeSpeedRaw] = useState(0.5);
 
+  const [trailLength, setTrailLength] = useState(25);
   const [chartMode, setChartMode] = useState<ChartMode>('performance');
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
 
@@ -295,7 +298,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         if (!statsRef.current) return;
         const s = statsRef.current;
 
-        // ✅ margens estáveis pra eixo X não sumir
         const margin = { top: 18, right: 18, bottom: 92, left: 86 };
         const chartW = Math.max(50, width - margin.left - margin.right);
         const chartH = Math.max(50, height - margin.top - margin.bottom);
@@ -303,12 +305,12 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         const originX = margin.left;
         const originY = margin.top + chartH;
 
-        // velocidades
-        const physicsSpeed = 0.1 + (animSpeedRaw * 0.4);
+        // ✅ velocidade do modo livre: slider próprio
+        const physicsSpeed = 0.1 + (freeSpeedRaw * 0.4);
 
-        // ✅ flutuação no modo mapeado: max +30% (antes ~4, agora 5.2)
+        // ✅ flutuação do modo escala: slider próprio, max +30%
         const mappedFloatMaxAmp = 5.2;
-        const mappedFloatAmp = animSpeedRaw * mappedFloatMaxAmp;
+        const mappedFloatAmp = floatStrengthRaw * mappedFloatMaxAmp;
 
         const projectX = (v: number) => {
           let norm = 0;
@@ -332,7 +334,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
         const particles = particlesRef.current;
 
-        // ✅ atualiza raio ANTES da física (colisão usa raio atual)
+        // update radius first (collision uses current radius)
         for (const p of particles) {
           const viewRadius = p.targetRadius * Math.pow(k, 0.25);
           p.radius += (viewRadius - p.radius) * 0.15;
@@ -368,8 +370,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
             ctx.textAlign = 'center';
             const label = (chartMode === 'performance') ? `${val.toFixed(1)}%` : formatCompact(val);
-
-            // ✅ garante dentro da tela
             const tickY = mathClamp(toScreenY(originY) + 18, 12, height - 14);
             ctx.fillText(label, screenX, tickY);
           }
@@ -425,7 +425,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
           const worldW = width / k;
           const worldH = height / k;
 
-          // 1) movement + wall bounce
+          // movement + wall bounce
           for (const p of particles) {
             if (p.isFixed) continue;
 
@@ -439,7 +439,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
             else if (p.y > worldH - p.radius) { p.y = worldH - p.radius; p.vy *= -1; }
           }
 
-          // 2) collisions: rigid separation + elastic impulse (bilhar)
+          // collisions: rigid separation + elastic impulse
           for (let i = 0; i < particles.length; i++) {
             const p1 = particles[i];
             for (let j = i + 1; j < particles.length; j++) {
@@ -456,7 +456,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
               const nx = dx / dist;
               const ny = dy / dist;
 
-              // static resolution (remove overlap)
+              // static resolution
               const overlap = minDist - dist;
               const totalMass = (p1.mass + p2.mass) || 1;
 
@@ -472,15 +472,14 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
                 p2.y += ny * overlap * move2;
               }
 
-              // dynamic resolution (impulse) - elastic
+              // dynamic resolution (impulse)
               const rvx = p2.vx - p1.vx;
               const rvy = p2.vy - p1.vy;
               const velAlongNormal = rvx * nx + rvy * ny;
 
-              // se já estão se afastando, não aplica impulso
               if (velAlongNormal > 0) continue;
 
-              const restitution = 1.0; // elastic
+              const restitution = 1.0;
               let impulse = -(1 + restitution) * velAlongNormal;
               impulse /= (1 / p1.mass + 1 / p2.mass);
 
@@ -509,7 +508,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
             const tx = projectX(xVal);
             const ty = projectY(yVal);
 
-            const floatFreq = 0.0002 * (1 + animSpeedRaw);
+            const floatFreq = 0.0002 * (1 + floatStrengthRaw);
             const floatX = mappedFloatAmp > 0 ? Math.sin(now * floatFreq + p.phase) * mappedFloatAmp : 0;
             const floatY = mappedFloatAmp > 0 ? Math.cos(now * (floatFreq * 1.3) + p.phase) * mappedFloatAmp : 0;
 
@@ -564,7 +563,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
           if (isDimmed) ctx.globalAlpha = 0.1;
 
-          // bubble
           ctx.beginPath();
           ctx.arc(screenX, screenY, p.radius, 0, Math.PI * 2);
 
@@ -615,10 +613,9 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         console.error('Animation Loop Error', e);
       }
     };
-  }, [animSpeedRaw, trailLength, isDark, chartMode, isFreeMode, numCoins, searchTerm]);
+  }, [floatStrengthRaw, freeSpeedRaw, trailLength, isDark, chartMode, isFreeMode, numCoins, searchTerm]);
 
   const drawTooltip = (ctx: CanvasRenderingContext2D, p: Particle, x: number, y: number, width: number, height: number) => {
-    // ✅ tooltip maior e legível
     const boxW = 260;
     const boxH = 138;
 
@@ -849,59 +846,106 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         </div>
       </div>
 
-      {/* SETTINGS POPUP (2 barras dentro) */}
+      {/* SETTINGS POPUP (limpo, sem borda interna, nada estourando) */}
       {settingsOpen && (
         <div
-          className="absolute top-24 right-4 bg-white/90 dark:bg-black/80 p-3 rounded-lg border border-gray-200 dark:border-white/10 backdrop-blur-md w-80 z-30 space-y-3 animate-in fade-in slide-in-from-top-4 shadow-xl"
+          className="absolute top-24 right-4 bg-white/90 dark:bg-black/80 p-4 rounded-lg border border-gray-200 dark:border-white/10 backdrop-blur-md w-80 z-30 animate-in fade-in slide-in-from-top-4 shadow-xl"
           onWheel={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
         >
-          {/* Barra 1 */}
-          <div className="bg-gray-100 dark:bg-black/50 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 flex items-center justify-between gap-3">
+          <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Atom size={14} />
-              <span className="text-xs font-black uppercase tracking-wider">Modo</span>
+              <span className="text-xs font-black uppercase tracking-wider">Modo Livre</span>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold">Livre</span>
-                <button onClick={() => setIsFreeMode(!isFreeMode)} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isFreeMode ? 'bg-[#dd9933]' : 'bg-gray-200 dark:bg-tech-700'}`}>
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isFreeMode ? 'translate-x-6' : 'translate-x-1'}`} />
-                </button>
-              </div>
-
-              <div className="w-px h-6 bg-gray-200 dark:bg-white/10" />
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold">#</span>
-                <select
-                  value={numCoins}
-                  onChange={e => setNumCoins(parseInt(e.target.value))}
-                  className="bg-white/70 dark:bg-tech-800 text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs border border-gray-200 dark:border-white/10 outline-none"
-                  onWheel={(e) => e.stopPropagation()}
-                >
-                  {[50, 100, 150, 200, 250].map(n => <option key={n} value={n}>{n} moedas</option>)}
-                </select>
-              </div>
-            </div>
+            <button
+              onClick={() => setIsFreeMode(!isFreeMode)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isFreeMode ? 'bg-[#dd9933]' : 'bg-gray-200 dark:bg-tech-700'}`}
+              title="Modo Livre"
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isFreeMode ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
           </div>
 
-          {/* Barra 2 */}
-          <div className="bg-gray-100 dark:bg-black/50 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-3 space-y-3">
+          <div className="mt-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <FastForward size={14} />
-              <span className="text-xs font-black uppercase tracking-wider">Flutuação / Velocidade</span>
-              <span className="ml-auto text-xs font-bold text-gray-500 dark:text-gray-400">{Math.round(animSpeedRaw * 100)}%</span>
+              <Coins size={14} />
+              <span className="text-xs font-black uppercase tracking-wider"># Moedas</span>
             </div>
-            <input type="range" min="0" max="1" step="0.05" value={animSpeedRaw} onChange={e => setAnimSpeedRaw(parseFloat(e.target.value))} className="w-full accent-[#dd9933]" />
 
-            <div className="flex items-center gap-2 pt-1">
-              <Droplets size={14} />
-              <span className="text-xs font-black uppercase tracking-wider">Rastro (Trail)</span>
-              <span className="ml-auto text-xs font-bold text-gray-500 dark:text-gray-400">{trailLength}</span>
+            <select
+              value={numCoins}
+              onChange={e => setNumCoins(parseInt(e.target.value))}
+              className="bg-white/80 dark:bg-tech-800 text-gray-900 dark:text-gray-100 px-2 py-1.5 rounded text-xs border border-gray-200 dark:border-white/10 outline-none"
+              onWheel={(e) => e.stopPropagation()}
+            >
+              {[50, 100, 150, 200, 250].map(n => <option key={n} value={n}>{n} moedas</option>)}
+            </select>
+          </div>
+
+          <div className="mt-4 space-y-4">
+            {/* Flutuação (modo escala) */}
+            <div className={isFreeMode ? 'opacity-50' : ''}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Wind size={14} />
+                  <span className="text-xs font-black uppercase tracking-wider">Flutuação (Escala)</span>
+                </div>
+                <span className="text-xs font-bold text-gray-500 dark:text-gray-400">{Math.round(floatStrengthRaw * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={floatStrengthRaw}
+                onChange={e => setFloatStrengthRaw(parseFloat(e.target.value))}
+                className="w-full accent-[#dd9933] mt-2"
+                disabled={isFreeMode}
+              />
             </div>
-            <input type="range" min="0" max="50" step="1" value={trailLength} onChange={e => setTrailLength(parseInt(e.target.value))} className="w-full accent-[#dd9933]" />
+
+            {/* Velocidade (modo livre) */}
+            <div className={!isFreeMode ? 'opacity-50' : ''}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <FastForward size={14} />
+                  <span className="text-xs font-black uppercase tracking-wider">Velocidade (Livre)</span>
+                </div>
+                <span className="text-xs font-bold text-gray-500 dark:text-gray-400">{Math.round(freeSpeedRaw * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={freeSpeedRaw}
+                onChange={e => setFreeSpeedRaw(parseFloat(e.target.value))}
+                className="w-full accent-[#dd9933] mt-2"
+                disabled={!isFreeMode}
+              />
+            </div>
+
+            {/* Trail */}
+            <div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Droplets size={14} />
+                  <span className="text-xs font-black uppercase tracking-wider">Rastro (Trail)</span>
+                </div>
+                <span className="text-xs font-bold text-gray-500 dark:text-gray-400">{trailLength}</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="50"
+                step="1"
+                value={trailLength}
+                onChange={e => setTrailLength(parseInt(e.target.value))}
+                className="w-full accent-[#dd9933] mt-2"
+              />
+            </div>
           </div>
         </div>
       )}
