@@ -24,7 +24,6 @@ import {
   RefreshCw,
   Search,
   Star,
-  TrendingUp,
   User
 } from 'lucide-react';
 
@@ -1556,7 +1555,7 @@ interface IndicatorPageProps {
   userTier: UserTier;
 }
 
-type PageType = 'MARKETCAP' | 'RSI' | 'MACD' | 'FNG' | 'LSR' | 'ALTSEASON' | 'ETF' | 'GAINERS' | 'HEATMAP' | 'BUBBLES' | 'CALENDAR' | 'TRUMP';
+type PageType = 'MARKETCAP' | 'RSI' | 'MACD' | 'FNG' | 'LSR' | 'ALTSEASON' | 'ETF' | 'HEATMAP' | 'BUBBLES' | 'CALENDAR' | 'TRUMP';
 
 function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageProps) {
   const [activePage, setActivePage] = useState<PageType>('MARKETCAP');
@@ -1566,7 +1565,6 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
   const GROUPS = [
     { title: 'Market', items: [
       { id: 'MARKETCAP' as PageType, label: tPages.marketcap, icon: <List size={18} /> },
-      { id: 'GAINERS' as PageType, label: tPages.topmovers, icon: <TrendingUp size={18} /> },
       { id: 'HEATMAP' as PageType, label: 'Heatmap Square', icon: <LayoutGrid size={18} /> },
       { id: 'BUBBLES' as PageType, label: 'Crypto Bubbles', icon: <CircleDashed size={18} /> },
       { id: 'RSI' as PageType, label: tWs.rsi.title, icon: <Activity size={18} /> },
@@ -1627,7 +1625,6 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
             {activePage === 'FNG' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'fng-page', type: WidgetType.FEAR_GREED, title: 'Fear & Greed Index', symbol: 'GLOBAL', isMaximized: true }} language={language} /></div>}
             {activePage === 'RSI' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'rsi-page', type: WidgetType.RSI_AVG, title: 'RSI Average Tracker', symbol: 'MARKET', isMaximized: true }} language={language} /></div>}
             {activePage === 'MACD' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'macd-page', type: WidgetType.MACD_AVG, title: 'MACD Average Tracker', symbol: 'MARKET', isMaximized: true }} language={language} /></div>}
-            {activePage === 'GAINERS' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'gainers-page', type: WidgetType.GAINERS_LOSERS, title: 'Top Movers (24h)', symbol: 'MARKET', isMaximized: true }} language={language} /></div>}
             {activePage === 'HEATMAP' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'heatmap-page', type: WidgetType.HEATMAP, title: 'Crypto Heatmap', symbol: 'MARKET', isMaximized: true }} language={language} /></div>}
             {activePage === 'CALENDAR' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'cal-page', type: WidgetType.CALENDAR, title: 'Calendar', symbol: 'CAL', isMaximized: true }} language={language} /></div>}
             {activePage === 'TRUMP' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'trump-page', type: WidgetType.TRUMP_METER, title: 'Trump-o-Meter', symbol: 'SENTIMENT', isMaximized: true }} language={language} /></div>}
