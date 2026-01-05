@@ -13,8 +13,8 @@ import AccessibilityModule from 'highcharts/modules/accessibility';
 const BASE = '/cachecko';
 
 const COINS_URL = `${BASE}/cachecko_lite.json`;
-const CATEGORIES_URL = `${BASE}/taxonomy-master.json`;
-const CATEGORY_COIN_MAP_URL = `${BASE}/category-coin-map.json`; // { [categoryId]: string[] }
+const CATEGORIES_URL = `${BASE}/categories/taxonomy-master.json`;
+const CATEGORY_COIN_MAP_URL = `${BASE}/categories/category-coin-map.json`; // { [categoryId]: string[] }
 
 // =============================
 // TYPES
