@@ -16,7 +16,7 @@ export const ENDPOINTS = {
       global: "/cg_global.json",
       main: "/cachecko.json",
       fng: "/fearandgreed_data.json",
-      rsiAvg: "/rsiavg.json",
+      rsiAvg: "/rsiavg.json", // Corrected filename if needed, ensure match with server
       rsiTracker: "/rsitrackerhist.json",
       macdAvg: "/macdavg.json",
       macdTracker: "/macdtracker.json",
@@ -36,6 +36,10 @@ export const ENDPOINTS = {
   special: {
     news: "/cachecko/news.php"
   }
+};
+
+export const ENDPOINT_FALLBACKS = {
+    // Fallbacks vazios para evitar erro de importação se referenciado
 };
 
 export const getCacheckoUrl = (path: string) => `${ENDPOINTS.cachecko.base}${path}`;

@@ -1,12 +1,30 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Highcharts from 'highcharts';
 import TreemapModule from 'highcharts/modules/treemap';
 import ExportingModule from 'highcharts/modules/exporting';
 import AccessibilityModule from 'highcharts/modules/accessibility';
 import { DashboardItem, Language } from '../../../types';
-import { httpGetJson, httpGetFirstJson } from '../../../services/http';
-import { ENDPOINTS, ENDPOINT_FALLBACKS } from '../../../services/endpoints';
+import { httpGetJson } from '../../../services/http';
+import { getCacheckoUrl } from '../../../services/endpoints';
+
+// =============================
+// ROUTES
+// =============================
+const COINS_URLS = [
+  '/cachecko/cachecko_lite.json',
+  '/cachecko/cachecko.json'
+];
+
+const CATEGORIES_URLS = [
+  '/cachecko/categories/taxonomy-master.json',
+  '/cachecko/taxonomy-master.json'
+];
+
+const CATEGORY_COIN_MAP_URLS = [
+  '/cachecko/categories/category_coins_map.json',
+  '/cachecko/category-coin-map.json'
+];
 
 // =============================
 // TYPES
@@ -23,6 +41,8 @@ type Coin = {
 type Category = {
   id: string;
   name: string;
+  categoryIds?: string[]; // IDs das subcategorias (ou dele mesmo)
+  children?: any[]; // Estrutura aninhada da taxonomia
 };
 
 type CategoryCoinMap = Record<string, string[]>;
@@ -30,23 +50,24 @@ type CategoryCoinMap = Record<string, string[]>;
 type HeatmapView =
   | { mode: 'market' }
   | { mode: 'categories' }
-  | { mode: 'categoryCoins'; categoryId: string; categoryName: string };
+  | { mode: 'categoryCoins'; masterId: string; categoryName: string };
 
 type TreemapPoint = {
   id: string;
   name: string;
-  value: number;
-  colorValue: number;
+  value: number; // Market Cap (Weight)
+  colorValue: number; // Performance (Color)
   custom?: {
     fullName?: string;
     logo?: string;
     change24h?: number;
     marketCap?: number;
+    coinsCount?: number;
   };
 };
 
 // =============================
-// HIGHCHARTS ONE-TIME INIT
+// HIGHCHARTS INIT
 // =============================
 let HC_INITED = false;
 function initHighchartsOnce() {
@@ -59,9 +80,7 @@ function initHighchartsOnce() {
 
   Highcharts.setOptions({
     chart: {
-      style: {
-        fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
-      }
+      style: { fontFamily: 'Inter, sans-serif' }
     }
   });
 }
@@ -69,14 +88,33 @@ function initHighchartsOnce() {
 // =============================
 // HELPERS
 // =============================
-function safeUpper(s?: string) {
-  return (s || '').toUpperCase();
+function withCb(url: string) {
+  const salt = Math.floor(Date.now() / 60000);
+  return url.includes('?') ? `${url}&_cb=${salt}` : `${url}?_cb=${salt}`;
+}
+
+async function httpGetJsonRobusto<T>(path: string): Promise<T> {
+  const finalUrl = withCb(getCacheckoUrl(path));
+  const { data } = await httpGetJson(finalUrl, { timeoutMs: 12000, retries: 2 });
+  return data as T;
+}
+
+async function fetchFirstJson<T>(paths: string[], label: string): Promise<T> {
+  let lastErr: any = null;
+  for (const p of paths) {
+    try {
+      return await httpGetJsonRobusto<T>(p);
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw new Error(`Falha ao carregar ${label}.`);
 }
 
 function formatPct(v: number) {
-  const n = Number.isFinite(v) ? v : 0;
-  const sign = n > 0 ? '+' : '';
-  return `${sign}${n.toFixed(2)}%`;
+  const s = Number.isFinite(v) ? v : 0;
+  const sign = s > 0 ? '+' : '';
+  return `${sign}${s.toFixed(2)}%`;
 }
 
 function formatMc(mc: number) {
@@ -88,38 +126,31 @@ function formatMc(mc: number) {
   return `${Math.round(n)}`;
 }
 
-function dedupCoinsById(coins: Coin[]) {
-  const m = new Map<string, Coin>();
+function safeUpper(s?: string) {
+  return (s || '').toUpperCase();
+}
 
+function dedupCoinsById(coins: Coin[]) {
+  const map = new Map<string, Coin>();
   for (const c of coins) {
     if (!c?.id) continue;
-    const prev = m.get(c.id);
-    if (!prev) {
-      m.set(c.id, c);
-      continue;
+    const prev = map.get(c.id);
+    if (!prev) map.set(c.id, c);
+    else {
+      if ((Number(c.market_cap) || 0) > (Number(prev.market_cap) || 0)) map.set(c.id, c);
     }
-
-    // Mantém o com maior marketcap, se duplicado
-    const prevMc = Number(prev.market_cap || 0);
-    const mc = Number(c.market_cap || 0);
-    if (mc > prevMc) m.set(c.id, c);
   }
-
-  return Array.from(m.values());
-}
-
-function normalizeCoinsPayload(data: any): Coin[] {
-  if (Array.isArray(data)) return data as Coin[];
-  if (Array.isArray(data?.coins)) return data.coins as Coin[];
-  return [];
+  return Array.from(map.values());
 }
 
 // =============================
-// BUILD DATASETS
+// LOGIC: BUILD POINTS
 // =============================
+
+// 1. Heatmap Global (Moedas)
 function buildMarketMonitorPoints(coins: Coin[], limit = 300): TreemapPoint[] {
   const arr = dedupCoinsById(coins)
-    .filter(c => c?.id)
+    .filter(c => c && c.id && (c.market_cap || 0) > 0)
     .sort((a, b) => Number(b.market_cap || 0) - Number(a.market_cap || 0))
     .slice(0, limit);
 
@@ -137,72 +168,124 @@ function buildMarketMonitorPoints(coins: Coin[], limit = 300): TreemapPoint[] {
   }));
 }
 
+// 2. Heatmap Categorias (Agregado)
 function buildCategoryPoints(
   categories: Category[],
   categoryCoinMap: CategoryCoinMap,
   coinById: Map<string, Coin>
 ): TreemapPoint[] {
-  return categories.map(cat => {
-    const ids = Array.from(new Set(categoryCoinMap[cat.id] || []));
-    const members = ids.map(id => coinById.get(id)).filter(Boolean) as Coin[];
+  
+  const points: TreemapPoint[] = [];
 
-    const totalMc = members.reduce((a, c) => a + Number(c.market_cap || 0), 0) || 1;
+  categories.forEach(cat => {
+    // Coleta todos os sub-IDs da categoria e seus filhos
+    const allCatIds = new Set<string>();
+    
+    // IDs diretos
+    if (Array.isArray(cat.categoryIds)) cat.categoryIds.forEach(id => allCatIds.add(String(id)));
+    
+    // IDs dos filhos (subcategorias)
+    if (Array.isArray(cat.children)) {
+        cat.children.forEach(child => {
+             const cIds = child.categoryIds || child.categories;
+             if(Array.isArray(cIds)) cIds.forEach((id:any) => allCatIds.add(String(id)));
+        });
+    }
 
-    const weightedPerf =
-      members.reduce((a, c) => {
-        const mc = Number(c.market_cap || 0);
-        const ch = Number(c.price_change_percentage_24h ?? 0);
-        return a + mc * ch;
-      }, 0) / (totalMc || 1);
+    // Coleta Moedas Únicas
+    const coinIds = new Set<string>();
+    allCatIds.forEach(catId => {
+        // map pode vir como { categories: { ... } } ou direto. Ajustamos no fetch, mas por segurança:
+        const mapped = categoryCoinMap[catId];
+        if (Array.isArray(mapped)) {
+            mapped.forEach(cid => coinIds.add(String(cid)));
+        }
+    });
 
-    const perf = Number.isFinite(weightedPerf) ? weightedPerf : 0;
+    const members = Array.from(coinIds)
+        .map(id => coinById.get(id))
+        .filter((c): c is Coin => !!c && (c.market_cap || 0) > 0);
 
-    return {
+    if (members.length === 0) return;
+
+    // Estatísticas Ponderadas
+    const totalMc = members.reduce((acc, c) => acc + (c.market_cap || 0), 0);
+    
+    // Performance Ponderada pelo Market Cap
+    let weightedSum = 0;
+    members.forEach(c => {
+        weightedSum += (c.market_cap || 0) * (c.price_change_percentage_24h || 0);
+    });
+    const weightedPerf = totalMc > 0 ? weightedSum / totalMc : 0;
+
+    points.push({
       id: cat.id,
       name: cat.name,
       value: totalMc,
-      colorValue: perf,
+      colorValue: weightedPerf,
       custom: {
         fullName: cat.name,
-        change24h: perf,
-        marketCap: totalMc
+        change24h: weightedPerf,
+        marketCap: totalMc,
+        coinsCount: members.length
       }
-    };
+    });
   });
+
+  // Ordena por tamanho para melhor layout
+  return points.sort((a, b) => b.value - a.value);
 }
 
+// 3. Heatmap Moedas de uma Categoria Específica
 function buildCategoryCoinsPoints(
-  categoryId: string,
+  masterId: string,
+  categories: Category[],
   categoryCoinMap: CategoryCoinMap,
   coinById: Map<string, Coin>,
-  limit = 300
+  limit = 200
 ): TreemapPoint[] {
-  const ids = Array.from(new Set(categoryCoinMap[categoryId] || []));
-  const members = ids
-    .map(id => coinById.get(id))
-    .filter(Boolean) as Coin[];
+  
+  const cat = categories.find(c => c.id === masterId);
+  if (!cat) return [];
 
-  const deduped = dedupCoinsById(members);
+  // Mesma lógica de agregação de moedas
+  const allCatIds = new Set<string>();
+  if (Array.isArray(cat.categoryIds)) cat.categoryIds.forEach(id => allCatIds.add(String(id)));
+  if (Array.isArray(cat.children)) {
+      cat.children.forEach(child => {
+            const cIds = child.categoryIds || child.categories;
+            if(Array.isArray(cIds)) cIds.forEach((id:any) => allCatIds.add(String(id)));
+      });
+  }
 
-  return deduped
-    .sort((a, b) => Number(b.market_cap || 0) - Number(a.market_cap || 0))
-    .slice(0, limit)
-    .map(c => ({
-      id: c.id,
-      name: safeUpper(c.symbol) || safeUpper(c.name) || c.id,
-      value: Number(c.market_cap || 1),
-      colorValue: Number(c.price_change_percentage_24h ?? 0),
-      custom: {
-        fullName: c.name || c.id,
-        logo: c.image,
-        change24h: Number(c.price_change_percentage_24h ?? 0),
-        marketCap: Number(c.market_cap || 0)
-      }
-    }));
+  const coinIds = new Set<string>();
+  allCatIds.forEach(catId => {
+      const mapped = categoryCoinMap[catId];
+      if (Array.isArray(mapped)) mapped.forEach(cid => coinIds.add(String(cid)));
+  });
+
+  const members = Array.from(coinIds)
+      .map(id => coinById.get(id))
+      .filter((c): c is Coin => !!c && (c.market_cap || 0) > 0)
+      .sort((a, b) => (b.market_cap || 0) - (a.market_cap || 0))
+      .slice(0, limit);
+
+  return members.map(c => ({
+    id: c.id,
+    name: safeUpper(c.symbol) || safeUpper(c.name) || c.id,
+    value: Number(c.market_cap || 1),
+    colorValue: Number(c.price_change_percentage_24h ?? 0),
+    custom: {
+      fullName: c.name || c.id,
+      logo: c.image,
+      change24h: Number(c.price_change_percentage_24h ?? 0),
+      marketCap: Number(c.market_cap || 0)
+    }
+  }));
 }
 
 // =============================
-// TREEMAP CHART
+// CHART COMPONENT
 // =============================
 function TreemapChart({
   view,
@@ -229,13 +312,14 @@ function TreemapChart({
   const points: TreemapPoint[] = useMemo(() => {
     if (view.mode === 'market') return buildMarketMonitorPoints(coins);
     if (view.mode === 'categories') return buildCategoryPoints(categories, categoryCoinMap, coinById);
-    return buildCategoryCoinsPoints(view.categoryId, categoryCoinMap, coinById);
+    // categoryCoins
+    return buildCategoryCoinsPoints(view.masterId, categories, categoryCoinMap, coinById);
   }, [view, coins, categories, categoryCoinMap, coinById]);
 
-  const title = useMemo(() => {
-    if (view.mode === 'market') return 'Market Monitor';
-    if (view.mode === 'categories') return 'Heatmap por Categoria';
-    return `Categoria: ${view.categoryName}`;
+  const titleText = useMemo(() => {
+    if (view.mode === 'market') return 'Market Monitor (Todas)';
+    if (view.mode === 'categories') return 'Heatmap de Setores (Categorias)';
+    return `Setor: ${view.categoryName}`;
   }, [view]);
 
   useEffect(() => {
@@ -251,100 +335,98 @@ function TreemapChart({
       chart: {
         backgroundColor: '#0b0d10',
         spacing: [12, 12, 12, 12],
-        animation: true
+        animation: false // Disable intro animation for snappiness
       },
       title: {
-        text: title,
+        text: titleText,
         align: 'left',
-        style: { color: '#fff', fontSize: '16px', fontWeight: '800' }
+        style: { color: '#fff', fontSize: '16px', fontWeight: '700' }
       },
       subtitle: {
-        text:
-          view.mode === 'categories'
-            ? 'Clique numa categoria para abrir as moedas'
-            : view.mode === 'market'
-              ? 'Mapa geral (cor = variação 24h, área = market cap)'
-              : 'Moedas da categoria (cor = variação 24h, área = market cap)',
+        text: view.mode === 'categories' 
+            ? 'Clique em um setor para ver os ativos.' 
+            : 'Tamanho = Market Cap | Cor = Variação 24h',
         align: 'left',
-        style: { color: 'rgba(255,255,255,0.65)', fontSize: '12px' }
+        style: { color: 'rgba(255,255,255,0.5)', fontSize: '12px' }
       },
       credits: { enabled: false },
       exporting: { enabled: false },
-      accessibility: { enabled: true },
       tooltip: {
         useHTML: true,
         outside: true,
-        backgroundColor: 'rgba(15,18,22,0.96)',
-        borderColor: 'rgba(255,255,255,0.10)',
-        style: { color: '#fff' },
+        backgroundColor: 'rgba(15,18,22,0.95)',
+        borderColor: '#333',
+        borderRadius: 8,
+        shadow: true,
+        style: { color: '#fff', fontSize: '12px' },
         formatter: function () {
           const p: any = this.point;
           const full = p?.custom?.fullName || p.name;
           const ch = Number(p?.custom?.change24h ?? p.colorValue ?? 0);
           const mc = Number(p?.custom?.marketCap ?? p.value ?? 0);
+          const count = p?.custom?.coinsCount;
 
           return `
-            <div style="min-width:240px">
-              <div style="font-weight:900; margin-bottom:6px">${full}</div>
-              <div><b>24h:</b> ${formatPct(ch)}</div>
-              <div><b>Market Cap:</b> $${formatMc(mc)}</div>
+            <div style="padding: 4px">
+              <div style="font-weight:800; font-size: 14px; margin-bottom:4px; color: #fff;">${full}</div>
+              ${count ? `<div style="margin-bottom:4px; color:#aaa;">${count} Moedas</div>` : ''}
+              <div style="margin-bottom:2px"><span style="color:#aaa">Var 24h:</span> <b style="color:${ch >= 0 ? '#4ade80' : '#f87171'}">${formatPct(ch)}</b></div>
+              <div><span style="color:#aaa">Mkt Cap:</span> <b style="color:#fff">$${formatMc(mc)}</b></div>
             </div>
           `;
         }
       },
-
-      // ✅ ESCALA VERDE/VERMELHA (igual ao exemplo)
       colorAxis: {
-        min: -10,
-        max: 10,
+        min: -15,
+        max: 15,
         stops: [
-          [0, '#f73539'],
-          [0.5, '#414555'],
-          [1, '#2ecc59']
+          [0, '#ef4444'], // Red
+          [0.5, '#1f2937'], // Dark Grey (Neutral)
+          [1, '#22c55e'] // Green
         ],
-        gridLineWidth: 0,
         labels: {
-          style: { color: 'rgba(255,255,255,0.8)' },
-          format: '{#gt value 0}+{value}{else}{value}{/gt}%'
+            style: { color: '#aaa' }
         }
       },
-
       series: [
         {
           type: 'treemap',
-          name: 'All',
           layoutAlgorithm: 'squarified',
-          allowDrillToNode: false,
-          animationLimit: 1000,
+          alternateStartingDirection: true,
+          levelIsConstant: false,
+          allowDrillToNode: false, // We handle drilldown manually
+          borderWidth: 1,
           borderColor: '#0b0d10',
-          borderWidth: 2,
-          colorKey: 'colorValue',
           data: points as any,
-
           dataLabels: {
             enabled: true,
-            allowOverlap: false,
-            style: { color: '#fff', textOutline: 'none', fontWeight: '900' },
+            style: { textOutline: 'none', color: '#fff', fontWeight: 'bold', fontSize: '13px' },
             formatter: function (this: any) {
               const p: any = this.point;
               const ch = Number(p?.custom?.change24h ?? p.colorValue ?? 0);
+              
+              // Simplificar label se for muito pequeno
+              if (this.point.shapeArgs && (this.point.shapeArgs.width < 40 || this.point.shapeArgs.height < 30)) return '';
 
               if (view.mode === 'categories') {
-                return `<span style="font-size:11px; opacity:.95">${p.name}</span><br/>
-                        <span style="font-size:11px; opacity:.85">${formatPct(ch)}</span>`;
+                 return `<div style="text-align:center">
+                    <span style="font-size:12px">${p.name}</span><br/>
+                    <span style="font-size:11px; opacity:0.8">${formatPct(ch)}</span>
+                 </div>`;
               }
 
-              return `<span style="font-size:14px">${p.name}</span><br/>
-                      <span style="font-size:12px; opacity:.85">${formatPct(ch)}</span>`;
+              return `<div style="text-align:center">
+                <span style="font-size:14px">${p.name}</span><br/>
+                <span style="font-size:11px; opacity:0.8">${formatPct(ch)}</span>
+              </div>`;
             }
           },
-
-          point: {
-            events: {
-              click: function () {
-                const p: any = this;
-                if (view.mode === 'categories') onSelectCategory(p.id, p.name);
-              }
+          events: {
+            click: function (event: any) {
+                if (view.mode === 'categories') {
+                    const p = (event as any).point;
+                    onSelectCategory(p.id, p.name);
+                }
             }
           }
         } as any
@@ -363,7 +445,7 @@ function TreemapChart({
         chartRef.current = null;
       }
     };
-  }, [points, title, view, onSelectCategory]);
+  }, [points, titleText, view, onSelectCategory]);
 
   return <div ref={containerRef} style={{ width: '100%', height: '100%' }} />;
 }
@@ -383,326 +465,157 @@ export default function CryptoHeatmaps({ item, language }: HeatmapWidgetProps) {
   const [coins, setCoins] = useState<Coin[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoryCoinMap, setCategoryCoinMap] = useState<CategoryCoinMap>({});
-
+  
   const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string>('');
+  const [errorMsg, setErrorMsg] = useState('');
 
-  // Debug opcional (pra matar “não carregou” sem adivinhar)
-  const [used, setUsed] = useState<{ coins?: string; map?: string; taxonomy?: string }>({});
-
-  const canCategories = useMemo(() => {
-    return categories.length > 0 && Object.keys(categoryCoinMap).length > 0;
-  }, [categories, categoryCoinMap]);
-
-  const load = useCallback(async () => {
+  useEffect(() => {
+    let active = true;
     setLoading(true);
-    setErr('');
 
-    try {
-      // COINS (tenta lite/full)
-      const coinsResp = await httpGetFirstJson<any>(
-        ENDPOINT_FALLBACKS.COINS_ANY,
-        'coins',
-        { timeoutMs: 10000, retries: 2 }
-      );
+    Promise.all([
+        fetchFirstJson<any>(COINS_URLS, 'coins'),
+        fetchFirstJson<any>(CATEGORIES_URLS, 'categories'),
+        fetchFirstJson<any>(CATEGORY_COIN_MAP_URLS, 'catMap')
+    ]).then(([rawCoins, rawCats, rawMap]) => {
+        if (!active) return;
 
-      // TAXONOMY
-      const taxPromise = httpGetJson<any>(ENDPOINTS.TAXONOMY, { timeoutMs: 10000, retries: 2 });
+        // Parse Coins
+        const cList = Array.isArray(rawCoins) ? rawCoins : (rawCoins.coins || []);
+        setCoins(cList);
 
-      // MAP (tenta várias grafias)
-      const mapPromise = httpGetFirstJson<any>(
-        ENDPOINT_FALLBACKS.CAT_MAP_ANY,
-        'category_coins_map',
-        { timeoutMs: 10000, retries: 2 }
-      );
+        // Parse Categories (Robust)
+        let catsList: any[] = [];
+        if (Array.isArray(rawCats)) catsList = rawCats;
+        else if (rawCats && Array.isArray(rawCats.masters)) catsList = rawCats.masters;
+        else if (rawCats && Array.isArray(rawCats.items)) catsList = rawCats.items;
+        
+        // Normalize Categories Structure
+        const cleanCats = catsList.map(c => ({
+            id: String(c.id),
+            name: String(c.name || c.title || c.id),
+            categoryIds: c.categoryIds || c.categories || [],
+            children: c.children || c.groups || []
+        }));
+        setCategories(cleanCats);
 
-      const [taxRes, mapRes] = await Promise.allSettled([taxPromise, mapPromise]);
+        // Parse Map
+        let cleanMap: CategoryCoinMap = {};
+        if (rawMap && typeof rawMap === 'object') {
+             // Handle { categories: {...} } wrapper if present
+             const root = (rawMap as any).categories || rawMap;
+             cleanMap = root;
+        }
+        setCategoryCoinMap(cleanMap);
 
-      const coinsArr = normalizeCoinsPayload(coinsResp.data);
-      setCoins(coinsArr);
+    }).catch(err => {
+        console.error(err);
+        if (active) setErrorMsg("Erro ao carregar dados.");
+    }).finally(() => {
+        if (active) setLoading(false);
+    });
 
-      setUsed(prev => ({ ...prev, coins: coinsResp.usedUrl }));
-
-      if (taxRes.status === 'fulfilled') {
-        const taxData = taxRes.value.data;
-        setCategories(Array.isArray(taxData) ? (taxData as Category[]) : []);
-        setUsed(prev => ({ ...prev, taxonomy: ENDPOINTS.TAXONOMY }));
-      }
-
-      if (mapRes.status === 'fulfilled') {
-        const mapData = mapRes.value.data;
-        setCategoryCoinMap(mapData && typeof mapData === 'object' ? (mapData as CategoryCoinMap) : {});
-        setUsed(prev => ({ ...prev, map: mapRes.value.usedUrl }));
-      }
-    } catch (e: any) {
-      setErr(String(e?.message || e));
-    } finally {
-      setLoading(false);
-    }
+    return () => { active = false; };
   }, []);
 
-  // Carrega 1x
+  const hasCategories = categories.length > 0 && Object.keys(categoryCoinMap).length > 0;
+
   useEffect(() => {
-    let alive = true;
-
-    (async () => {
-      if (!alive) return;
-      await load();
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, [load]);
-
-  // trava scroll quando modal abre
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
+    if (open) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
   }, [open]);
 
-  const openMarket = useCallback(() => {
-    setView({ mode: 'market' });
-    setOpen(true);
-  }, []);
+  // Modal Render
+  const modalContent = (
+    <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="bg-[#0b0d10] w-full h-full rounded-2xl border border-gray-800 shadow-2xl flex flex-col overflow-hidden">
+            {/* Header */}
+            <div className="flex justify-between items-center p-4 border-b border-gray-800 bg-[#121418]">
+                <div className="flex items-center gap-4">
+                    <h2 className="text-xl font-bold text-white uppercase tracking-wider">
+                        {view.mode === 'market' ? 'Mapa Geral' : view.mode === 'categories' ? 'Setores' : view.categoryName}
+                    </h2>
+                    
+                    <div className="flex bg-gray-800 rounded-lg p-1 gap-1">
+                        <button 
+                            onClick={() => setView({ mode: 'market' })}
+                            className={`px-4 py-1.5 text-xs font-bold rounded-md transition-colors ${view.mode === 'market' ? 'bg-[#dd9933] text-black' : 'text-gray-400 hover:text-white'}`}
+                        >
+                            GERAL
+                        </button>
+                        <button 
+                            onClick={() => setView({ mode: 'categories' })}
+                            disabled={!hasCategories}
+                            className={`px-4 py-1.5 text-xs font-bold rounded-md transition-colors ${view.mode !== 'market' ? 'bg-[#dd9933] text-black' : 'text-gray-400 hover:text-white disabled:opacity-30'}`}
+                        >
+                            SETORES
+                        </button>
+                    </div>
+                </div>
 
-  const openCategories = useCallback(() => {
-    setView({ mode: 'categories' });
-    setOpen(true);
-  }, []);
-
-  const close = useCallback(() => {
-    setOpen(false);
-    setView({ mode: 'market' });
-  }, []);
-
-  const back = useCallback(() => {
-    setView({ mode: 'categories' });
-  }, []);
-
-  const modal = (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 2147483647,
-        background: 'rgba(0,0,0,0.78)',
-        backdropFilter: 'blur(8px)'
-      }}
-    >
-      <div style={{ position: 'absolute', inset: 0, padding: 14 }}>
-        <div
-          style={{
-            width: '100%',
-            height: '100%',
-            borderRadius: 18,
-            overflow: 'hidden',
-            border: '1px solid rgba(255,255,255,0.10)',
-            background: '#0b0d10',
-            boxShadow: '0 30px 90px rgba(0,0,0,0.55)',
-            display: 'flex',
-            flexDirection: 'column'
-          }}
-        >
-          {/* Header */}
-          <div
-            style={{
-              padding: '12px 12px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              borderBottom: '1px solid rgba(255,255,255,0.08)'
-            }}
-          >
-            <div style={{ color: '#fff', fontWeight: 900, display: 'flex', gap: 10, alignItems: 'center' }}>
-              <span style={{ opacity: 0.95 }}>
-                {view.mode === 'market'
-                  ? 'Market Monitor'
-                  : view.mode === 'categories'
-                    ? 'Heatmap por Categoria'
-                    : `Categoria: ${view.categoryName}`}
-              </span>
-
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={() => setView({ mode: 'market' })}
-                  style={{
-                    padding: '8px 10px',
-                    borderRadius: 10,
-                    border: '1px solid rgba(255,255,255,0.12)',
-                    background: view.mode === 'market' ? 'rgba(221,153,51,0.22)' : 'rgba(255,255,255,0.05)',
-                    color: '#fff',
-                    fontWeight: 900,
-                    cursor: 'pointer'
-                  }}
-                >
-                  Geral
-                </button>
-
-                <button
-                  onClick={() => setView({ mode: 'categories' })}
-                  disabled={!canCategories}
-                  style={{
-                    padding: '8px 10px',
-                    borderRadius: 10,
-                    border: '1px solid rgba(255,255,255,0.12)',
-                    background: view.mode === 'categories' ? 'rgba(221,153,51,0.22)' : 'rgba(255,255,255,0.05)',
-                    color: canCategories ? '#fff' : 'rgba(255,255,255,0.45)',
-                    fontWeight: 900,
-                    cursor: canCategories ? 'pointer' : 'not-allowed'
-                  }}
-                  title={!canCategories ? 'Categorias indisponíveis (faltou taxonomy/map)' : ''}
-                >
-                  Categorias
-                </button>
-              </div>
+                <div className="flex gap-3">
+                    {view.mode === 'categoryCoins' && (
+                        <button onClick={() => setView({ mode: 'categories' })} className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg text-xs font-bold uppercase transition-colors">
+                            Voltar
+                        </button>
+                    )}
+                    <button onClick={() => setOpen(false)} className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-bold uppercase transition-colors">
+                        Fechar
+                    </button>
+                </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              {view.mode === 'categoryCoins' && (
-                <button
-                  onClick={back}
-                  style={{
-                    padding: '10px 14px',
-                    borderRadius: 12,
-                    border: '1px solid rgba(255,255,255,0.15)',
-                    background: 'rgba(255,255,255,0.06)',
-                    color: '#fff',
-                    fontWeight: 900,
-                    cursor: 'pointer'
-                  }}
-                >
-                  Voltar
-                </button>
-              )}
-
-              <button
-                onClick={close}
-                style={{
-                  padding: '10px 14px',
-                  borderRadius: 12,
-                  border: '1px solid rgba(0,0,0,0.25)',
-                  background: '#dd9933',
-                  color: '#0b0d10',
-                  fontWeight: 900,
-                  cursor: 'pointer'
-                }}
-              >
-                Fechar ✕
-              </button>
+            {/* Chart Area */}
+            <div className="flex-1 min-h-0 relative">
+                <TreemapChart 
+                    view={view}
+                    coins={coins}
+                    categories={categories}
+                    categoryCoinMap={categoryCoinMap}
+                    onSelectCategory={(id, name) => setView({ mode: 'categoryCoins', masterId: id, categoryName: name })}
+                />
             </div>
-          </div>
 
-          {/* Chart */}
-          <div style={{ flex: 1, minHeight: 0 }}>
-            <TreemapChart
-              view={view}
-              coins={coins}
-              categories={categories}
-              categoryCoinMap={categoryCoinMap}
-              onSelectCategory={(id, name) => setView({ mode: 'categoryCoins', categoryId: id, categoryName: name })}
-            />
-          </div>
-
-          {/* Footer */}
-          <div
-            style={{
-              padding: '10px 12px',
-              borderTop: '1px solid rgba(255,255,255,0.08)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              color: 'rgba(255,255,255,0.55)',
-              fontWeight: 800,
-              fontSize: 12
-            }}
-          >
-            <span>
-              {view.mode === 'market'
-                ? `Moedas: ${Math.min(300, coins.length)} (por market cap)`
-                : view.mode === 'categories'
-                  ? `Categorias: ${categories.length}`
-                  : `Moedas na categoria: ${view.categoryName}`}
-            </span>
-            <span>Cor = variação 24h | Área = market cap</span>
-          </div>
+            {/* Footer Status */}
+            <div className="p-2 border-t border-gray-800 bg-[#121418] flex justify-between text-[10px] text-gray-500 font-mono uppercase">
+                <span>{coins.length} Ativos Carregados</span>
+                <span>Heatmap V2.0 • Data Source: Cachecko</span>
+            </div>
         </div>
-      </div>
     </div>
   );
 
   return (
-    <div style={{ width: '100%' }}>
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-        <button
-          onClick={openMarket}
-          style={{
-            padding: '10px 14px',
-            borderRadius: 12,
-            border: '1px solid rgba(255,255,255,0.15)',
-            background: 'rgba(255,255,255,0.06)',
-            color: '#fff',
-            fontWeight: 900,
-            cursor: 'pointer'
-          }}
-        >
-          Market Monitor
-        </button>
+    <div className="w-full h-full flex flex-col items-center justify-center relative p-4 bg-white dark:bg-[#1a1c1e]">
+        <div className="text-center">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Crypto Heatmap</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Visualização global de mercado.</p>
+            
+            <div className="flex gap-3 justify-center">
+                <button 
+                    onClick={() => { setView({ mode: 'market' }); setOpen(true); }}
+                    className="px-6 py-2 bg-[#dd9933] hover:bg-amber-600 text-black font-bold rounded-full shadow-lg transition-transform hover:scale-105"
+                >
+                    Abrir Mapa Geral
+                </button>
+                <button 
+                    onClick={() => { setView({ mode: 'categories' }); setOpen(true); }}
+                    disabled={!hasCategories}
+                    className="px-6 py-2 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-900 dark:text-white font-bold rounded-full shadow-lg transition-transform hover:scale-105 disabled:opacity-50"
+                >
+                    Mapa de Setores
+                </button>
+            </div>
 
-        <button
-          onClick={openCategories}
-          disabled={!canCategories}
-          style={{
-            padding: '10px 14px',
-            borderRadius: 12,
-            border: '1px solid rgba(255,255,255,0.15)',
-            background: canCategories ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.03)',
-            color: canCategories ? '#fff' : 'rgba(255,255,255,0.45)',
-            fontWeight: 900,
-            cursor: canCategories ? 'pointer' : 'not-allowed'
-          }}
-          title={!canCategories ? 'Categorias indisponíveis (faltou taxonomy/map)' : ''}
-        >
-          Heatmap por Categoria
-        </button>
-
-        <button
-          onClick={load}
-          style={{
-            padding: '10px 14px',
-            borderRadius: 12,
-            border: '1px solid rgba(255,255,255,0.15)',
-            background: 'rgba(255,255,255,0.06)',
-            color: '#fff',
-            fontWeight: 900,
-            cursor: 'pointer'
-          }}
-          title="Recarregar dados"
-        >
-          Recarregar
-        </button>
-
-        {loading && <span style={{ color: 'rgba(255,255,255,0.75)', fontWeight: 800 }}>Carregando…</span>}
-        {!!err && !loading && <span style={{ color: '#ff6b6b', fontWeight: 900 }}>{err}</span>}
-      </div>
-
-      {/* Debug (remove se quiser) */}
-      <div style={{ marginTop: 10, color: 'rgba(255,255,255,0.55)', fontSize: 12, fontWeight: 700 }}>
-        <div>
-          Coins: <span style={{ color: 'rgba(255,255,255,0.85)' }}>{used.coins || '—'}</span>
+            {loading && <div className="mt-4 text-xs text-gray-400 animate-pulse">Carregando dados...</div>}
+            {errorMsg && <div className="mt-4 text-xs text-red-500">{errorMsg}</div>}
         </div>
-        <div>
-          Taxonomy: <span style={{ color: 'rgba(255,255,255,0.85)' }}>{used.taxonomy || '—'}</span>
-        </div>
-        <div>
-          CatMap: <span style={{ color: 'rgba(255,255,255,0.85)' }}>{used.map || '—'}</span>
-        </div>
-      </div>
 
-      {open && createPortal(modal, document.body)}
+        {open && createPortal(modalContent, document.body)}
     </div>
   );
 }
