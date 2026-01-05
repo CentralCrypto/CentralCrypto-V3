@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Loader2, Layers, RefreshCw } from 'lucide-react';
 import { fetchTopCoins, isStablecoin } from '../services/api';
 import { DashboardItem, Language, ApiCoin } from '../../../types';
@@ -8,41 +8,41 @@ interface Props {
   language?: Language;
 }
 
-declare global {
-  interface Window {
-    Highcharts: any;
-  }
-}
-
 const formatUSD = (val: number) => {
-  if (val === undefined || val === null || !isFinite(val)) return '$0';
+  if (!val || !isFinite(val)) return '$0';
   const abs = Math.abs(val);
   if (abs >= 1e12) return `$${(val / 1e12).toFixed(2)}T`;
   if (abs >= 1e9) return `$${(val / 1e9).toFixed(2)}B`;
   if (abs >= 1e6) return `$${(val / 1e6).toFixed(2)}M`;
-  if (abs >= 1e3) return `$${(val / 1e3).toFixed(2)}K`;
   return `$${val.toLocaleString()}`;
 };
 
-const safePct = (v: number) => {
-  const n = Number(v);
-  if (!isFinite(n)) return '--';
-  const s = n >= 0 ? '+' : '';
-  return `${s}${n.toFixed(2)}%`;
+const pct = (v: number) => {
+  if (!isFinite(v)) return '—';
+  const s = v >= 0 ? '+' : '';
+  return `${s}${v.toFixed(2)}%`;
 };
 
-const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+type TaxMaster = {
+  id: string;
+  name: string;
+  categoryIds: string[];
+  children: { id: string; name: string; categoryIds: string[] }[];
+};
 
 const HeatmapWidget: React.FC<Props> = ({ item, language = 'pt' }) => {
   const [coins, setCoins] = useState<ApiCoin[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Toggle só pra label (tamanho fica por marketcap, como heatmap decente)
+  const [mode, setMode] = useState<'marketCap' | 'percentChange24h'>('marketCap');
+
   const [taxonomy, setTaxonomy] = useState<any>(null);
   const [catCoinMap, setCatCoinMap] = useState<Record<string, string[]> | null>(null);
 
-  const [isLoading, setIsLoading] = useState(true);
-  const [mode, setMode] = useState<'marketCap' | 'percentChange24h'>('marketCap');
-
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<any>(null);
+  const pluginAddedRef = useRef(false);
 
   const fetchJsonSafe = async (url: string) => {
     const r = await fetch(url, { cache: 'no-store' });
@@ -50,22 +50,20 @@ const HeatmapWidget: React.FC<Props> = ({ item, language = 'pt' }) => {
     return r.json();
   };
 
-  const loadData = async () => {
-    setIsLoading(true);
+  const loadAll = useCallback(async () => {
+    setLoading(true);
     try {
-      const base = '/cachecko/categories';
-
-      const [coinsRes, taxonomyRes, coinMapRes] = await Promise.all([
+      const [top, taxonomyJson, mapJson] = await Promise.all([
         fetchTopCoins().catch(() => []),
-        fetchJsonSafe(`${base}/taxonomy-master.json`).catch(() => null),
-        fetchJsonSafe(`${base}/category_coins_map.json`).catch(() => null),
+        fetchJsonSafe('/cachecko/categories/taxonomy-master.json').catch(() => null),
+        fetchJsonSafe('/cachecko/categories/category_coins_map.json').catch(() => null),
       ]);
 
-      const processed = (Array.isArray(coinsRes) ? coinsRes : [])
-        .filter((c: any) => c && c.id && c.symbol)
-        .filter((c: any) => !isStablecoin(String(c.symbol)))
+      const filtered = (Array.isArray(top) ? top : [])
+        .filter(c => c && c.id && c.symbol)
+        .filter(c => !isStablecoin(String(c.symbol)))
         .map((c: any) => ({
-          id: c.id,
+          ...c,
           symbol: String(c.symbol || '').toUpperCase(),
           name: c.name || c.symbol,
           current_price: Number(c.current_price || 0) || 0,
@@ -80,40 +78,30 @@ const HeatmapWidget: React.FC<Props> = ({ item, language = 'pt' }) => {
           high_24h: Number(c.high_24h || 0) || 0,
           low_24h: Number(c.low_24h || 0) || 0,
         }))
-        .sort((a: any, b: any) => (b.market_cap || 0) - (a.market_cap || 0));
+        .sort((a, b) => (b.market_cap || 0) - (a.market_cap || 0));
 
-      // Pega mais que 100 pra preencher melhor as categorias
-      setCoins(processed.slice(0, 300));
+      setCoins(filtered);
+      setTaxonomy(taxonomyJson);
 
-      setTaxonomy(taxonomyRes);
+      if (mapJson && typeof mapJson === 'object') {
+        const categories = (mapJson as any).categories && typeof (mapJson as any).categories === 'object'
+          ? (mapJson as any).categories
+          : mapJson;
 
-      // category_coins_map.json pode vir no formato {categories:{...}} ou direto {...}
-      const mapRaw = coinMapRes && typeof coinMapRes === 'object' ? coinMapRes : null;
-      const categories =
-        mapRaw?.categories && typeof mapRaw.categories === 'object'
-          ? mapRaw.categories
-          : mapRaw;
-
-      if (categories && typeof categories === 'object') {
-        setCatCoinMap(categories as Record<string, string[]>);
+        setCatCoinMap(categories && typeof categories === 'object' ? (categories as Record<string, string[]>) : null);
       } else {
         setCatCoinMap(null);
       }
     } catch (e) {
-      console.error('Heatmap loadData error:', e);
-      setCatCoinMap(null);
+      console.error('Heatmap load error:', e);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // -------- taxonomy parsing (igual teu MarketCapTable) --------
-  const parsedTaxonomy = useMemo(() => {
+  useEffect(() => { loadAll(); }, [loadAll]);
+
+  const parsedTaxonomy: TaxMaster[] = useMemo(() => {
     const raw = taxonomy;
     let masters: any[] = [];
 
@@ -127,16 +115,26 @@ const HeatmapWidget: React.FC<Props> = ({ item, language = 'pt' }) => {
         id: String(m.id ?? m.key ?? m.name ?? '').trim(),
         name: String(m.name ?? m.title ?? m.id ?? '').trim(),
         categoryIds: Array.isArray(m.categoryIds) ? m.categoryIds.map(String) : Array.isArray(m.categories) ? m.categories.map(String) : [],
-        children: Array.isArray(m.children) ? m.children : Array.isArray(m.groups) ? m.groups : [],
+        children: (Array.isArray(m.children) ? m.children : Array.isArray(m.groups) ? m.groups : [])
+          .filter(Boolean)
+          .map((c: any) => ({
+            id: String(c.id ?? c.key ?? c.name ?? '').trim(),
+            name: String(c.name ?? c.title ?? c.id ?? '').trim(),
+            categoryIds: Array.isArray(c.categoryIds) ? c.categoryIds.map(String) : Array.isArray(c.categories) ? c.categories.map(String) : [],
+          }))
       }))
-      .filter((m: any) => m.id);
+      .filter((m: any) => m.id && m.name);
   }, [taxonomy]);
 
-  // category -> set(coinId)
+  const coinById = useMemo(() => {
+    const m = new Map<string, ApiCoin>();
+    for (const c of coins) if (c?.id) m.set(String(c.id), c);
+    return m;
+  }, [coins]);
+
   const categoryCoinIds = useMemo(() => {
     const map = new Map<string, Set<string>>();
     if (!catCoinMap) return map;
-
     for (const [catId, arr] of Object.entries(catCoinMap)) {
       if (!catId || !Array.isArray(arr)) continue;
       map.set(String(catId), new Set(arr.map(x => String(x))));
@@ -144,227 +142,175 @@ const HeatmapWidget: React.FC<Props> = ({ item, language = 'pt' }) => {
     return map;
   }, [catCoinMap]);
 
-  // coinById
-  const coinById = useMemo(() => {
-    const m = new Map<string, ApiCoin>();
-    for (const c of coins) {
-      if (c?.id) m.set(String(c.id), c);
-    }
-    return m;
-  }, [coins]);
+  const getCoinChange24 = (c: ApiCoin) => {
+    const v = (c as any).price_change_percentage_24h_in_currency ?? c.price_change_percentage_24h ?? 0;
+    return isFinite(v) ? Number(v) : 0;
+  };
 
-  // Resolve membros por catIds (existentes no coinById)
-  const membersFromCategoryIds = (catIds: string[]) => {
+  const membersFromCategoryIds = useCallback((catIds: string[]) => {
     const seen = new Set<string>();
-    const members: ApiCoin[] = [];
+    const out: ApiCoin[] = [];
 
     for (const cid of catIds) {
       const setIds = categoryCoinIds.get(cid);
       if (!setIds) continue;
-
       for (const id of setIds) {
         if (seen.has(id)) continue;
         seen.add(id);
         const c = coinById.get(id);
-        if (c) members.push(c);
+        if (c) out.push(c);
       }
     }
-    return members;
-  };
+    // limita pra não explodir (mas ainda mostra bastante)
+    out.sort((a, b) => (Number(b.market_cap || 0) - Number(a.market_cap || 0)));
+    return out.slice(0, 180);
+  }, [categoryCoinIds, coinById]);
 
-  // --------- monta data do treemap (LEVEL 1 -> LEVEL 2 -> COINS) ----------
-  const treemapData = useMemo(() => {
-    // Se não tem mapping de categorias, mete tudo num grupo só e segue o jogo.
-    const hasMap = !!catCoinMap && categoryCoinIds.size > 0 && parsedTaxonomy.length > 0;
-
-    const data: any[] = [];
-    const assigned = new Set<string>();
-
-    const buildLeaf = (coin: ApiCoin, parentId: string) => {
-      const change = Number((coin as any).price_change_percentage_24h || 0) || 0;
-      const mkt = Number((coin as any).market_cap || 0) || 0;
-
-      const sizeValue =
-        mode === 'marketCap'
-          ? Math.max(1, mkt)
-          : Math.max(1, mkt); // mantém área por mcap; modo muda o label/tooltip (mais legível)
-
-      return {
-        id: `c:${coin.id}`,
-        parent: parentId,
-        name: String((coin as any).symbol || '').toUpperCase(),
-        value: sizeValue,
-        colorValue: clamp(change, -12, 12),
-        custom: {
-          fullName: (coin as any).name || '',
-          change,
-          price: Number((coin as any).current_price || 0) || 0,
-          mkt,
-          vol: Number((coin as any).total_volume || 0) || 0,
-          logo: (coin as any).image || '',
-          ath: Number((coin as any).ath || 0) || 0,
-          ath_p: Number((coin as any).ath_change_percentage || 0) || 0,
-          atl: Number((coin as any).atl || 0) || 0,
-          atl_p: Number((coin as any).atl_change_percentage || 0) || 0,
-          high24: Number((coin as any).high_24h || 0) || 0,
-          low24: Number((coin as any).low_24h || 0) || 0,
-        },
-      };
-    };
-
-    const weightedChange = (members: ApiCoin[]) => {
-      const wSum = members.reduce((s, c) => s + (Number((c as any).market_cap || 0) || 0), 0);
-      if (wSum <= 0) {
-        const vals = members.map(c => Number((c as any).price_change_percentage_24h || 0)).filter(isFinite);
-        if (vals.length === 0) return 0;
-        return vals.reduce((a, b) => a + b, 0) / vals.length;
-      }
-      let acc = 0;
-      for (const c of members) {
-        const w = Number((c as any).market_cap || 0) || 0;
-        const ch = Number((c as any).price_change_percentage_24h || 0) || 0;
-        acc += w * ch;
-      }
-      return acc / wSum;
-    };
-
-    if (!hasMap) {
-      // Level 1
-      data.push({
-        id: 'm:all',
-        name: 'All Coins',
-        custom: { fullName: 'All Coins' },
+  const buildTreemapData = useMemo(() => {
+    // fallback: se não tiver mapping, cai pro top 100 por mcap sem agrupamento
+    if (!parsedTaxonomy.length || categoryCoinIds.size === 0) {
+      const top = coins.slice(0, 120);
+      return top.map((c) => {
+        const ch = getCoinChange24(c);
+        const mc = Number(c.market_cap || 0) || 1;
+        return {
+          id: String(c.id),
+          name: String(c.symbol || '').toUpperCase(),
+          value: mc,
+          colorValue: ch,
+          custom: {
+            fullName: c.name,
+            performance: pct(ch),
+            logo: c.image,
+            price: c.current_price,
+            mkt: c.market_cap,
+            vol: c.total_volume,
+            ath: c.ath,
+            ath_p: c.ath_change_percentage,
+            atl: c.atl,
+            atl_p: c.atl_change_percentage,
+            high24: c.high_24h,
+            low24: c.low_24h
+          }
+        };
       });
-      // Level 2 (sempre cria pra manter levels=3)
-      data.push({
-        id: 's:all:all',
-        parent: 'm:all',
-        name: 'Todas',
-        custom: { fullName: 'Todas' },
-      });
-
-      for (const c of coins.slice(0, 200)) {
-        assigned.add(String(c.id));
-        data.push(buildLeaf(c, 's:all:all'));
-      }
-
-      return data;
     }
 
-    // Com taxonomy + map: masters em ordem
+    const points: any[] = [];
+
+    // level 1: masters
     for (const master of parsedTaxonomy) {
-      const masterId = `m:${master.id}`;
-      data.push({
-        id: masterId,
-        name: master.name || master.id,
-        custom: { fullName: master.name || master.id },
+      points.push({
+        id: master.id,
+        name: master.name,
+        custom: { fullName: master.name }
       });
 
-      const children = Array.isArray(master.children) ? master.children : [];
-      const masterCatIds = Array.isArray(master.categoryIds) ? master.categoryIds.map(String) : [];
+      const subs = Array.isArray(master.children) && master.children.length > 0
+        ? master.children
+        : [{ id: `${master.id}__all__`, name: 'Todas', categoryIds: master.categoryIds }];
 
-      // Se não tem children, cria um sub “Todas”
-      const effectiveSubs =
-        children.length > 0
-          ? children
-              .filter(Boolean)
-              .map((c: any) => ({
-                id: String(c.id ?? c.key ?? c.name ?? '').trim(),
-                name: String(c.name ?? c.title ?? c.id ?? '').trim(),
-                categoryIds: Array.isArray(c.categoryIds) ? c.categoryIds.map(String) : Array.isArray(c.categories) ? c.categories.map(String) : [],
-              }))
-              .filter((x: any) => x.id)
-          : [
-              {
-                id: '__all__',
-                name: 'Todas',
-                categoryIds: masterCatIds,
-              },
-            ];
-
-      for (const sub of effectiveSubs) {
-        const subId = `s:${master.id}:${sub.id}`;
-        data.push({
+      for (const sub of subs) {
+        const subId = `${master.id}::${sub.id}`;
+        points.push({
           id: subId,
-          parent: masterId,
-          name: sub.name || sub.id,
-          custom: { fullName: sub.name || sub.id },
+          parent: master.id,
+          name: sub.name,
+          custom: { fullName: sub.name }
         });
 
-        // Pega membros pelo mapping e remove duplicados globais (pra não repetir moeda em 2 grupos)
-        const membersAll = membersFromCategoryIds(sub.categoryIds || []);
-        const members = membersAll.filter(c => !assigned.has(String(c.id)));
+        const members = membersFromCategoryIds(sub.categoryIds || []);
+        for (const c of members) {
+          const ch = getCoinChange24(c);
+          const mc = Number(c.market_cap || 0) || 1;
 
-        // Se um sub ficar vazio, só deixa o header (ok), mas tenta preencher com algo do master (quando __all__)
-        if (members.length === 0 && sub.id === '__all__') {
-          const fallbackMembersAll = membersFromCategoryIds(masterCatIds);
-          const fallbackMembers = fallbackMembersAll.filter(c => !assigned.has(String(c.id)));
-          for (const c of fallbackMembers) {
-            assigned.add(String(c.id));
-            data.push(buildLeaf(c, subId));
-          }
-        } else {
-          for (const c of members) {
-            assigned.add(String(c.id));
-            data.push(buildLeaf(c, subId));
-          }
-        }
-
-        // Dá cor pro header do sub com perf ponderada (nice, igual demo)
-        const leafMembers = members.length > 0 ? members : membersFromCategoryIds(sub.categoryIds || []).filter(c => assigned.has(String(c.id)));
-        if (leafMembers.length > 0) {
-          const perf = weightedChange(leafMembers);
-          const totalMcap = leafMembers.reduce((s, c) => s + (Number((c as any).market_cap || 0) || 0), 0);
-
-          // Atualiza o próprio sub node (último push desse sub foi o header)
-          const idx = data.findIndex(p => p.id === subId);
-          if (idx >= 0) {
-            data[idx] = {
-              ...data[idx],
-              value: Math.max(1, totalMcap),
-              colorValue: clamp(perf, -12, 12),
-              custom: {
-                ...(data[idx].custom || {}),
-                performance: safePct(perf),
-              },
-            };
-          }
+          points.push({
+            id: `${c.id}__${subId}`, // evita colisão se a moeda aparecer em mais de um grupo
+            name: String(c.symbol || '').toUpperCase(),
+            parent: subId,
+            value: mc,
+            colorValue: ch,
+            custom: {
+              fullName: c.name,
+              performance: pct(ch),
+              logo: c.image,
+              price: c.current_price,
+              mkt: c.market_cap,
+              vol: c.total_volume,
+              ath: c.ath,
+              ath_p: c.ath_change_percentage,
+              atl: c.atl,
+              atl_p: c.atl_change_percentage,
+              high24: c.high_24h,
+              low24: c.low_24h
+            }
+          });
         }
       }
     }
 
-    // Sobras (coins top que não caíram em nada): joga em OTHER
-    const leftovers = coins.filter(c => !assigned.has(String(c.id))).slice(0, 120);
-    if (leftovers.length > 0) {
-      data.push({ id: 'm:other', name: 'Other', custom: { fullName: 'Other' } });
-      data.push({ id: 's:other:all', parent: 'm:other', name: 'Todas', custom: { fullName: 'Todas' } });
+    return points;
+  }, [parsedTaxonomy, categoryCoinIds, coins, membersFromCategoryIds]);
 
-      for (const c of leftovers) {
-        data.push(buildLeaf(c, 's:other:all'));
-      }
-    }
-
-    return data;
-  }, [coins, catCoinMap, categoryCoinIds, coinById, parsedTaxonomy, mode]);
-
-  // ----------- render Highcharts -----------
   useEffect(() => {
-    if (!chartRef.current || !window.Highcharts) return;
-    if (!treemapData || treemapData.length === 0) return;
+    if (!chartRef.current || !(window as any).Highcharts) return;
+    if (!buildTreemapData || buildTreemapData.length === 0) return;
+
+    const Highcharts = (window as any).Highcharts;
+
+    // plugin 1x (igual demo)
+    if (!pluginAddedRef.current) {
+      pluginAddedRef.current = true;
+
+      Highcharts.addEvent(Highcharts.Series, 'drawDataLabels', function () {
+        if (this.type !== 'treemap') return;
+
+        this.points.forEach((point: any) => {
+          // Level 2 header: calcula performance combinada (approx) e pinta callout
+          if (point?.node?.level === 2 && Number.isFinite(point.value)) {
+            const children = Array.isArray(point.node.children) ? point.node.children : [];
+            if (!children.length) return;
+
+            const previousValue = children.reduce((acc: number, child: any) => {
+              const v = (child.point?.value || 0);
+              const cv = (child.point?.colorValue || 0);
+              return acc + v - v * cv / 100;
+            }, 0);
+
+            const perf = 100 * (point.value - previousValue) / (previousValue || 1);
+
+            point.custom = {
+              ...(point.custom || {}),
+              performance: (perf < 0 ? '' : '+') + perf.toFixed(2) + '%'
+            };
+
+            if (point.dlOptions && this.colorAxis) {
+              point.dlOptions.backgroundColor = this.colorAxis.toColor(perf);
+            }
+          }
+
+          // Level 3 leaf: fonte escala por área
+          if (point?.node?.level === 3 && point.shapeArgs && point.dlOptions?.style) {
+            const area = point.shapeArgs.width * point.shapeArgs.height;
+            point.dlOptions.style.fontSize = `${Math.min(34, 9 + Math.round(area * 0.0008))}px`;
+          }
+        });
+      });
+    }
 
     if (chartInstance.current) {
       chartInstance.current.destroy();
       chartInstance.current = null;
     }
 
-    chartInstance.current = window.Highcharts.chart(chartRef.current, {
+    chartInstance.current = Highcharts.chart(chartRef.current, {
       chart: {
         type: 'treemap',
         backgroundColor: 'transparent',
         animation: false,
-        style: { fontFamily: 'Inter, sans-serif' },
         spacing: [0, 0, 0, 0],
         margin: [0, 0, 0, 0],
+        style: { fontFamily: 'Inter, sans-serif' }
       },
       title: { text: null },
       subtitle: { text: null },
@@ -373,15 +319,21 @@ const HeatmapWidget: React.FC<Props> = ({ item, language = 'pt' }) => {
       exporting: { enabled: false },
 
       colorAxis: {
-        min: -12,
-        max: 12,
+        min: -15,
+        max: 15,
+        minColor: '#f73539',
+        maxColor: '#2ecc59',
         stops: [
-          [0, '#f23645'],
-          [0.5, '#363a45'],
-          [1, '#089981'],
+          [0, '#f73539'],
+          [0.5, '#414555'],
+          [1, '#2ecc59']
         ],
         gridLineWidth: 0,
-        labels: { enabled: false },
+        labels: {
+          overflow: 'allow',
+          format: '{#gt value 0}+{value}{else}{value}{/gt}%',
+          style: { color: 'white' }
+        }
       },
 
       tooltip: {
@@ -391,240 +343,200 @@ const HeatmapWidget: React.FC<Props> = ({ item, language = 'pt' }) => {
         followPointer: true,
         backgroundColor: 'rgba(10, 11, 12, 0.98)',
         borderColor: 'rgba(221, 153, 51, 0.9)',
-        borderRadius: 20,
+        borderRadius: 18,
         shadow: true,
         padding: 0,
         style: { zIndex: 9999, color: '#ffffff', pointerEvents: 'none' },
         formatter: function (this: any) {
           const p = this.point;
-          // Nó de grupo (level 1/2)
-          if (!p?.custom?.price && p?.node?.level && p.node.level <= 2) {
-            const perf = p?.custom?.performance ? String(p.custom.performance) : '--';
-            return `
-              <div style="padding: 16px; min-width: 260px; color:#fff; font-family:Inter,sans-serif; pointer-events:none;">
-                <div style="font-size:14px; font-weight:900; color:#dd9933; text-transform:uppercase; letter-spacing:1px;">Grupo</div>
-                <div style="font-size:22px; font-weight:1000; margin-top:4px;">${p.name}</div>
-                <div style="margin-top:10px; font-size:12px; color:#9aa0aa; text-transform:uppercase; font-weight:900;">Performance (ponderada)</div>
-                <div style="font-size:18px; font-weight:1000;">${perf}</div>
+          if (!p?.custom) return `<div style="padding:14px;color:#fff;">${p.name}</div>`;
+
+          // ignora tooltip de master/sub (sem leaf)
+          if (!p.custom.price && p.node?.level !== 3) {
+            const perf = p.custom.performance ? ` (${p.custom.performance})` : '';
+            return `<div style="padding:14px;min-width:240px;color:#fff;">
+              <div style="font-weight:900;font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:#dd9933;">
+                ${p.name}${perf}
               </div>
-            `;
+            </div>`;
           }
 
-          // Moeda (leaf)
-          const change = Number(p?.custom?.change || 0) || 0;
+          const change = Number(p.colorValue || 0);
           const changeColor = change >= 0 ? '#22c55e' : '#ef4444';
 
           return `
-            <div style="padding: 20px; min-width: 360px; color: #ffffff; pointer-events: none; font-family: 'Inter', sans-serif;">
-              <div style="display:flex; align-items:center; gap:16px; margin-bottom:16px; border-bottom:2px solid rgba(255,255,255,0.1); padding-bottom:16px;">
-                ${p.custom.logo ? `<img src="${p.custom.logo}" style="width:52px; height:52px; border-radius:50%; background:#fff; border:3px solid #dd9933;">` : ''}
+            <div style="padding: 18px; min-width: 340px; color: #ffffff; pointer-events: none; font-family: 'Inter', sans-serif;">
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;border-bottom:2px solid rgba(255,255,255,0.08);padding-bottom:14px;">
+                ${p.custom.logo ? `<img src="${p.custom.logo}" style="width:48px;height:48px;border-radius:50%;background:#fff;border:3px solid #dd9933;">` : ''}
                 <div>
-                  <div style="font-size:24px; font-weight:900; line-height:1;">${p.name}</div>
-                  <div style="font-size:13px; color:#dd9933; font-weight:800; text-transform:uppercase; margin-top:5px; letter-spacing:1px;">
-                    ${(p.custom.fullName || '').toString()}
+                  <div style="font-size:22px;font-weight:900;line-height:1;">${p.name}</div>
+                  <div style="font-size:12px;color:#dd9933;font-weight:800;text-transform:uppercase;margin-top:4px;letter-spacing:.12em;">
+                    ${p.custom.fullName || ''}
                   </div>
                 </div>
               </div>
 
-              <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
                 <div>
-                  <div style="font-size:10px; color:#999; font-weight:bold; text-transform:uppercase;">PREÇO ATUAL</div>
-                  <div style="font-size:18px; font-weight:900; font-family:'JetBrains Mono';">$${Number(p.custom.price || 0).toLocaleString()}</div>
+                  <div style="font-size:10px;color:#999;font-weight:900;text-transform:uppercase;">PREÇO</div>
+                  <div style="font-size:17px;font-weight:900;font-family:'JetBrains Mono';">$${(p.custom.price || 0).toLocaleString()}</div>
                 </div>
                 <div>
-                  <div style="font-size:10px; color:#999; font-weight:bold; text-transform:uppercase;">VARIAÇÃO 24H</div>
-                  <div style="font-size:18px; font-weight:1000; color:${changeColor};">${change.toFixed(2)}%</div>
+                  <div style="font-size:10px;color:#999;font-weight:900;text-transform:uppercase;">24H</div>
+                  <div style="font-size:17px;font-weight:1000;color:${changeColor};">${pct(change)}</div>
                 </div>
                 <div>
-                  <div style="font-size:10px; color:#999; font-weight:bold; text-transform:uppercase;">MARKET CAP</div>
-                  <div style="font-size:17px; font-weight:900; color:#60a5fa;">${formatUSD(Number(p.custom.mkt || 0))}</div>
+                  <div style="font-size:10px;color:#999;font-weight:900;text-transform:uppercase;">MARKET CAP</div>
+                  <div style="font-size:15px;font-weight:900;color:#60a5fa;">${formatUSD(p.custom.mkt || 0)}</div>
                 </div>
                 <div>
-                  <div style="font-size:10px; color:#999; font-weight:bold; text-transform:uppercase;">VOLUME 24H</div>
-                  <div style="font-size:17px; font-weight:900; color:#dd9933;">${formatUSD(Number(p.custom.vol || 0))}</div>
+                  <div style="font-size:10px;color:#999;font-weight:900;text-transform:uppercase;">VOL 24H</div>
+                  <div style="font-size:15px;font-weight:900;color:#dd9933;">${formatUSD(p.custom.vol || 0)}</div>
                 </div>
               </div>
 
-              <div style="background:rgba(255,255,255,0.05); padding:16px; border-radius:16px; border:1px solid rgba(255,255,255,0.08);">
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:12px;">
+              <div style="background:rgba(255,255,255,0.05);padding:14px;border-radius:14px;border:1px solid rgba(255,255,255,0.08);">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;">
                   <div>
-                    <div style="font-size:9px; color:#666; font-weight:900; text-transform:uppercase;">MÁX 24H</div>
-                    <div style="font-size:13px; font-weight:800; color:#22c55e;">$${Number(p.custom.high24 || 0).toLocaleString()}</div>
+                    <div style="font-size:9px;color:#666;font-weight:900;text-transform:uppercase;">MÁX 24H</div>
+                    <div style="font-size:12px;font-weight:800;color:#22c55e;">$${(p.custom.high24 || 0).toLocaleString()}</div>
                   </div>
                   <div>
-                    <div style="font-size:9px; color:#666; font-weight:900; text-transform:uppercase;">MÍN 24H</div>
-                    <div style="font-size:13px; font-weight:800; color:#ef4444;">$${Number(p.custom.low24 || 0).toLocaleString()}</div>
+                    <div style="font-size:9px;color:#666;font-weight:900;text-transform:uppercase;">MÍN 24H</div>
+                    <div style="font-size:12px;font-weight:800;color:#ef4444;">$${(p.custom.low24 || 0).toLocaleString()}</div>
                   </div>
                 </div>
 
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                   <div>
-                    <div style="font-size:9px; color:#666; font-weight:900; text-transform:uppercase;">ALL TIME HIGH</div>
-                    <div style="font-size:13px; font-weight:800; color:#fff;">$${Number(p.custom.ath || 0).toLocaleString()}</div>
-                    <div style="font-size:10px; font-weight:1000; color:#ef4444;">${Number(p.custom.ath_p || 0).toFixed(1)}% (DROP)</div>
+                    <div style="font-size:9px;color:#666;font-weight:900;text-transform:uppercase;">ATH</div>
+                    <div style="font-size:12px;font-weight:800;color:#fff;">$${(p.custom.ath || 0).toLocaleString()}</div>
+                    <div style="font-size:10px;font-weight:1000;color:#ef4444;">${(p.custom.ath_p ?? 0).toFixed(1)}%</div>
                   </div>
                   <div>
-                    <div style="font-size:9px; color:#666; font-weight:900; text-transform:uppercase;">ALL TIME LOW</div>
-                    <div style="font-size:13px; font-weight:800; color:#fff;">$${Number(p.custom.atl || 0).toLocaleString()}</div>
-                    <div style="font-size:10px; font-weight:1000; color:#22c55e;">+${Number(p.custom.atl_p || 0).toFixed(0)}% (PUMP)</div>
+                    <div style="font-size:9px;color:#666;font-weight:900;text-transform:uppercase;">ATL</div>
+                    <div style="font-size:12px;font-weight:800;color:#fff;">$${(p.custom.atl || 0).toLocaleString()}</div>
+                    <div style="font-size:10px;font-weight:1000;color:#22c55e;">+${(p.custom.atl_p ?? 0).toFixed(0)}%</div>
                   </div>
                 </div>
               </div>
             </div>
           `;
-        },
+        }
       },
 
-      series: [
-        {
-          name: 'All',
-          type: 'treemap',
-          layoutAlgorithm: 'squarified',
-          allowDrillToNode: true,
-          animationLimit: 1000,
-          borderColor: 'rgba(0,0,0,0.35)',
-          borderWidth: 1,
-          opacity: 1,
-          nodeSizeBy: 'leaf',
+      plotOptions: {
+        series: {
+          animation: false
+        }
+      },
 
-          dataLabels: {
-            enabled: false,
-            useHTML: true,
-            allowOverlap: true,
-            style: { textOutline: 'none' },
-          },
-
-          levels: [
-            {
-              level: 1,
-              borderWidth: 3,
-              levelIsConstant: false,
-              dataLabels: {
-                enabled: true,
-                headers: true,
-                align: 'left',
-                padding: 6,
-                style: {
-                  fontWeight: '900',
-                  fontSize: '12px',
-                  color: '#dd9933',
-                  textTransform: 'uppercase',
-                  textOutline: 'none',
-                },
-                formatter: function (this: any) {
-                  return `<span style="letter-spacing:1px;">${this.point.name}</span>`;
-                },
-              },
-            },
-            {
-              level: 2,
-              groupPadding: 2,
-              dataLabels: {
-                enabled: true,
-                headers: true,
-                align: 'center',
-                useHTML: true,
-                padding: 0,
-                style: {
-                  color: '#ffffff',
-                  fontWeight: '900',
-                  fontSize: '11px',
-                  textTransform: 'uppercase',
-                  textOutline: 'none',
-                },
-                formatter: function (this: any) {
-                  const p = this.point;
-                  const perf = p?.custom?.performance ? String(p.custom.performance) : '';
-                  const bg = 'rgba(54,58,69,0.65)';
-                  return `
-                    <div style="
-                      display:inline-flex; align-items:center; gap:8px;
-                      background:${bg};
-                      border:1px solid rgba(255,255,255,0.12);
-                      padding:2px 8px; border-radius:999px;
-                      line-height:1;
-                      box-shadow:0 6px 14px rgba(0,0,0,0.35);
-                      ">
-                      <span style="font-size:11px;">${p.name}</span>
-                      ${perf ? `<span style="font-size:11px; color:#dd9933;">${perf}</span>` : ''}
-                    </div>
-                  `;
-                },
-              },
-            },
-            {
-              level: 3,
-              dataLabels: {
-                enabled: true,
-                useHTML: true,
-                allowOverlap: true,
-                formatter: function (this: any) {
-                  const p = this.point;
-                  const w = p.shapeArgs?.width || 0;
-                  const h = p.shapeArgs?.height || 0;
-                  if (w < 46 || h < 34) return '';
-
-                  const change = Number(p?.custom?.change || 0) || 0;
-                  const changeColor = change >= 0 ? '#22c55e' : '#ef4444';
-
-                  const fontSize = Math.min(Math.max(w / 6.2, 10), 28);
-                  const subFont = Math.max(Math.floor(fontSize * 0.7), 10);
-
-                  const showLogo = w > 70 && h > 70 && !!p?.custom?.logo;
-                  const imgSize = Math.min(Math.max(w * 0.28, 22), 52);
-
-                  const secondLine =
-                    mode === 'marketCap'
-                      ? formatUSD(Number(p?.custom?.mkt || 0))
-                      : `${change.toFixed(2)}%`;
-
-                  const secondColor = mode === 'marketCap' ? '#ffffff' : changeColor;
-
-                  return `
-                    <div style="
-                      width:100%; height:100%;
-                      display:flex; flex-direction:column;
-                      align-items:center; justify-content:center;
-                      text-align:center; pointer-events:none;
-                      color:#fff; line-height:1.05;
-                      text-shadow:0 2px 6px rgba(0,0,0,0.95);
-                    ">
-                      ${showLogo ? `<img src="${p.custom.logo}" style="
-                        width:${imgSize}px; height:${imgSize}px; border-radius:50%;
-                        background:#fff; padding:2px;
-                        border:2px solid rgba(221,153,51,0.75);
-                        box-shadow:0 6px 16px rgba(0,0,0,0.45);
-                        margin-bottom:6px;
-                      "/>` : ''}
-                      <div style="font-weight:1000; font-size:${fontSize}px;">${p.name}</div>
-                      <div style="font-weight:900; opacity:0.95; font-size:${subFont}px; color:${secondColor};">
-                        ${secondLine}
-                      </div>
-                    </div>
-                  `;
-                },
-                style: { textOutline: 'none' },
-              },
-            },
-          ],
-
-          accessibility: { exposeAsGroupOnly: true },
-
-          breadcrumbs: {
-            buttonTheme: {
-              fill: 'rgba(10,11,12,0.6)',
-              stroke: 'rgba(255,255,255,0.08)',
-              style: { color: '#dd9933', fontWeight: '900' },
-              states: {
-                hover: { fill: 'rgba(10,11,12,0.85)', style: { color: '#ffffff' } },
-                select: { style: { color: '#ffffff' } },
-              },
-            },
-          },
-
-          data: treemapData,
+      series: [{
+        name: 'All',
+        type: 'treemap',
+        allowDrillToNode: true,
+        animationLimit: 1000,
+        layoutAlgorithm: 'squarified',
+        borderColor: '#0a0b0c',
+        color: '#0a0b0c',
+        opacity: 0.01,
+        nodeSizeBy: 'leaf',
+        dataLabels: {
+          enabled: false,
+          allowOverlap: true,
+          style: {
+            fontSize: '0.9em',
+            textOutline: 'none'
+          }
         },
-      ],
+        levels: [{
+          level: 1,
+          dataLabels: {
+            enabled: true,
+            headers: true,
+            align: 'left',
+            style: {
+              fontWeight: 'bold',
+              fontSize: '0.75em',
+              lineClamp: 1,
+              textTransform: 'uppercase',
+              color: '#ffffff'
+            },
+            padding: 3
+          },
+          borderWidth: 3,
+          levelIsConstant: false
+        }, {
+          level: 2,
+          dataLabels: {
+            enabled: true,
+            headers: true,
+            align: 'center',
+            shape: 'callout',
+            backgroundColor: '#414555',
+            borderWidth: 1,
+            borderColor: '#0a0b0c',
+            padding: 0,
+            style: {
+              color: 'white',
+              fontWeight: 'normal',
+              fontSize: '0.65em',
+              lineClamp: 1,
+              textOutline: 'none',
+              textTransform: 'uppercase'
+            }
+          },
+          groupPadding: 1
+        }, {
+          level: 3,
+          dataLabels: {
+            enabled: true,
+            align: 'center',
+            useHTML: true,
+            formatter: function (this: any) {
+              const p = this.point;
+              const w = p.shapeArgs?.width || 0;
+              const h = p.shapeArgs?.height || 0;
+              if (w < 42 || h < 38) return null;
+
+              const line2 = mode === 'marketCap'
+                ? formatUSD(Number(p.custom?.mkt || 0))
+                : (p.custom?.performance || pct(Number(p.colorValue || 0)));
+
+              // opcional: logo só se tiver espaço
+              let logoHtml = '';
+              if (w > 72 && h > 88 && p.custom?.logo) {
+                const imgSize = Math.min(Math.max(w * 0.28, 22), 56);
+                logoHtml = `<img src="${p.custom.logo}" style="width:${imgSize}px;height:${imgSize}px;border-radius:50%;margin-bottom:6px;background:#fff;box-shadow:0 4px 10px rgba(0,0,0,.65);border:2px solid rgba(255,255,255,.2);" />`;
+              }
+
+              return `
+                <div style="text-align:center;color:#fff;line-height:1.05;pointer-events:none;display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;">
+                  ${logoHtml}
+                  <div style="font-weight:1000;text-shadow:0 2px 7px rgba(0,0,0,1);">
+                    ${p.name}
+                  </div>
+                  <div style="font-weight:900;opacity:.95;text-shadow:0 2px 6px rgba(0,0,0,.9);font-size:.8em;">
+                    ${line2}
+                  </div>
+                </div>
+              `;
+            },
+            style: { color: '#ffffff', textOutline: 'none' }
+          }
+        }],
+        accessibility: { exposeAsGroupOnly: true },
+        breadcrumbs: {
+          buttonTheme: {
+            style: { color: 'silver' },
+            states: {
+              hover: { fill: '#333' },
+              select: { style: { color: 'white' } }
+            }
+          }
+        },
+        data: buildTreemapData
+      }]
     });
 
     return () => {
@@ -633,7 +545,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, language = 'pt' }) => {
         chartInstance.current = null;
       }
     };
-  }, [treemapData, mode]);
+  }, [buildTreemapData, mode]);
 
   return (
     <div className="h-full flex flex-col bg-black relative overflow-hidden">
@@ -644,12 +556,8 @@ const HeatmapWidget: React.FC<Props> = ({ item, language = 'pt' }) => {
               <Layers size={16} className="text-[#dd9933]" />
             </div>
             <div className="flex flex-col">
-              <span className="text-sm font-black uppercase text-white tracking-tighter">
-                Market Heatmap
-              </span>
-              <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest">
-                Drilldown por Categorias → Moedas
-              </span>
+              <span className="text-sm font-black uppercase text-white tracking-tighter">Market Heatmap</span>
+              <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Drilldown por categorias → moedas</span>
             </div>
           </div>
 
@@ -657,31 +565,21 @@ const HeatmapWidget: React.FC<Props> = ({ item, language = 'pt' }) => {
             <div className="flex bg-white/5 p-0.5 rounded border border-white/10">
               <button
                 onClick={() => setMode('marketCap')}
-                className={`px-4 py-1.5 text-xs font-black rounded transition-all ${
-                  mode === 'marketCap'
-                    ? 'bg-[#dd9933] text-black shadow'
-                    : 'text-gray-500 hover:text-white'
-                }`}
+                className={`px-4 py-1.5 text-xs font-black rounded transition-all ${mode === 'marketCap' ? 'bg-[#dd9933] text-black shadow' : 'text-gray-500 hover:text-white'}`}
               >
                 MARKET CAP
               </button>
               <button
                 onClick={() => setMode('percentChange24h')}
-                className={`px-4 py-1.5 text-xs font-black rounded transition-all ${
-                  mode === 'percentChange24h'
-                    ? 'bg-[#dd9933] text-black shadow'
-                    : 'text-gray-500 hover:text-white'
-                }`}
+                className={`px-4 py-1.5 text-xs font-black rounded transition-all ${mode === 'percentChange24h' ? 'bg-[#dd9933] text-black shadow' : 'text-gray-500 hover:text-white'}`}
               >
                 VAR % 24H
               </button>
             </div>
 
             <button
-              onClick={loadData}
-              className={`p-2 hover:text-[#dd9933] transition-colors rounded ${
-                isLoading ? 'animate-spin' : ''
-              }`}
+              onClick={loadAll}
+              className={`p-2 hover:text-[#dd9933] transition-colors rounded ${loading ? 'animate-spin' : ''}`}
               title="Atualizar"
             >
               <RefreshCw size={18} className="text-gray-500" />
@@ -693,13 +591,11 @@ const HeatmapWidget: React.FC<Props> = ({ item, language = 'pt' }) => {
       <div className="flex-1 relative bg-black overflow-visible">
         <div ref={chartRef} className="absolute inset-0 w-full h-full" />
 
-        {isLoading && (
+        {loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-[100]">
             <div className="flex items-center gap-3 bg-black/80 border border-[#dd9933]/50 px-6 py-4 rounded-xl shadow-2xl">
               <Loader2 className="animate-spin text-[#dd9933]" size={24} />
-              <span className="text-xs font-black text-white uppercase tracking-widest">
-                Sincronizando Mercado...
-              </span>
+              <span className="text-xs font-black text-white uppercase tracking-widest">Sincronizando Mercado...</span>
             </div>
           </div>
         )}
@@ -709,18 +605,14 @@ const HeatmapWidget: React.FC<Props> = ({ item, language = 'pt' }) => {
         <div className="flex items-center justify-between max-w-lg mx-auto w-full gap-4">
           <div className="flex flex-col gap-1 w-full">
             <div className="h-2 w-full rounded-full overflow-hidden flex border border-white/5">
-              <div className="flex-1 bg-[#f23645]" />
-              <div className="flex-1 bg-[#7c252b]" />
-              <div className="flex-1 bg-[#363a45]" />
-              <div className="flex-1 bg-[#1b433d]" />
-              <div className="flex-1 bg-[#089981]" />
+              <div className="flex-1 bg-[#f73539]" />
+              <div className="flex-1 bg-[#b53b43]" />
+              <div className="flex-1 bg-[#414555]" />
+              <div className="flex-1 bg-[#2ecc59]" />
+              <div className="flex-1 bg-[#1fb14a]" />
             </div>
             <div className="flex justify-between w-full text-[9px] font-black text-gray-600 uppercase tracking-widest">
-              <span>MUITO BEARISH</span>
-              <span>QUEDA</span>
-              <span>NEUTRO</span>
-              <span>ALTA</span>
-              <span>MUITO BULLISH</span>
+              <span>MUITO BEARISH</span><span>QUEDA</span><span>NEUTRO</span><span>ALTA</span><span>MUITO BULLISH</span>
             </div>
           </div>
         </div>
