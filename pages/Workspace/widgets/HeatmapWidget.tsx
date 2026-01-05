@@ -1,33 +1,12 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Highcharts from 'highcharts';
 import TreemapModule from 'highcharts/modules/treemap';
 import ExportingModule from 'highcharts/modules/exporting';
 import AccessibilityModule from 'highcharts/modules/accessibility';
 import { DashboardItem, Language } from '../../../types';
-import { httpGetJson } from '../../../services/http';
-import { getCacheckoUrl } from '../../../services/endpoints';
-
-// =============================
-// ROUTES (HTTP) - MESMA ORIGEM
-// =============================
-// IMPORTANTE: esses caminhos precisam estar SERVIDOS via HTTP.
-// Ex.: https://seusite.com/cachecko/cachecko_lite.json
-// NÃO EXISTE "fetch /opt/n8n/..." no navegador.
-const COINS_URLS = [
-  '/cachecko/cachecko_lite.json',
-  '/cachecko/cachecko.json'
-];
-
-const CATEGORIES_URLS = [
-  '/cachecko/categories/taxonomy-master.json',
-  '/cachecko/taxonomy-master.json'
-];
-
-const CATEGORY_COIN_MAP_URLS = [
-  '/cachecko/categories/category-coin-map.json',
-  '/cachecko/category-coin-map.json'
-];
+import { httpGetJson, httpGetFirstJson } from '../../../services/http';
+import { ENDPOINTS, ENDPOINT_FALLBACKS } from '../../../services/endpoints';
 
 // =============================
 // TYPES
@@ -90,46 +69,14 @@ function initHighchartsOnce() {
 // =============================
 // HELPERS
 // =============================
-function withCb(url: string) {
-  const salt = Math.floor(Date.now() / 60000);
-  return url.includes('?') ? `${url}&_cb=${salt}` : `${url}?_cb=${salt}`;
-}
-
-/**
- * Mesmo padrão do MarketCapTable:
- * - usa getCacheckoUrl() (proxy interno do Vite / mesma origem)
- * - usa httpGetJson() (timeout + retries)
- */
-async function httpGetJsonRobusto<T>(path: string): Promise<T> {
-  const finalUrl = withCb(getCacheckoUrl(path));
-  const { data } = await httpGetJson(finalUrl, { timeoutMs: 12000, retries: 2 });
-  return data as T;
-}
-
-/**
- * Tenta uma lista de URLs até achar a primeira que responde.
- * Isso salva tua vida quando muda a pasta/rota e ainda tem legado.
- */
-async function fetchFirstJson<T>(paths: string[], label: string): Promise<T> {
-  let lastErr: any = null;
-
-  for (const p of paths) {
-    try {
-      return await httpGetJsonRobusto<T>(p);
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-
-  throw new Error(
-    `Falha ao carregar ${label}. Tentei: ${paths.join(' | ')}. Último erro: ${String(lastErr?.message || lastErr)}`
-  );
+function safeUpper(s?: string) {
+  return (s || '').toUpperCase();
 }
 
 function formatPct(v: number) {
-  const s = Number.isFinite(v) ? v : 0;
-  const sign = s > 0 ? '+' : '';
-  return `${sign}${s.toFixed(2)}%`;
+  const n = Number.isFinite(v) ? v : 0;
+  const sign = n > 0 ? '+' : '';
+  return `${sign}${n.toFixed(2)}%`;
 }
 
 function formatMc(mc: number) {
@@ -141,23 +88,30 @@ function formatMc(mc: number) {
   return `${Math.round(n)}`;
 }
 
-function safeUpper(s?: string) {
-  return (s || '').toUpperCase();
-}
-
 function dedupCoinsById(coins: Coin[]) {
-  const map = new Map<string, Coin>();
+  const m = new Map<string, Coin>();
+
   for (const c of coins) {
     if (!c?.id) continue;
-    const prev = map.get(c.id);
-    if (!prev) map.set(c.id, c);
-    else {
-      const prevMc = Number(prev.market_cap || 0);
-      const mc = Number(c.market_cap || 0);
-      if (mc > prevMc) map.set(c.id, c);
+    const prev = m.get(c.id);
+    if (!prev) {
+      m.set(c.id, c);
+      continue;
     }
+
+    // Mantém o com maior marketcap, se duplicado
+    const prevMc = Number(prev.market_cap || 0);
+    const mc = Number(c.market_cap || 0);
+    if (mc > prevMc) m.set(c.id, c);
   }
-  return Array.from(map.values());
+
+  return Array.from(m.values());
+}
+
+function normalizeCoinsPayload(data: any): Coin[] {
+  if (Array.isArray(data)) return data as Coin[];
+  if (Array.isArray(data?.coins)) return data.coins as Coin[];
+  return [];
 }
 
 // =============================
@@ -165,7 +119,7 @@ function dedupCoinsById(coins: Coin[]) {
 // =============================
 function buildMarketMonitorPoints(coins: Coin[], limit = 300): TreemapPoint[] {
   const arr = dedupCoinsById(coins)
-    .filter(c => c && c.id)
+    .filter(c => c?.id)
     .sort((a, b) => Number(b.market_cap || 0) - Number(a.market_cap || 0))
     .slice(0, limit);
 
@@ -201,14 +155,16 @@ function buildCategoryPoints(
         return a + mc * ch;
       }, 0) / (totalMc || 1);
 
+    const perf = Number.isFinite(weightedPerf) ? weightedPerf : 0;
+
     return {
       id: cat.id,
       name: cat.name,
       value: totalMc,
-      colorValue: Number.isFinite(weightedPerf) ? weightedPerf : 0,
+      colorValue: perf,
       custom: {
         fullName: cat.name,
-        change24h: Number.isFinite(weightedPerf) ? weightedPerf : 0,
+        change24h: perf,
         marketCap: totalMc
       }
     };
@@ -222,9 +178,13 @@ function buildCategoryCoinsPoints(
   limit = 300
 ): TreemapPoint[] {
   const ids = Array.from(new Set(categoryCoinMap[categoryId] || []));
-  const members = ids.map(id => coinById.get(id)).filter(Boolean) as Coin[];
+  const members = ids
+    .map(id => coinById.get(id))
+    .filter(Boolean) as Coin[];
 
-  return members
+  const deduped = dedupCoinsById(members);
+
+  return deduped
     .sort((a, b) => Number(b.market_cap || 0) - Number(a.market_cap || 0))
     .slice(0, limit)
     .map(c => ({
@@ -242,7 +202,7 @@ function buildCategoryCoinsPoints(
 }
 
 // =============================
-// CHART COMPONENT
+// TREEMAP CHART
 // =============================
 function TreemapChart({
   view,
@@ -296,7 +256,7 @@ function TreemapChart({
       title: {
         text: title,
         align: 'left',
-        style: { color: '#fff', fontSize: '16px', fontWeight: '700' }
+        style: { color: '#fff', fontSize: '16px', fontWeight: '800' }
       },
       subtitle: {
         text:
@@ -324,14 +284,16 @@ function TreemapChart({
           const mc = Number(p?.custom?.marketCap ?? p.value ?? 0);
 
           return `
-            <div style="min-width:220px">
-              <div style="font-weight:800; margin-bottom:6px">${full}</div>
+            <div style="min-width:240px">
+              <div style="font-weight:900; margin-bottom:6px">${full}</div>
               <div><b>24h:</b> ${formatPct(ch)}</div>
               <div><b>Market Cap:</b> $${formatMc(mc)}</div>
             </div>
           `;
         }
       },
+
+      // ✅ ESCALA VERDE/VERMELHA (igual ao exemplo)
       colorAxis: {
         min: -10,
         max: 10,
@@ -346,6 +308,7 @@ function TreemapChart({
           format: '{#gt value 0}+{value}{else}{value}{/gt}%'
         }
       },
+
       series: [
         {
           type: 'treemap',
@@ -357,10 +320,11 @@ function TreemapChart({
           borderWidth: 2,
           colorKey: 'colorValue',
           data: points as any,
+
           dataLabels: {
             enabled: true,
             allowOverlap: false,
-            style: { color: '#fff', textOutline: 'none', fontWeight: '800' },
+            style: { color: '#fff', textOutline: 'none', fontWeight: '900' },
             formatter: function (this: any) {
               const p: any = this.point;
               const ch = Number(p?.custom?.change24h ?? p.colorValue ?? 0);
@@ -374,6 +338,7 @@ function TreemapChart({
                       <span style="font-size:12px; opacity:.85">${formatPct(ch)}</span>`;
             }
           },
+
           point: {
             events: {
               click: function () {
@@ -404,7 +369,7 @@ function TreemapChart({
 }
 
 // =============================
-// MAIN COMPONENT (FULLSCREEN POPUP VIA PORTAL)
+// MAIN COMPONENT
 // =============================
 interface HeatmapWidgetProps {
   item?: DashboardItem;
@@ -418,54 +383,79 @@ export default function CryptoHeatmaps({ item, language }: HeatmapWidgetProps) {
   const [coins, setCoins] = useState<Coin[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoryCoinMap, setCategoryCoinMap] = useState<CategoryCoinMap>({});
+
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string>('');
+
+  // Debug opcional (pra matar “não carregou” sem adivinhar)
+  const [used, setUsed] = useState<{ coins?: string; map?: string; taxonomy?: string }>({});
 
   const canCategories = useMemo(() => {
     return categories.length > 0 && Object.keys(categoryCoinMap).length > 0;
   }, [categories, categoryCoinMap]);
 
-  useEffect(() => {
-    let alive = true;
-
+  const load = useCallback(async () => {
     setLoading(true);
     setErr('');
 
-    Promise.allSettled([
-      fetchFirstJson<Coin>(COINS_URLS, 'coins') as any,
-      fetchFirstJson<Category[]>(CATEGORIES_URLS, 'categories'),
-      fetchFirstJson<CategoryCoinMap>(CATEGORY_COIN_MAP_URLS, 'category-coin-map')
-    ])
-      .then(results => {
-        if (!alive) return;
+    try {
+      // COINS (tenta lite/full)
+      const coinsResp = await httpGetFirstJson<any>(
+        ENDPOINT_FALLBACKS.COINS_ANY,
+        'coins',
+        { timeoutMs: 10000, retries: 2 }
+      );
 
-        const [rCoins, rCats, rMap] = results;
+      // TAXONOMY
+      const taxPromise = httpGetJson<any>(ENDPOINTS.TAXONOMY, { timeoutMs: 10000, retries: 2 });
 
-        if (rCoins.status === 'fulfilled') {
-          const val: any = rCoins.value;
-          // coins pode vir como array direto, ou como objeto com "coins"
-          const arr = Array.isArray(val) ? val : Array.isArray(val?.coins) ? val.coins : [];
-          setCoins(arr as Coin[]);
-        } else {
-          setErr(prev => prev || (rCoins.reason?.message || 'Falha ao carregar moedas'));
-        }
+      // MAP (tenta várias grafias)
+      const mapPromise = httpGetFirstJson<any>(
+        ENDPOINT_FALLBACKS.CAT_MAP_ANY,
+        'category_coins_map',
+        { timeoutMs: 10000, retries: 2 }
+      );
 
-        if (rCats.status === 'fulfilled') setCategories(Array.isArray(rCats.value) ? rCats.value : []);
-        else setErr(prev => prev || (rCats.reason?.message || 'Falha ao carregar categorias'));
+      const [taxRes, mapRes] = await Promise.allSettled([taxPromise, mapPromise]);
 
-        if (rMap.status === 'fulfilled' && rMap.value && typeof rMap.value === 'object') setCategoryCoinMap(rMap.value);
-        else setErr(prev => prev || (rMap.reason?.message || 'Falha ao carregar mapa categoria→moedas'));
-      })
-      .finally(() => {
-        if (!alive) return;
-        setLoading(false);
-      });
+      const coinsArr = normalizeCoinsPayload(coinsResp.data);
+      setCoins(coinsArr);
+
+      setUsed(prev => ({ ...prev, coins: coinsResp.usedUrl }));
+
+      if (taxRes.status === 'fulfilled') {
+        const taxData = taxRes.value.data;
+        setCategories(Array.isArray(taxData) ? (taxData as Category[]) : []);
+        setUsed(prev => ({ ...prev, taxonomy: ENDPOINTS.TAXONOMY }));
+      }
+
+      if (mapRes.status === 'fulfilled') {
+        const mapData = mapRes.value.data;
+        setCategoryCoinMap(mapData && typeof mapData === 'object' ? (mapData as CategoryCoinMap) : {});
+        setUsed(prev => ({ ...prev, map: mapRes.value.usedUrl }));
+      }
+    } catch (e: any) {
+      setErr(String(e?.message || e));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Carrega 1x
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      if (!alive) return;
+      await load();
+    })();
 
     return () => {
       alive = false;
     };
-  }, []);
+  }, [load]);
 
+  // trava scroll quando modal abre
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -475,24 +465,24 @@ export default function CryptoHeatmaps({ item, language }: HeatmapWidgetProps) {
     };
   }, [open]);
 
-  function openMarket() {
+  const openMarket = useCallback(() => {
     setView({ mode: 'market' });
     setOpen(true);
-  }
+  }, []);
 
-  function openCategories() {
+  const openCategories = useCallback(() => {
     setView({ mode: 'categories' });
     setOpen(true);
-  }
+  }, []);
 
-  function close() {
+  const close = useCallback(() => {
     setOpen(false);
     setView({ mode: 'market' });
-  }
+  }, []);
 
-  function back() {
+  const back = useCallback(() => {
     setView({ mode: 'categories' });
-  }
+  }, []);
 
   const modal = (
     <div
@@ -518,6 +508,7 @@ export default function CryptoHeatmaps({ item, language }: HeatmapWidgetProps) {
             flexDirection: 'column'
           }}
         >
+          {/* Header */}
           <div
             style={{
               padding: '12px 12px',
@@ -528,7 +519,7 @@ export default function CryptoHeatmaps({ item, language }: HeatmapWidgetProps) {
             }}
           >
             <div style={{ color: '#fff', fontWeight: 900, display: 'flex', gap: 10, alignItems: 'center' }}>
-              <span style={{ opacity: 0.9 }}>
+              <span style={{ opacity: 0.95 }}>
                 {view.mode === 'market'
                   ? 'Market Monitor'
                   : view.mode === 'categories'
@@ -559,12 +550,12 @@ export default function CryptoHeatmaps({ item, language }: HeatmapWidgetProps) {
                     padding: '8px 10px',
                     borderRadius: 10,
                     border: '1px solid rgba(255,255,255,0.12)',
-                    background: view.mode !== 'market' ? 'rgba(221,153,51,0.22)' : 'rgba(255,255,255,0.05)',
+                    background: view.mode === 'categories' ? 'rgba(221,153,51,0.22)' : 'rgba(255,255,255,0.05)',
                     color: canCategories ? '#fff' : 'rgba(255,255,255,0.45)',
                     fontWeight: 900,
                     cursor: canCategories ? 'pointer' : 'not-allowed'
                   }}
-                  title={!canCategories ? 'Categorias indisponíveis (faltou categories/map)' : ''}
+                  title={!canCategories ? 'Categorias indisponíveis (faltou taxonomy/map)' : ''}
                 >
                   Categorias
                 </button>
@@ -581,7 +572,7 @@ export default function CryptoHeatmaps({ item, language }: HeatmapWidgetProps) {
                     border: '1px solid rgba(255,255,255,0.15)',
                     background: 'rgba(255,255,255,0.06)',
                     color: '#fff',
-                    fontWeight: 800,
+                    fontWeight: 900,
                     cursor: 'pointer'
                   }}
                 >
@@ -606,6 +597,7 @@ export default function CryptoHeatmaps({ item, language }: HeatmapWidgetProps) {
             </div>
           </div>
 
+          {/* Chart */}
           <div style={{ flex: 1, minHeight: 0 }}>
             <TreemapChart
               view={view}
@@ -616,6 +608,7 @@ export default function CryptoHeatmaps({ item, language }: HeatmapWidgetProps) {
             />
           </div>
 
+          {/* Footer */}
           <div
             style={{
               padding: '10px 12px',
@@ -623,7 +616,7 @@ export default function CryptoHeatmaps({ item, language }: HeatmapWidgetProps) {
               display: 'flex',
               justifyContent: 'space-between',
               color: 'rgba(255,255,255,0.55)',
-              fontWeight: 700,
+              fontWeight: 800,
               fontSize: 12
             }}
           >
@@ -671,13 +664,42 @@ export default function CryptoHeatmaps({ item, language }: HeatmapWidgetProps) {
             fontWeight: 900,
             cursor: canCategories ? 'pointer' : 'not-allowed'
           }}
-          title={!canCategories ? 'Categorias indisponíveis (faltou categories/map)' : ''}
+          title={!canCategories ? 'Categorias indisponíveis (faltou taxonomy/map)' : ''}
         >
           Heatmap por Categoria
         </button>
 
-        {loading && <span style={{ color: 'rgba(255,255,255,0.7)', fontWeight: 700 }}>Carregando…</span>}
+        <button
+          onClick={load}
+          style={{
+            padding: '10px 14px',
+            borderRadius: 12,
+            border: '1px solid rgba(255,255,255,0.15)',
+            background: 'rgba(255,255,255,0.06)',
+            color: '#fff',
+            fontWeight: 900,
+            cursor: 'pointer'
+          }}
+          title="Recarregar dados"
+        >
+          Recarregar
+        </button>
+
+        {loading && <span style={{ color: 'rgba(255,255,255,0.75)', fontWeight: 800 }}>Carregando…</span>}
         {!!err && !loading && <span style={{ color: '#ff6b6b', fontWeight: 900 }}>{err}</span>}
+      </div>
+
+      {/* Debug (remove se quiser) */}
+      <div style={{ marginTop: 10, color: 'rgba(255,255,255,0.55)', fontSize: 12, fontWeight: 700 }}>
+        <div>
+          Coins: <span style={{ color: 'rgba(255,255,255,0.85)' }}>{used.coins || '—'}</span>
+        </div>
+        <div>
+          Taxonomy: <span style={{ color: 'rgba(255,255,255,0.85)' }}>{used.taxonomy || '—'}</span>
+        </div>
+        <div>
+          CatMap: <span style={{ color: 'rgba(255,255,255,0.85)' }}>{used.map || '—'}</span>
+        </div>
       </div>
 
       {open && createPortal(modal, document.body)}
