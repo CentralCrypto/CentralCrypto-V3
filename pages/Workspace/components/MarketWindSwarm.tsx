@@ -1617,4 +1617,128 @@ title="Legenda / Instruções"
 
 {legendTipOpen && (
 <div
-className="absolute right-0 mt-2 w-80 bg-white/95 dark:bg-black/85 border border-gray-200 dark:border-white/10 rounded-xl p-3
+className="absolute right-0 mt-2 w-80 bg-white/95 dark:bg-black/85 border border-gray-200 dark:border-white/10 rounded-xl p-3 shadow-xl backdrop-blur-md text-sm"
+onMouseEnter={() => setLegendTipOpen(true)}
+onMouseLeave={() => setLegendTipOpen(false)}
+>
+<div className="space-y-1 text-gray-800 dark:text-gray-100">
+{legendText}
+</div>
+</div>
+)}
+</div>
+
+<button
+onClick={() => setSettingsOpen(v => !v)}
+className={`p-3 rounded-lg border transition-colors backdrop-blur-sm ${settingsOpen ? 'bg-[#dd9933] text-black border-[#dd9933]' : 'bg-gray-100 dark:bg-black/50 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10'}`}
+title="Settings"
+>
+<Settings size={20} />
+</button>
+
+<button
+onClick={() => onClose()}
+className="p-3 bg-gray-100 dark:bg-black/50 rounded-lg border border-gray-200 dark:border-white/10 hover:bg-red-500/10 text-gray-600 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+title="Close"
+>
+<CloseIcon size={20} />
+</button>
+</div>
+</div>
+
+{settingsOpen && (
+<div
+className="absolute top-24 right-4 bg-white/90 dark:bg-black/80 p-4 rounded-lg border border-gray-200 dark:border-white/10 backdrop-blur-md w-80 z-30 shadow-xl"
+onWheel={(e) => e.stopPropagation()}
+onMouseDown={(e) => e.stopPropagation()}
+>
+<div className="flex items-center justify-between gap-3">
+<div className="flex items-center gap-2">
+<Atom size={14} />
+<span className="text-xs font-black uppercase tracking-wider">Modo Game</span>
+</div>
+
+<button
+onClick={() => setIsGameMode(!isGameMode)}
+className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isGameMode ? 'bg-[#dd9933]' : 'bg-gray-200 dark:bg-[#2f3032]'}`}
+title="Modo Game"
+>
+<span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isGameMode ? 'translate-x-6' : 'translate-x-1'}`} />
+</button>
+</div>
+
+<div className="mt-3 flex items-center justify-between gap-3">
+<div className="flex items-center gap-2">
+<Coins size={14} />
+<span className="text-xs font-black uppercase tracking-wider"># Moedas</span>
+</div>
+
+<select
+value={numCoins}
+onChange={e => setNumCoins(parseInt(e.target.value))}
+className="bg-white dark:bg-[#2f3032] text-gray-900 dark:text-gray-100 px-2 py-1.5 rounded text-xs border border-gray-200 dark:border-white/10 outline-none"
+onWheel={(e) => e.stopPropagation()}
+>
+{[50, 100, 150, 200, 250].map(n => <option key={n} value={n}>{n} moedas</option>)}
+</select>
+</div>
+
+<div className="mt-4 space-y-4">
+<div className={isGameMode ? 'opacity-50' : ''}>
+<div className="flex items-center justify-between gap-3">
+<div className="flex items-center gap-2">
+<Wind size={14} />
+<span className="text-xs font-black uppercase tracking-wider">Flutuação (Mapa)</span>
+</div>
+<span className="text-xs font-bold text-gray-500 dark:text-gray-400">{Math.round(floatStrengthRaw * 100)}%</span>
+</div>
+<input
+type="range"
+min="0"
+max="1"
+step="0.05"
+value={floatStrengthRaw}
+onChange={e => setFloatStrengthRaw(parseFloat(e.target.value))}
+className="w-full accent-[#dd9933] mt-2"
+disabled={isGameMode}
+/>
+</div>
+
+<div>
+<div className="flex items-center justify-between gap-3">
+<div className="flex items-center gap-2">
+<Droplets size={14} />
+<span className="text-xs font-black uppercase tracking-wider">Rastro (Trail)</span>
+</div>
+<span className="text-xs font-bold text-gray-500 dark:text-gray-400">{trailLength}</span>
+</div>
+<input
+type="range"
+min="0"
+max="50"
+step="1"
+value={trailLength}
+onChange={e => setTrailLength(parseInt(e.target.value))}
+className="w-full accent-[#dd9933] mt-2"
+/>
+</div>
+</div>
+</div>
+)}
+
+<div ref={stageRef} className="flex-1 w-full relative cursor-crosshair overflow-hidden">
+<canvas
+ref={canvasRef}
+onMouseMove={handleMouseMove}
+onMouseDown={(e) => { e.preventDefault(); handleMouseDown(e); }}
+onMouseUp={(e) => { e.preventDefault(); handleMouseUp(); }}
+onMouseLeave={() => { setHoveredParticle(null); handleMouseUp(); }}
+onWheel={handleWheel}
+className="absolute inset-0 w-full h-full block"
+/>
+</div>
+</div>
+);
+};
+
+export default MarketWindSwarm;
