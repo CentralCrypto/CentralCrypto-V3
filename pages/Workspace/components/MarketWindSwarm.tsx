@@ -4,22 +4,22 @@ import { Search, XCircle, Settings, Droplets, X as CloseIcon, Atom, Coins, Maxim
 import { fetchTopCoins } from '../services/api';
 
 interface Particle {
-  id: string;
-  x: number; y: number;
-  vx: number; vy: number;
-  radius: number;
-  targetRadius: number;
-  color: string;
-  coin: ApiCoin;
-  trail: { x: number, y: number, age: number }[];
-  phase: number;
-  isFixed?: boolean;
-  mass: number;
+id: string;
+x: number; y: number;
+vx: number; vy: number;
+radius: number;
+targetRadius: number;
+color: string;
+coin: ApiCoin;
+trail: { x: number, y: number, age: number }[];
+phase: number;
+isFixed?: boolean;
+mass: number;
 
-  pocketHold?: number;
-  isFalling?: boolean;
-  fallT?: number;
-  fallPocket?: { x: number; y: number; r: number } | null;
+pocketHold?: number;
+isFalling?: boolean;
+fallT?: number;
+fallPocket?: { x: number; y: number; r: number } | null;
 }
 
 type ChartMode = 'performance' | 'valuation';
@@ -31,90 +31,97 @@ interface MarketWindSwarmProps { language: Language; onClose: () => void; }
 const mathClamp = (val: number, min: number, max: number) => Math.max(min, Math.min(val, max));
 
 const formatCompact = (v?: number) => {
-  const n = Number(v);
-  if (!isFinite(n)) return '-';
-  const abs = Math.abs(n);
-  if (abs >= 1e12) return `$${(n / 1e12).toFixed(2)}T`;
-  if (abs >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
-  if (abs >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
-  if (abs >= 1e3) return `$${(n / 1e3).toFixed(1)}K`;
-  return `$${n.toFixed(0)}`;
+const n = Number(v);
+if (!isFinite(n)) return '-';
+const abs = Math.abs(n);
+if (abs >= 1e12) return `$${(n / 1e12).toFixed(2)}T`;
+if (abs >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
+if (abs >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
+if (abs >= 1e3) return `$${(n / 1e3).toFixed(1)}K`;
+return `$${n.toFixed(0)}`;
+};
+
+const formatPrice = (v?: number) => {
+const n = Number(v);
+if (!isFinite(n)) return '-';
+if (n < 0.01) return `$${n.toPrecision(3)}`;
+return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
 const getSpark = (coin: any): number[] | null => {
-  const arr = coin?.sparkline_in_7d?.price;
-  if (!Array.isArray(arr) || arr.length < 2) return null;
-  return arr.map((x: any) => Number(x)).filter((x: number) => isFinite(x));
+const arr = coin?.sparkline_in_7d?.price;
+if (!Array.isArray(arr) || arr.length < 2) return null;
+return arr.map((x: any) => Number(x)).filter((x: number) => isFinite(x));
 };
 
 const computeSparkChange = (coin: any, tf: Timeframe) => {
-  const spark = getSpark(coin);
-  if (!spark || spark.length < 2) {
-    const fallback = Number(coin?.price_change_percentage_24h);
-    const pct = isFinite(fallback) ? fallback : 0;
-    return {
-      pct,
-      absPct: Math.abs(pct),
-      series: null as number[] | null,
-      inferredMinutesPerPoint: null as number | null
-    };
-  }
+const spark = getSpark(coin);
+if (!spark || spark.length < 2) {
+const fallback = Number(coin?.price_change_percentage_24h);
+const pct = isFinite(fallback) ? fallback : 0;
+return {
+pct,
+absPct: Math.abs(pct),
+series: null as number[] | null,
+inferredMinutesPerPoint: null as number | null
+};
+}
 
-  const len = spark.length;
-  const totalMinutes = 7 * 24 * 60;
-  const minutesPerPoint = totalMinutes / Math.max(1, (len - 1));
+const len = spark.length;
+const totalMinutes = 7 * 24 * 60;
+const minutesPerPoint = totalMinutes / Math.max(1, (len - 1));
 
-  const hours = tf === '1h' ? 1 : tf === '24h' ? 24 : 7 * 24;
-  const points = Math.max(2, Math.min(len, Math.round((hours * 60) / minutesPerPoint)));
+const hours = tf === '1h' ? 1 : tf === '24h' ? 24 : 7 * 24;
+const points = Math.max(2, Math.min(len, Math.round((hours * 60) / minutesPerPoint)));
 
-  const slice = spark.slice(len - points);
-  const first = slice[0];
-  const last = slice[slice.length - 1];
+const slice = spark.slice(len - points);
+const first = slice[0];
+const last = slice[slice.length - 1];
 
-  const pct = first > 0 ? ((last - first) / first) * 100 : 0;
-  return {
-    pct: isFinite(pct) ? pct : 0,
-    absPct: isFinite(pct) ? Math.abs(pct) : 0,
-    series: spark,
-    inferredMinutesPerPoint: minutesPerPoint
-  };
+const pct = first > 0 ? ((last - first) / first) * 100 : 0;
+return {
+pct: isFinite(pct) ? pct : 0,
+absPct: isFinite(pct) ? Math.abs(pct) : 0,
+series: spark,
+inferredMinutesPerPoint: minutesPerPoint
+};
 };
 
 // ========================
 // WATERMARK CONFIG
 // ========================
-const WATERMARK_LOCAL = '/logo2-transp.png';
-const WATERMARK_REMOTE = '';
+const WATERMARK_LOCAL = '/logo2-transp.png'; // coloque em /public/logo2-transp.png
+const WATERMARK_REMOTE = ''; // opcional
 
 const drawWatermark = (
-  ctx: CanvasRenderingContext2D,
-  width: number,
-  height: number,
-  img: HTMLImageElement | null,
-  isDark: boolean,
-  isGameMode: boolean
+ctx: CanvasRenderingContext2D,
+width: number,
+height: number,
+img: HTMLImageElement | null,
+isDark: boolean,
+isGameMode: boolean
 ) => {
-  if (!img || !img.complete || img.naturalWidth <= 0 || img.naturalHeight <= 0) return;
+if (!img || !img.complete || img.naturalWidth <= 0 || img.naturalHeight <= 0) return;
 
-  const maxW = width * 0.78;
-  const maxH = height * 0.78;
-  const scale = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight);
+const maxW = width * 0.78;
+const maxH = height * 0.78;
+const scale = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight);
 
-  const w = img.naturalWidth * scale;
-  const h = img.naturalHeight * scale;
+const w = img.naturalWidth * scale;
+const h = img.naturalHeight * scale;
 
-  const x = (width - w) / 2;
-  const y = (height - h) / 2;
+const x = (width - w) / 2;
+const y = (height - h) / 2;
 
-  const alphaBase = isDark ? 0.055 : 0.035;
-  const alpha = isGameMode ? alphaBase * 0.85 : alphaBase;
+const alphaBase = isDark ? 0.055 : 0.035;
+const alpha = isGameMode ? alphaBase * 0.85 : alphaBase;
 
-  ctx.save();
-  ctx.globalAlpha = alpha;
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(img, x, y, w, h);
-  ctx.restore();
+ctx.save();
+ctx.globalAlpha = alpha;
+ctx.imageSmoothingEnabled = true;
+ctx.imageSmoothingQuality = 'high';
+ctx.drawImage(img, x, y, w, h);
+ctx.restore();
 };
 
 // ========================
@@ -124,1502 +131,1632 @@ const GAME_BALL_RADIUS = 26;
 const GAME_CUE_RADIUS = 34;
 const GAME_WALL_PAD = 14;
 
-const MAX_PULL = 240;         // distância máxima de recuo do taco
-const MAX_SHOT_POWER = 2400;  // potência máxima
-const PHYSICS_SPEED = 1.0;
-const DRAG_BASE = 0.985;
-const STOP_EPS = 0.65;
+const GAME_SPEED_LOCK = 0.20; // “20%”
+const GAME_MAX_SPEED = 1400 * GAME_SPEED_LOCK;
 
-// Enquanto pull < LOCK_PULL, você pode ajustar a mira (mouse muda a direção).
-// Passou disso, trava direção e só “puxa pra trás” pra força.
-const LOCK_PULL = 8;
+const MAX_PULL = 240;
+const MAX_SHOT_POWER = 2400;
+
+// desaceleração e parada
+const DRAG_BASE = 0.985;
+const STOP_EPS = 0.85;
+
+// “segura para carregar”
+const CHARGE_SPEED = 520; // px de pull por segundo
 
 const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const stageRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  const particlesRef = useRef<Particle[]>([]);
-  const imageCache = useRef(new Map<string, HTMLImageElement>());
-  const animationLoopFn = useRef<(() => void) | null>(null);
-  const reqIdRef = useRef<number>(0);
-
-  const dprRef = useRef(1);
-
-  const [status, setStatus] = useState<Status>('loading');
-  const [coins, setCoins] = useState<ApiCoin[]>([]);
-
-  const [hoveredParticle, setHoveredParticle] = useState<Particle | null>(null);
-  const [selectedParticle, setSelectedParticle] = useState<Particle | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-
-  const [chartMode, setChartMode] = useState<'performance' | 'valuation'>('performance');
-  const [timeframe, setTimeframe] = useState<Timeframe>('24h');
-
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [legendTipOpen, setLegendTipOpen] = useState(false);
-
-  const [isGameMode, setIsGameMode] = useState(false);
-  const isGameModeRef = useRef(isGameMode);
-  useEffect(() => { isGameModeRef.current = isGameMode; }, [isGameMode]);
-
-  const [numCoins, setNumCoins] = useState(50);
-
-  const [floatStrengthRaw, setFloatStrengthRaw] = useState(0.5);
-  const [trailLength, setTrailLength] = useState(25);
-
-  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
-
-  const [detailOpen, setDetailOpen] = useState(false);
-  const [detailCoin, setDetailCoin] = useState<ApiCoin | null>(null);
-
-  const transformRef = useRef({ k: 1, x: 0, y: 0 });
-  const isPanningRef = useRef(false);
-  const panStartRef = useRef({ clientX: 0, clientY: 0, x: 0, y: 0 });
-  const draggedParticleRef = useRef<Particle | null>(null);
-  const lastMousePosRef = useRef<{ x: number; y: number } | null>(null);
-
-  // =========================================
-  // Aiming “bilhar real”:
-  // 1) mira = mouse aponta o alvo
-  // 2) força = puxar pra trás (drag)
-  // =========================================
-  const aimingRef = useRef<{
-    active: boolean;
-    cueId: string | null;
-    fromX: number;
-    fromY: number;
-
-    // direção (normalizada) da tacada (travada depois de começar a puxar)
-    dirX: number;
-    dirY: number;
-
-    // “alvo” escolhido (mouse no alvo) no momento da mira
-    targetX: number;
-    targetY: number;
-
-    // ponto de referência pra medir o “recuo”
-    anchorX: number;
-    anchorY: number;
-
-    pull: number;
-  }>({
-    active: false,
-    cueId: null,
-    fromX: 0,
-    fromY: 0,
-    dirX: 1,
-    dirY: 0,
-    targetX: 0,
-    targetY: 0,
-    anchorX: 0,
-    anchorY: 0,
-    pull: 0
-  });
-
-  const watermarkRef = useRef<HTMLImageElement | null>(null);
-
-  useEffect(() => {
-    const tryLoad = (src: string, onOk: () => void, onFail: () => void) => {
-      if (!src) { onFail(); return; }
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => { watermarkRef.current = img; onOk(); };
-      img.onerror = () => onFail();
-      img.src = src;
-    };
-
-    tryLoad(
-      WATERMARK_LOCAL,
-      () => {},
-      () => { if (WATERMARK_REMOTE) tryLoad(WATERMARK_REMOTE, () => {}, () => {}); }
-    );
-  }, []);
-
-  const hoveredParticleRef = useRef(hoveredParticle);
-  hoveredParticleRef.current = hoveredParticle;
-
-  const selectedParticleRef = useRef(selectedParticle);
-  selectedParticleRef.current = selectedParticle;
-
-  const detailOpenRef = useRef(detailOpen);
-  detailOpenRef.current = detailOpen;
-
-  const statsRef = useRef<{
-    minX: number, maxX: number,
-    minY: number, maxY: number,
-    minR: number, maxR: number,
-    logMinX: number, logMaxX: number,
-    logMinY: number, logMaxY: number
-  } | null>(null);
-
-  useEffect(() => {
-    const prevBody = document.body.style.overflow;
-    const prevHtml = document.documentElement.style.overflow;
-    document.body.style.overflow = 'hidden';
-    document.documentElement.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prevBody;
-      document.documentElement.style.overflow = prevHtml;
-    };
-  }, []);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setDetailOpen(false);
-        setSettingsOpen(false);
-        setLegendTipOpen(false);
-
-        aimingRef.current.active = false;
-        aimingRef.current.cueId = null;
-        aimingRef.current.pull = 0;
-
-        if (draggedParticleRef.current) {
-          draggedParticleRef.current.isFixed = false;
-          draggedParticleRef.current = null;
-        }
-        isPanningRef.current = false;
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-
-  const loadData = useCallback(async () => {
-    if (particlesRef.current.length === 0) setStatus('loading');
-    try {
-      const data = await fetchTopCoins({ force: true });
-      if (data && data.length > 0) {
-        setCoins(data);
-        setStatus('running');
-      } else if (particlesRef.current.length === 0) setStatus('demo');
-    } catch {
-      if (particlesRef.current.length === 0) setStatus('error');
-    }
-  }, []);
-
-  const resetZoom = useCallback(() => {
-    transformRef.current = { k: 1, x: 0, y: 0 };
-  }, []);
-
-  const setupGameLayout = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const dpr = dprRef.current || 1;
-    const width = canvas.width / dpr;
-    const height = canvas.height / dpr;
-
-    const w = width;
-    const h = height;
-
-    const cue = particlesRef.current.find(p => String(p.coin.id).toLowerCase() === 'bitcoin');
-
-    const others = particlesRef.current
-      .filter(p => String(p.coin.id).toLowerCase() !== 'bitcoin')
-      .sort((a, b) => (Number(a.coin.market_cap_rank) || 99999) - (Number(b.coin.market_cap_rank) || 99999));
-
-    for (const p of particlesRef.current) {
-      const isBTC = String(p.coin.id).toLowerCase() === 'bitcoin';
-      p.targetRadius = isBTC ? GAME_CUE_RADIUS : GAME_BALL_RADIUS;
-      p.radius = p.targetRadius;
-      p.mass = Math.max(1, p.targetRadius);
-      p.vx = 0; p.vy = 0;
-      p.trail = [];
-      p.isFixed = false;
-      p.isFalling = false;
-      p.fallT = 0;
-      p.pocketHold = 0;
-      p.fallPocket = null;
-    }
-
-    if (cue) {
-      cue.x = w * 0.78;
-      cue.y = h * 0.5;
-    }
-
-    const rackApexX = w * 0.20;
-    const rackApexY = h * 0.50;
-
-    const spacing = GAME_BALL_RADIUS * 2.08;
-
-    const N = others.length;
-    let rows = 1;
-    while ((rows * (rows + 1)) / 2 < N) rows++;
-
-    let idx = 0;
-    for (let r = 0; r < rows; r++) {
-      const ballsInRow = r + 1;
-      const rowX = rackApexX + r * spacing;
-      const rowYStart = rackApexY - (r * spacing) / 2;
-
-      for (let c = 0; c < ballsInRow; c++) {
-        if (idx >= others.length) break;
-        const p = others[idx++];
-        p.x = rowX;
-        p.y = rowYStart + c * spacing;
-      }
-    }
-
-    const minX = GAME_WALL_PAD + GAME_BALL_RADIUS;
-    const maxX = w - GAME_WALL_PAD - GAME_BALL_RADIUS;
-    const minY = GAME_WALL_PAD + GAME_BALL_RADIUS;
-    const maxY = h - GAME_WALL_PAD - GAME_BALL_RADIUS;
-
-    for (const p of particlesRef.current) {
-      p.x = mathClamp(p.x, minX, maxX);
-      p.y = mathClamp(p.y, minY, maxY);
-    }
-  }, []);
-
-  const snapBackToMap = useCallback(() => {
-    if (!statsRef.current) return;
-
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const dpr = dprRef.current || 1;
-    const width = canvas.width / dpr;
-    const height = canvas.height / dpr;
-
-    const s = statsRef.current;
-
-    const margin = { top: 18, right: 18, bottom: 92, left: 86 };
-    const chartW = Math.max(50, width - margin.left - margin.right);
-    const chartH = Math.max(50, height - margin.top - margin.bottom);
-
-    const originX = margin.left;
-    const originY = margin.top + chartH;
-
-    const projectX = (v: number) => {
-      let norm = 0;
-      if (chartMode === 'valuation') {
-        if (v <= 0) return originX;
-        norm = (Math.log10(v) - s.logMinX) / (s.logMaxX - s.logMinX || 1);
-      } else {
-        norm = (v - s.minX) / (s.maxX - s.minX || 1);
-      }
-      return originX + norm * chartW;
-    };
-
-    const projectY = (v: number) => {
-      if (v <= 0) return originY;
-      const norm = (Math.log10(v) - s.logMinY) / (s.logMaxY - s.logMinY || 1);
-      return margin.top + (1 - norm) * chartH;
-    };
-
-    for (const p of particlesRef.current) {
-      p.vx = 0;
-      p.vy = 0;
-      p.trail = [];
-      p.isFixed = false;
-      p.isFalling = false;
-      p.fallT = 0;
-      p.pocketHold = 0;
-      p.fallPocket = null;
-
-      const yVal = Math.max(1, Number(p.coin.total_volume) || 1);
-      let xVal = 0;
-
-      if (chartMode === 'performance') xVal = computeSparkChange(p.coin, timeframe).pct || 0;
-      else xVal = Math.max(1, Number(p.coin.market_cap) || 1);
-
-      p.x = projectX(xVal);
-      p.y = projectY(yVal);
-    }
-  }, [chartMode, timeframe]);
-
-  useEffect(() => {
-    loadData();
-    const interval = setInterval(loadData, 60000);
-
-    const canvas = canvasRef.current;
-    const stage = stageRef.current;
-    if (!canvas || !stage) return;
-
-    const resizeCanvas = () => {
-      const ratio = window.devicePixelRatio || 1;
-      dprRef.current = ratio;
-
-      const rect = stage.getBoundingClientRect();
-      const cssW = Math.max(1, Math.floor(rect.width));
-      const cssH = Math.max(1, Math.floor(rect.height));
-
-      canvas.width = Math.max(1, Math.floor(cssW * ratio));
-      canvas.height = Math.max(1, Math.floor(cssH * ratio));
-      canvas.style.width = `${cssW}px`;
-      canvas.style.height = `${cssH}px`;
-    };
-
-    resizeCanvas();
-
-    const ro = new ResizeObserver(() => resizeCanvas());
-    ro.observe(stage);
-
-    window.addEventListener('resize', resizeCanvas);
-
-    const observer = new MutationObserver(() => setIsDark(document.documentElement.classList.contains('dark')));
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-
-    return () => {
-      clearInterval(interval);
-      ro.disconnect();
-      observer.disconnect();
-      window.removeEventListener('resize', resizeCanvas);
-    };
-  }, [loadData]);
-
-  useEffect(() => {
-    if (isGameMode) {
-      resetZoom();
-      setDetailOpen(false);
-      setSelectedParticle(null);
-      setHoveredParticle(null);
-
-      aimingRef.current.active = false;
-      aimingRef.current.cueId = null;
-      aimingRef.current.pull = 0;
-
-      setupGameLayout();
-    } else {
-      resetZoom();
-      setDetailOpen(false);
-      setSettingsOpen(false);
-      setLegendTipOpen(false);
-
-      aimingRef.current.active = false;
-      aimingRef.current.cueId = null;
-      aimingRef.current.pull = 0;
-
-      if (draggedParticleRef.current) {
-        draggedParticleRef.current.isFixed = false;
-        draggedParticleRef.current = null;
-      }
-
-      snapBackToMap();
-    }
-  }, [isGameMode, resetZoom, setupGameLayout, snapBackToMap]);
-
-  const getCoinPerfPct = useCallback((coin: any) => computeSparkChange(coin, timeframe).pct, [timeframe]);
-  const getCoinAbsPct = useCallback((coin: any) => computeSparkChange(coin, timeframe).absPct, [timeframe]);
-
-  const sizeMetricPerf = useCallback((coin: any) => {
-    const absPct = Math.max(0, getCoinAbsPct(coin));
-    const vol = Math.max(0, Number(coin?.total_volume) || 0);
-    const volFactor = Math.log10(vol + 1);
-    return absPct * volFactor;
-  }, [getCoinAbsPct]);
-
-  useEffect(() => {
-    const topCoins = coins.slice(0, numCoins);
-    if (topCoins.length === 0) return;
-
-    const xData: number[] = [];
-    const yData: number[] = [];
-    const rData: number[] = [];
-
-    for (const c of topCoins) {
-      const vol = Math.max(1, Number(c.total_volume) || 1);
-      yData.push(vol);
-
-      if (chartMode === 'performance') {
-        xData.push(getCoinPerfPct(c) || 0);
-        rData.push(Math.max(0.000001, sizeMetricPerf(c)));
-      } else {
-        xData.push(Math.max(1, Number(c.market_cap) || 1));
-        rData.push(Math.max(0.0001, getCoinAbsPct(c)));
-      }
-    }
-
-    const minX = Math.min(...xData), maxX = Math.max(...xData);
-    const minY = Math.min(...yData), maxY = Math.max(...yData);
-    const minR = Math.min(...rData), maxR = Math.max(...rData);
-
-    const logMinX = (chartMode === 'valuation') ? Math.log10(Math.max(1, minX)) : 0;
-    const logMaxX = (chartMode === 'valuation') ? Math.log10(Math.max(1, maxX)) : 0;
-
-    statsRef.current = {
-      minX, maxX, minY, maxY, minR, maxR,
-      logMinX, logMaxX,
-      logMinY: Math.log10(Math.max(1, minY)),
-      logMaxY: Math.log10(Math.max(1, maxY))
-    };
-
-    const existingMap = new Map(particlesRef.current.map(p => [p.id, p] as const));
-
-    const w = stageRef.current?.clientWidth || 1000;
-    const h = stageRef.current?.clientHeight || 800;
-
-    const newParticles = topCoins.map(coin => {
-      const existing = existingMap.get(coin.id);
-
-      if (!imageCache.current.has(coin.image)) {
-        const img = new Image();
-        img.src = coin.image;
-        imageCache.current.set(coin.image, img);
-      }
-
-      const pct = getCoinPerfPct(coin);
-      const baseColor = pct >= 0 ? '#089981' : '#f23645';
-
-      const radiusVal = chartMode === 'performance'
-        ? Math.max(0.000001, sizeMetricPerf(coin))
-        : Math.max(0.0001, getCoinAbsPct(coin));
-
-      const rrMin = minR;
-      const rrMax = maxR;
-      const t = (radiusVal - rrMin) / (rrMax - rrMin || 1);
-      const targetRadius = 15 + mathClamp(t, 0, 1) * 55;
-
-      const isBTC = String(coin.id).toLowerCase() === 'bitcoin';
-
-      const vx = (Math.random() - 0.5) * 60;
-      const vy = (Math.random() - 0.5) * 60;
-
-      if (existing) {
-        existing.coin = coin;
-        existing.targetRadius = isGameMode ? (isBTC ? GAME_CUE_RADIUS : GAME_BALL_RADIUS) : targetRadius;
-        existing.color = isBTC ? '#ffffff' : baseColor;
-        existing.mass = Math.max(1, existing.targetRadius);
-        return existing;
-      }
-
-      return {
-        id: coin.id,
-        x: Math.random() * w,
-        y: Math.random() * h,
-        vx,
-        vy,
-        radius: 0,
-        targetRadius: isGameMode ? (isBTC ? GAME_CUE_RADIUS : GAME_BALL_RADIUS) : targetRadius,
-        color: isBTC ? '#ffffff' : baseColor,
-        coin,
-        trail: [],
-        phase: Math.random() * Math.PI * 2,
-        mass: Math.max(1, isGameMode ? (isBTC ? GAME_CUE_RADIUS : GAME_BALL_RADIUS) : targetRadius),
-        pocketHold: 0,
-        isFalling: false,
-        fallT: 0,
-        fallPocket: null
-      };
-    });
-
-    particlesRef.current = newParticles;
-
-    if (isGameMode) setupGameLayout();
-  }, [coins, numCoins, chartMode, timeframe, getCoinPerfPct, getCoinAbsPct, sizeMetricPerf, isGameMode, setupGameLayout]);
-
-  const screenToWorld = (clientX: number, clientY: number) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return { x: 0, y: 0, mx: 0, my: 0 };
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = clientX - rect.left;
-    const mouseY = clientY - rect.top;
-
-    const { k, x, y } = transformRef.current;
-    return {
-      x: (mouseX - x) / k,
-      y: (mouseY - y) / k,
-      mx: mouseX,
-      my: mouseY
-    };
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    const canvas = canvasRef.current; if (!canvas) return;
-
-    const wpos = screenToWorld(e.clientX, e.clientY);
-    const worldMouseX = wpos.x;
-    const worldMouseY = wpos.y;
-
-    lastMousePosRef.current = { x: worldMouseX, y: worldMouseY };
-
-    // ===============================
-    // Aiming “bilhar real”
-    // ===============================
-    if (isGameModeRef.current && aimingRef.current.active) {
-      // Se ainda não puxou (pull pequeno), deixa ajustar direção apontando o alvo
-      if (aimingRef.current.pull < LOCK_PULL) {
-        const dx = worldMouseX - aimingRef.current.fromX;
-        const dy = worldMouseY - aimingRef.current.fromY;
-        const dist = Math.hypot(dx, dy);
-
-        const nx = dx / (dist || 1);
-        const ny = dy / (dist || 1);
-
-        aimingRef.current.dirX = nx;
-        aimingRef.current.dirY = ny;
-
-        aimingRef.current.targetX = worldMouseX;
-        aimingRef.current.targetY = worldMouseY;
-
-        // anchor = ponto onde você “mirou”
-        aimingRef.current.anchorX = worldMouseX;
-        aimingRef.current.anchorY = worldMouseY;
-
-        aimingRef.current.pull = 0;
-      } else {
-        // Passou do lock: mantém direção e mede recuo projetando “puxar pra trás” na direção
-        const ax = aimingRef.current.anchorX;
-        const ay = aimingRef.current.anchorY;
-        const ddx = ax - worldMouseX;
-        const ddy = ay - worldMouseY;
-
-        const pullProj = ddx * aimingRef.current.dirX + ddy * aimingRef.current.dirY;
-        aimingRef.current.pull = mathClamp(pullProj, 0, MAX_PULL);
-      }
-    }
-
-    if (draggedParticleRef.current) {
-      const p = draggedParticleRef.current;
-      p.vx = 0;
-      p.vy = 0;
-      p.x = worldMouseX;
-      p.y = worldMouseY;
-      return;
-    }
-
-    if (aimingRef.current.active) return;
-
-    if (isPanningRef.current) {
-      const dx = e.clientX - panStartRef.current.clientX;
-      const dy = e.clientY - panStartRef.current.clientY;
-      transformRef.current.x = panStartRef.current.x + dx;
-      transformRef.current.y = panStartRef.current.y + dy;
-      return;
-    }
-
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    const { k, x, y } = transformRef.current;
-
-    let found: Particle | null = null;
-    for (let i = particlesRef.current.length - 1; i >= 0; i--) {
-      const p = particlesRef.current[i];
-      if (p.isFalling) continue;
-
-      const sx = p.x * k + x;
-      const sy = p.y * k + y;
-      const sr = p.radius;
-
-      const dx = sx - mouseX;
-      const dy = sy - mouseY;
-
-      if (dx * dx + dy * dy < (sr + 5) * (sr + 5)) {
-        found = p;
-        break;
-      }
-    }
-
-    setHoveredParticle(found);
-  };
-
-  const openDetailFor = (p: Particle) => {
-    setSelectedParticle(p);
-    setDetailCoin(p.coin);
-    setDetailOpen(true);
-  };
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (detailOpenRef.current) return;
-
-    if (hoveredParticleRef.current) {
-      const p = hoveredParticleRef.current;
-      const isBTC = String(p.coin.id).toLowerCase() === 'bitcoin';
-
-      if (isGameModeRef.current) {
-        // bola branca: iniciar mira com ESQUERDO ou DIREITO
-        if (isBTC && (e.button === 0 || e.button === 2)) {
-          const w = screenToWorld(e.clientX, e.clientY);
-
-          const dx = w.x - p.x;
-          const dy = w.y - p.y;
-          const dist = Math.hypot(dx, dy);
-
-          const nx = dx / (dist || 1);
-          const ny = dy / (dist || 1);
-
-          aimingRef.current.active = true;
-          aimingRef.current.cueId = p.id;
-
-          aimingRef.current.fromX = p.x;
-          aimingRef.current.fromY = p.y;
-
-          aimingRef.current.dirX = nx;
-          aimingRef.current.dirY = ny;
-
-          aimingRef.current.targetX = w.x;
-          aimingRef.current.targetY = w.y;
-
-          aimingRef.current.anchorX = w.x;
-          aimingRef.current.anchorY = w.y;
-
-          aimingRef.current.pull = 0;
-
-          setSelectedParticle(p);
-          return;
-        }
-
-        // outras bolas: drag
-        draggedParticleRef.current = p;
-        draggedParticleRef.current.isFixed = true;
-        setSelectedParticle(p);
-        return;
-      }
-
-      openDetailFor(p);
-      return;
-    }
-
-    if (!isGameModeRef.current) {
-      isPanningRef.current = true;
-      panStartRef.current = {
-        clientX: e.clientX,
-        clientY: e.clientY,
-        x: transformRef.current.x,
-        y: transformRef.current.y
-      };
-    }
-  };
-
-  const handleMouseUp = useCallback(() => {
-    if (aimingRef.current.active && aimingRef.current.cueId && isGameModeRef.current) {
-      const cue = particlesRef.current.find(pp => pp.id === aimingRef.current.cueId);
-
-      if (cue && !cue.isFalling) {
-        const pull = mathClamp(aimingRef.current.pull, 0, MAX_PULL);
-
-        if (pull > 2) {
-          const power = (pull / MAX_PULL) * MAX_SHOT_POWER;
-
-          const nx = aimingRef.current.dirX;
-          const ny = aimingRef.current.dirY;
-
-          cue.vx += (nx * power) / Math.max(1, cue.mass);
-          cue.vy += (ny * power) / Math.max(1, cue.mass);
-        }
-      }
-
-      aimingRef.current.active = false;
-      aimingRef.current.cueId = null;
-      aimingRef.current.pull = 0;
-    }
-
-    if (draggedParticleRef.current) {
-      draggedParticleRef.current.isFixed = false;
-      draggedParticleRef.current = null;
-    }
-
-    isPanningRef.current = false;
-  }, []);
-
-  const handleMouseUpRef = useRef(handleMouseUp);
-  useEffect(() => { handleMouseUpRef.current = handleMouseUp; }, [handleMouseUp]);
-  useEffect(() => {
-    const up = () => handleMouseUpRef.current();
-    window.addEventListener('mouseup', up);
-    return () => window.removeEventListener('mouseup', up);
-  }, []);
-
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    if (detailOpenRef.current) return;
-    if (isGameModeRef.current) return;
-
-    const canvas = canvasRef.current; if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    const worldX = (mouseX - transformRef.current.x) / transformRef.current.k;
-    const worldY = (mouseY - transformRef.current.y) / transformRef.current.k;
-
-    const zoomFactor = 1.1;
-    const oldK = transformRef.current.k;
-    const newK = e.deltaY < 0 ? oldK * zoomFactor : oldK / zoomFactor;
-    const clampedK = mathClamp(newK, 0.1, 10.0);
-
-    const newX = mouseX - worldX * clampedK;
-    const newY = mouseY - worldY * clampedK;
-
-    transformRef.current = { k: clampedK, x: newX, y: newY };
-  };
-
-  const legendText = useMemo(() => {
-    if (isGameMode) {
-      return (
-        <>
-          <div><span className="font-black">Modo Game (Bilhar)</span></div>
-          <div>• A <span className="font-black">bola branca</span> é o <span className="font-black">BTC</span>.</div>
-          <div>• <span className="font-bold">Mira</span>: coloque o mouse no <span className="font-bold">alvo</span> (direção).</div>
-          <div>• <span className="font-bold">Clique e segure</span> na bola branca.</div>
-          <div>• <span className="font-bold">Força</span>: puxe o mouse <span className="font-bold">pra trás</span> (drag) na linha da mira.</div>
-          <div>• <span className="font-bold">Solte</span> para tacar.</div>
-          <div className="mt-2 opacity-80">Dica: enquanto você não puxou, dá pra ajustar a mira livremente.</div>
-        </>
-      );
-    }
-
-    if (chartMode === 'performance') {
-      return (
-        <>
-          <div><span className="font-black">Modo Variação (preço)</span></div>
-          <div>• <span className="font-bold">X</span>: Variação de preço {timeframe} (%)</div>
-          <div>• <span className="font-bold">Y</span>: Volume 24h (log)</div>
-          <div>• <span className="font-bold">Tamanho</span>: |%var {timeframe}| × log(volume)</div>
-          <div>• <span className="font-bold">Cor</span>: verde/ vermelho pela variação {timeframe}</div>
-        </>
-      );
-    }
-
-    return (
-      <>
-        <div><span className="font-black">Modo Market Cap</span></div>
-        <div>• <span className="font-bold">X</span>: Market Cap (log)</div>
-        <div>• <span className="font-bold">Y</span>: Volume 24h (log)</div>
-        <div>• <span className="font-bold">Tamanho</span>: |%var {timeframe}|</div>
-        <div>• <span className="font-bold">Cor</span>: verde/ vermelho pela variação {timeframe}</div>
-      </>
-    );
-  }, [chartMode, timeframe, isGameMode]);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d', { alpha: false });
-    if (!ctx || !canvas) return;
-
-    let lastTime = performance.now();
-
-    const drawCueStick = (
-      ctx2: CanvasRenderingContext2D,
-      cueBall: Particle,
-      now: number,
-      toScreenX: (v: number) => number,
-      toScreenY: (v: number) => number,
-      k: number,
-      isDarkTheme: boolean
-    ) => {
-      const cx = toScreenX(cueBall.x);
-      const cy = toScreenY(cueBall.y);
-
-      // direção do taco
-      let angle = 0;
-
-      if (aimingRef.current.active) {
-        angle = Math.atan2(aimingRef.current.dirY, aimingRef.current.dirX);
-      } else if (lastMousePosRef.current) {
-        const wm = lastMousePosRef.current;
-        const tx = toScreenX(wm.x);
-        const ty = toScreenY(wm.y);
-        angle = Math.atan2(ty - cy, tx - cx);
-      } else {
-        angle = Math.atan2(Math.sin(now * 0.0006), Math.cos(now * 0.0006));
-      }
-
-      const nx = Math.cos(angle);
-      const ny = Math.sin(angle);
-
-      // pump: base = pull, + oscilação pra frente/trás
-      const pull = aimingRef.current.active ? aimingRef.current.pull : 0;
-      const pumpWave = Math.sin(now * 0.030) * mathClamp(6 + pull * 0.06, 6, 18);
-      const pump = aimingRef.current.active ? (pull + pumpWave) : (10 + Math.sin(now * 0.018) * 6);
-
-      const stickLen = Math.max(260, cueBall.radius * 7.2);
-      const stickThick = Math.max(9, cueBall.radius * 0.40);
-
-      const contactDist = cueBall.radius + 8 + pump;
-      const tipX = cx - nx * contactDist;
-      const tipY = cy - ny * contactDist;
-
-      const backX = tipX - nx * stickLen;
-      const backY = tipY - ny * stickLen;
-
-      ctx2.save();
-      ctx2.globalAlpha = 0.92;
-      ctx2.lineCap = 'round';
-
-      ctx2.beginPath();
-      ctx2.moveTo(backX, backY);
-      ctx2.lineTo(tipX, tipY);
-      ctx2.strokeStyle = isDarkTheme ? 'rgba(210,170,120,0.78)' : 'rgba(120,85,45,0.72)';
-      ctx2.lineWidth = stickThick;
-      ctx2.stroke();
-
-      const tipSeg = 22;
-      ctx2.beginPath();
-      ctx2.moveTo(tipX - nx * tipSeg, tipY - ny * tipSeg);
-      ctx2.lineTo(tipX, tipY);
-      ctx2.strokeStyle = isDarkTheme ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.78)';
-      ctx2.lineWidth = Math.max(6, stickThick * 0.55);
-      ctx2.stroke();
-
-      // linha de mira no alvo escolhido (target) enquanto mira
-      if (aimingRef.current.active) {
-        const tx = toScreenX(aimingRef.current.targetX);
-        const ty = toScreenY(aimingRef.current.targetY);
-
-        ctx2.setLineDash([8, 8]);
-        ctx2.beginPath();
-        ctx2.moveTo(cx, cy);
-        ctx2.lineTo(tx, ty);
-        ctx2.strokeStyle = isDarkTheme ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.18)';
-        ctx2.lineWidth = 2;
-        ctx2.stroke();
-        ctx2.setLineDash([]);
-      }
-
-      ctx2.restore();
-    };
-
-    const drawRackTriangle = (
-      ctx2: CanvasRenderingContext2D,
-      width: number,
-      height: number,
-      toScreenX: (v: number) => number,
-      toScreenY: (v: number) => number,
-      k: number,
-      isDarkTheme: boolean
-    ) => {
-      const w = width;
-      const h = height;
-
-      const apexX = w * 0.20;
-      const apexY = h * 0.50;
-
-      const spacing = GAME_BALL_RADIUS * 2.08;
-      const rows = 6;
-
-      const baseX = apexX + (rows - 1) * spacing;
-      const halfH = ((rows - 1) * spacing) / 2;
-
-      const x1 = toScreenX(apexX);
-      const y1 = toScreenY(apexY);
-
-      const x2 = toScreenX(baseX);
-      const y2 = toScreenY(apexY - halfH);
-
-      const x3 = toScreenX(baseX);
-      const y3 = toScreenY(apexY + halfH);
-
-      ctx2.save();
-      ctx2.globalAlpha = 0.35;
-      ctx2.strokeStyle = isDarkTheme ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.18)';
-      ctx2.lineWidth = 3;
-
-      ctx2.beginPath();
-      ctx2.moveTo(x1, y1);
-      ctx2.lineTo(x2, y2);
-      ctx2.lineTo(x3, y3);
-      ctx2.closePath();
-      ctx2.stroke();
-
-      ctx2.restore();
-    };
-
-    animationLoopFn.current = () => {
-      const now = performance.now();
-      const dt = Math.min((now - lastTime) / 1000, 0.05);
-      lastTime = now;
-
-      const dpr = dprRef.current || 1;
-      const width = canvas.width / dpr;
-      const height = canvas.height / dpr;
-
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-
-      if (isGameModeRef.current) ctx.fillStyle = isDark ? '#08110c' : '#e8f3ea';
-      else ctx.fillStyle = isDark ? '#0b0f14' : '#ffffff';
-
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.scale(dpr, dpr);
-
-      drawWatermark(ctx, width, height, watermarkRef.current, isDark, isGameModeRef.current);
-
-      const { k, x: panX, y: panY } = transformRef.current;
-      const toScreenX = (val: number) => val * k + panX;
-      const toScreenY = (val: number) => val * k + panY;
-
-      const particles = particlesRef.current;
-
-      for (const p of particles) {
-        const viewRadius = p.targetRadius * Math.pow(k, 0.25);
-        p.radius += (viewRadius - p.radius) * 0.15;
-        p.mass = Math.max(1, p.radius);
-      }
-
-      let pockets: { x: number; y: number; r: number }[] = [];
-      if (isGameModeRef.current) {
-        const worldW = width / k;
-        const worldH = height / k;
-        const pr = Math.max(26, Math.min(40, Math.min(worldW, worldH) * 0.04));
-
-        pockets = [
-          { x: pr, y: pr, r: pr },
-          { x: worldW / 2, y: pr, r: pr },
-          { x: worldW - pr, y: pr, r: pr },
-          { x: pr, y: worldH - pr, r: pr },
-          { x: worldW / 2, y: worldH - pr, r: pr },
-          { x: worldW - pr, y: worldH - pr, r: pr }
-        ];
-
-        ctx.save();
-        ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.10)';
-        ctx.lineWidth = 4;
-        ctx.strokeRect(8, 8, width - 16, height - 16);
-        ctx.restore();
-
-        ctx.save();
-        for (const pk of pockets) {
-          const sx = toScreenX(pk.x);
-          const sy = toScreenY(pk.y);
-
-          ctx.beginPath();
-          ctx.arc(sx, sy, pk.r * k, 0, Math.PI * 2);
-          ctx.fillStyle = isDark ? 'rgba(0,0,0,0.72)' : 'rgba(0,0,0,0.18)';
-          ctx.fill();
-
-          ctx.beginPath();
-          ctx.arc(sx, sy, pk.r * k, 0, Math.PI * 2);
-          ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)';
-          ctx.lineWidth = 2;
-          ctx.stroke();
-        }
-        ctx.restore();
-
-        drawRackTriangle(ctx, width, height, toScreenX, toScreenY, k, isDark);
-
-        const cueBall = particles.find(p => String(p.coin.id).toLowerCase() === 'bitcoin');
-        if (cueBall) drawCueStick(ctx, cueBall, now, toScreenX, toScreenY, k, isDark);
-      }
-
-      // PHYSICS / GAME
-      if (isGameModeRef.current) {
-        const worldW = width / k;
-        const worldH = height / k;
-
-        const drag = Math.pow(DRAG_BASE, dt * 60);
-
-        for (const p of particles) {
-          if (p.isFalling) continue;
-          if (p.isFixed) continue;
-
-          p.vx *= drag;
-          p.vy *= drag;
-
-          if (Math.hypot(p.vx, p.vy) < STOP_EPS) {
-            p.vx = 0;
-            p.vy = 0;
-          }
-
-          p.x += p.vx * dt * PHYSICS_SPEED;
-          p.y += p.vy * dt * PHYSICS_SPEED;
-
-          if (p.x < p.radius + GAME_WALL_PAD) { p.x = p.radius + GAME_WALL_PAD; p.vx *= -1; }
-          else if (p.x > worldW - p.radius - GAME_WALL_PAD) { p.x = worldW - p.radius - GAME_WALL_PAD; p.vx *= -1; }
-
-          if (p.y < p.radius + GAME_WALL_PAD) { p.y = p.radius + GAME_WALL_PAD; p.vy *= -1; }
-          else if (p.y > worldH - p.radius - GAME_WALL_PAD) { p.y = worldH - p.radius - GAME_WALL_PAD; p.vy *= -1; }
-        }
-
-        for (let i = 0; i < particles.length; i++) {
-          const p1 = particles[i];
-          if (p1.isFalling) continue;
-
-          for (let j = i + 1; j < particles.length; j++) {
-            const p2 = particles[j];
-            if (p2.isFalling) continue;
-
-            const dx = p2.x - p1.x;
-            const dy = p2.y - p1.y;
-            const minDist = p1.radius + p2.radius;
-
-            const distSq = dx * dx + dy * dy;
-            if (distSq >= minDist * minDist) continue;
-
-            const dist = Math.sqrt(distSq) || 0.001;
-            const nx = dx / dist;
-            const ny = dy / dist;
-
-            const overlap = minDist - dist;
-            const totalMass = (p1.mass + p2.mass) || 1;
-
-            const move1 = (p2.mass / totalMass);
-            const move2 = (p1.mass / totalMass);
-
-            if (!p1.isFixed) {
-              p1.x -= nx * overlap * move1;
-              p1.y -= ny * overlap * move1;
-            }
-            if (!p2.isFixed) {
-              p2.x += nx * overlap * move2;
-              p2.y += ny * overlap * move2;
-            }
-
-            const rvx = p2.vx - p1.vx;
-            const rvy = p2.vy - p1.vy;
-            const velAlongNormal = rvx * nx + rvy * ny;
-            if (velAlongNormal > 0) continue;
-
-            const restitution = 0.96;
-            let impulse = -(1 + restitution) * velAlongNormal;
-            impulse /= (1 / p1.mass + 1 / p2.mass);
-
-            const impulseX = impulse * nx;
-            const impulseY = impulse * ny;
-
-            if (!p1.isFixed) {
-              p1.vx -= impulseX / p1.mass;
-              p1.vy -= impulseY / p1.mass;
-            }
-            if (!p2.isFixed) {
-              p2.vx += impulseX / p2.mass;
-              p2.vy += impulseY / p2.mass;
-            }
-          }
-        }
-
-        const holdNeeded = 0.35;
-
-        for (const p of particles) {
-          if (p.isFalling) {
-            p.fallT = (p.fallT || 0) + dt;
-            if (p.fallT >= 0.35) particlesRef.current = particlesRef.current.filter(pp => pp !== p);
-            continue;
-          }
-
-          const speed = Math.hypot(p.vx, p.vy);
-          if (speed !== 0) {
-            p.pocketHold = 0;
-            p.fallPocket = null;
-            continue;
-          }
-
-          let onPocket = false;
-          let picked: { x: number; y: number; r: number } | null = null;
-
-          for (const pk of pockets) {
-            const dist = Math.hypot(p.x - pk.x, p.y - pk.y);
-            if (dist <= pk.r * 0.65) {
-              onPocket = true;
-              picked = pk;
-              break;
-            }
-          }
-
-          if (onPocket && picked) {
-            p.pocketHold = (p.pocketHold || 0) + dt;
-            p.fallPocket = picked;
-
-            if ((p.pocketHold || 0) >= holdNeeded) {
-              p.isFalling = true;
-              p.fallT = 0;
-              p.vx = 0; p.vy = 0;
-            }
-          } else {
-            p.pocketHold = 0;
-            p.fallPocket = null;
-          }
-        }
-      } else {
-        // MAP (mantém igual)
-        if (!statsRef.current) return;
-        const s = statsRef.current;
-
-        const margin = { top: 18, right: 18, bottom: 92, left: 86 };
-        const chartW = Math.max(50, width - margin.left - margin.right);
-        const chartH = Math.max(50, height - margin.top - margin.bottom);
-
-        const originX = margin.left;
-        const originY = margin.top + chartH;
-
-        const mappedFloatMaxAmp = 5.2 * 1.3;
-        const mappedFloatAmp = floatStrengthRaw * mappedFloatMaxAmp;
-
-        const projectX = (v: number) => {
-          let norm = 0;
-          if (chartMode === 'valuation') {
-            if (v <= 0) return originX;
-            norm = (Math.log10(v) - s.logMinX) / (s.logMaxX - s.logMinX || 1);
-          } else {
-            norm = (v - s.minX) / (s.maxX - s.minX || 1);
-          }
-          return originX + norm * chartW;
-        };
-
-        const projectY = (v: number) => {
-          if (v <= 0) return originY;
-          const norm = (Math.log10(v) - s.logMinY) / (s.logMaxY - s.logMinY || 1);
-          return margin.top + (1 - norm) * chartH;
-        };
-
-        for (const p of particles) {
-          let xVal = 0;
-          const yVal = p.coin.total_volume || 1;
-
-          if (chartMode === 'performance') xVal = getCoinPerfPct(p.coin) || 0;
-          else xVal = p.coin.market_cap || 1;
-
-          const tx = projectX(xVal);
-          const ty = projectY(yVal);
-
-          const floatFreq = 0.0002 * (1 + floatStrengthRaw);
-          const floatX = mappedFloatAmp > 0 ? Math.sin(now * floatFreq + p.phase) * mappedFloatAmp : 0;
-          const floatY = mappedFloatAmp > 0 ? Math.cos(now * (floatFreq * 1.3) + p.phase) * mappedFloatAmp : 0;
-
-          const targetX = tx + floatX;
-          const targetY = ty + floatY;
-
-          p.x += (targetX - p.x) * 0.05;
-          p.y += (targetY - p.y) * 0.05;
-        }
-      }
-
-      // RENDER PARTICLES
-      const particlesToDraw = particlesRef.current;
-
-      for (const p of particlesToDraw) {
-        const screenX = toScreenX(p.x);
-        const screenY = toScreenY(p.y);
-
-        if (screenX + p.radius < 0 || screenX - p.radius > width || screenY + p.radius < 0 || screenY - p.radius > height) continue;
-
-        let drawRadius = p.radius;
-        let alpha = 1.0;
-        if (p.isFalling) {
-          const t = mathClamp((p.fallT || 0) / 0.35, 0, 1);
-          drawRadius = p.radius * (1 - t);
-          alpha = 1 - t;
-        }
-
-        const isHovered = hoveredParticleRef.current?.id === p.id;
-        const isSelected = selectedParticleRef.current?.id === p.id;
-
-        const isDimmed = searchTerm
-          && !p.coin.name.toLowerCase().includes(searchTerm.toLowerCase())
-          && !p.coin.symbol.toLowerCase().includes(searchTerm.toLowerCase());
-
-        if (isDimmed) alpha *= 0.12;
-
-        if (trailLength > 0 && alpha > 0.05) {
-          const last = p.trail[p.trail.length - 1];
-          const ddx = last ? screenX - last.x : 10;
-          const ddy = last ? screenY - last.y : 10;
-
-          if (!last || (ddx * ddx + ddy * ddy > 4)) p.trail.push({ x: screenX, y: screenY, age: 1.0 });
-
-          for (let tIdx = 0; tIdx < p.trail.length; tIdx++) p.trail[tIdx].age -= 0.02;
-          p.trail = p.trail.filter(t => t.age > 0);
-
-          if (p.trail.length > 1) {
-            const grad = ctx.createLinearGradient(p.trail[0].x, p.trail[0].y, screenX, screenY);
-            grad.addColorStop(0, 'rgba(0,0,0,0)');
-            grad.addColorStop(1, p.color);
-
-            ctx.beginPath();
-            ctx.moveTo(p.trail[0].x, p.trail[0].y);
-            for (let i = 1; i < p.trail.length; i++) ctx.lineTo(p.trail[i].x, p.trail[i].y);
-
-            ctx.strokeStyle = grad;
-            ctx.globalAlpha = alpha;
-            ctx.lineWidth = Math.min(drawRadius * 0.4, 4);
-            ctx.stroke();
-            ctx.globalAlpha = 1.0;
-          }
-        } else {
-          p.trail = [];
-        }
-
-        if (drawRadius <= 0.5) continue;
-
-        const isBTC = String(p.coin.id).toLowerCase() === 'bitcoin';
-
-        ctx.save();
-        ctx.globalAlpha = alpha;
-
-        if (isBTC && isGameModeRef.current) {
-          ctx.beginPath();
-          ctx.arc(screenX, screenY, drawRadius, 0, Math.PI * 2);
-          ctx.fillStyle = '#ffffff';
-          ctx.fill();
-
-          ctx.beginPath();
-          ctx.arc(screenX, screenY, drawRadius, 0, Math.PI * 2);
-          ctx.strokeStyle = isDark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.35)';
-          ctx.lineWidth = 2;
-          ctx.stroke();
-
-          const img = imageCache.current.get(p.coin.image);
-          if (img?.complete) {
-            const logoSize = drawRadius * 1.2;
-            ctx.drawImage(img, screenX - logoSize / 2, screenY - logoSize / 2, logoSize, logoSize);
-          }
-        } else {
-          ctx.beginPath();
-          ctx.arc(screenX, screenY, drawRadius, 0, Math.PI * 2);
-
-          const img = imageCache.current.get(p.coin.image);
-          if (img?.complete) {
-            ctx.save();
-            ctx.clip();
-            ctx.drawImage(img, screenX - drawRadius, screenY - drawRadius, drawRadius * 2, drawRadius * 2);
-            ctx.restore();
-
-            ctx.strokeStyle = p.color;
-            ctx.lineWidth = isSelected ? 4 : 2;
-            ctx.stroke();
-          } else {
-            ctx.fillStyle = p.color;
-            ctx.fill();
-          }
-
-          if (!isGameModeRef.current && drawRadius > 12) {
-            ctx.fillStyle = '#fff';
-            ctx.font = `bold ${Math.max(11, drawRadius * 0.42)}px Inter`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.shadowColor = 'rgba(0,0,0,0.8)';
-            ctx.shadowBlur = 4;
-            ctx.fillText(p.coin.symbol.toUpperCase(), screenX, screenY);
-            ctx.shadowBlur = 0;
-          }
-        }
-
-        if (isHovered || isSelected) {
-          ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.arc(screenX, screenY, drawRadius + 4, 0, Math.PI * 2);
-          ctx.stroke();
-        }
-
-        ctx.restore();
-      }
-    };
-  }, [isDark, chartMode, isGameMode, timeframe, floatStrengthRaw, trailLength, searchTerm, getCoinPerfPct, setupGameLayout]);
-
-  useEffect(() => {
-    const loop = () => {
-      if (animationLoopFn.current) animationLoopFn.current();
-      reqIdRef.current = requestAnimationFrame(loop);
-    };
-    loop();
-    return () => cancelAnimationFrame(reqIdRef.current);
-  }, []);
-
-  return (
-    <div
-      ref={containerRef}
-      className="fixed inset-0 z-[2000] bg-white dark:bg-[#0b0f14] text-gray-900 dark:text-white flex flex-col overflow-hidden touch-none select-none overscroll-none h-[100dvh]"
-    >
-      <div className="flex justify-between items-start p-4 z-20 bg-white/80 dark:bg-black/50 backdrop-blur-sm border-b border-gray-200 dark:border-white/10 shrink-0">
-        <div className="flex items-center gap-4">
-          <Coins size={28} className="text-[#dd9933]" />
-          <div>
-            <h3 className="text-xl font-black uppercase tracking-wider">Crypto Bubbles</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 font-bold">{status === 'demo' ? 'MODO DEMO' : isGameMode ? 'MODO GAME' : 'MODO MAPA'}</p>
-          </div>
-
-          <div className="w-px h-8 bg-gray-200 dark:bg-white/10 mx-4"></div>
-
-          <div className="flex items-center gap-2">
-            <div className="flex bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10">
-              <button
-                onClick={() => setChartMode('valuation')}
-                className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'valuation' ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500 dark:text-gray-300'}`}
-              >
-                Market Cap
-              </button>
-            </div>
-
-            <div className="flex bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10">
-              <button
-                onClick={() => setChartMode('performance')}
-                className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'performance' ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500 dark:text-gray-300'}`}
-              >
-                Variação:
-              </button>
-
-              <div className="w-px h-5 bg-gray-200 dark:bg-white/10 mx-1"></div>
-
-              <div className="flex items-center gap-2 px-2 py-1">
-                <Wind size={14} className="text-gray-400" />
-                <select
-                  value={timeframe}
-                  onChange={(e) => setTimeframe(e.target.value as Timeframe)}
-                  className="bg-white dark:bg-[#2f3032] text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs font-black border border-gray-200 dark:border-white/10 outline-none"
-                >
-                  <option value="1h">1h</option>
-                  <option value="24h">24h</option>
-                  <option value="7d">7d</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/50 p-2 rounded-lg border border-gray-200 dark:border-white/10">
-            <Search size={16} className="text-gray-400" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar ativo..."
-              className="bg-transparent outline-none text-sm w-48 text-gray-900 dark:text-white"
-            />
-            {searchTerm && (
-              <button onClick={() => { setSearchTerm(''); setSelectedParticle(null); }}>
-                <XCircle size={16} className="text-gray-500 hover:text-white" />
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 relative">
-          <button
-            onClick={resetZoom}
-            className="p-3 bg-[#dd9933]/10 hover:bg-[#dd9933]/20 text-[#dd9933] rounded-lg border border-[#dd9933]/30 transition-colors"
-            title="Reset Zoom"
-          >
-            <Maximize size={20} />
-          </button>
-
-          <div className="relative">
-            <button
-              onMouseEnter={() => setLegendTipOpen(true)}
-              onMouseLeave={() => setLegendTipOpen(false)}
-              className="p-3 rounded-lg border transition-colors backdrop-blur-sm bg-gray-100 dark:bg-black/50 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10"
-              title="Legenda / Instruções"
-            >
-              <Info size={20} />
-            </button>
-
-            {legendTipOpen && (
-              <div
-                className="absolute right-0 mt-2 w-80 bg-white/95 dark:bg-black/85 border border-gray-200 dark:border-white/10 rounded-xl p-3 shadow-xl backdrop-blur-md text-sm"
-                onMouseEnter={() => setLegendTipOpen(true)}
-                onMouseLeave={() => setLegendTipOpen(false)}
-              >
-                <div className="space-y-1 text-gray-800 dark:text-gray-100">
-                  {legendText}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <button
-            onClick={() => setSettingsOpen(v => !v)}
-            className={`p-3 rounded-lg border transition-colors backdrop-blur-sm ${settingsOpen ? 'bg-[#dd9933] text-black border-[#dd9933]' : 'bg-gray-100 dark:bg-black/50 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10'}`}
-            title="Settings"
-          >
-            <Settings size={20} />
-          </button>
-
-          <button
-            onClick={() => onClose()}
-            className="p-3 bg-gray-100 dark:bg-black/50 rounded-lg border border-gray-200 dark:border-white/10 hover:bg-red-500/10 text-gray-600 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
-            title="Close"
-          >
-            <CloseIcon size={20} />
-          </button>
-        </div>
-      </div>
-
-      {settingsOpen && (
-        <div
-          className="absolute top-24 right-4 bg-white/90 dark:bg-black/80 p-4 rounded-lg border border-gray-200 dark:border-white/10 backdrop-blur-md w-80 z-30 shadow-xl"
-          onWheel={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Atom size={14} />
-              <span className="text-xs font-black uppercase tracking-wider">Modo Game</span>
-            </div>
-
-            <button
-              onClick={() => setIsGameMode(!isGameMode)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isGameMode ? 'bg-[#dd9933]' : 'bg-gray-200 dark:bg-[#2f3032]'}`}
-              title="Modo Game"
-            >
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isGameMode ? 'translate-x-6' : 'translate-x-1'}`} />
-            </button>
-          </div>
-
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Coins size={14} />
-              <span className="text-xs font-black uppercase tracking-wider"># Moedas</span>
-            </div>
-
-            <select
-              value={numCoins}
-              onChange={e => setNumCoins(parseInt(e.target.value))}
-              className="bg-white dark:bg-[#2f3032] text-gray-900 dark:text-gray-100 px-2 py-1.5 rounded text-xs border border-gray-200 dark:border-white/10 outline-none"
-              onWheel={(e) => e.stopPropagation()}
-            >
-              {[50, 100, 150, 200, 250].map(n => <option key={n} value={n}>{n} moedas</option>)}
-            </select>
-          </div>
-
-          <div className="mt-4 space-y-4">
-            <div className={isGameMode ? 'opacity-50' : ''}>
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <Wind size={14} />
-                  <span className="text-xs font-black uppercase tracking-wider">Flutuação (Mapa)</span>
-                </div>
-                <span className="text-xs font-bold text-gray-500 dark:text-gray-400">{Math.round(floatStrengthRaw * 100)}%</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value={floatStrengthRaw}
-                onChange={e => setFloatStrengthRaw(parseFloat(e.target.value))}
-                className="w-full accent-[#dd9933] mt-2"
-                disabled={isGameMode}
-              />
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <Droplets size={14} />
-                  <span className="text-xs font-black uppercase tracking-wider">Rastro (Trail)</span>
-                </div>
-                <span className="text-xs font-bold text-gray-500 dark:text-gray-400">{trailLength}</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="50"
-                step="1"
-                value={trailLength}
-                onChange={e => setTrailLength(parseInt(e.target.value))}
-                className="w-full accent-[#dd9933] mt-2"
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div ref={stageRef} className="flex-1 w-full relative cursor-crosshair overflow-hidden">
-        <canvas
-          ref={canvasRef}
-          onContextMenu={(e) => e.preventDefault()}
-          onMouseMove={handleMouseMove}
-          onMouseDown={(e) => { e.preventDefault(); handleMouseDown(e); }}
-          onMouseUp={(e) => { e.preventDefault(); handleMouseUp(); }}
-          onMouseLeave={() => { setHoveredParticle(null); handleMouseUp(); }}
-          onWheel={handleWheel}
-          className="absolute inset-0 w-full h-full block"
-        />
-      </div>
-    </div>
-  );
+const containerRef = useRef<HTMLDivElement>(null);
+const stageRef = useRef<HTMLDivElement>(null);
+const canvasRef = useRef<HTMLCanvasElement>(null);
+
+const particlesRef = useRef<Particle[]>([]);
+const imageCache = useRef(new Map<string, HTMLImageElement>());
+const animationLoopFn = useRef<(() => void) | null>(null);
+const reqIdRef = useRef<number>(0);
+
+const dprRef = useRef(1);
+
+const [status, setStatus] = useState<Status>('loading');
+const [coins, setCoins] = useState<ApiCoin[]>([]);
+
+const [hoveredParticle, setHoveredParticle] = useState<Particle | null>(null);
+const [selectedParticle, setSelectedParticle] = useState<Particle | null>(null);
+const [searchTerm, setSearchTerm] = useState('');
+
+const [chartMode, setChartMode] = useState<ChartMode>('performance');
+const [timeframe, setTimeframe] = useState<Timeframe>('24h');
+
+const [settingsOpen, setSettingsOpen] = useState(false);
+const [legendTipOpen, setLegendTipOpen] = useState(false);
+
+const [isGameMode, setIsGameMode] = useState(false);
+const isGameModeRef = useRef(false);
+useEffect(() => { isGameModeRef.current = isGameMode; }, [isGameMode]);
+
+const [numCoins, setNumCoins] = useState(50);
+
+// defaults em 50%
+const [floatStrengthRaw, setFloatStrengthRaw] = useState(0.5);
+const [trailLength, setTrailLength] = useState(25);
+
+const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
+
+// Detail panel (mantido)
+const [detailOpen, setDetailOpen] = useState(false);
+const [detailCoin, setDetailCoin] = useState<ApiCoin | null>(null);
+
+// Interaction
+const transformRef = useRef({ k: 1, x: 0, y: 0 });
+const isPanningRef = useRef(false);
+const panStartRef = useRef({ clientX: 0, clientY: 0, x: 0, y: 0 });
+const draggedParticleRef = useRef<Particle | null>(null);
+const lastMousePosRef = useRef<{ x: number; y: number } | null>(null);
+
+// aiming (tacada) - clique no alvo, segura pra carregar, solta pra tacar
+const aimingRef = useRef<{
+active: boolean;
+cueId: string | null;
+
+fromX: number;
+fromY: number;
+
+dirX: number;
+dirY: number;
+
+targetX: number;
+targetY: number;
+
+startMs: number;
+pull: number;
+}>({
+active: false,
+cueId: null,
+fromX: 0,
+fromY: 0,
+dirX: 1,
+dirY: 0,
+targetX: 0,
+targetY: 0,
+startMs: 0,
+pull: 0
+});
+
+// WATERMARK IMAGE (preload)
+const watermarkRef = useRef<HTMLImageElement | null>(null);
+
+useEffect(() => {
+const tryLoad = (src: string, onOk: () => void, onFail: () => void) => {
+if (!src) { onFail(); return; }
+const img = new Image();
+img.crossOrigin = 'anonymous';
+img.onload = () => {
+watermarkRef.current = img;
+onOk();
+};
+img.onerror = () => onFail();
+img.src = src;
+};
+
+tryLoad(
+WATERMARK_LOCAL,
+() => {},
+() => {
+if (WATERMARK_REMOTE) tryLoad(WATERMARK_REMOTE, () => {}, () => {});
+}
+);
+}, []);
+
+const hoveredParticleRef = useRef(hoveredParticle);
+hoveredParticleRef.current = hoveredParticle;
+
+const selectedParticleRef = useRef(selectedParticle);
+selectedParticleRef.current = selectedParticle;
+
+const detailOpenRef = useRef(detailOpen);
+detailOpenRef.current = detailOpen;
+
+const statsRef = useRef<{
+minX: number, maxX: number,
+minY: number, maxY: number,
+minR: number, maxR: number,
+logMinX: number, logMaxX: number,
+logMinY: number, logMaxY: number
+} | null>(null);
+
+useEffect(() => {
+const prevBody = document.body.style.overflow;
+const prevHtml = document.documentElement.style.overflow;
+document.body.style.overflow = 'hidden';
+document.documentElement.style.overflow = 'hidden';
+return () => {
+document.body.style.overflow = prevBody;
+document.documentElement.style.overflow = prevHtml;
+};
+}, []);
+
+useEffect(() => {
+const onKey = (e: KeyboardEvent) => {
+if (e.key === 'Escape') {
+setDetailOpen(false);
+setSettingsOpen(false);
+setLegendTipOpen(false);
+
+aimingRef.current.active = false;
+aimingRef.current.cueId = null;
+aimingRef.current.pull = 0;
+
+if (draggedParticleRef.current) {
+draggedParticleRef.current.isFixed = false;
+draggedParticleRef.current = null;
+}
+isPanningRef.current = false;
+}
+};
+window.addEventListener('keydown', onKey);
+return () => window.removeEventListener('keydown', onKey);
+}, []);
+
+const loadData = useCallback(async () => {
+if (particlesRef.current.length === 0) setStatus('loading');
+try {
+const data = await fetchTopCoins({ force: true });
+if (data && data.length > 0) {
+setCoins(data);
+setStatus('running');
+} else if (particlesRef.current.length === 0) setStatus('demo');
+} catch {
+if (particlesRef.current.length === 0) setStatus('error');
+}
+}, []);
+
+const resetZoom = useCallback(() => {
+transformRef.current = { k: 1, x: 0, y: 0 };
+}, []);
+
+const setupGameLayout = useCallback(() => {
+const canvas = canvasRef.current;
+if (!canvas) return;
+
+const dpr = dprRef.current || 1;
+const width = canvas.width / dpr;
+const height = canvas.height / dpr;
+
+const w = width;
+const h = height;
+
+// cue ball (BTC)
+const cue = particlesRef.current.find(p => String(p.coin.id).toLowerCase() === 'bitcoin');
+
+// separa as outras
+const others = particlesRef.current
+.filter(p => String(p.coin.id).toLowerCase() !== 'bitcoin')
+.sort((a, b) => (Number(a.coin.market_cap_rank) || 99999) - (Number(b.coin.market_cap_rank) || 99999));
+
+// Normaliza tamanhos (tudo igual, BTC maior)
+for (const p of particlesRef.current) {
+const isBTC = String(p.coin.id).toLowerCase() === 'bitcoin';
+p.targetRadius = isBTC ? GAME_CUE_RADIUS : GAME_BALL_RADIUS;
+p.radius = p.targetRadius;
+p.mass = Math.max(1, p.targetRadius);
+p.vx = 0; p.vy = 0;
+p.trail = [];
+p.isFixed = false;
+p.isFalling = false;
+p.fallT = 0;
+p.pocketHold = 0;
+p.fallPocket = null;
+}
+
+// posição inicial da bola branca
+if (cue) {
+cue.x = w * 0.78;
+cue.y = h * 0.5;
+}
+
+// rack (triângulo) à esquerda
+const rackApexX = w * 0.20;
+const rackApexY = h * 0.50;
+
+const spacing = GAME_BALL_RADIUS * 2.08;
+
+const N = others.length;
+let rows = 1;
+while ((rows * (rows + 1)) / 2 < N) rows++;
+
+let idx = 0;
+for (let r = 0; r < rows; r++) {
+const ballsInRow = r + 1;
+const rowX = rackApexX + r * spacing;
+const rowYStart = rackApexY - (r * spacing) / 2;
+
+for (let c = 0; c < ballsInRow; c++) {
+if (idx >= others.length) break;
+const p = others[idx++];
+p.x = rowX;
+p.y = rowYStart + c * spacing;
+}
+}
+
+// garante dentro da mesa
+const minX = GAME_WALL_PAD + GAME_BALL_RADIUS;
+const maxX = w - GAME_WALL_PAD - GAME_BALL_RADIUS;
+const minY = GAME_WALL_PAD + GAME_BALL_RADIUS;
+const maxY = h - GAME_WALL_PAD - GAME_BALL_RADIUS;
+
+for (const p of particlesRef.current) {
+p.x = mathClamp(p.x, minX, maxX);
+p.y = mathClamp(p.y, minY, maxY);
+}
+}, []);
+
+useEffect(() => {
+loadData();
+const interval = setInterval(loadData, 60000);
+
+const canvas = canvasRef.current;
+const stage = stageRef.current;
+if (!canvas || !stage) return;
+
+const resizeCanvas = () => {
+const ratio = window.devicePixelRatio || 1;
+dprRef.current = ratio;
+
+const rect = stage.getBoundingClientRect();
+const cssW = Math.max(1, Math.floor(rect.width));
+const cssH = Math.max(1, Math.floor(rect.height));
+
+canvas.width = Math.max(1, Math.floor(cssW * ratio));
+canvas.height = Math.max(1, Math.floor(cssH * ratio));
+canvas.style.width = `${cssW}px`;
+canvas.style.height = `${cssH}px`;
+};
+
+resizeCanvas();
+
+const ro = new ResizeObserver(() => resizeCanvas());
+ro.observe(stage);
+
+window.addEventListener('resize', resizeCanvas);
+
+const observer = new MutationObserver(() => setIsDark(document.documentElement.classList.contains('dark')));
+observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
+return () => {
+clearInterval(interval);
+ro.disconnect();
+observer.disconnect();
+window.removeEventListener('resize', resizeCanvas);
+};
+}, [loadData]);
+
+// mouseup global (pra não perder tacada fora do canvas)
+const handleMouseUpRef = useRef<() => void>(() => {});
+useEffect(() => {
+const up = () => handleMouseUpRef.current();
+window.addEventListener('mouseup', up);
+return () => window.removeEventListener('mouseup', up);
+}, []);
+
+// Ao ligar/desligar Game
+useEffect(() => {
+if (isGameMode) {
+resetZoom();
+setDetailOpen(false);
+setSelectedParticle(null);
+setHoveredParticle(null);
+
+aimingRef.current.active = false;
+aimingRef.current.cueId = null;
+aimingRef.current.pull = 0;
+
+setupGameLayout();
+} else {
+resetZoom();
+setDetailOpen(false);
+setSettingsOpen(false);
+setLegendTipOpen(false);
+
+aimingRef.current.active = false;
+aimingRef.current.cueId = null;
+aimingRef.current.pull = 0;
+
+if (draggedParticleRef.current) {
+draggedParticleRef.current.isFixed = false;
+draggedParticleRef.current = null;
+}
+
+// NÃO teleporta: só limpa dinâmica e deixa o mapa puxar suave
+for (const p of particlesRef.current) {
+p.vx = 0;
+p.vy = 0;
+p.trail = [];
+p.isFixed = false;
+p.isFalling = false;
+p.fallT = 0;
+p.pocketHold = 0;
+p.fallPocket = null;
+}
+}
+}, [isGameMode, resetZoom, setupGameLayout]);
+
+const getCoinPerfPct = useCallback((coin: any) => computeSparkChange(coin, timeframe).pct, [timeframe]);
+const getCoinAbsPct = useCallback((coin: any) => computeSparkChange(coin, timeframe).absPct, [timeframe]);
+
+const sizeMetricPerf = useCallback((coin: any) => {
+const absPct = Math.max(0, getCoinAbsPct(coin));
+const vol = Math.max(0, Number(coin?.total_volume) || 0);
+const volFactor = Math.log10(vol + 1);
+return absPct * volFactor;
+}, [getCoinAbsPct]);
+
+useEffect(() => {
+const topCoins = coins.slice(0, numCoins);
+if (topCoins.length === 0) return;
+
+const xData: number[] = [];
+const yData: number[] = [];
+const rData: number[] = [];
+
+for (const c of topCoins) {
+const vol = Math.max(1, Number(c.total_volume) || 1);
+yData.push(vol);
+
+if (chartMode === 'performance') {
+xData.push(getCoinPerfPct(c) || 0);
+rData.push(Math.max(0.000001, sizeMetricPerf(c)));
+} else {
+xData.push(Math.max(1, Number(c.market_cap) || 1));
+rData.push(Math.max(0.0001, getCoinAbsPct(c)));
+}
+}
+
+const minX = Math.min(...xData), maxX = Math.max(...xData);
+const minY = Math.min(...yData), maxY = Math.max(...yData);
+const minR = Math.min(...rData), maxR = Math.max(...rData);
+
+const logMinX = (chartMode === 'valuation') ? Math.log10(Math.max(1, minX)) : 0;
+const logMaxX = (chartMode === 'valuation') ? Math.log10(Math.max(1, maxX)) : 0;
+
+statsRef.current = {
+minX, maxX, minY, maxY, minR, maxR,
+logMinX, logMaxX,
+logMinY: Math.log10(Math.max(1, minY)),
+logMaxY: Math.log10(Math.max(1, maxY))
+};
+
+const existingMap = new Map(particlesRef.current.map(p => [p.id, p] as const));
+
+const w = stageRef.current?.clientWidth || 1000;
+const h = stageRef.current?.clientHeight || 800;
+
+const newParticles = topCoins.map(coin => {
+const existing = existingMap.get(coin.id);
+
+if (!imageCache.current.has(coin.image)) {
+const img = new Image();
+img.src = coin.image;
+imageCache.current.set(coin.image, img);
+}
+
+const pct = getCoinPerfPct(coin);
+const baseColor = pct >= 0 ? '#089981' : '#f23645';
+
+const radiusVal = chartMode === 'performance'
+? Math.max(0.000001, sizeMetricPerf(coin))
+: Math.max(0.0001, getCoinAbsPct(coin));
+
+const rrMin = minR;
+const rrMax = maxR;
+const t = (radiusVal - rrMin) / (rrMax - rrMin || 1);
+const targetRadius = 15 + mathClamp(t, 0, 1) * 55;
+
+const isBTC = String(coin.id).toLowerCase() === 'bitcoin';
+
+const vx = (Math.random() - 0.5) * 60;
+const vy = (Math.random() - 0.5) * 60;
+
+if (existing) {
+existing.coin = coin;
+existing.targetRadius = isGameModeRef.current ? (isBTC ? GAME_CUE_RADIUS : GAME_BALL_RADIUS) : targetRadius;
+existing.color = isBTC ? '#ffffff' : baseColor;
+existing.mass = Math.max(1, existing.targetRadius);
+return existing;
+}
+
+return {
+id: coin.id,
+x: Math.random() * w,
+y: Math.random() * h,
+vx,
+vy,
+radius: 0,
+targetRadius: isGameModeRef.current ? (isBTC ? GAME_CUE_RADIUS : GAME_BALL_RADIUS) : targetRadius,
+color: isBTC ? '#ffffff' : baseColor,
+coin,
+trail: [],
+phase: Math.random() * Math.PI * 2,
+mass: Math.max(1, isGameModeRef.current ? (isBTC ? GAME_CUE_RADIUS : GAME_BALL_RADIUS) : targetRadius),
+pocketHold: 0,
+isFalling: false,
+fallT: 0,
+fallPocket: null
+};
+});
+
+particlesRef.current = newParticles;
+
+if (isGameModeRef.current) setupGameLayout();
+}, [coins, numCoins, chartMode, timeframe, getCoinPerfPct, getCoinAbsPct, sizeMetricPerf, setupGameLayout]);
+
+const screenToWorld = (clientX: number, clientY: number) => {
+const canvas = canvasRef.current;
+if (!canvas) return { x: 0, y: 0, mx: 0, my: 0 };
+const rect = canvas.getBoundingClientRect();
+const mouseX = clientX - rect.left;
+const mouseY = clientY - rect.top;
+
+const { k, x, y } = transformRef.current;
+return {
+x: (mouseX - x) / k,
+y: (mouseY - y) / k,
+mx: mouseX,
+my: mouseY
+};
+};
+
+const handleMouseMove = (e: React.MouseEvent) => {
+const canvas = canvasRef.current; if (!canvas) return;
+
+const wpos = screenToWorld(e.clientX, e.clientY);
+const worldMouseX = wpos.x;
+const worldMouseY = wpos.y;
+
+if (isGameModeRef.current && aimingRef.current.active) {
+// enquanto segura, pode ajustar a mira movendo o mouse (sem resetar charge)
+aimingRef.current.targetX = worldMouseX;
+aimingRef.current.targetY = worldMouseY;
+
+const cue = particlesRef.current.find(pp => pp.id === aimingRef.current.cueId);
+if (cue) {
+const dx = aimingRef.current.targetX - cue.x;
+const dy = aimingRef.current.targetY - cue.y;
+const dist = Math.hypot(dx, dy) || 1;
+aimingRef.current.dirX = dx / dist;
+aimingRef.current.dirY = dy / dist;
+aimingRef.current.fromX = cue.x;
+aimingRef.current.fromY = cue.y;
+}
+}
+
+if (lastMousePosRef.current && draggedParticleRef.current) {
+const dx = worldMouseX - lastMousePosRef.current.x;
+const dy = worldMouseY - lastMousePosRef.current.y;
+draggedParticleRef.current.vx = dx * 50;
+draggedParticleRef.current.vy = dy * 50;
+draggedParticleRef.current.x = worldMouseX;
+draggedParticleRef.current.y = worldMouseY;
+}
+lastMousePosRef.current = { x: worldMouseX, y: worldMouseY };
+
+if (draggedParticleRef.current) return;
+
+if (isPanningRef.current) {
+const dx = e.clientX - panStartRef.current.clientX;
+const dy = e.clientY - panStartRef.current.clientY;
+transformRef.current.x = panStartRef.current.x + dx;
+transformRef.current.y = panStartRef.current.y + dy;
+return;
+}
+
+const canvasEl = canvasRef.current;
+if (!canvasEl) return;
+const rect = canvasEl.getBoundingClientRect();
+const mouseX = e.clientX - rect.left;
+const mouseY = e.clientY - rect.top;
+
+const { k, x, y } = transformRef.current;
+
+let found: Particle | null = null;
+for (let i = particlesRef.current.length - 1; i >= 0; i--) {
+const p = particlesRef.current[i];
+if (p.isFalling) continue;
+
+const sx = p.x * k + x;
+const sy = p.y * k + y;
+const sr = p.radius;
+
+const dx = sx - mouseX;
+const dy = sy - mouseY;
+
+if (dx * dx + dy * dy < (sr + 5) * (sr + 5)) {
+found = p;
+break;
+}
+}
+
+setHoveredParticle(found);
+};
+
+const openDetailFor = (p: Particle) => {
+setSelectedParticle(p);
+setDetailCoin(p.coin);
+setDetailOpen(true);
+};
+
+const handleMouseDown = (e: React.MouseEvent) => {
+if (detailOpenRef.current) return;
+
+if (isGameModeRef.current) {
+const w = screenToWorld(e.clientX, e.clientY);
+
+// bola branca (BTC)
+const cue = particlesRef.current.find(pp => String(pp.coin.id).toLowerCase() === 'bitcoin');
+if (!cue) return;
+
+// se clicou numa bola que não é BTC: mantém drag
+const hp = hoveredParticleRef.current;
+const clickedNonCueBall = hp && String(hp.coin.id).toLowerCase() !== 'bitcoin';
+
+if (clickedNonCueBall) {
+draggedParticleRef.current = hp;
+draggedParticleRef.current.isFixed = true;
+setSelectedParticle(hp);
+return;
+}
+
+// ESQUERDO: clique no alvo + segura para carregar
+if (e.button === 0) {
+const dx = w.x - cue.x;
+const dy = w.y - cue.y;
+const dist = Math.hypot(dx, dy) || 1;
+
+aimingRef.current.active = true;
+aimingRef.current.cueId = cue.id;
+
+aimingRef.current.fromX = cue.x;
+aimingRef.current.fromY = cue.y;
+
+aimingRef.current.dirX = dx / dist;
+aimingRef.current.dirY = dy / dist;
+
+aimingRef.current.targetX = w.x;
+aimingRef.current.targetY = w.y;
+
+aimingRef.current.startMs = performance.now();
+aimingRef.current.pull = 0;
+
+setSelectedParticle(cue);
+return;
+}
+
+return;
+}
+
+if (hoveredParticleRef.current) {
+// mapa: clique abre painel
+openDetailFor(hoveredParticleRef.current);
+return;
+}
+
+isPanningRef.current = true;
+panStartRef.current = {
+clientX: e.clientX,
+clientY: e.clientY,
+x: transformRef.current.x,
+y: transformRef.current.y
+};
+};
+
+const handleMouseUp = () => {
+if (aimingRef.current.active && aimingRef.current.cueId && isGameModeRef.current) {
+const cue = particlesRef.current.find(pp => pp.id === aimingRef.current.cueId);
+
+if (cue && !cue.isFalling) {
+const pull = mathClamp(aimingRef.current.pull, 0, MAX_PULL);
+
+if (pull > 2) {
+const power = (pull / MAX_PULL) * MAX_SHOT_POWER;
+
+const nx = aimingRef.current.dirX;
+const ny = aimingRef.current.dirY;
+
+cue.vx += (nx * power) / Math.max(1, cue.mass);
+cue.vy += (ny * power) / Math.max(1, cue.mass);
+}
+}
+
+aimingRef.current.active = false;
+aimingRef.current.cueId = null;
+aimingRef.current.pull = 0;
+}
+
+if (draggedParticleRef.current) {
+draggedParticleRef.current.isFixed = false;
+draggedParticleRef.current = null;
+}
+
+isPanningRef.current = false;
+};
+handleMouseUpRef.current = handleMouseUp;
+
+const handleWheel = (e: React.WheelEvent) => {
+e.preventDefault();
+if (detailOpenRef.current) return;
+if (isGameModeRef.current) return;
+
+const canvas = canvasRef.current; if (!canvas) return;
+const rect = canvas.getBoundingClientRect();
+const mouseX = e.clientX - rect.left;
+const mouseY = e.clientY - rect.top;
+
+const worldX = (mouseX - transformRef.current.x) / transformRef.current.k;
+const worldY = (mouseY - transformRef.current.y) / transformRef.current.k;
+
+const zoomFactor = 1.1;
+const oldK = transformRef.current.k;
+const newK = e.deltaY < 0 ? oldK * zoomFactor : oldK / zoomFactor;
+const clampedK = mathClamp(newK, 0.1, 10.0);
+
+const newX = mouseX - worldX * clampedK;
+const newY = mouseY - worldY * clampedK;
+
+transformRef.current = { k: clampedK, x: newX, y: newY };
+};
+
+const legendText = useMemo(() => {
+if (isGameMode) {
+return (
+<>
+<div><span className="font-black">Modo Game (Bilhar)</span></div>
+<div>• A <span className="font-black">bola branca</span> é o <span className="font-black">BTC</span>.</div>
+<div>• <span className="font-bold">Clique</span> no ponto onde você quer mandar a bola.</div>
+<div>• <span className="font-bold">Segure</span> o botão esquerdo para carregar a força (o taco recua).</div>
+<div>• <span className="font-bold">Solte</span> para tacar.</div>
+<div>• Se uma bola parar sobre uma caçapa, ela “cai” e sai da mesa.</div>
+</>
+);
+}
+
+if (chartMode === 'performance') {
+return (
+<>
+<div><span className="font-black">Modo Variação (preço)</span></div>
+<div>• <span className="font-bold">X</span>: Variação de preço {timeframe} (%)</div>
+<div>• <span className="font-bold">Y</span>: Volume 24h (log)</div>
+<div>• <span className="font-bold">Tamanho</span>: |%var {timeframe}| × log(volume)</div>
+<div>• <span className="font-bold">Cor</span>: verde/ vermelho pela variação {timeframe}</div>
+</>
+);
+}
+
+return (
+<>
+<div><span className="font-black">Modo Market Cap</span></div>
+<div>• <span className="font-bold">X</span>: Market Cap (log)</div>
+<div>• <span className="font-bold">Y</span>: Volume 24h (log)</div>
+<div>• <span className="font-bold">Tamanho</span>: |%var {timeframe}|</div>
+<div>• <span className="font-bold">Cor</span>: verde/ vermelho pela variação {timeframe}</div>
+</>
+);
+}, [chartMode, timeframe, isGameMode]);
+
+useEffect(() => {
+const canvas = canvasRef.current;
+const ctx = canvas?.getContext('2d', { alpha: false });
+if (!ctx || !canvas) return;
+
+let lastTime = performance.now();
+
+const drawCueStick = (
+ctx2: CanvasRenderingContext2D,
+cueBall: Particle,
+now: number,
+toScreenX: (v: number) => number,
+toScreenY: (v: number) => number,
+k: number,
+isDarkTheme: boolean
+) => {
+const cx = toScreenX(cueBall.x);
+const cy = toScreenY(cueBall.y);
+
+// direção (bola -> alvo)
+let dirX = 1;
+let dirY = 0;
+
+if (aimingRef.current.active) {
+dirX = aimingRef.current.dirX;
+dirY = aimingRef.current.dirY;
+} else if (lastMousePosRef.current) {
+const wm = lastMousePosRef.current;
+const tx = toScreenX(wm.x);
+const ty = toScreenY(wm.y);
+const dx = tx - cx;
+const dy = ty - cy;
+const dist = Math.hypot(dx, dy) || 1;
+dirX = dx / dist;
+dirY = dy / dist;
+}
+
+// ângulo da direção (na tela)
+const angle = Math.atan2(dirY, dirX);
+
+// potência visual
+const pull = aimingRef.current.active ? aimingRef.current.pull : 0;
+const pumpWave = Math.sin(now * 0.030) * mathClamp(8 + pull * 0.05, 8, 18);
+const pump = aimingRef.current.active
+? (pull + pumpWave)
+: (12 + Math.sin(now * 0.018) * 6);
+
+const stickLen = Math.max(260, cueBall.radius * 7.8);
+const stickThick = Math.max(8, cueBall.radius * 0.38);
+
+// tip fica fora da bola (não passa “por baixo”)
+const gap = 12;
+const tipX = cx - Math.cos(angle) * (cueBall.radius + gap + pump);
+const tipY = cy - Math.sin(angle) * (cueBall.radius + gap + pump);
+
+ctx2.save();
+ctx2.translate(tipX, tipY);
+// x positivo vai “pra trás” do taco
+ctx2.rotate(angle + Math.PI);
+
+ctx2.globalAlpha = 0.92;
+ctx2.lineCap = 'round';
+
+// corpo
+ctx2.beginPath();
+ctx2.moveTo(0, 0);
+ctx2.lineTo(stickLen, 0);
+ctx2.strokeStyle = isDarkTheme ? 'rgba(210,170,120,0.75)' : 'rgba(120,85,45,0.70)';
+ctx2.lineWidth = stickThick;
+ctx2.stroke();
+
+// ponteira
+ctx2.beginPath();
+ctx2.moveTo(0, 0);
+ctx2.lineTo(Math.min(30, stickLen * 0.18), 0);
+ctx2.strokeStyle = isDarkTheme ? 'rgba(255,255,255,0.60)' : 'rgba(255,255,255,0.78)';
+ctx2.lineWidth = Math.max(6, stickThick * 0.55);
+ctx2.stroke();
+
+ctx2.restore();
+
+// linha de mira + alvo fixo
+if (aimingRef.current.active) {
+const tx = toScreenX(aimingRef.current.targetX);
+const ty = toScreenY(aimingRef.current.targetY);
+
+ctx2.save();
+ctx2.setLineDash([8, 8]);
+ctx2.globalAlpha = 0.55;
+ctx2.strokeStyle = isDarkTheme ? 'rgba(221,153,51,0.85)' : 'rgba(221,153,51,0.95)';
+ctx2.lineWidth = 2;
+ctx2.beginPath();
+ctx2.moveTo(cx, cy);
+ctx2.lineTo(tx, ty);
+ctx2.stroke();
+ctx2.setLineDash([]);
+
+ctx2.globalAlpha = 0.9;
+// marca do alvo
+ctx2.beginPath();
+ctx2.arc(tx, ty, 10, 0, Math.PI * 2);
+ctx2.strokeStyle = isDarkTheme ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.45)';
+ctx2.lineWidth = 2;
+ctx2.stroke();
+
+ctx2.beginPath();
+ctx2.moveTo(tx - 14, ty);
+ctx2.lineTo(tx + 14, ty);
+ctx2.moveTo(tx, ty - 14);
+ctx2.lineTo(tx, ty + 14);
+ctx2.strokeStyle = isDarkTheme ? 'rgba(221,153,51,0.85)' : 'rgba(221,153,51,0.95)';
+ctx2.lineWidth = 2;
+ctx2.stroke();
+
+ctx2.restore();
+}
+};
+
+const drawRackTriangle = (
+ctx2: CanvasRenderingContext2D,
+width: number,
+height: number,
+toScreenX: (v: number) => number,
+toScreenY: (v: number) => number,
+isDarkTheme: boolean
+) => {
+const w = width;
+const h = height;
+
+const apexX = w * 0.20;
+const apexY = h * 0.50;
+
+const spacing = GAME_BALL_RADIUS * 2.08;
+const rows = 6;
+
+const baseX = apexX + (rows - 1) * spacing;
+const halfH = ((rows - 1) * spacing) / 2;
+
+const x1 = toScreenX(apexX);
+const y1 = toScreenY(apexY);
+
+const x2 = toScreenX(baseX);
+const y2 = toScreenY(apexY - halfH);
+
+const x3 = toScreenX(baseX);
+const y3 = toScreenY(apexY + halfH);
+
+ctx2.save();
+ctx2.globalAlpha = 0.35;
+ctx2.strokeStyle = isDarkTheme ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.18)';
+ctx2.lineWidth = 3;
+
+ctx2.beginPath();
+ctx2.moveTo(x1, y1);
+ctx2.lineTo(x2, y2);
+ctx2.lineTo(x3, y3);
+ctx2.closePath();
+ctx2.stroke();
+
+ctx2.restore();
+};
+
+animationLoopFn.current = () => {
+const now = performance.now();
+const dt = Math.min((now - lastTime) / 1000, 0.05);
+lastTime = now;
+
+// charge por tempo (modo game)
+if (isGameModeRef.current && aimingRef.current.active) {
+const heldMs = now - aimingRef.current.startMs;
+const pull = (heldMs / 1000) * CHARGE_SPEED;
+aimingRef.current.pull = mathClamp(pull, 0, MAX_PULL);
+}
+
+const dpr = dprRef.current || 1;
+const width = canvas.width / dpr;
+const height = canvas.height / dpr;
+
+ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+// background
+if (isGameModeRef.current) ctx.fillStyle = isDark ? '#08110c' : '#e8f3ea';
+else ctx.fillStyle = isDark ? '#0b0f14' : '#ffffff';
+
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+ctx.scale(dpr, dpr);
+
+// watermark
+drawWatermark(ctx, width, height, watermarkRef.current, isDark, isGameModeRef.current);
+
+const { k, x: panX, y: panY } = transformRef.current;
+const toScreenX = (val: number) => val * k + panX;
+const toScreenY = (val: number) => val * k + panY;
+
+const particles = particlesRef.current;
+
+// radius easing
+for (const p of particles) {
+const viewRadius = p.targetRadius * Math.pow(k, 0.25);
+p.radius += (viewRadius - p.radius) * 0.15;
+p.mass = Math.max(1, p.radius);
+}
+
+// pockets (game)
+let pockets: { x: number; y: number; r: number }[] = [];
+if (isGameModeRef.current) {
+const worldW = width / k;
+const worldH = height / k;
+const pr = Math.max(26, Math.min(40, Math.min(worldW, worldH) * 0.04));
+
+pockets = [
+{ x: pr, y: pr, r: pr },
+{ x: worldW / 2, y: pr, r: pr },
+{ x: worldW - pr, y: pr, r: pr },
+{ x: pr, y: worldH - pr, r: pr },
+{ x: worldW / 2, y: worldH - pr, r: pr },
+{ x: worldW - pr, y: worldH - pr, r: pr }
+];
+
+// borda mesa
+ctx.save();
+ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.10)';
+ctx.lineWidth = 4;
+ctx.strokeRect(8, 8, width - 16, height - 16);
+ctx.restore();
+
+// caçapas
+ctx.save();
+for (const pk of pockets) {
+const sx = toScreenX(pk.x);
+const sy = toScreenY(pk.y);
+
+ctx.beginPath();
+ctx.arc(sx, sy, pk.r * k, 0, Math.PI * 2);
+ctx.fillStyle = isDark ? 'rgba(0,0,0,0.72)' : 'rgba(0,0,0,0.18)';
+ctx.fill();
+
+ctx.beginPath();
+ctx.arc(sx, sy, pk.r * k, 0, Math.PI * 2);
+ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)';
+ctx.lineWidth = 2;
+ctx.stroke();
+}
+ctx.restore();
+
+// triângulo rack
+drawRackTriangle(ctx, width, height, toScreenX, toScreenY, isDark);
+}
+
+// axes (map)
+if (!isGameModeRef.current && statsRef.current) {
+const s = statsRef.current;
+
+const margin = { top: 18, right: 18, bottom: 92, left: 86 };
+const chartW = Math.max(50, width - margin.left - margin.right);
+const chartH = Math.max(50, height - margin.top - margin.bottom);
+
+const originX = margin.left;
+const originY = margin.top + chartH;
+
+const xSteps = 6;
+
+ctx.save();
+ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)';
+ctx.lineWidth = 1;
+
+ctx.font = 'bold 12px Inter';
+ctx.fillStyle = isDark ? 'rgba(255,255,255,0.78)' : 'rgba(0,0,0,0.72)';
+ctx.textBaseline = 'middle';
+
+const projectX = (v: number) => {
+let norm = 0;
+if (chartMode === 'valuation') {
+if (v <= 0) return originX;
+norm = (Math.log10(v) - s.logMinX) / (s.logMaxX - s.logMinX || 1);
+} else {
+norm = (v - s.minX) / (s.maxX - s.minX || 1);
+}
+return originX + norm * chartW;
+};
+
+const projectY = (v: number) => {
+if (v <= 0) return originY;
+const norm = (Math.log10(v) - s.logMinY) / (s.logMaxY - s.logMinY || 1);
+return margin.top + (1 - norm) * chartH;
+};
+
+for (let i = 0; i <= xSteps; i++) {
+const percent = i / xSteps;
+
+let val = 0;
+if (chartMode === 'valuation') val = Math.pow(10, s.logMinX + percent * (s.logMaxX - s.logMinX));
+else val = s.minX + percent * (s.maxX - s.minX);
+
+const worldX = projectX(val);
+const screenX = toScreenX(worldX);
+
+ctx.beginPath();
+ctx.moveTo(screenX, toScreenY(margin.top));
+ctx.lineTo(screenX, toScreenY(originY));
+ctx.stroke();
+
+ctx.textAlign = 'center';
+const label = (chartMode === 'performance') ? `${val.toFixed(1)}%` : formatCompact(val);
+const tickY = mathClamp(toScreenY(originY) + 18, 12, height - 14);
+ctx.fillText(label, screenX, tickY);
+}
+
+const ySteps = 5;
+for (let i = 0; i <= ySteps; i++) {
+const percent = i / ySteps;
+const val = Math.pow(10, s.logMinY + percent * (s.logMaxY - s.logMinY));
+const worldY = projectY(val);
+const screenY = toScreenY(worldY);
+
+ctx.beginPath();
+ctx.moveTo(toScreenX(originX), screenY);
+ctx.lineTo(toScreenX(originX + chartW), screenY);
+ctx.stroke();
+
+ctx.textAlign = 'right';
+ctx.fillText(formatCompact(val), toScreenX(originX) - 10, screenY);
+}
+
+ctx.beginPath();
+ctx.moveTo(toScreenX(originX), toScreenY(originY));
+ctx.lineTo(toScreenX(originX + chartW), toScreenY(originY));
+ctx.stroke();
+
+ctx.beginPath();
+ctx.moveTo(toScreenX(originX), toScreenY(margin.top));
+ctx.lineTo(toScreenX(originX), toScreenY(originY));
+ctx.stroke();
+
+ctx.font = 'bold 14px Inter';
+ctx.textAlign = 'center';
+ctx.fillStyle = isDark ? '#dd9933' : '#333';
+
+const xLabel = chartMode === 'performance'
+? `Variação de preço ${timeframe} (%)`
+: 'Market Cap (Log)';
+const xLabelY = mathClamp(toScreenY(originY) + 56, 20, height - 10);
+ctx.fillText(xLabel, width / 2, xLabelY);
+
+ctx.save();
+ctx.translate(18, height / 2);
+ctx.rotate(-Math.PI / 2);
+ctx.fillText('Volume 24h (Log)', 0, 0);
+ctx.restore();
+
+ctx.restore();
+}
+
+// PHYSICS / MAPPING
+if (isGameModeRef.current) {
+const worldW = width / k;
+const worldH = height / k;
+
+const drag = Math.pow(DRAG_BASE, dt * 60);
+
+for (const p of particles) {
+if (p.isFalling) continue;
+if (p.isFixed) continue;
+
+p.vx *= drag;
+p.vy *= drag;
+
+if (Math.hypot(p.vx, p.vy) < STOP_EPS) {
+p.vx = 0;
+p.vy = 0;
+}
+
+p.x += p.vx * dt * 1.0;
+p.y += p.vy * dt * 1.0;
+
+if (p.x < p.radius + GAME_WALL_PAD) { p.x = p.radius + GAME_WALL_PAD; p.vx *= -1; }
+else if (p.x > worldW - p.radius - GAME_WALL_PAD) { p.x = worldW - p.radius - GAME_WALL_PAD; p.vx *= -1; }
+
+if (p.y < p.radius + GAME_WALL_PAD) { p.y = p.radius + GAME_WALL_PAD; p.vy *= -1; }
+else if (p.y > worldH - p.radius - GAME_WALL_PAD) { p.y = worldH - p.radius - GAME_WALL_PAD; p.vy *= -1; }
+}
+
+// collisions
+for (let i = 0; i < particles.length; i++) {
+const p1 = particles[i];
+if (p1.isFalling) continue;
+
+for (let j = i + 1; j < particles.length; j++) {
+const p2 = particles[j];
+if (p2.isFalling) continue;
+
+const dx = p2.x - p1.x;
+const dy = p2.y - p1.y;
+const minDist = p1.radius + p2.radius;
+
+const distSq = dx * dx + dy * dy;
+if (distSq >= minDist * minDist) continue;
+
+const dist = Math.sqrt(distSq) || 0.001;
+const nx = dx / dist;
+const ny = dy / dist;
+
+const overlap = minDist - dist;
+const totalMass = (p1.mass + p2.mass) || 1;
+
+const move1 = (p2.mass / totalMass);
+const move2 = (p1.mass / totalMass);
+
+if (!p1.isFixed) {
+p1.x -= nx * overlap * move1;
+p1.y -= ny * overlap * move1;
+}
+if (!p2.isFixed) {
+p2.x += nx * overlap * move2;
+p2.y += ny * overlap * move2;
+}
+
+const rvx = p2.vx - p1.vx;
+const rvy = p2.vy - p1.vy;
+const velAlongNormal = rvx * nx + rvy * ny;
+if (velAlongNormal > 0) continue;
+
+const restitution = 0.98;
+let impulse = -(1 + restitution) * velAlongNormal;
+impulse /= (1 / p1.mass + 1 / p2.mass);
+
+const impulseX = impulse * nx;
+const impulseY = impulse * ny;
+
+if (!p1.isFixed) {
+p1.vx -= impulseX / p1.mass;
+p1.vy -= impulseY / p1.mass;
+}
+if (!p2.isFixed) {
+p2.vx += impulseX / p2.mass;
+p2.vy += impulseY / p2.mass;
+}
+}
+}
+
+// clamp speed “20%”
+for (const p of particles) {
+if (p.isFalling) continue;
+if (p.isFixed) continue;
+
+const sp = Math.hypot(p.vx, p.vy);
+if (sp > GAME_MAX_SPEED) {
+const s = GAME_MAX_SPEED / sp;
+p.vx *= s;
+p.vy *= s;
+}
+}
+
+// pocket + fall
+const holdNeeded = 0.35;
+const toRemove: Particle[] = [];
+
+for (const p of particles) {
+if (p.isFalling) {
+p.fallT = (p.fallT || 0) + dt;
+if ((p.fallT || 0) >= 0.35) toRemove.push(p);
+continue;
+}
+
+const speed = Math.hypot(p.vx, p.vy);
+const isStopped = speed <= STOP_EPS;
+
+if (!isStopped) {
+p.pocketHold = 0;
+p.fallPocket = null;
+continue;
+}
+
+let onPocket = false;
+let picked: { x: number; y: number; r: number } | null = null;
+
+for (const pk of pockets) {
+const dist = Math.hypot(p.x - pk.x, p.y - pk.y);
+if (dist <= pk.r * 0.65) {
+onPocket = true;
+picked = pk;
+break;
+}
+}
+
+if (onPocket && picked) {
+p.pocketHold = (p.pocketHold || 0) + dt;
+p.fallPocket = picked;
+
+if ((p.pocketHold || 0) >= holdNeeded) {
+p.isFalling = true;
+p.fallT = 0;
+p.vx = 0; p.vy = 0;
+}
+} else {
+p.pocketHold = 0;
+p.fallPocket = null;
+}
+}
+
+if (toRemove.length > 0) {
+particlesRef.current = particlesRef.current.filter(pp => !toRemove.includes(pp));
+}
+} else {
+if (!statsRef.current) return;
+const s = statsRef.current;
+
+const margin = { top: 18, right: 18, bottom: 92, left: 86 };
+const chartW = Math.max(50, width - margin.left - margin.right);
+const chartH = Math.max(50, height - margin.top - margin.bottom);
+
+const originX = margin.left;
+const originY = margin.top + chartH;
+
+// +30% max sempre (min 0)
+const mappedFloatMaxAmp = 5.2 * 1.3;
+const mappedFloatAmp = floatStrengthRaw * mappedFloatMaxAmp;
+
+const projectX = (v: number) => {
+let norm = 0;
+if (chartMode === 'valuation') {
+if (v <= 0) return originX;
+norm = (Math.log10(v) - s.logMinX) / (s.logMaxX - s.logMinX || 1);
+} else {
+norm = (v - s.minX) / (s.maxX - s.minX || 1);
+}
+return originX + norm * chartW;
+};
+
+const projectY = (v: number) => {
+if (v <= 0) return originY;
+const norm = (Math.log10(v) - s.logMinY) / (s.logMaxY - s.logMinY || 1);
+return margin.top + (1 - norm) * chartH;
+};
+
+for (const p of particles) {
+let xVal = 0;
+const yVal = p.coin.total_volume || 1;
+
+if (chartMode === 'performance') xVal = getCoinPerfPct(p.coin) || 0;
+else xVal = p.coin.market_cap || 1;
+
+const tx = projectX(xVal);
+const ty = projectY(yVal);
+
+const floatFreq = 0.0002 * (1 + floatStrengthRaw);
+const floatX = mappedFloatAmp > 0 ? Math.sin(now * floatFreq + p.phase) * mappedFloatAmp : 0;
+const floatY = mappedFloatAmp > 0 ? Math.cos(now * (floatFreq * 1.3) + p.phase) * mappedFloatAmp : 0;
+
+const targetX = tx + floatX;
+const targetY = ty + floatY;
+
+p.x += (targetX - p.x) * 0.05;
+p.y += (targetY - p.y) * 0.05;
+}
+}
+
+// taco por cima do felt (depois dos pockets) e antes das bolas
+if (isGameModeRef.current) {
+const cueBall = particlesRef.current.find(p => String(p.coin.id).toLowerCase() === 'bitcoin');
+if (cueBall) drawCueStick(ctx, cueBall, now, toScreenX, toScreenY, k, isDark);
+}
+
+// RENDER PARTICLES
+const particlesToDraw = particlesRef.current;
+
+for (const p of particlesToDraw) {
+const screenX = toScreenX(p.x);
+const screenY = toScreenY(p.y);
+
+if (screenX + p.radius < 0 || screenX - p.radius > width || screenY + p.radius < 0 || screenY - p.radius > height) continue;
+
+let drawRadius = p.radius;
+let alpha = 1.0;
+if (p.isFalling) {
+const t = mathClamp((p.fallT || 0) / 0.35, 0, 1);
+drawRadius = p.radius * (1 - t);
+alpha = 1 - t;
+}
+
+const isHovered = hoveredParticleRef.current?.id === p.id;
+const isSelected = selectedParticleRef.current?.id === p.id;
+
+const isDimmed = searchTerm
+&& !p.coin.name.toLowerCase().includes(searchTerm.toLowerCase())
+&& !p.coin.symbol.toLowerCase().includes(searchTerm.toLowerCase());
+
+if (isDimmed) alpha *= 0.12;
+
+if (trailLength > 0 && alpha > 0.05) {
+const last = p.trail[p.trail.length - 1];
+const ddx = last ? screenX - last.x : 10;
+const ddy = last ? screenY - last.y : 10;
+
+if (!last || (ddx * ddx + ddy * ddy > 4)) p.trail.push({ x: screenX, y: screenY, age: 1.0 });
+
+for (let tIdx = 0; tIdx < p.trail.length; tIdx++) p.trail[tIdx].age -= 0.02;
+p.trail = p.trail.filter(t => t.age > 0);
+
+if (p.trail.length > 1) {
+const grad = ctx.createLinearGradient(p.trail[0].x, p.trail[0].y, screenX, screenY);
+grad.addColorStop(0, 'rgba(0,0,0,0)');
+grad.addColorStop(1, p.color);
+
+ctx.beginPath();
+ctx.moveTo(p.trail[0].x, p.trail[0].y);
+for (let i = 1; i < p.trail.length; i++) ctx.lineTo(p.trail[i].x, p.trail[i].y);
+
+ctx.strokeStyle = grad;
+ctx.globalAlpha = alpha;
+ctx.lineWidth = Math.min(drawRadius * 0.4, 4);
+ctx.stroke();
+ctx.globalAlpha = 1.0;
+}
+} else {
+p.trail = [];
+}
+
+if (drawRadius <= 0.5) continue;
+
+const isBTC = String(p.coin.id).toLowerCase() === 'bitcoin';
+
+ctx.save();
+ctx.globalAlpha = alpha;
+
+// BTC no game: bola branca + logo centralizado
+if (isBTC && isGameModeRef.current) {
+ctx.beginPath();
+ctx.arc(screenX, screenY, drawRadius, 0, Math.PI * 2);
+ctx.fillStyle = '#ffffff';
+ctx.fill();
+
+ctx.beginPath();
+ctx.arc(screenX, screenY, drawRadius, 0, Math.PI * 2);
+ctx.strokeStyle = isDark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.35)';
+ctx.lineWidth = 2;
+ctx.stroke();
+
+const img = imageCache.current.get(p.coin.image);
+if (img?.complete) {
+const logoSize = drawRadius * 1.2;
+ctx.drawImage(img, screenX - logoSize / 2, screenY - logoSize / 2, logoSize, logoSize);
+}
+} else {
+// demais bolas
+ctx.beginPath();
+ctx.arc(screenX, screenY, drawRadius, 0, Math.PI * 2);
+
+const img = imageCache.current.get(p.coin.image);
+if (img?.complete) {
+ctx.save();
+ctx.clip();
+ctx.drawImage(img, screenX - drawRadius, screenY - drawRadius, drawRadius * 2, drawRadius * 2);
+ctx.restore();
+
+ctx.strokeStyle = p.color;
+ctx.lineWidth = isSelected ? 4 : 2;
+ctx.stroke();
+} else {
+ctx.fillStyle = p.color;
+ctx.fill();
+}
+
+if (!isGameModeRef.current && drawRadius > 12) {
+ctx.fillStyle = '#fff';
+ctx.font = `bold ${Math.max(11, drawRadius * 0.42)}px Inter`;
+ctx.textAlign = 'center';
+ctx.textBaseline = 'middle';
+ctx.shadowColor = 'rgba(0,0,0,0.8)';
+ctx.shadowBlur = 4;
+ctx.fillText(p.coin.symbol.toUpperCase(), screenX, screenY);
+ctx.shadowBlur = 0;
+}
+}
+
+if (isHovered || isSelected) {
+ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)';
+ctx.lineWidth = 2;
+ctx.beginPath();
+ctx.arc(screenX, screenY, drawRadius + 4, 0, Math.PI * 2);
+ctx.stroke();
+}
+
+ctx.restore();
+}
+};
+}, [isDark, chartMode, timeframe, floatStrengthRaw, trailLength, searchTerm, getCoinPerfPct]);
+
+useEffect(() => {
+const loop = () => {
+if (animationLoopFn.current) animationLoopFn.current();
+reqIdRef.current = requestAnimationFrame(loop);
+};
+loop();
+return () => cancelAnimationFrame(reqIdRef.current);
+}, []);
+
+const detailPerf = useMemo(() => {
+if (!detailCoin) return null;
+return computeSparkChange(detailCoin, timeframe);
+}, [detailCoin, timeframe]);
+
+const detailColor = useMemo(() => {
+if (!detailPerf) return '#dd9933';
+return detailPerf.pct >= 0 ? '#089981' : '#f23645';
+}, [detailPerf]);
+
+return (
+<div
+ref={containerRef}
+className="fixed inset-0 z-[2000] bg-white dark:bg-[#0b0f14] text-gray-900 dark:text-white flex flex-col overflow-hidden touch-none select-none overscroll-none h-[100dvh]"
+>
+<div className="flex justify-between items-start p-4 z-20 bg-white/80 dark:bg-black/50 backdrop-blur-sm border-b border-gray-200 dark:border-white/10 shrink-0">
+<div className="flex items-center gap-4">
+<Coins size={28} className="text-[#dd9933]" />
+<div>
+<h3 className="text-xl font-black uppercase tracking-wider">Crypto Bubbles</h3>
+<p className="text-xs text-gray-500 dark:text-gray-400 font-bold">{status === 'demo' ? 'MODO DEMO' : isGameMode ? 'MODO GAME' : 'MODO MAPA'}</p>
+</div>
+
+<div className="w-px h-8 bg-gray-200 dark:bg-white/10 mx-4"></div>
+
+<div className="flex items-center gap-2">
+<div className="flex bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10">
+<button
+onClick={() => setChartMode('valuation')}
+className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'valuation' ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500 dark:text-gray-300'}`}
+>
+Market Cap
+</button>
+</div>
+
+<div className="flex items-center bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10">
+<button
+onClick={() => setChartMode('performance')}
+className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'performance' ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500 dark:text-gray-300'}`}
+>
+Variação:
+</button>
+
+<div className="w-px h-5 bg-gray-200 dark:bg-white/10 mx-1"></div>
+
+<div className="flex items-center gap-2 px-2 py-1">
+<Wind size={14} className="text-gray-400" />
+<select
+value={timeframe}
+onChange={(e) => setTimeframe(e.target.value as Timeframe)}
+className="bg-white dark:bg-[#2f3032] text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs font-black border border-gray-200 dark:border-white/10 outline-none"
+>
+<option value="1h">1h</option>
+<option value="24h">24h</option>
+<option value="7d">7d</option>
+</select>
+</div>
+</div>
+</div>
+
+<div className="flex items-center gap-2 bg-gray-100 dark:bg-black/50 p-2 rounded-lg border border-gray-200 dark:border-white/10">
+<Search size={16} className="text-gray-400" />
+<input
+type="text"
+value={searchTerm}
+onChange={(e) => setSearchTerm(e.target.value)}
+placeholder="Buscar ativo..."
+className="bg-transparent outline-none text-sm w-48 text-gray-900 dark:text-white"
+/>
+{searchTerm && (
+<button onClick={() => { setSearchTerm(''); setSelectedParticle(null); }}>
+<XCircle size={16} className="text-gray-500 hover:text-white" />
+</button>
+)}
+</div>
+</div>
+
+<div className="flex items-center gap-3 relative">
+<button
+onClick={resetZoom}
+className="p-3 bg-[#dd9933]/10 hover:bg-[#dd9933]/20 text-[#dd9933] rounded-lg border border-[#dd9933]/30 transition-colors"
+title="Reset Zoom"
+>
+<Maximize size={20} />
+</button>
+
+<div className="relative">
+<button
+onMouseEnter={() => setLegendTipOpen(true)}
+onMouseLeave={() => setLegendTipOpen(false)}
+className="p-3 rounded-lg border transition-colors backdrop-blur-sm bg-gray-100 dark:bg-black/50 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10"
+title="Legenda / Instruções"
+>
+<Info size={20} />
+</button>
+
+{legendTipOpen && (
+<div
+className="absolute right-0 mt-2 w-80 bg-white/95 dark:bg-black/85 border border-gray-200 dark:border-white/10 rounded-xl p-3 shadow-xl backdrop-blur-md text-sm"
+onMouseEnter={() => setLegendTipOpen(true)}
+onMouseLeave={() => setLegendTipOpen(false)}
+>
+<div className="space-y-1 text-gray-800 dark:text-gray-100">
+{legendText}
+</div>
+</div>
+)}
+</div>
+
+<button
+onClick={() => setSettingsOpen(v => !v)}
+className={`p-3 rounded-lg border transition-colors backdrop-blur-sm ${settingsOpen ? 'bg-[#dd9933] text-black border-[#dd9933]' : 'bg-gray-100 dark:bg-black/50 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10'}`}
+title="Settings"
+>
+<Settings size={20} />
+</button>
+
+<button
+onClick={() => onClose()}
+className="p-3 bg-gray-100 dark:bg-black/50 rounded-lg border border-gray-200 dark:border-white/10 hover:bg-red-500/10 text-gray-600 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+title="Close"
+>
+<CloseIcon size={20} />
+</button>
+</div>
+</div>
+
+{settingsOpen && (
+<div
+className="absolute top-24 right-4 bg-white/90 dark:bg-black/80 p-4 rounded-lg border border-gray-200 dark:border-white/10 backdrop-blur-md w-80 z-30 shadow-xl"
+onWheel={(e) => e.stopPropagation()}
+onMouseDown={(e) => e.stopPropagation()}
+>
+<div className="flex items-center justify-between gap-3">
+<div className="flex items-center gap-2">
+<Atom size={14} />
+<span className="text-xs font-black uppercase tracking-wider">Modo Game</span>
+</div>
+
+<button
+onClick={() => setIsGameMode(!isGameMode)}
+className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isGameMode ? 'bg-[#dd9933]' : 'bg-gray-200 dark:bg-[#2f3032]'}`}
+title="Modo Game"
+>
+<span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isGameMode ? 'translate-x-6' : 'translate-x-1'}`} />
+</button>
+</div>
+
+<div className="mt-3 flex items-center justify-between gap-3">
+<div className="flex items-center gap-2">
+<Coins size={14} />
+<span className="text-xs font-black uppercase tracking-wider"># Moedas</span>
+</div>
+
+<select
+value={numCoins}
+onChange={e => setNumCoins(parseInt(e.target.value))}
+className="bg-white dark:bg-[#2f3032] text-gray-900 dark:text-gray-100 px-2 py-1.5 rounded text-xs border border-gray-200 dark:border-white/10 outline-none"
+onWheel={(e) => e.stopPropagation()}
+>
+{[50, 100, 150, 200, 250].map(n => <option key={n} value={n}>{n} moedas</option>)}
+</select>
+</div>
+
+<div className="mt-4 space-y-4">
+<div className={isGameMode ? 'opacity-50' : ''}>
+<div className="flex items-center justify-between gap-3">
+<div className="flex items-center gap-2">
+<Wind size={14} />
+<span className="text-xs font-black uppercase tracking-wider">Flutuação (Mapa)</span>
+</div>
+<span className="text-xs font-bold text-gray-500 dark:text-gray-400">{Math.round(floatStrengthRaw * 100)}%</span>
+</div>
+<input
+type="range"
+min="0"
+max="1"
+step="0.05"
+value={floatStrengthRaw}
+onChange={e => setFloatStrengthRaw(parseFloat(e.target.value))}
+className="w-full accent-[#dd9933] mt-2"
+disabled={isGameMode}
+/>
+</div>
+
+<div>
+<div className="flex items-center justify-between gap-3">
+<div className="flex items-center gap-2">
+<Droplets size={14} />
+<span className="text-xs font-black uppercase tracking-wider">Rastro (Trail)</span>
+</div>
+<span className="text-xs font-bold text-gray-500 dark:text-gray-400">{trailLength}</span>
+</div>
+<input
+type="range"
+min="0"
+max="50"
+step="1"
+value={trailLength}
+onChange={e => setTrailLength(parseInt(e.target.value))}
+className="w-full accent-[#dd9933] mt-2"
+/>
+</div>
+</div>
+</div>
+)}
+
+<div ref={stageRef} className="flex-1 w-full relative cursor-crosshair overflow-hidden">
+<canvas
+ref={canvasRef}
+onMouseMove={handleMouseMove}
+onMouseDown={(e) => { e.preventDefault(); handleMouseDown(e); }}
+onMouseUp={(e) => { e.preventDefault(); handleMouseUp(); }}
+onMouseLeave={() => { setHoveredParticle(null); handleMouseUp(); }}
+onWheel={handleWheel}
+className="absolute inset-0 w-full h-full block"
+/>
+</div>
+</div>
+);
 };
 
 export default MarketWindSwarm;

@@ -243,8 +243,22 @@ const RsiWidget = ({ language, onNavigate }: { language: Language; onNavigate: (
 
   const refresh = async () => {
     try {
-      const res = await fetchRsiAverage();
-      if (res) setData(res);
+      const res: any = await fetchRsiAverage();
+      if (res) {
+          // Parse correct n8n structure: [{ data: { overall: { ... } } }]
+          if (Array.isArray(res) && res[0]?.data?.overall) {
+              const o = res[0].data.overall;
+              setData({
+                  averageRsi: Number(o.averageRsi) || 50,
+                  yesterday: Number(o.yesterday) || 50,
+                  days7Ago: Number(o.days7Ago) || 50,
+                  days30Ago: Number(o.days30Ago) || 50
+              });
+          } else {
+              // Fallback for flat structure
+              setData(res);
+          }
+      }
     } finally {
       setLoading(false);
     }
@@ -311,7 +325,6 @@ const RsiWidget = ({ language, onNavigate }: { language: Language; onNavigate: (
         <div className="flex-1 flex items-center justify-center text-xs text-gray-500 animate-pulse">Loading...</div>
       ) : (
         <>
-          {/* Igual ao Fear&Greed: mesmo wrapper, mesmo padding, sem translate */}
           <div className="flex-1 min-h-0 relative w-full flex justify-center items-center py-2">
             <svg viewBox="0 0 200 135" className="w-full h-full overflow-visible" preserveAspectRatio="xMidYMax meet">
               <defs>
@@ -700,12 +713,6 @@ const EtfFlowWidget = ({ language, onNavigate, theme }: { language: Language; on
         <div className="text-xl font-black font-mono leading-none text-gray-900 dark:text-gray-100">
           {headlineBtcUsd}
         </div>
-
-        {/*{periodTotals && (
-          <div className="mt-1 text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest opacity-80">
-            Período: {formatUsd(periodTotals.totalUsd)}
-          </div>
-        )}*/}
       </div>
 
       <div className="flex-1 min-h-[130px]">
