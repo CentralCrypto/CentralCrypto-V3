@@ -11,7 +11,7 @@ import { DashboardItem, Language } from '../../../types';
 // =============================
 // Se já está servindo os JSONs no teu site, usa URL RELATIVA.
 // Exemplo: https://teudominio.com/cachecko/cachecko_lite.json
-const BASE = '/cachecko';
+const BASE = '/opt/n8n/cachecko';
 
 const COINS_URL = `${BASE}/cachecko_lite.json`;
 const CATEGORIES_URL = `${BASE}/categories/taxonomy-master.json`;
