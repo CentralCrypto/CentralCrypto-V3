@@ -5,17 +5,29 @@ import TreemapModule from 'highcharts/modules/treemap';
 import ExportingModule from 'highcharts/modules/exporting';
 import AccessibilityModule from 'highcharts/modules/accessibility';
 import { DashboardItem, Language } from '../../../types';
+import { httpGetJson } from '../../../services/http';
+import { getCacheckoUrl } from '../../../services/endpoints';
 
 // =============================
-// CONFIG (MESMA ORIGEM)
+// ROUTES (HTTP) - MESMA ORIGEM
 // =============================
-// Se já está servindo os JSONs no teu site, usa URL RELATIVA.
-// Exemplo: https://teudominio.com/cachecko/cachecko_lite.json
-const BASE = '/opt/n8n/cachecko';
+// IMPORTANTE: esses caminhos precisam estar SERVIDOS via HTTP.
+// Ex.: https://seusite.com/cachecko/cachecko_lite.json
+// NÃO EXISTE "fetch /opt/n8n/..." no navegador.
+const COINS_URLS = [
+  '/cachecko/cachecko_lite.json',
+  '/cachecko/cachecko.json'
+];
 
-const COINS_URL = `${BASE}/cachecko_lite.json`;
-const CATEGORIES_URL = `${BASE}/categories/taxonomy-master.json`;
-const CATEGORY_COIN_MAP_URL = `${BASE}/categories/category-coin-map.json`; // { [categoryId]: string[] }
+const CATEGORIES_URLS = [
+  '/cachecko/categories/taxonomy-master.json',
+  '/cachecko/taxonomy-master.json'
+];
+
+const CATEGORY_COIN_MAP_URLS = [
+  '/cachecko/categories/category-coin-map.json',
+  '/cachecko/category-coin-map.json'
+];
 
 // =============================
 // TYPES
@@ -61,6 +73,7 @@ let HC_INITED = false;
 function initHighchartsOnce() {
   if (HC_INITED) return;
   HC_INITED = true;
+
   (TreemapModule as any)(Highcharts);
   (ExportingModule as any)(Highcharts);
   (AccessibilityModule as any)(Highcharts);
@@ -78,14 +91,39 @@ function initHighchartsOnce() {
 // HELPERS
 // =============================
 function withCb(url: string) {
-  const salt = Math.floor(Date.now() / 60000); // muda a cada 1 min
+  const salt = Math.floor(Date.now() / 60000);
   return url.includes('?') ? `${url}&_cb=${salt}` : `${url}?_cb=${salt}`;
 }
 
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(withCb(url), { cache: 'no-store' });
-  if (!res.ok) throw new Error(`HTTP ${res.status} ao carregar ${url}`);
-  return (await res.json()) as T;
+/**
+ * Mesmo padrão do MarketCapTable:
+ * - usa getCacheckoUrl() (proxy interno do Vite / mesma origem)
+ * - usa httpGetJson() (timeout + retries)
+ */
+async function httpGetJsonRobusto<T>(path: string): Promise<T> {
+  const finalUrl = withCb(getCacheckoUrl(path));
+  const { data } = await httpGetJson(finalUrl, { timeoutMs: 12000, retries: 2 });
+  return data as T;
+}
+
+/**
+ * Tenta uma lista de URLs até achar a primeira que responde.
+ * Isso salva tua vida quando muda a pasta/rota e ainda tem legado.
+ */
+async function fetchFirstJson<T>(paths: string[], label: string): Promise<T> {
+  let lastErr: any = null;
+
+  for (const p of paths) {
+    try {
+      return await httpGetJsonRobusto<T>(p);
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+
+  throw new Error(
+    `Falha ao carregar ${label}. Tentei: ${paths.join(' | ')}. Último erro: ${String(lastErr?.message || lastErr)}`
+  );
 }
 
 function formatPct(v: number) {
@@ -294,7 +332,6 @@ function TreemapChart({
           `;
         }
       },
-      // ✅ ESCALA VERDE/VERMELHA IGUAL A IDEIA DO EXEMPLO
       colorAxis: {
         min: -10,
         max: 10,
@@ -395,23 +432,29 @@ export default function CryptoHeatmaps({ item, language }: HeatmapWidgetProps) {
     setErr('');
 
     Promise.allSettled([
-      fetchJson<Coin[]>(COINS_URL),
-      fetchJson<Category[]>(CATEGORIES_URL),
-      fetchJson<CategoryCoinMap>(CATEGORY_COIN_MAP_URL)
+      fetchFirstJson<Coin>(COINS_URLS, 'coins') as any,
+      fetchFirstJson<Category[]>(CATEGORIES_URLS, 'categories'),
+      fetchFirstJson<CategoryCoinMap>(CATEGORY_COIN_MAP_URLS, 'category-coin-map')
     ])
       .then(results => {
         if (!alive) return;
 
         const [rCoins, rCats, rMap] = results;
 
-        if (rCoins.status === 'fulfilled') setCoins(Array.isArray(rCoins.value) ? rCoins.value : []);
-        else setErr(prev => prev || `Falha ao carregar moedas em ${COINS_URL}`);
+        if (rCoins.status === 'fulfilled') {
+          const val: any = rCoins.value;
+          // coins pode vir como array direto, ou como objeto com "coins"
+          const arr = Array.isArray(val) ? val : Array.isArray(val?.coins) ? val.coins : [];
+          setCoins(arr as Coin[]);
+        } else {
+          setErr(prev => prev || (rCoins.reason?.message || 'Falha ao carregar moedas'));
+        }
 
         if (rCats.status === 'fulfilled') setCategories(Array.isArray(rCats.value) ? rCats.value : []);
-        else setErr(prev => prev || `Falha ao carregar categorias em ${CATEGORIES_URL}`);
+        else setErr(prev => prev || (rCats.reason?.message || 'Falha ao carregar categorias'));
 
         if (rMap.status === 'fulfilled' && rMap.value && typeof rMap.value === 'object') setCategoryCoinMap(rMap.value);
-        else setErr(prev => prev || `Falha ao carregar mapa categoria→moedas em ${CATEGORY_COIN_MAP_URL}`);
+        else setErr(prev => prev || (rMap.reason?.message || 'Falha ao carregar mapa categoria→moedas'));
       })
       .finally(() => {
         if (!alive) return;
