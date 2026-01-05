@@ -1,15 +1,20 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Highcharts from 'highcharts';
 import TreemapModule from 'highcharts/modules/treemap';
 import ExportingModule from 'highcharts/modules/exporting';
 import AccessibilityModule from 'highcharts/modules/accessibility';
 
 // =============================
-// CONFIG (AJUSTE OS ENDPOINTS)
+// CONFIG (MESMA ORIGEM)
 // =============================
-const COINS_URL = '/cachecko/cachecko_lite.json';
-const CATEGORIES_URL = '/cachecko/taxonomy-master.json';
-const CATEGORY_COIN_MAP_URL = '/cachecko/category-coin-map.json'; // { [categoryId]: string[] }
+// Se já está servindo os JSONs no teu site, usa URL RELATIVA.
+// Exemplo: https://teudominio.com/cachecko/cachecko_lite.json
+const BASE = '/cachecko';
+
+const COINS_URL = `${BASE}/cachecko_lite.json`;
+const CATEGORIES_URL = `${BASE}/taxonomy-master.json`;
+const CATEGORY_COIN_MAP_URL = `${BASE}/category-coin-map.json`; // { [categoryId]: string[] }
 
 // =============================
 // TYPES
@@ -29,8 +34,6 @@ type Category = {
 };
 
 type CategoryCoinMap = Record<string, string[]>;
-
-type HeatmapMode = 'market' | 'categories' | 'categoryCoins';
 
 type HeatmapView =
   | { mode: 'market' }
@@ -57,28 +60,31 @@ let HC_INITED = false;
 function initHighchartsOnce() {
   if (HC_INITED) return;
   HC_INITED = true;
-
   TreemapModule(Highcharts);
   ExportingModule(Highcharts);
   AccessibilityModule(Highcharts);
 
-  // Opcional: ajustar animação default e estilos globais
   Highcharts.setOptions({
-    chart: { style: { fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif' } }
+    chart: {
+      style: {
+        fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
+      }
+    }
   });
 }
 
 // =============================
 // HELPERS
 // =============================
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { cache: 'no-store' });
-  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-  return (await res.json()) as T;
+function withCb(url: string) {
+  const salt = Math.floor(Date.now() / 60000); // muda a cada 1 min
+  return url.includes('?') ? `${url}&_cb=${salt}` : `${url}?_cb=${salt}`;
 }
 
-function clamp(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n));
+async function fetchJson<T>(url: string): Promise<T> {
+  const res = await fetch(withCb(url), { cache: 'no-store' });
+  if (!res.ok) throw new Error(`HTTP ${res.status} ao carregar ${url}`);
+  return (await res.json()) as T;
 }
 
 function formatPct(v: number) {
@@ -100,7 +106,6 @@ function safeUpper(s?: string) {
   return (s || '').toUpperCase();
 }
 
-// Dedup moedas (por id) e mantém as maiores por market cap no topo
 function dedupCoinsById(coins: Coin[]) {
   const map = new Map<string, Coin>();
   for (const c of coins) {
@@ -230,7 +235,7 @@ function TreemapChart({
 
   const title = useMemo(() => {
     if (view.mode === 'market') return 'Market Monitor';
-    if (view.mode === 'categories') return 'Categorias';
+    if (view.mode === 'categories') return 'Heatmap por Categoria';
     return `Categoria: ${view.categoryName}`;
   }, [view]);
 
@@ -238,13 +243,10 @@ function TreemapChart({
     initHighchartsOnce();
     if (!containerRef.current) return;
 
-    // Destroy anterior
     if (chartRef.current) {
       chartRef.current.destroy();
       chartRef.current = null;
     }
-
-    const hasData = points && points.length > 0;
 
     const chart = Highcharts.chart(containerRef.current, {
       chart: {
@@ -262,8 +264,8 @@ function TreemapChart({
           view.mode === 'categories'
             ? 'Clique numa categoria para abrir as moedas'
             : view.mode === 'market'
-              ? 'Mapa geral por market cap (cor = variação 24h)'
-              : 'Mapa da categoria (cor = variação 24h)',
+              ? 'Mapa geral (cor = variação 24h, área = market cap)'
+              : 'Moedas da categoria (cor = variação 24h, área = market cap)',
         align: 'left',
         style: { color: 'rgba(255,255,255,0.65)', fontSize: '12px' }
       },
@@ -291,8 +293,8 @@ function TreemapChart({
           `;
         }
       },
+      // ✅ ESCALA VERDE/VERMELHA IGUAL A IDEIA DO EXEMPLO
       colorAxis: {
-        // escala igual teu exemplo (vermelho -> neutro -> verde)
         min: -10,
         max: 10,
         stops: [
@@ -315,23 +317,17 @@ function TreemapChart({
           animationLimit: 1000,
           borderColor: '#0b0d10',
           borderWidth: 2,
-          colorKey: 'colorValue', // <<< CRÍTICO PRA PEGAR O COLORAXIS
-          data: hasData ? (points as any) : [],
+          colorKey: 'colorValue',
+          data: points as any,
           dataLabels: {
             enabled: true,
             allowOverlap: false,
-            style: {
-              color: '#fff',
-              textOutline: 'none',
-              fontWeight: '800'
-            },
+            style: { color: '#fff', textOutline: 'none', fontWeight: '800' },
             formatter: function () {
               const p: any = this.point;
-              const isCat = view.mode === 'categories';
               const ch = Number(p?.custom?.change24h ?? p.colorValue ?? 0);
 
-              // Ajuste simples: menos texto nas categorias, mais nas moedas
-              if (isCat) {
+              if (view.mode === 'categories') {
                 return `<span style="font-size:11px; opacity:.95">${p.name}</span><br/>
                         <span style="font-size:11px; opacity:.85">${formatPct(ch)}</span>`;
               }
@@ -340,14 +336,11 @@ function TreemapChart({
                       <span style="font-size:12px; opacity:.85">${formatPct(ch)}</span>`;
             }
           },
-          // eventos de clique
           point: {
             events: {
               click: function () {
                 const p: any = this;
-                if (view.mode === 'categories') {
-                  onSelectCategory(p.id, p.name);
-                }
+                if (view.mode === 'categories') onSelectCategory(p.id, p.name);
               }
             }
           }
@@ -357,10 +350,7 @@ function TreemapChart({
 
     chartRef.current = chart;
 
-    // Resize reativo
-    const ro = new ResizeObserver(() => {
-      chart.reflow();
-    });
+    const ro = new ResizeObserver(() => chart.reflow());
     ro.observe(containerRef.current);
 
     return () => {
@@ -376,7 +366,7 @@ function TreemapChart({
 }
 
 // =============================
-// FULLSCREEN MODAL + CONTROLS
+// MAIN COMPONENT (FULLSCREEN POPUP VIA PORTAL)
 // =============================
 export default function CryptoHeatmaps() {
   const [open, setOpen] = useState(false);
@@ -392,9 +382,9 @@ export default function CryptoHeatmaps() {
     return categories.length > 0 && Object.keys(categoryCoinMap).length > 0;
   }, [categories, categoryCoinMap]);
 
-  // Load all datasets once
   useEffect(() => {
     let alive = true;
+
     setLoading(true);
     setErr('');
 
@@ -409,13 +399,13 @@ export default function CryptoHeatmaps() {
         const [rCoins, rCats, rMap] = results;
 
         if (rCoins.status === 'fulfilled') setCoins(Array.isArray(rCoins.value) ? rCoins.value : []);
-        else setErr(prev => prev || `Falha ao carregar moedas (${COINS_URL})`);
+        else setErr(prev => prev || `Falha ao carregar moedas em ${COINS_URL}`);
 
         if (rCats.status === 'fulfilled') setCategories(Array.isArray(rCats.value) ? rCats.value : []);
-        else setErr(prev => prev || `Falha ao carregar categorias (${CATEGORIES_URL})`);
+        else setErr(prev => prev || `Falha ao carregar categorias em ${CATEGORIES_URL}`);
 
         if (rMap.status === 'fulfilled' && rMap.value && typeof rMap.value === 'object') setCategoryCoinMap(rMap.value);
-        else setErr(prev => prev || `Falha ao carregar mapa categoria→moedas (${CATEGORY_COIN_MAP_URL})`);
+        else setErr(prev => prev || `Falha ao carregar mapa categoria→moedas em ${CATEGORY_COIN_MAP_URL}`);
       })
       .finally(() => {
         if (!alive) return;
@@ -426,6 +416,15 @@ export default function CryptoHeatmaps() {
       alive = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
 
   function openMarket() {
     setView({ mode: 'market' });
@@ -446,45 +445,155 @@ export default function CryptoHeatmaps() {
     setView({ mode: 'categories' });
   }
 
-  const headerRight = (
-    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-      {view.mode === 'categoryCoins' && (
-        <button
-          onClick={back}
+  const modal = (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 2147483647,
+        background: 'rgba(0,0,0,0.78)',
+        backdropFilter: 'blur(8px)'
+      }}
+    >
+      <div style={{ position: 'absolute', inset: 0, padding: 14 }}>
+        <div
           style={{
-            padding: '10px 14px',
-            borderRadius: 12,
-            border: '1px solid rgba(255,255,255,0.15)',
-            background: 'rgba(255,255,255,0.06)',
-            color: '#fff',
-            fontWeight: 800,
-            cursor: 'pointer'
+            width: '100%',
+            height: '100%',
+            borderRadius: 18,
+            overflow: 'hidden',
+            border: '1px solid rgba(255,255,255,0.10)',
+            background: '#0b0d10',
+            boxShadow: '0 30px 90px rgba(0,0,0,0.55)',
+            display: 'flex',
+            flexDirection: 'column'
           }}
         >
-          Voltar
-        </button>
-      )}
+          <div
+            style={{
+              padding: '12px 12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              borderBottom: '1px solid rgba(255,255,255,0.08)'
+            }}
+          >
+            <div style={{ color: '#fff', fontWeight: 900, display: 'flex', gap: 10, alignItems: 'center' }}>
+              <span style={{ opacity: 0.9 }}>
+                {view.mode === 'market'
+                  ? 'Market Monitor'
+                  : view.mode === 'categories'
+                    ? 'Heatmap por Categoria'
+                    : `Categoria: ${view.categoryName}`}
+              </span>
 
-      <button
-        onClick={close}
-        style={{
-          padding: '10px 14px',
-          borderRadius: 12,
-          border: '1px solid rgba(0,0,0,0.25)',
-          background: '#dd9933',
-          color: '#0b0d10',
-          fontWeight: 900,
-          cursor: 'pointer'
-        }}
-      >
-        Fechar ✕
-      </button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => setView({ mode: 'market' })}
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    background: view.mode === 'market' ? 'rgba(221,153,51,0.22)' : 'rgba(255,255,255,0.05)',
+                    color: '#fff',
+                    fontWeight: 900,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Geral
+                </button>
+
+                <button
+                  onClick={() => setView({ mode: 'categories' })}
+                  disabled={!canCategories}
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    background: view.mode !== 'market' ? 'rgba(221,153,51,0.22)' : 'rgba(255,255,255,0.05)',
+                    color: canCategories ? '#fff' : 'rgba(255,255,255,0.45)',
+                    fontWeight: 900,
+                    cursor: canCategories ? 'pointer' : 'not-allowed'
+                  }}
+                  title={!canCategories ? 'Categorias indisponíveis (faltou categories/map)' : ''}
+                >
+                  Categorias
+                </button>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              {view.mode === 'categoryCoins' && (
+                <button
+                  onClick={back}
+                  style={{
+                    padding: '10px 14px',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    background: 'rgba(255,255,255,0.06)',
+                    color: '#fff',
+                    fontWeight: 800,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Voltar
+                </button>
+              )}
+
+              <button
+                onClick={close}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: 12,
+                  border: '1px solid rgba(0,0,0,0.25)',
+                  background: '#dd9933',
+                  color: '#0b0d10',
+                  fontWeight: 900,
+                  cursor: 'pointer'
+                }}
+              >
+                Fechar ✕
+              </button>
+            </div>
+          </div>
+
+          <div style={{ flex: 1, minHeight: 0 }}>
+            <TreemapChart
+              view={view}
+              coins={coins}
+              categories={categories}
+              categoryCoinMap={categoryCoinMap}
+              onSelectCategory={(id, name) => setView({ mode: 'categoryCoins', categoryId: id, categoryName: name })}
+            />
+          </div>
+
+          <div
+            style={{
+              padding: '10px 12px',
+              borderTop: '1px solid rgba(255,255,255,0.08)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              color: 'rgba(255,255,255,0.55)',
+              fontWeight: 700,
+              fontSize: 12
+            }}
+          >
+            <span>
+              {view.mode === 'market'
+                ? `Moedas: ${Math.min(300, coins.length)} (por market cap)`
+                : view.mode === 'categories'
+                  ? `Categorias: ${categories.length}`
+                  : `Moedas na categoria: ${view.categoryName}`}
+            </span>
+            <span>Cor = variação 24h | Área = market cap</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 
   return (
     <div style={{ width: '100%' }}>
-      {/* Botões de abertura */}
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <button
           onClick={openMarket}
@@ -518,129 +627,11 @@ export default function CryptoHeatmaps() {
           Heatmap por Categoria
         </button>
 
-        {loading && <span style={{ color: 'rgba(255,255,255,0.7)', fontWeight: 700 }}>Carregando dados…</span>}
-        {!!err && !loading && <span style={{ color: '#ff6b6b', fontWeight: 800 }}>{err}</span>}
+        {loading && <span style={{ color: 'rgba(255,255,255,0.7)', fontWeight: 700 }}>Carregando…</span>}
+        {!!err && !loading && <span style={{ color: '#ff6b6b', fontWeight: 900 }}>{err}</span>}
       </div>
 
-      {/* Modal fullscreen */}
-      {open && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 99999,
-            background: 'rgba(0,0,0,0.78)',
-            backdropFilter: 'blur(8px)'
-          }}
-        >
-          <div style={{ position: 'absolute', inset: 0, padding: 14 }}>
-            <div
-              style={{
-                width: '100%',
-                height: '100%',
-                borderRadius: 18,
-                overflow: 'hidden',
-                border: '1px solid rgba(255,255,255,0.10)',
-                background: '#0b0d10',
-                boxShadow: '0 30px 90px rgba(0,0,0,0.55)',
-                display: 'flex',
-                flexDirection: 'column'
-              }}
-            >
-              {/* Barra do topo */}
-              <div
-                style={{
-                  padding: '12px 12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  borderBottom: '1px solid rgba(255,255,255,0.08)'
-                }}
-              >
-                <div style={{ color: '#fff', fontWeight: 900, display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <span style={{ opacity: 0.9 }}>
-                    {view.mode === 'market'
-                      ? 'Market Monitor'
-                      : view.mode === 'categories'
-                        ? 'Categorias'
-                        : `Categoria: ${view.categoryName}`}
-                  </span>
-
-                  {/* Botões rápidos dentro do modal */}
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      onClick={() => setView({ mode: 'market' })}
-                      style={{
-                        padding: '8px 10px',
-                        borderRadius: 10,
-                        border: '1px solid rgba(255,255,255,0.12)',
-                        background: view.mode === 'market' ? 'rgba(221,153,51,0.22)' : 'rgba(255,255,255,0.05)',
-                        color: '#fff',
-                        fontWeight: 900,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      Geral
-                    </button>
-
-                    <button
-                      onClick={() => setView({ mode: 'categories' })}
-                      disabled={!canCategories}
-                      style={{
-                        padding: '8px 10px',
-                        borderRadius: 10,
-                        border: '1px solid rgba(255,255,255,0.12)',
-                        background: view.mode !== 'market' ? 'rgba(221,153,51,0.22)' : 'rgba(255,255,255,0.05)',
-                        color: canCategories ? '#fff' : 'rgba(255,255,255,0.45)',
-                        fontWeight: 900,
-                        cursor: canCategories ? 'pointer' : 'not-allowed'
-                      }}
-                      title={!canCategories ? 'Categorias indisponíveis' : ''}
-                    >
-                      Categorias
-                    </button>
-                  </div>
-                </div>
-
-                {headerRight}
-              </div>
-
-              {/* Área do gráfico */}
-              <div style={{ flex: 1, minHeight: 0 }}>
-                <TreemapChart
-                  view={view}
-                  coins={coins}
-                  categories={categories}
-                  categoryCoinMap={categoryCoinMap}
-                  onSelectCategory={(id, name) => setView({ mode: 'categoryCoins', categoryId: id, categoryName: name })}
-                />
-              </div>
-
-              {/* Rodapé simples */}
-              <div
-                style={{
-                  padding: '10px 12px',
-                  borderTop: '1px solid rgba(255,255,255,0.08)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  color: 'rgba(255,255,255,0.55)',
-                  fontWeight: 700,
-                  fontSize: 12
-                }}
-              >
-                <span>
-                  {view.mode === 'market'
-                    ? `Moedas: ${Math.min(300, coins.length)} (ordenado por market cap)`
-                    : view.mode === 'categories'
-                      ? `Categorias: ${categories.length}`
-                      : `Moedas na categoria: ${view.categoryName}`}
-                </span>
-                <span>Cor = variação 24h | Área = market cap</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {open && createPortal(modal, document.body)}
     </div>
   );
 }

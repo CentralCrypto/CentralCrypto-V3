@@ -90,8 +90,8 @@ inferredMinutesPerPoint: minutesPerPoint
 // ========================
 // WATERMARK CONFIG
 // ========================
-const WATERMARK_LOCAL = '/logo2-transp.png'; // coloque em /public/logo2-transp.png
-const WATERMARK_REMOTE = ''; // opcional
+const WATERMARK_LOCAL = '/logo2-transp.png';
+const WATERMARK_REMOTE = '';
 
 const drawWatermark = (
 ctx: CanvasRenderingContext2D,
@@ -131,18 +131,22 @@ const GAME_BALL_RADIUS = 26;
 const GAME_CUE_RADIUS = 34;
 const GAME_WALL_PAD = 14;
 
-const GAME_SPEED_LOCK = 0.20; // “20%”
+// antes era 0.20 (capava tudo)
+// deixa mais “pool de verdade”
+const GAME_SPEED_LOCK = 0.65;
 const GAME_MAX_SPEED = 1400 * GAME_SPEED_LOCK;
 
 const MAX_PULL = 240;
-const MAX_SHOT_POWER = 2400;
+
+// tacada mais forte
+const MAX_SHOT_POWER = 5200;
 
 // desaceleração e parada
-const DRAG_BASE = 0.985;
+const DRAG_BASE = 0.992;
 const STOP_EPS = 0.85;
 
 // “segura para carregar”
-const CHARGE_SPEED = 520; // px de pull por segundo
+const CHARGE_SPEED = 620;
 
 const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 const containerRef = useRef<HTMLDivElement>(null);
@@ -175,7 +179,6 @@ useEffect(() => { isGameModeRef.current = isGameMode; }, [isGameMode]);
 
 const [numCoins, setNumCoins] = useState(50);
 
-// defaults em 50%
 const [floatStrengthRaw, setFloatStrengthRaw] = useState(0.5);
 const [trailLength, setTrailLength] = useState(25);
 
@@ -192,7 +195,7 @@ const panStartRef = useRef({ clientX: 0, clientY: 0, x: 0, y: 0 });
 const draggedParticleRef = useRef<Particle | null>(null);
 const lastMousePosRef = useRef<{ x: number; y: number } | null>(null);
 
-// aiming (tacada) - clique no alvo, segura pra carregar, solta pra tacar
+// aiming (tacada)
 const aimingRef = useRef<{
 active: boolean;
 cueId: string | null;
@@ -324,20 +327,21 @@ const height = canvas.height / dpr;
 const w = width;
 const h = height;
 
-// cue ball (BTC)
 const cue = particlesRef.current.find(p => String(p.coin.id).toLowerCase() === 'bitcoin');
 
-// separa as outras
 const others = particlesRef.current
 .filter(p => String(p.coin.id).toLowerCase() !== 'bitcoin')
 .sort((a, b) => (Number(a.coin.market_cap_rank) || 99999) - (Number(b.coin.market_cap_rank) || 99999));
 
-// Normaliza tamanhos (tudo igual, BTC maior)
 for (const p of particlesRef.current) {
 const isBTC = String(p.coin.id).toLowerCase() === 'bitcoin';
 p.targetRadius = isBTC ? GAME_CUE_RADIUS : GAME_BALL_RADIUS;
 p.radius = p.targetRadius;
-p.mass = Math.max(1, p.targetRadius);
+
+// massa “pool”: tudo igual (sensação real)
+// (não fica bola de 200 toneladas)
+p.mass = 1;
+
 p.vx = 0; p.vy = 0;
 p.trail = [];
 p.isFixed = false;
@@ -347,13 +351,11 @@ p.pocketHold = 0;
 p.fallPocket = null;
 }
 
-// posição inicial da bola branca
 if (cue) {
 cue.x = w * 0.78;
 cue.y = h * 0.5;
 }
 
-// rack (triângulo) à esquerda
 const rackApexX = w * 0.20;
 const rackApexY = h * 0.50;
 
@@ -377,7 +379,6 @@ p.y = rowYStart + c * spacing;
 }
 }
 
-// garante dentro da mesa
 const minX = GAME_WALL_PAD + GAME_BALL_RADIUS;
 const maxX = w - GAME_WALL_PAD - GAME_BALL_RADIUS;
 const minY = GAME_WALL_PAD + GAME_BALL_RADIUS;
@@ -429,7 +430,6 @@ window.removeEventListener('resize', resizeCanvas);
 };
 }, [loadData]);
 
-// mouseup global (pra não perder tacada fora do canvas)
 const handleMouseUpRef = useRef<() => void>(() => {});
 useEffect(() => {
 const up = () => handleMouseUpRef.current();
@@ -437,7 +437,6 @@ window.addEventListener('mouseup', up);
 return () => window.removeEventListener('mouseup', up);
 }, []);
 
-// Ao ligar/desligar Game
 useEffect(() => {
 if (isGameMode) {
 resetZoom();
@@ -465,7 +464,6 @@ draggedParticleRef.current.isFixed = false;
 draggedParticleRef.current = null;
 }
 
-// NÃO teleporta: só limpa dinâmica e deixa o mapa puxar suave
 for (const p of particlesRef.current) {
 p.vx = 0;
 p.vy = 0;
@@ -489,6 +487,12 @@ const volFactor = Math.log10(vol + 1);
 return absPct * volFactor;
 }, [getCoinAbsPct]);
 
+// ✅ tamanho no modo valuation (market cap): log do mcap
+const sizeMetricMcap = useCallback((coin: any) => {
+const mc = Math.max(1, Number(coin?.market_cap) || 1);
+return Math.log10(mc);
+}, []);
+
 useEffect(() => {
 const topCoins = coins.slice(0, numCoins);
 if (topCoins.length === 0) return;
@@ -505,8 +509,9 @@ if (chartMode === 'performance') {
 xData.push(getCoinPerfPct(c) || 0);
 rData.push(Math.max(0.000001, sizeMetricPerf(c)));
 } else {
+// X é market cap (linear), mas o tamanho usa LOG pra ficar “usável”
 xData.push(Math.max(1, Number(c.market_cap) || 1));
-rData.push(Math.max(0.0001, getCoinAbsPct(c)));
+rData.push(Math.max(0.0001, sizeMetricMcap(c)));
 }
 }
 
@@ -543,11 +548,13 @@ const baseColor = pct >= 0 ? '#089981' : '#f23645';
 
 const radiusVal = chartMode === 'performance'
 ? Math.max(0.000001, sizeMetricPerf(coin))
-: Math.max(0.0001, getCoinAbsPct(coin));
+: Math.max(0.0001, sizeMetricMcap(coin));
 
 const rrMin = minR;
 const rrMax = maxR;
 const t = (radiusVal - rrMin) / (rrMax - rrMin || 1);
+
+// base do tamanho
 const targetRadius = 15 + mathClamp(t, 0, 1) * 55;
 
 const isBTC = String(coin.id).toLowerCase() === 'bitcoin';
@@ -559,7 +566,10 @@ if (existing) {
 existing.coin = coin;
 existing.targetRadius = isGameModeRef.current ? (isBTC ? GAME_CUE_RADIUS : GAME_BALL_RADIUS) : targetRadius;
 existing.color = isBTC ? '#ffffff' : baseColor;
-existing.mass = Math.max(1, existing.targetRadius);
+
+// massa: no game fica 1, no mapa segue raio
+existing.mass = isGameModeRef.current ? 1 : Math.max(1, existing.targetRadius);
+
 return existing;
 }
 
@@ -575,7 +585,7 @@ color: isBTC ? '#ffffff' : baseColor,
 coin,
 trail: [],
 phase: Math.random() * Math.PI * 2,
-mass: Math.max(1, isGameModeRef.current ? (isBTC ? GAME_CUE_RADIUS : GAME_BALL_RADIUS) : targetRadius),
+mass: isGameModeRef.current ? 1 : Math.max(1, targetRadius),
 pocketHold: 0,
 isFalling: false,
 fallT: 0,
@@ -586,7 +596,7 @@ fallPocket: null
 particlesRef.current = newParticles;
 
 if (isGameModeRef.current) setupGameLayout();
-}, [coins, numCoins, chartMode, timeframe, getCoinPerfPct, getCoinAbsPct, sizeMetricPerf, setupGameLayout]);
+}, [coins, numCoins, chartMode, timeframe, getCoinPerfPct, sizeMetricPerf, sizeMetricMcap, setupGameLayout]);
 
 const screenToWorld = (clientX: number, clientY: number) => {
 const canvas = canvasRef.current;
@@ -612,7 +622,6 @@ const worldMouseX = wpos.x;
 const worldMouseY = wpos.y;
 
 if (isGameModeRef.current && aimingRef.current.active) {
-// enquanto segura, pode ajustar a mira movendo o mouse (sem resetar charge)
 aimingRef.current.targetX = worldMouseX;
 aimingRef.current.targetY = worldMouseY;
 
@@ -689,11 +698,9 @@ if (detailOpenRef.current) return;
 if (isGameModeRef.current) {
 const w = screenToWorld(e.clientX, e.clientY);
 
-// bola branca (BTC)
 const cue = particlesRef.current.find(pp => String(pp.coin.id).toLowerCase() === 'bitcoin');
 if (!cue) return;
 
-// se clicou numa bola que não é BTC: mantém drag
 const hp = hoveredParticleRef.current;
 const clickedNonCueBall = hp && String(hp.coin.id).toLowerCase() !== 'bitcoin';
 
@@ -704,7 +711,6 @@ setSelectedParticle(hp);
 return;
 }
 
-// ESQUERDO: clique no alvo + segura para carregar
 if (e.button === 0) {
 const dx = w.x - cue.x;
 const dy = w.y - cue.y;
@@ -733,7 +739,6 @@ return;
 }
 
 if (hoveredParticleRef.current) {
-// mapa: clique abre painel
 openDetailFor(hoveredParticleRef.current);
 return;
 }
@@ -755,13 +760,14 @@ if (cue && !cue.isFalling) {
 const pull = mathClamp(aimingRef.current.pull, 0, MAX_PULL);
 
 if (pull > 2) {
+// power direto (sem dividir por massa) e cap maior (GAME_MAX_SPEED)
 const power = (pull / MAX_PULL) * MAX_SHOT_POWER;
 
 const nx = aimingRef.current.dirX;
 const ny = aimingRef.current.dirY;
 
-cue.vx += (nx * power) / Math.max(1, cue.mass);
-cue.vy += (ny * power) / Math.max(1, cue.mass);
+cue.vx += nx * power;
+cue.vy += ny * power;
 }
 }
 
@@ -812,7 +818,6 @@ return (
 <div>• <span className="font-bold">Clique</span> no ponto onde você quer mandar a bola.</div>
 <div>• <span className="font-bold">Segure</span> o botão esquerdo para carregar a força (o taco recua).</div>
 <div>• <span className="font-bold">Solte</span> para tacar.</div>
-<div>• Se uma bola parar sobre uma caçapa, ela “cai” e sai da mesa.</div>
 </>
 );
 }
@@ -834,7 +839,7 @@ return (
 <div><span className="font-black">Modo Market Cap</span></div>
 <div>• <span className="font-bold">X</span>: Market Cap (log)</div>
 <div>• <span className="font-bold">Y</span>: Volume 24h (log)</div>
-<div>• <span className="font-bold">Tamanho</span>: |%var {timeframe}|</div>
+<div>• <span className="font-bold">Tamanho</span>: Market Cap (log)</div>
 <div>• <span className="font-bold">Cor</span>: verde/ vermelho pela variação {timeframe}</div>
 </>
 );
@@ -859,7 +864,6 @@ isDarkTheme: boolean
 const cx = toScreenX(cueBall.x);
 const cy = toScreenY(cueBall.y);
 
-// direção (bola -> alvo)
 let dirX = 1;
 let dirY = 0;
 
@@ -877,10 +881,8 @@ dirX = dx / dist;
 dirY = dy / dist;
 }
 
-// ângulo da direção (na tela)
 const angle = Math.atan2(dirY, dirX);
 
-// potência visual
 const pull = aimingRef.current.active ? aimingRef.current.pull : 0;
 const pumpWave = Math.sin(now * 0.030) * mathClamp(8 + pull * 0.05, 8, 18);
 const pump = aimingRef.current.active
@@ -890,20 +892,17 @@ const pump = aimingRef.current.active
 const stickLen = Math.max(260, cueBall.radius * 7.8);
 const stickThick = Math.max(8, cueBall.radius * 0.38);
 
-// tip fica fora da bola (não passa “por baixo”)
 const gap = 12;
 const tipX = cx - Math.cos(angle) * (cueBall.radius + gap + pump);
 const tipY = cy - Math.sin(angle) * (cueBall.radius + gap + pump);
 
 ctx2.save();
 ctx2.translate(tipX, tipY);
-// x positivo vai “pra trás” do taco
 ctx2.rotate(angle + Math.PI);
 
 ctx2.globalAlpha = 0.92;
 ctx2.lineCap = 'round';
 
-// corpo
 ctx2.beginPath();
 ctx2.moveTo(0, 0);
 ctx2.lineTo(stickLen, 0);
@@ -911,7 +910,6 @@ ctx2.strokeStyle = isDarkTheme ? 'rgba(210,170,120,0.75)' : 'rgba(120,85,45,0.70
 ctx2.lineWidth = stickThick;
 ctx2.stroke();
 
-// ponteira
 ctx2.beginPath();
 ctx2.moveTo(0, 0);
 ctx2.lineTo(Math.min(30, stickLen * 0.18), 0);
@@ -921,7 +919,6 @@ ctx2.stroke();
 
 ctx2.restore();
 
-// linha de mira + alvo fixo
 if (aimingRef.current.active) {
 const tx = toScreenX(aimingRef.current.targetX);
 const ty = toScreenY(aimingRef.current.targetY);
@@ -938,7 +935,6 @@ ctx2.stroke();
 ctx2.setLineDash([]);
 
 ctx2.globalAlpha = 0.9;
-// marca do alvo
 ctx2.beginPath();
 ctx2.arc(tx, ty, 10, 0, Math.PI * 2);
 ctx2.strokeStyle = isDarkTheme ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.45)';
@@ -1007,7 +1003,6 @@ const now = performance.now();
 const dt = Math.min((now - lastTime) / 1000, 0.05);
 lastTime = now;
 
-// charge por tempo (modo game)
 if (isGameModeRef.current && aimingRef.current.active) {
 const heldMs = now - aimingRef.current.startMs;
 const pull = (heldMs / 1000) * CHARGE_SPEED;
@@ -1020,14 +1015,12 @@ const height = canvas.height / dpr;
 
 ctx.setTransform(1, 0, 0, 1, 0, 0);
 
-// background
 if (isGameModeRef.current) ctx.fillStyle = isDark ? '#08110c' : '#e8f3ea';
 else ctx.fillStyle = isDark ? '#0b0f14' : '#ffffff';
 
 ctx.fillRect(0, 0, canvas.width, canvas.height);
 ctx.scale(dpr, dpr);
 
-// watermark
 drawWatermark(ctx, width, height, watermarkRef.current, isDark, isGameModeRef.current);
 
 const { k, x: panX, y: panY } = transformRef.current;
@@ -1040,10 +1033,11 @@ const particles = particlesRef.current;
 for (const p of particles) {
 const viewRadius = p.targetRadius * Math.pow(k, 0.25);
 p.radius += (viewRadius - p.radius) * 0.15;
-p.mass = Math.max(1, p.radius);
+
+// ✅ massa: game = 1, mapa = raio
+p.mass = isGameModeRef.current ? 1 : Math.max(1, p.radius);
 }
 
-// pockets (game)
 let pockets: { x: number; y: number; r: number }[] = [];
 if (isGameModeRef.current) {
 const worldW = width / k;
@@ -1059,14 +1053,12 @@ pockets = [
 { x: worldW - pr, y: worldH - pr, r: pr }
 ];
 
-// borda mesa
 ctx.save();
 ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.10)';
 ctx.lineWidth = 4;
 ctx.strokeRect(8, 8, width - 16, height - 16);
 ctx.restore();
 
-// caçapas
 ctx.save();
 for (const pk of pockets) {
 const sx = toScreenX(pk.x);
@@ -1085,11 +1077,9 @@ ctx.stroke();
 }
 ctx.restore();
 
-// triângulo rack
 drawRackTriangle(ctx, width, height, toScreenX, toScreenY, isDark);
 }
 
-// axes (map)
 if (!isGameModeRef.current && statsRef.current) {
 const s = statsRef.current;
 
@@ -1212,8 +1202,8 @@ p.vx = 0;
 p.vy = 0;
 }
 
-p.x += p.vx * dt * 1.0;
-p.y += p.vy * dt * 1.0;
+p.x += p.vx * dt;
+p.y += p.vy * dt;
 
 if (p.x < p.radius + GAME_WALL_PAD) { p.x = p.radius + GAME_WALL_PAD; p.vx *= -1; }
 else if (p.x > worldW - p.radius - GAME_WALL_PAD) { p.x = worldW - p.radius - GAME_WALL_PAD; p.vx *= -1; }
@@ -1222,7 +1212,6 @@ if (p.y < p.radius + GAME_WALL_PAD) { p.y = p.radius + GAME_WALL_PAD; p.vy *= -1
 else if (p.y > worldH - p.radius - GAME_WALL_PAD) { p.y = worldH - p.radius - GAME_WALL_PAD; p.vy *= -1; }
 }
 
-// collisions
 for (let i = 0; i < particles.length; i++) {
 const p1 = particles[i];
 if (p1.isFalling) continue;
@@ -1280,7 +1269,6 @@ p2.vy += impulseY / p2.mass;
 }
 }
 
-// clamp speed “20%”
 for (const p of particles) {
 if (p.isFalling) continue;
 if (p.isFixed) continue;
@@ -1293,7 +1281,6 @@ p.vy *= s;
 }
 }
 
-// pocket + fall
 const holdNeeded = 0.35;
 const toRemove: Particle[] = [];
 
@@ -1354,7 +1341,6 @@ const chartH = Math.max(50, height - margin.top - margin.bottom);
 const originX = margin.left;
 const originY = margin.top + chartH;
 
-// +30% max sempre (min 0)
 const mappedFloatMaxAmp = 5.2 * 1.3;
 const mappedFloatAmp = floatStrengthRaw * mappedFloatMaxAmp;
 
@@ -1397,13 +1383,11 @@ p.y += (targetY - p.y) * 0.05;
 }
 }
 
-// taco por cima do felt (depois dos pockets) e antes das bolas
 if (isGameModeRef.current) {
 const cueBall = particlesRef.current.find(p => String(p.coin.id).toLowerCase() === 'bitcoin');
 if (cueBall) drawCueStick(ctx, cueBall, now, toScreenX, toScreenY, k, isDark);
 }
 
-// RENDER PARTICLES
 const particlesToDraw = particlesRef.current;
 
 for (const p of particlesToDraw) {
@@ -1465,7 +1449,6 @@ const isBTC = String(p.coin.id).toLowerCase() === 'bitcoin';
 ctx.save();
 ctx.globalAlpha = alpha;
 
-// BTC no game: bola branca + logo centralizado
 if (isBTC && isGameModeRef.current) {
 ctx.beginPath();
 ctx.arc(screenX, screenY, drawRadius, 0, Math.PI * 2);
@@ -1484,7 +1467,6 @@ const logoSize = drawRadius * 1.2;
 ctx.drawImage(img, screenX - logoSize / 2, screenY - logoSize / 2, logoSize, logoSize);
 }
 } else {
-// demais bolas
 ctx.beginPath();
 ctx.arc(screenX, screenY, drawRadius, 0, Math.PI * 2);
 
@@ -1635,128 +1617,4 @@ title="Legenda / Instruções"
 
 {legendTipOpen && (
 <div
-className="absolute right-0 mt-2 w-80 bg-white/95 dark:bg-black/85 border border-gray-200 dark:border-white/10 rounded-xl p-3 shadow-xl backdrop-blur-md text-sm"
-onMouseEnter={() => setLegendTipOpen(true)}
-onMouseLeave={() => setLegendTipOpen(false)}
->
-<div className="space-y-1 text-gray-800 dark:text-gray-100">
-{legendText}
-</div>
-</div>
-)}
-</div>
-
-<button
-onClick={() => setSettingsOpen(v => !v)}
-className={`p-3 rounded-lg border transition-colors backdrop-blur-sm ${settingsOpen ? 'bg-[#dd9933] text-black border-[#dd9933]' : 'bg-gray-100 dark:bg-black/50 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10'}`}
-title="Settings"
->
-<Settings size={20} />
-</button>
-
-<button
-onClick={() => onClose()}
-className="p-3 bg-gray-100 dark:bg-black/50 rounded-lg border border-gray-200 dark:border-white/10 hover:bg-red-500/10 text-gray-600 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
-title="Close"
->
-<CloseIcon size={20} />
-</button>
-</div>
-</div>
-
-{settingsOpen && (
-<div
-className="absolute top-24 right-4 bg-white/90 dark:bg-black/80 p-4 rounded-lg border border-gray-200 dark:border-white/10 backdrop-blur-md w-80 z-30 shadow-xl"
-onWheel={(e) => e.stopPropagation()}
-onMouseDown={(e) => e.stopPropagation()}
->
-<div className="flex items-center justify-between gap-3">
-<div className="flex items-center gap-2">
-<Atom size={14} />
-<span className="text-xs font-black uppercase tracking-wider">Modo Game</span>
-</div>
-
-<button
-onClick={() => setIsGameMode(!isGameMode)}
-className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isGameMode ? 'bg-[#dd9933]' : 'bg-gray-200 dark:bg-[#2f3032]'}`}
-title="Modo Game"
->
-<span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isGameMode ? 'translate-x-6' : 'translate-x-1'}`} />
-</button>
-</div>
-
-<div className="mt-3 flex items-center justify-between gap-3">
-<div className="flex items-center gap-2">
-<Coins size={14} />
-<span className="text-xs font-black uppercase tracking-wider"># Moedas</span>
-</div>
-
-<select
-value={numCoins}
-onChange={e => setNumCoins(parseInt(e.target.value))}
-className="bg-white dark:bg-[#2f3032] text-gray-900 dark:text-gray-100 px-2 py-1.5 rounded text-xs border border-gray-200 dark:border-white/10 outline-none"
-onWheel={(e) => e.stopPropagation()}
->
-{[50, 100, 150, 200, 250].map(n => <option key={n} value={n}>{n} moedas</option>)}
-</select>
-</div>
-
-<div className="mt-4 space-y-4">
-<div className={isGameMode ? 'opacity-50' : ''}>
-<div className="flex items-center justify-between gap-3">
-<div className="flex items-center gap-2">
-<Wind size={14} />
-<span className="text-xs font-black uppercase tracking-wider">Flutuação (Mapa)</span>
-</div>
-<span className="text-xs font-bold text-gray-500 dark:text-gray-400">{Math.round(floatStrengthRaw * 100)}%</span>
-</div>
-<input
-type="range"
-min="0"
-max="1"
-step="0.05"
-value={floatStrengthRaw}
-onChange={e => setFloatStrengthRaw(parseFloat(e.target.value))}
-className="w-full accent-[#dd9933] mt-2"
-disabled={isGameMode}
-/>
-</div>
-
-<div>
-<div className="flex items-center justify-between gap-3">
-<div className="flex items-center gap-2">
-<Droplets size={14} />
-<span className="text-xs font-black uppercase tracking-wider">Rastro (Trail)</span>
-</div>
-<span className="text-xs font-bold text-gray-500 dark:text-gray-400">{trailLength}</span>
-</div>
-<input
-type="range"
-min="0"
-max="50"
-step="1"
-value={trailLength}
-onChange={e => setTrailLength(parseInt(e.target.value))}
-className="w-full accent-[#dd9933] mt-2"
-/>
-</div>
-</div>
-</div>
-)}
-
-<div ref={stageRef} className="flex-1 w-full relative cursor-crosshair overflow-hidden">
-<canvas
-ref={canvasRef}
-onMouseMove={handleMouseMove}
-onMouseDown={(e) => { e.preventDefault(); handleMouseDown(e); }}
-onMouseUp={(e) => { e.preventDefault(); handleMouseUp(); }}
-onMouseLeave={() => { setHoveredParticle(null); handleMouseUp(); }}
-onWheel={handleWheel}
-className="absolute inset-0 w-full h-full block"
-/>
-</div>
-</div>
-);
-};
-
-export default MarketWindSwarm;
+className="absolute right-0 mt-2 w-80 bg-white/95 dark:bg-black/85 border border-gray-200 dark:border-white/10 rounded-xl p-3
