@@ -4,6 +4,7 @@ import Highcharts from 'highcharts';
 import TreemapModule from 'highcharts/modules/treemap';
 import ExportingModule from 'highcharts/modules/exporting';
 import AccessibilityModule from 'highcharts/modules/accessibility';
+import { DashboardItem, Language } from '../../../types';
 
 // =============================
 // CONFIG (MESMA ORIGEM)
@@ -60,9 +61,9 @@ let HC_INITED = false;
 function initHighchartsOnce() {
   if (HC_INITED) return;
   HC_INITED = true;
-  TreemapModule(Highcharts);
-  ExportingModule(Highcharts);
-  AccessibilityModule(Highcharts);
+  (TreemapModule as any)(Highcharts);
+  (ExportingModule as any)(Highcharts);
+  (AccessibilityModule as any)(Highcharts);
 
   Highcharts.setOptions({
     chart: {
@@ -323,7 +324,7 @@ function TreemapChart({
             enabled: true,
             allowOverlap: false,
             style: { color: '#fff', textOutline: 'none', fontWeight: '800' },
-            formatter: function () {
+            formatter: function (this: any) {
               const p: any = this.point;
               const ch = Number(p?.custom?.change24h ?? p.colorValue ?? 0);
 
@@ -368,7 +369,12 @@ function TreemapChart({
 // =============================
 // MAIN COMPONENT (FULLSCREEN POPUP VIA PORTAL)
 // =============================
-export default function CryptoHeatmaps() {
+interface HeatmapWidgetProps {
+  item?: DashboardItem;
+  language?: Language;
+}
+
+export default function CryptoHeatmaps({ item, language }: HeatmapWidgetProps) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<HeatmapView>({ mode: 'market' });
 

@@ -16,7 +16,7 @@ export const ENDPOINTS = {
       global: "/cg_global.json",
       main: "/cachecko.json",
       fng: "/fearandgreed_data.json",
-      rsiAvg: "/rsi_avg.json",
+      rsiAvg: "/rsiavg.json",
       rsiTracker: "/rsitrackerhist.json",
       macdAvg: "/macdavg.json",
       macdTracker: "/macdtracker.json",

@@ -243,20 +243,24 @@ const RsiWidget = ({ language, onNavigate }: { language: Language; onNavigate: (
 
   const refresh = async () => {
     try {
-      const res: any = await fetchRsiAverage();
+      // Direct call to ensure filename is correct (/rsiavg.json)
+      const res: any = await fetchWithFallback('/cachecko/rsiavg.json');
       if (res) {
-          // Parse correct n8n structure: [{ data: { overall: { ... } } }]
-          if (Array.isArray(res) && res[0]?.data?.overall) {
-              const o = res[0].data.overall;
+          let o = res;
+          // Robust parsing logic for n8n array vs object structure
+          if (Array.isArray(res) && res.length > 0) {
+              o = res[0]?.data?.overall || res[0];
+          } else if (res?.data?.overall) {
+              o = res.data.overall;
+          }
+
+          if (o) {
               setData({
-                  averageRsi: Number(o.averageRsi) || 50,
-                  yesterday: Number(o.yesterday) || 50,
-                  days7Ago: Number(o.days7Ago) || 50,
-                  days30Ago: Number(o.days30Ago) || 50
+                  averageRsi: Number(o.averageRsi ?? 50),
+                  yesterday: Number(o.yesterday ?? 50),
+                  days7Ago: Number(o.days7Ago ?? 50),
+                  days30Ago: Number(o.days30Ago ?? 50)
               });
-          } else {
-              // Fallback for flat structure
-              setData(res);
           }
       }
     } finally {

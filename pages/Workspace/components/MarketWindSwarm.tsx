@@ -131,22 +131,19 @@ const GAME_BALL_RADIUS = 26;
 const GAME_CUE_RADIUS = 34;
 const GAME_WALL_PAD = 14;
 
-// antes era 0.20 (capava tudo)
-// deixa mais “pool de verdade”
 const GAME_SPEED_LOCK = 0.65;
 const GAME_MAX_SPEED = 1400 * GAME_SPEED_LOCK;
 
 const MAX_PULL = 240;
-
-// tacada mais forte
 const MAX_SHOT_POWER = 5200;
 
-// desaceleração e parada
 const DRAG_BASE = 0.992;
 const STOP_EPS = 0.85;
 
-// “segura para carregar”
 const CHARGE_SPEED = 620;
+
+// taco some após tacada
+const STICK_HIDE_MS = 5000;
 
 const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 const containerRef = useRef<HTMLDivElement>(null);
@@ -184,18 +181,17 @@ const [trailLength, setTrailLength] = useState(25);
 
 const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
 
-// Detail panel (mantido)
+// Detail panel
 const [detailOpen, setDetailOpen] = useState(false);
 const [detailCoin, setDetailCoin] = useState<ApiCoin | null>(null);
 
-// Interaction
 const transformRef = useRef({ k: 1, x: 0, y: 0 });
 const isPanningRef = useRef(false);
 const panStartRef = useRef({ clientX: 0, clientY: 0, x: 0, y: 0 });
 const draggedParticleRef = useRef<Particle | null>(null);
 const lastMousePosRef = useRef<{ x: number; y: number } | null>(null);
 
-// aiming (tacada)
+// aiming
 const aimingRef = useRef<{
 active: boolean;
 cueId: string | null;
@@ -224,30 +220,10 @@ startMs: 0,
 pull: 0
 });
 
-// WATERMARK IMAGE (preload)
+// stick cooldown after shot
+const stickHiddenUntilRef = useRef<number>(0);
+
 const watermarkRef = useRef<HTMLImageElement | null>(null);
-
-useEffect(() => {
-const tryLoad = (src: string, onOk: () => void, onFail: () => void) => {
-if (!src) { onFail(); return; }
-const img = new Image();
-img.crossOrigin = 'anonymous';
-img.onload = () => {
-watermarkRef.current = img;
-onOk();
-};
-img.onerror = () => onFail();
-img.src = src;
-};
-
-tryLoad(
-WATERMARK_LOCAL,
-() => {},
-() => {
-if (WATERMARK_REMOTE) tryLoad(WATERMARK_REMOTE, () => {}, () => {});
-}
-);
-}, []);
 
 const hoveredParticleRef = useRef(hoveredParticle);
 hoveredParticleRef.current = hoveredParticle;
@@ -258,11 +234,11 @@ selectedParticleRef.current = selectedParticle;
 const detailOpenRef = useRef(detailOpen);
 detailOpenRef.current = detailOpen;
 
+// stats for chart mapping
 const statsRef = useRef<{
 minX: number, maxX: number,
 minY: number, maxY: number,
 minR: number, maxR: number,
-logMinX: number, logMaxX: number,
 logMinY: number, logMaxY: number
 } | null>(null);
 
@@ -297,6 +273,28 @@ isPanningRef.current = false;
 };
 window.addEventListener('keydown', onKey);
 return () => window.removeEventListener('keydown', onKey);
+}, []);
+
+useEffect(() => {
+const tryLoad = (src: string, onOk: () => void, onFail: () => void) => {
+if (!src) { onFail(); return; }
+const img = new Image();
+img.crossOrigin = 'anonymous';
+img.onload = () => {
+watermarkRef.current = img;
+onOk();
+};
+img.onerror = () => onFail();
+img.src = src;
+};
+
+tryLoad(
+WATERMARK_LOCAL,
+() => {},
+() => {
+if (WATERMARK_REMOTE) tryLoad(WATERMARK_REMOTE, () => {}, () => {});
+}
+);
 }, []);
 
 const loadData = useCallback(async () => {
@@ -337,11 +335,7 @@ for (const p of particlesRef.current) {
 const isBTC = String(p.coin.id).toLowerCase() === 'bitcoin';
 p.targetRadius = isBTC ? GAME_CUE_RADIUS : GAME_BALL_RADIUS;
 p.radius = p.targetRadius;
-
-// massa “pool”: tudo igual (sensação real)
-// (não fica bola de 200 toneladas)
 p.mass = 1;
-
 p.vx = 0; p.vy = 0;
 p.trail = [];
 p.isFixed = false;
@@ -448,6 +442,8 @@ aimingRef.current.active = false;
 aimingRef.current.cueId = null;
 aimingRef.current.pull = 0;
 
+stickHiddenUntilRef.current = 0;
+
 setupGameLayout();
 } else {
 resetZoom();
@@ -458,6 +454,8 @@ setLegendTipOpen(false);
 aimingRef.current.active = false;
 aimingRef.current.cueId = null;
 aimingRef.current.pull = 0;
+
+stickHiddenUntilRef.current = 0;
 
 if (draggedParticleRef.current) {
 draggedParticleRef.current.isFixed = false;
@@ -487,16 +485,20 @@ const volFactor = Math.log10(vol + 1);
 return absPct * volFactor;
 }, [getCoinAbsPct]);
 
-// ✅ tamanho no modo valuation (market cap): log do mcap
+// tamanho marketcap: log
 const sizeMetricMcap = useCallback((coin: any) => {
 const mc = Math.max(1, Number(coin?.market_cap) || 1);
 return Math.log10(mc);
 }, []);
 
+// ======================
+// BUILD/UPDATE PARTICLES
+// ======================
 useEffect(() => {
 const topCoins = coins.slice(0, numCoins);
 if (topCoins.length === 0) return;
 
+// stats for mapping (no modo valuation: X agora é %var, Y é volume log, tamanho é marketcap log)
 const xData: number[] = [];
 const yData: number[] = [];
 const rData: number[] = [];
@@ -509,9 +511,8 @@ if (chartMode === 'performance') {
 xData.push(getCoinPerfPct(c) || 0);
 rData.push(Math.max(0.000001, sizeMetricPerf(c)));
 } else {
-// X é market cap (linear), mas o tamanho usa LOG pra ficar “usável”
-xData.push(Math.max(1, Number(c.market_cap) || 1));
-rData.push(Math.max(0.0001, sizeMetricMcap(c)));
+xData.push(getCoinPerfPct(c) || 0); // ✅ X também é variação %
+rData.push(Math.max(0.0001, sizeMetricMcap(c))); // ✅ tamanho = mcap
 }
 }
 
@@ -519,16 +520,27 @@ const minX = Math.min(...xData), maxX = Math.max(...xData);
 const minY = Math.min(...yData), maxY = Math.max(...yData);
 const minR = Math.min(...rData), maxR = Math.max(...rData);
 
-const logMinX = (chartMode === 'valuation') ? Math.log10(Math.max(1, minX)) : 0;
-const logMaxX = (chartMode === 'valuation') ? Math.log10(Math.max(1, maxX)) : 0;
-
 statsRef.current = {
 minX, maxX, minY, maxY, minR, maxR,
-logMinX, logMaxX,
 logMinY: Math.log10(Math.max(1, minY)),
 logMaxY: Math.log10(Math.max(1, maxY))
 };
 
+// se está no game: NÃO recria nem relayouta — só atualiza coin/meta
+if (isGameModeRef.current) {
+const map = new Map(topCoins.map(c => [c.id, c] as const));
+for (const p of particlesRef.current) {
+const upd = map.get(p.id);
+if (upd) {
+p.coin = upd;
+const pct = getCoinPerfPct(upd);
+p.color = String(upd.id).toLowerCase() === 'bitcoin' ? '#ffffff' : (pct >= 0 ? '#089981' : '#f23645');
+}
+}
+return;
+}
+
+// mapa normal: cria/atualiza com smooth
 const existingMap = new Map(particlesRef.current.map(p => [p.id, p] as const));
 
 const w = stageRef.current?.clientWidth || 1000;
@@ -554,7 +566,6 @@ const rrMin = minR;
 const rrMax = maxR;
 const t = (radiusVal - rrMin) / (rrMax - rrMin || 1);
 
-// base do tamanho
 const targetRadius = 15 + mathClamp(t, 0, 1) * 55;
 
 const isBTC = String(coin.id).toLowerCase() === 'bitcoin';
@@ -564,12 +575,9 @@ const vy = (Math.random() - 0.5) * 60;
 
 if (existing) {
 existing.coin = coin;
-existing.targetRadius = isGameModeRef.current ? (isBTC ? GAME_CUE_RADIUS : GAME_BALL_RADIUS) : targetRadius;
+existing.targetRadius = targetRadius;
 existing.color = isBTC ? '#ffffff' : baseColor;
-
-// massa: no game fica 1, no mapa segue raio
-existing.mass = isGameModeRef.current ? 1 : Math.max(1, existing.targetRadius);
-
+existing.mass = Math.max(1, existing.targetRadius);
 return existing;
 }
 
@@ -580,12 +588,12 @@ y: Math.random() * h,
 vx,
 vy,
 radius: 0,
-targetRadius: isGameModeRef.current ? (isBTC ? GAME_CUE_RADIUS : GAME_BALL_RADIUS) : targetRadius,
+targetRadius,
 color: isBTC ? '#ffffff' : baseColor,
 coin,
 trail: [],
 phase: Math.random() * Math.PI * 2,
-mass: isGameModeRef.current ? 1 : Math.max(1, targetRadius),
+mass: Math.max(1, targetRadius),
 pocketHold: 0,
 isFalling: false,
 fallT: 0,
@@ -594,9 +602,7 @@ fallPocket: null
 });
 
 particlesRef.current = newParticles;
-
-if (isGameModeRef.current) setupGameLayout();
-}, [coins, numCoins, chartMode, timeframe, getCoinPerfPct, sizeMetricPerf, sizeMetricMcap, setupGameLayout]);
+}, [coins, numCoins, chartMode, timeframe, getCoinPerfPct, sizeMetricPerf, sizeMetricMcap]);
 
 const screenToWorld = (clientX: number, clientY: number) => {
 const canvas = canvasRef.current;
@@ -612,6 +618,12 @@ y: (mouseY - y) / k,
 mx: mouseX,
 my: mouseY
 };
+};
+
+const openDetailFor = (p: Particle) => {
+setSelectedParticle(p);
+setDetailCoin(p.coin);
+setDetailOpen(true);
 };
 
 const handleMouseMove = (e: React.MouseEvent) => {
@@ -686,16 +698,13 @@ break;
 setHoveredParticle(found);
 };
 
-const openDetailFor = (p: Particle) => {
-setSelectedParticle(p);
-setDetailCoin(p.coin);
-setDetailOpen(true);
-};
-
 const handleMouseDown = (e: React.MouseEvent) => {
 if (detailOpenRef.current) return;
 
 if (isGameModeRef.current) {
+const now = performance.now();
+if (now < stickHiddenUntilRef.current) return;
+
 const w = screenToWorld(e.clientX, e.clientY);
 
 const cue = particlesRef.current.find(pp => String(pp.coin.id).toLowerCase() === 'bitcoin');
@@ -738,6 +747,7 @@ return;
 return;
 }
 
+// mapa: clique abre painel
 if (hoveredParticleRef.current) {
 openDetailFor(hoveredParticleRef.current);
 return;
@@ -760,7 +770,6 @@ if (cue && !cue.isFalling) {
 const pull = mathClamp(aimingRef.current.pull, 0, MAX_PULL);
 
 if (pull > 2) {
-// power direto (sem dividir por massa) e cap maior (GAME_MAX_SPEED)
 const power = (pull / MAX_PULL) * MAX_SHOT_POWER;
 
 const nx = aimingRef.current.dirX;
@@ -768,6 +777,9 @@ const ny = aimingRef.current.dirY;
 
 cue.vx += nx * power;
 cue.vy += ny * power;
+
+const now = performance.now();
+stickHiddenUntilRef.current = now + STICK_HIDE_MS;
 }
 }
 
@@ -815,9 +827,10 @@ return (
 <>
 <div><span className="font-black">Modo Game (Bilhar)</span></div>
 <div>• A <span className="font-black">bola branca</span> é o <span className="font-black">BTC</span>.</div>
-<div>• <span className="font-bold">Clique</span> no ponto onde você quer mandar a bola.</div>
+<div>• <span className="font-bold">Clique</span> no alvo final (onde quer mandar a bola).</div>
 <div>• <span className="font-bold">Segure</span> o botão esquerdo para carregar a força (o taco recua).</div>
 <div>• <span className="font-bold">Solte</span> para tacar.</div>
+<div>• Após a tacada, o taco <span className="font-bold">some por 5s</span> para as bolas acomodarem.</div>
 </>
 );
 }
@@ -837,7 +850,7 @@ return (
 return (
 <>
 <div><span className="font-black">Modo Market Cap</span></div>
-<div>• <span className="font-bold">X</span>: Market Cap (log)</div>
+<div>• <span className="font-bold">X</span>: Variação de preço {timeframe} (%)</div>
 <div>• <span className="font-bold">Y</span>: Volume 24h (log)</div>
 <div>• <span className="font-bold">Tamanho</span>: Market Cap (log)</div>
 <div>• <span className="font-bold">Cor</span>: verde/ vermelho pela variação {timeframe}</div>
@@ -861,6 +874,8 @@ toScreenY: (v: number) => number,
 k: number,
 isDarkTheme: boolean
 ) => {
+if (now < stickHiddenUntilRef.current) return;
+
 const cx = toScreenX(cueBall.x);
 const cy = toScreenY(cueBall.y);
 
@@ -1029,12 +1044,9 @@ const toScreenY = (val: number) => val * k + panY;
 
 const particles = particlesRef.current;
 
-// radius easing
 for (const p of particles) {
 const viewRadius = p.targetRadius * Math.pow(k, 0.25);
 p.radius += (viewRadius - p.radius) * 0.15;
-
-// ✅ massa: game = 1, mapa = raio
 p.mass = isGameModeRef.current ? 1 : Math.max(1, p.radius);
 }
 
@@ -1101,13 +1113,7 @@ ctx.fillStyle = isDark ? 'rgba(255,255,255,0.78)' : 'rgba(0,0,0,0.72)';
 ctx.textBaseline = 'middle';
 
 const projectX = (v: number) => {
-let norm = 0;
-if (chartMode === 'valuation') {
-if (v <= 0) return originX;
-norm = (Math.log10(v) - s.logMinX) / (s.logMaxX - s.logMinX || 1);
-} else {
-norm = (v - s.minX) / (s.maxX - s.minX || 1);
-}
+const norm = (v - s.minX) / (s.maxX - s.minX || 1);
 return originX + norm * chartW;
 };
 
@@ -1119,10 +1125,7 @@ return margin.top + (1 - norm) * chartH;
 
 for (let i = 0; i <= xSteps; i++) {
 const percent = i / xSteps;
-
-let val = 0;
-if (chartMode === 'valuation') val = Math.pow(10, s.logMinX + percent * (s.logMaxX - s.logMinX));
-else val = s.minX + percent * (s.maxX - s.minX);
+const val = s.minX + percent * (s.maxX - s.minX);
 
 const worldX = projectX(val);
 const screenX = toScreenX(worldX);
@@ -1133,7 +1136,7 @@ ctx.lineTo(screenX, toScreenY(originY));
 ctx.stroke();
 
 ctx.textAlign = 'center';
-const label = (chartMode === 'performance') ? `${val.toFixed(1)}%` : formatCompact(val);
+const label = `${val.toFixed(1)}%`;
 const tickY = mathClamp(toScreenY(originY) + 18, 12, height - 14);
 ctx.fillText(label, screenX, tickY);
 }
@@ -1168,9 +1171,7 @@ ctx.font = 'bold 14px Inter';
 ctx.textAlign = 'center';
 ctx.fillStyle = isDark ? '#dd9933' : '#333';
 
-const xLabel = chartMode === 'performance'
-? `Variação de preço ${timeframe} (%)`
-: 'Market Cap (Log)';
+const xLabel = `Variação de preço ${timeframe} (%)`;
 const xLabelY = mathClamp(toScreenY(originY) + 56, 20, height - 10);
 ctx.fillText(xLabel, width / 2, xLabelY);
 
@@ -1183,7 +1184,6 @@ ctx.restore();
 ctx.restore();
 }
 
-// PHYSICS / MAPPING
 if (isGameModeRef.current) {
 const worldW = width / k;
 const worldH = height / k;
@@ -1345,13 +1345,7 @@ const mappedFloatMaxAmp = 5.2 * 1.3;
 const mappedFloatAmp = floatStrengthRaw * mappedFloatMaxAmp;
 
 const projectX = (v: number) => {
-let norm = 0;
-if (chartMode === 'valuation') {
-if (v <= 0) return originX;
-norm = (Math.log10(v) - s.logMinX) / (s.logMaxX - s.logMinX || 1);
-} else {
-norm = (v - s.minX) / (s.maxX - s.minX || 1);
-}
+const norm = (v - s.minX) / (s.maxX - s.minX || 1);
 return originX + norm * chartW;
 };
 
@@ -1362,11 +1356,8 @@ return margin.top + (1 - norm) * chartH;
 };
 
 for (const p of particles) {
-let xVal = 0;
+const xVal = getCoinPerfPct(p.coin) || 0;
 const yVal = p.coin.total_volume || 1;
-
-if (chartMode === 'performance') xVal = getCoinPerfPct(p.coin) || 0;
-else xVal = p.coin.market_cap || 1;
 
 const tx = projectX(xVal);
 const ty = projectY(yVal);
@@ -1529,6 +1520,10 @@ if (!detailPerf) return '#dd9933';
 return detailPerf.pct >= 0 ? '#089981' : '#f23645';
 }, [detailPerf]);
 
+const closeDetail = () => {
+setDetailOpen(false);
+};
+
 return (
 <div
 ref={containerRef}
@@ -1678,6 +1673,7 @@ value={numCoins}
 onChange={e => setNumCoins(parseInt(e.target.value))}
 className="bg-white dark:bg-[#2f3032] text-gray-900 dark:text-gray-100 px-2 py-1.5 rounded text-xs border border-gray-200 dark:border-white/10 outline-none"
 onWheel={(e) => e.stopPropagation()}
+disabled={isGameMode}
 >
 {[50, 100, 150, 200, 250].map(n => <option key={n} value={n}>{n} moedas</option>)}
 </select>
@@ -1737,6 +1733,59 @@ onWheel={handleWheel}
 className="absolute inset-0 w-full h-full block"
 />
 </div>
+
+{detailOpen && detailCoin && (
+<div className="absolute inset-0 z-40 pointer-events-none">
+<div className="absolute inset-0 bg-black/30 pointer-events-auto" onClick={closeDetail}></div>
+
+<div className="absolute top-0 right-0 h-full w-[380px] max-w-[92vw] bg-white dark:bg-[#0f141b] border-l border-gray-200 dark:border-white/10 shadow-2xl pointer-events-auto flex flex-col">
+<div className="p-4 border-b border-gray-200 dark:border-white/10 flex items-center justify-between">
+<div className="flex items-center gap-3">
+<img src={detailCoin.image} alt={detailCoin.name} className="w-10 h-10 rounded-full" />
+<div>
+<div className="text-sm font-black">{detailCoin.name} <span className="text-gray-500 dark:text-gray-400 font-bold">({detailCoin.symbol.toUpperCase()})</span></div>
+<div className="text-xs font-bold text-gray-500 dark:text-gray-400">Rank #{detailCoin.market_cap_rank ?? '-'}</div>
+</div>
+</div>
+<button
+onClick={closeDetail}
+className="p-2 rounded-lg bg-gray-100 dark:bg-black/40 border border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10"
+title="Fechar"
+>
+<CloseIcon size={18} />
+</button>
+</div>
+
+<div className="p-4 space-y-3">
+<div className="flex items-center justify-between">
+<div className="text-xs font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">Preço</div>
+<div className="text-sm font-black">{formatPrice(detailCoin.current_price)}</div>
+</div>
+
+<div className="flex items-center justify-between">
+<div className="text-xs font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">Variação {timeframe}</div>
+<div className="text-sm font-black" style={{ color: detailColor }}>
+{(detailPerf?.pct ?? 0).toFixed(2)}%
+</div>
+</div>
+
+<div className="flex items-center justify-between">
+<div className="text-xs font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">Market Cap</div>
+<div className="text-sm font-black">{formatCompact(detailCoin.market_cap)}</div>
+</div>
+
+<div className="flex items-center justify-between">
+<div className="text-xs font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">Volume 24h</div>
+<div className="text-sm font-black">{formatCompact(detailCoin.total_volume)}</div>
+</div>
+</div>
+
+<div className="mt-auto p-4 border-t border-gray-200 dark:border-white/10 text-xs text-gray-500 dark:text-gray-400">
+Clique fora para fechar.
+</div>
+</div>
+</div>
+)}
 </div>
 );
 };
