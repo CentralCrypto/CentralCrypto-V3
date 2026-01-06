@@ -19,8 +19,6 @@ interface Particle {
   isFalling?: boolean;
   fallT?: number;
   fallPocket?: { x: number; y: number; r: number } | null;
-
-  // optional: fall origin for smooth “suck into pocket”
   fallFromX?: number;
   fallFromY?: number;
 }
@@ -31,7 +29,7 @@ type Timeframe = '1h' | '24h' | '7d';
 
 interface MarketWindSwarmProps { language: Language; onClose: () => void; }
 
-const mathClamp = (val: number, min: number, max: number) => Math.max(min, Math.min(val, max));
+const clamp = (val: number, min: number, max: number) => Math.max(min, Math.min(val, max));
 
 const formatCompact = (v?: number) => {
   const n = Number(v);
@@ -62,12 +60,7 @@ const computeSparkChange = (coin: any, tf: Timeframe) => {
   if (!spark || spark.length < 2) {
     const fallback = Number(coin?.price_change_percentage_24h);
     const pct = isFinite(fallback) ? fallback : 0;
-    return {
-      pct,
-      absPct: Math.abs(pct),
-      series: null as number[] | null,
-      inferredMinutesPerPoint: null as number | null
-    };
+    return { pct, absPct: Math.abs(pct), series: null as number[] | null, inferredMinutesPerPoint: null as number | null };
   }
 
   const len = spark.length;
@@ -93,7 +86,7 @@ const computeSparkChange = (coin: any, tf: Timeframe) => {
 // ========================
 // WATERMARK CONFIG
 // ========================
-const WATERMARK_LOCAL = '/logo2-transp.png'; // /public/logo2-transp.png
+const WATERMARK_LOCAL = '/logo2-transp.png';
 const WATERMARK_REMOTE = '';
 
 const drawWatermark = (
@@ -160,48 +153,37 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   const [isGameMode, setIsGameMode] = useState(false);
   const [numCoins, setNumCoins] = useState(50);
 
-  // defaults 50%
   const [floatStrengthRaw, setFloatStrengthRaw] = useState(0.5);
   const [trailLength, setTrailLength] = useState(25);
 
-  // tacada: controle de força (default 50%)
   const [cuePowerRaw, setCuePowerRaw] = useState(0.5);
 
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
 
-  // Detail panel (clique no mapa)
+  // Detail panel
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailCoin, setDetailCoin] = useState<ApiCoin | null>(null);
 
-  // Interaction / transform
+  // Transform
   const transformRef = useRef({ k: 1, x: 0, y: 0 });
   const isPanningRef = useRef(false);
   const panStartRef = useRef({ clientX: 0, clientY: 0, x: 0, y: 0 });
   const draggedParticleRef = useRef<Particle | null>(null);
   const lastMousePosRef = useRef<{ x: number; y: number } | null>(null);
 
-  // aiming (novo): click onde quer, segura para puxar taco, solta para tacar
+  // aiming
   const aimingRef = useRef<{
     active: boolean;
     holdStart: number;
     targetX: number;
     targetY: number;
-    pull: number; // 0..maxPull
-  }>({
-    active: false,
-    holdStart: 0,
-    targetX: 0,
-    targetY: 0,
-    pull: 0
-  });
+    pull: number;
+  }>({ active: false, holdStart: 0, targetX: 0, targetY: 0, pull: 0 });
 
-  // cue stick hide for 5s after shot
   const cueHideUntilRef = useRef<number>(0);
 
-  // WATERMARK IMAGE
   const watermarkRef = useRef<HTMLImageElement | null>(null);
 
-  // cached stats for mapping
   const statsRef = useRef<{
     minX: number, maxX: number,
     minY: number, maxY: number,
@@ -235,10 +217,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       if (!src) { onFail(); return; }
       const img = new Image();
       img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        watermarkRef.current = img;
-        onOk();
-      };
+      img.onload = () => { watermarkRef.current = img; onOk(); };
       img.onerror = () => onFail();
       img.src = src;
     };
@@ -246,9 +225,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     tryLoad(
       WATERMARK_LOCAL,
       () => {},
-      () => {
-        if (WATERMARK_REMOTE) tryLoad(WATERMARK_REMOTE, () => {}, () => {});
-      }
+      () => { if (WATERMARK_REMOTE) tryLoad(WATERMARK_REMOTE, () => {}, () => {}); }
     );
   }, []);
 
@@ -317,8 +294,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     return absPct * volFactor;
   }, [getCoinAbsPct]);
 
-  // compute stats + update particle sizes/colors WITHOUT resetting positions
-  const recomputeStatsAndTargets = useCallback((coinsList: ApiCoin[], mode: ChartMode, tf: Timeframe) => {
+  const recomputeStatsAndTargets = useCallback((coinsList: ApiCoin[], mode: ChartMode) => {
     const topCoins = coinsList.slice(0, numCoins);
     if (topCoins.length === 0) return;
 
@@ -335,7 +311,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         xData.push(x);
         rData.push(Math.max(0.000001, sizeMetricPerf(c)));
       } else {
-        // valuation mode: size MUST be proportional to market cap
         const mc = Math.max(1, Number(c.market_cap) || 1);
         xData.push(mc);
         rData.push(mc);
@@ -356,7 +331,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       logMaxY: Math.log10(Math.max(1, maxY))
     };
 
-    // update each particle coin reference / targetRadius / color
     const coinMap = new Map(topCoins.map(c => [c.id, c] as const));
     for (const p of particlesRef.current) {
       const updated = coinMap.get(p.id);
@@ -364,10 +338,8 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
       const pct = getCoinPerfPct(p.coin) || 0;
       const baseColor = pct >= 0 ? '#089981' : '#f23645';
-
       const isBTC = String(p.coin.id).toLowerCase() === 'bitcoin';
 
-      // compute target radius for map modes (game overrides elsewhere)
       let metric = 1;
       if (mode === 'performance') metric = Math.max(0.000001, sizeMetricPerf(p.coin));
       else metric = Math.max(1, Number(p.coin.market_cap) || 1);
@@ -375,7 +347,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       const rrMin = minR;
       const rrMax = maxR;
       const t = (metric - rrMin) / (rrMax - rrMin || 1);
-      const targetRadius = 15 + mathClamp(t, 0, 1) * 55;
+      const targetRadius = 15 + clamp(t, 0, 1) * 55;
 
       if (!isGameMode) {
         p.targetRadius = targetRadius;
@@ -403,7 +375,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       .filter(p => String(p.coin.id).toLowerCase() !== 'bitcoin')
       .sort((a, b) => (Number(a.coin.market_cap_rank) || 99999) - (Number(b.coin.market_cap_rank) || 99999));
 
-    // normalize sizes (all same, BTC larger)
     for (const p of particlesRef.current) {
       const isBTC = String(p.coin.id).toLowerCase() === 'bitcoin';
       p.targetRadius = isBTC ? GAME_CUE_RADIUS : GAME_BALL_RADIUS;
@@ -417,13 +388,11 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       p.fallPocket = null;
     }
 
-    // cue ball start
     if (cue) {
       cue.x = w * 0.78;
       cue.y = h * 0.5;
     }
 
-    // rack triangle left
     const rackApexX = w * 0.20;
     const rackApexY = h * 0.50;
 
@@ -447,22 +416,19 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       }
     }
 
-    // clamp to table
     const minX = GAME_WALL_PAD + GAME_BALL_RADIUS;
     const maxX = w - GAME_WALL_PAD - GAME_BALL_RADIUS;
     const minY = GAME_WALL_PAD + GAME_BALL_RADIUS;
     const maxY = h - GAME_WALL_PAD - GAME_BALL_RADIUS;
 
     for (const p of particlesRef.current) {
-      p.x = mathClamp(p.x, minX, maxX);
-      p.y = mathClamp(p.y, minY, maxY);
+      p.x = clamp(p.x, minX, maxX);
+      p.y = clamp(p.y, minY, maxY);
     }
   }, []);
 
-  // map projection for snap back (only used when leaving game, keep smooth updates otherwise)
   const snapBackToMap = useCallback(() => {
     if (!statsRef.current) return;
-
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -516,7 +482,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     }
   }, [chartMode, getCoinPerfPct]);
 
-  // init + resize observers
+  // init + resize
   useEffect(() => {
     loadData();
     const interval = setInterval(loadData, 60000);
@@ -557,7 +523,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     };
   }, [loadData]);
 
-  // global mouseup (for aiming)
+  // global mouseup (shot)
   useEffect(() => {
     const up = () => handleMouseUp();
     window.addEventListener('mouseup', up);
@@ -565,53 +531,43 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // build/rebuild particles ONLY when coins or numCoins changes
+  // =========================
+  // IMPORTANT: build particles ONLY when coins/numCoins changes
+  // (this fixes the "wipe/reposition on chart switch")
+  // =========================
   useEffect(() => {
     const topCoins = coins.slice(0, numCoins);
     if (topCoins.length === 0) return;
 
-    // preload images
     for (const c of topCoins) {
-      if (!imageCache.current.has(c.image)) {
+      if (c?.image && !imageCache.current.has(c.image)) {
         const img = new Image();
         img.src = c.image;
         imageCache.current.set(c.image, img);
       }
     }
 
-    // compute stats
-    recomputeStatsAndTargets(coins, chartMode, timeframe);
-
-    // preserve existing by id
     const existingMap = new Map(particlesRef.current.map(p => [p.id, p] as const));
     const w = stageRef.current?.clientWidth || 1000;
     const h = stageRef.current?.clientHeight || 800;
 
     const newParticles: Particle[] = topCoins.map(coin => {
       const existing = existingMap.get(coin.id);
-      const pct = getCoinPerfPct(coin) || 0;
-      const baseColor = pct >= 0 ? '#089981' : '#f23645';
-      const isBTC = String(coin.id).toLowerCase() === 'bitcoin';
 
       if (existing) {
         existing.coin = coin;
-        existing.color = isBTC ? '#ffffff' : baseColor;
-        // keep x/y/vx/vy for continuity
         return existing;
       }
-
-      const vx = (Math.random() - 0.5) * 60;
-      const vy = (Math.random() - 0.5) * 60;
 
       return {
         id: coin.id,
         x: Math.random() * w,
         y: Math.random() * h,
-        vx,
-        vy,
+        vx: (Math.random() - 0.5) * 60,
+        vy: (Math.random() - 0.5) * 60,
         radius: 0,
         targetRadius: 24,
-        color: isBTC ? '#ffffff' : baseColor,
+        color: '#dd9933',
         coin,
         trail: [],
         phase: Math.random() * Math.PI * 2,
@@ -625,17 +581,14 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
     particlesRef.current = newParticles;
 
-    // if currently in game, DO NOT auto-restart layout on data refresh
-    // only do initial layout if entering game (handled elsewhere)
-    if (!isGameMode) {
-      // keep smooth map; no snap/reset
-    }
-  }, [coins, numCoins, recomputeStatsAndTargets, chartMode, timeframe, getCoinPerfPct, isGameMode]);
+    // stats/targets update after rebuild
+    recomputeStatsAndTargets(coins, chartMode);
+  }, [coins, numCoins, recomputeStatsAndTargets, chartMode]);
 
-  // when chartMode/timeframe changes: recompute stats and targets; DON'T reset positions or transform
+  // when chartMode or timeframe changes: DO NOT rebuild particles, only update targets/colors
   useEffect(() => {
     if (coins.length === 0) return;
-    recomputeStatsAndTargets(coins, chartMode, timeframe);
+    recomputeStatsAndTargets(coins, chartMode);
   }, [chartMode, timeframe, coins, recomputeStatsAndTargets]);
 
   // enter/exit game
@@ -666,7 +619,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         draggedParticleRef.current = null;
       }
 
-      // return to map positions instantly (then mapping will “breathe”)
       snapBackToMap();
     }
   }, [isGameMode, resetZoom, setupGameLayout, snapBackToMap]);
@@ -680,18 +632,14 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
     lastMousePosRef.current = { x: worldMouseX, y: worldMouseY };
 
-    // if holding in game, update pull (time-held) only
     if (isGameMode && aimingRef.current.active) {
       const now = performance.now();
       const held = now - aimingRef.current.holdStart;
       const maxPull = 190;
-      // pull grows with time held (up to ~1s)
-      const pull = mathClamp((held / 900) * maxPull, 0, maxPull);
-      aimingRef.current.pull = pull;
+      aimingRef.current.pull = clamp((held / 900) * maxPull, 0, maxPull);
       return;
     }
 
-    // drag a ball (non-cue) in game
     if (draggedParticleRef.current) {
       const p = draggedParticleRef.current;
       p.x = worldMouseX;
@@ -705,11 +653,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       transformRef.current.x = panStartRef.current.x + dx;
       transformRef.current.y = panStartRef.current.y + dy;
       return;
-    }
-
-    // hover detection (skip in game while aiming)
-    if (isGameMode) {
-      // still allow hover highlight (optional)
     }
 
     const canvasEl = canvasRef.current;
@@ -750,7 +693,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   const handleMouseDown = (e: React.MouseEvent) => {
     if (detailOpenRef.current) return;
 
-    // GAME: left click anywhere sets target, holding charges shot
     if (isGameMode) {
       if (e.button !== 0) return;
 
@@ -769,13 +711,11 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       return;
     }
 
-    // MAP: click on particle opens panel
     if (hoveredParticleRef.current) {
       openDetailFor(hoveredParticleRef.current);
       return;
     }
 
-    // MAP: pan
     isPanningRef.current = true;
     panStartRef.current = {
       clientX: e.clientX,
@@ -786,7 +726,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   };
 
   const handleMouseUp = () => {
-    // shot release
     if (isGameMode && aimingRef.current.active) {
       const cue = particlesRef.current.find(pp => String(pp.coin.id).toLowerCase() === 'bitcoin');
       if (cue && !cue.isFalling) {
@@ -800,18 +739,15 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         const nx = dx / dist;
         const ny = dy / dist;
 
-        // power based on pull + user slider
-        const pull = aimingRef.current.pull; // 0..190
-        const pullNorm = mathClamp(pull / 190, 0, 1);
+        const pull = aimingRef.current.pull;
+        const pullNorm = clamp(pull / 190, 0, 1);
 
-        const basePower = 2600; // stronger (you complained it was weak)
+        const basePower = 2800;
         const power = basePower * pullNorm * (0.35 + cuePowerRaw * 1.65);
 
-        // apply impulse
         cue.vx += nx * (power / Math.max(1, cue.mass));
         cue.vy += ny * (power / Math.max(1, cue.mass));
 
-        // hide cue stick for 5 seconds
         cueHideUntilRef.current = performance.now() + 5000;
       }
 
@@ -843,7 +779,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     const zoomFactor = 1.1;
     const oldK = transformRef.current.k;
     const newK = e.deltaY < 0 ? oldK * zoomFactor : oldK / zoomFactor;
-    const clampedK = mathClamp(newK, 0.1, 10.0);
+    const clampedK = clamp(newK, 0.1, 10.0);
 
     const newX = mouseX - worldX * clampedK;
     const newY = mouseY - worldY * clampedK;
@@ -856,12 +792,11 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       return (
         <>
           <div><span className="font-black">Modo Game (Bilhar)</span></div>
-          <div>• A <span className="font-black">bola branca</span> é o <span className="font-black">BTC</span>.</div>
-          <div>• <span className="font-bold">Clique no alvo</span> (onde você quer que a bola vá).</div>
-          <div>• <span className="font-bold">Segure</span> o botão esquerdo para “puxar o taco” (mais força).</div>
-          <div>• <span className="font-bold">Solte</span> para tacar.</div>
-          <div>• Se uma bola encostar na caçapa, ela “cai” e sai da mesa.</div>
-          <div className="mt-2 opacity-80">Dica: após a tacada, o taco some por 5s para deixar as bolas acomodarem.</div>
+          <div>• A bola branca é o BTC.</div>
+          <div>• Clique no alvo (onde você quer que a bola vá).</div>
+          <div>• Segure o botão esquerdo para puxar o taco (mais força).</div>
+          <div>• Solte para tacar.</div>
+          <div>• Após tacar, o taco some por 5s.</div>
         </>
       );
     }
@@ -869,11 +804,11 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     if (chartMode === 'performance') {
       return (
         <>
-          <div><span className="font-black">Modo Variação (preço)</span></div>
-          <div>• <span className="font-bold">X</span>: Variação de preço {timeframe} (%)</div>
-          <div>• <span className="font-bold">Y</span>: Volume 24h (log)</div>
-          <div>• <span className="font-bold">Tamanho</span>: |%var {timeframe}| × log(volume)</div>
-          <div>• <span className="font-bold">Cor</span>: verde/vermelho pela variação {timeframe}</div>
+          <div><span className="font-black">Modo Variação</span></div>
+          <div>• X: Variação de preço {timeframe} (%)</div>
+          <div>• Y: Volume 24h (log)</div>
+          <div>• Tamanho: |%var {timeframe}| × log(volume)</div>
+          <div>• Cor: verde/vermelho pela variação</div>
         </>
       );
     }
@@ -881,10 +816,10 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     return (
       <>
         <div><span className="font-black">Modo Market Cap</span></div>
-        <div>• <span className="font-bold">X</span>: Market Cap (log)</div>
-        <div>• <span className="font-bold">Y</span>: Volume 24h (log)</div>
-        <div>• <span className="font-bold">Tamanho</span>: Market Cap</div>
-        <div>• <span className="font-bold">Cor</span>: verde/vermelho pela variação {timeframe}</div>
+        <div>• X: Market Cap (log)</div>
+        <div>• Y: Volume 24h (log)</div>
+        <div>• Tamanho: Market Cap</div>
+        <div>• Cor: verde/vermelho pela variação</div>
       </>
     );
   }, [chartMode, timeframe, isGameMode]);
@@ -923,7 +858,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       const cx = toScreenX(cueBall.x);
       const cy = toScreenY(cueBall.y);
 
-      // direction: target if aiming, else idle around mouse or gentle orbit
       let tx = cx + 120;
       let ty = cy;
 
@@ -940,82 +874,44 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
       const dx = tx - cx;
       const dy = ty - cy;
-      const angle = Math.atan2(dy, dx);
+      const dist = Math.hypot(dx, dy) || 0.0001;
 
-      // pullback: aiming uses held pull; otherwise small breathing animation
-      const basePull = aimingRef.current.active ? aimingRef.current.pull : (16 + (Math.sin(now * 0.0022) * 6));
-      const pull = basePull;
+      const ux = dx / dist;
+      const uy = dy / dist;
+
+      const contactGap = 12;
+      const pullBase = aimingRef.current.active ? aimingRef.current.pull : (10 + Math.sin(now * 0.0022) * 6);
+      const pull = pullBase;
+
+      const tipX = cx - ux * (cueBall.radius + contactGap + pull);
+      const tipY = cy - uy * (cueBall.radius + contactGap + pull);
 
       const stickLen = Math.max(260, cueBall.radius * 7.5);
-      const stickThick = Math.max(9, cueBall.radius * 0.40);
+      const buttX = tipX - ux * stickLen;
+      const buttY = tipY - uy * stickLen;
 
-      // keep the tip OUTSIDE the ball: contactDist includes radius + margin
-      const contactDist = (cueBall.radius + 14);
-      const baseX = cx - Math.cos(angle) * (contactDist + pull);
-      const baseY = cy - Math.sin(angle) * (contactDist + pull);
+      const thick = Math.max(8, cueBall.radius * 0.40);
+      const tipThick = Math.max(5, thick * 0.55);
 
       ctx2.save();
-      ctx2.translate(baseX, baseY);
-      ctx2.rotate(angle + Math.PI);
-
       ctx2.globalAlpha = 0.92;
       ctx2.lineCap = 'round';
 
       // body
       ctx2.beginPath();
-      ctx2.moveTo(-stickLen, 0);
-      ctx2.lineTo(0, 0);
+      ctx2.moveTo(buttX, buttY);
+      ctx2.lineTo(tipX, tipY);
       ctx2.strokeStyle = isDarkTheme ? 'rgba(210,170,120,0.78)' : 'rgba(120,85,45,0.72)';
-      ctx2.lineWidth = stickThick;
+      ctx2.lineWidth = thick;
       ctx2.stroke();
 
       // tip
+      const tipLen = Math.min(30, stickLen * 0.12);
       ctx2.beginPath();
-      ctx2.moveTo(-26, 0);
-      ctx2.lineTo(0, 0);
+      ctx2.moveTo(tipX - ux * tipLen, tipY - uy * tipLen);
+      ctx2.lineTo(tipX, tipY);
       ctx2.strokeStyle = isDarkTheme ? 'rgba(255,255,255,0.62)' : 'rgba(255,255,255,0.78)';
-      ctx2.lineWidth = Math.max(6, stickThick * 0.55);
-      ctx2.stroke();
-
-      ctx2.restore();
-    };
-
-    const drawRackTriangle = (
-      ctx2: CanvasRenderingContext2D,
-      width: number,
-      height: number,
-      toScreenX: (v: number) => number,
-      toScreenY: (v: number) => number,
-      isDarkTheme: boolean
-    ) => {
-      const apexX = width * 0.20;
-      const apexY = height * 0.50;
-
-      const spacing = GAME_BALL_RADIUS * 2.08;
-      const rows = 6;
-
-      const baseX = apexX + (rows - 1) * spacing;
-      const halfH = ((rows - 1) * spacing) / 2;
-
-      const x1 = toScreenX(apexX);
-      const y1 = toScreenY(apexY);
-
-      const x2 = toScreenX(baseX);
-      const y2 = toScreenY(apexY - halfH);
-
-      const x3 = toScreenX(baseX);
-      const y3 = toScreenY(apexY + halfH);
-
-      ctx2.save();
-      ctx2.globalAlpha = 0.35;
-      ctx2.strokeStyle = isDarkTheme ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.18)';
-      ctx2.lineWidth = 3;
-
-      ctx2.beginPath();
-      ctx2.moveTo(x1, y1);
-      ctx2.lineTo(x2, y2);
-      ctx2.lineTo(x3, y3);
-      ctx2.closePath();
+      ctx2.lineWidth = tipThick;
       ctx2.stroke();
 
       ctx2.restore();
@@ -1056,7 +952,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     const loop = () => {
       const now = performance.now();
       const dtRaw = (now - lastTime) / 1000;
-      const dt = Math.min(dtRaw, 1 / 30); // cap spikes
+      const dt = Math.min(dtRaw, 1 / 30);
       lastTime = now;
 
       const dpr = dprRef.current || 1;
@@ -1065,14 +961,12 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
       ctx.setTransform(1, 0, 0, 1, 0, 0);
 
-      // background
       if (isGameMode) ctx.fillStyle = isDark ? '#08110c' : '#e8f3ea';
       else ctx.fillStyle = isDark ? '#0b0f14' : '#ffffff';
 
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.scale(dpr, dpr);
 
-      // watermark
       drawWatermark(ctx, width, height, watermarkRef.current, isDark, isGameMode);
 
       const { k, x: panX, y: panY } = transformRef.current;
@@ -1081,14 +975,13 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
       const particles = particlesRef.current;
 
-      // ease radius to target
       for (const p of particles) {
         const viewRadius = p.targetRadius * Math.pow(k, 0.25);
         p.radius += (viewRadius - p.radius) * 0.15;
         p.mass = Math.max(1, p.radius);
       }
 
-      // pockets in game
+      // GAME pockets
       let pockets: { x: number; y: number; r: number }[] = [];
       if (isGameMode) {
         const worldW = width / k;
@@ -1104,14 +997,12 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
           { x: worldW - pr, y: worldH - pr, r: pr }
         ];
 
-        // table border
         ctx.save();
         ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.10)';
         ctx.lineWidth = 4;
         ctx.strokeRect(8, 8, width - 16, height - 16);
         ctx.restore();
 
-        // pockets
         ctx.save();
         for (const pk of pockets) {
           const sx = toScreenX(pk.x);
@@ -1130,9 +1021,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         }
         ctx.restore();
 
-        drawRackTriangle(ctx, width, height, toScreenX, toScreenY, isDark);
-
-        // aim marker
         drawAimMarker(ctx, toScreenX, toScreenY, isDark);
       }
 
@@ -1191,7 +1079,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
           ctx.textAlign = 'center';
           const label = (chartMode === 'performance') ? `${val.toFixed(1)}%` : formatCompact(val);
-          const tickY = mathClamp(toScreenY(originY) + 18, 12, height - 14);
+          const tickY = clamp(toScreenY(originY) + 18, 12, height - 14);
           ctx.fillText(label, screenX, tickY);
         }
 
@@ -1228,7 +1116,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         const xLabel = chartMode === 'performance'
           ? `Variação de preço ${timeframe} (%)`
           : 'Market Cap (Log)';
-        const xLabelY = mathClamp(toScreenY(originY) + 56, 20, height - 10);
+        const xLabelY = clamp(toScreenY(originY) + 56, 20, height - 10);
         ctx.fillText(xLabel, width / 2, xLabelY);
 
         ctx.save();
@@ -1251,12 +1139,11 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         const worldH = height / k;
 
         const dampingPerFrame = 0.985;
-        const stopEps = 0.8; // stop threshold (smaller = more “glide”)
+        const stopEps = 0.8;
 
         for (let step = 0; step < subSteps; step++) {
           const drag = Math.pow(dampingPerFrame, stepDt * 60);
 
-          // integrate + walls
           for (const p of particles) {
             if (p.isFalling) continue;
             if (p.isFixed) continue;
@@ -1264,10 +1151,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
             p.vx *= drag;
             p.vy *= drag;
 
-            if (Math.hypot(p.vx, p.vy) < stopEps) {
-              p.vx = 0;
-              p.vy = 0;
-            }
+            if (Math.hypot(p.vx, p.vy) < stopEps) { p.vx = 0; p.vy = 0; }
 
             p.x += p.vx * stepDt;
             p.y += p.vy * stepDt;
@@ -1279,7 +1163,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
             else if (p.y > worldH - p.radius - GAME_WALL_PAD) { p.y = worldH - p.radius - GAME_WALL_PAD; p.vy *= -1; }
           }
 
-          // collisions (billiard-ish)
           for (let i = 0; i < particles.length; i++) {
             const p1 = particles[i];
             if (p1.isFalling) continue;
@@ -1305,14 +1188,8 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
               const move1 = (p2.mass / totalMass);
               const move2 = (p1.mass / totalMass);
 
-              if (!p1.isFixed) {
-                p1.x -= nx * overlap * move1;
-                p1.y -= ny * overlap * move1;
-              }
-              if (!p2.isFixed) {
-                p2.x += nx * overlap * move2;
-                p2.y += ny * overlap * move2;
-              }
+              if (!p1.isFixed) { p1.x -= nx * overlap * move1; p1.y -= ny * overlap * move1; }
+              if (!p2.isFixed) { p2.x += nx * overlap * move2; p2.y += ny * overlap * move2; }
 
               const rvx = p2.vx - p1.vx;
               const rvy = p2.vy - p1.vy;
@@ -1326,18 +1203,11 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
               const impulseX = impulse * nx;
               const impulseY = impulse * ny;
 
-              if (!p1.isFixed) {
-                p1.vx -= impulseX / p1.mass;
-                p1.vy -= impulseY / p1.mass;
-              }
-              if (!p2.isFixed) {
-                p2.vx += impulseX / p2.mass;
-                p2.vy += impulseY / p2.mass;
-              }
+              if (!p1.isFixed) { p1.vx -= impulseX / p1.mass; p1.vy -= impulseY / p1.mass; }
+              if (!p2.isFixed) { p2.vx += impulseX / p2.mass; p2.vy += impulseY / p2.mass; }
             }
           }
 
-          // pocket logic: instant when circles intersect (independent of speed)
           for (const p of particles) {
             if (p.isFalling) continue;
             if (p.isFixed) continue;
@@ -1357,12 +1227,11 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
             }
           }
 
-          // falling animation timer/update
           for (const p of particles) {
             if (!p.isFalling) continue;
             p.fallT = (p.fallT || 0) + stepDt;
 
-            const t = mathClamp((p.fallT || 0) / 0.35, 0, 1);
+            const t = clamp((p.fallT || 0) / 0.35, 0, 1);
             const ease = 1 - Math.pow(1 - t, 3);
 
             const pk = p.fallPocket;
@@ -1379,7 +1248,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
           }
         }
       } else {
-        // MAP MAPPING (smooth, no reset)
         if (!statsRef.current) {
           reqIdRef.current = requestAnimationFrame(loop);
           return;
@@ -1393,7 +1261,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         const originX = margin.left;
         const originY = margin.top + chartH;
 
-        // +30% max amplitude always, min remains 0
         const mappedFloatMaxAmp = 5.2 * 1.3;
         const mappedFloatAmp = floatStrengthRaw * mappedFloatMaxAmp;
 
@@ -1431,7 +1298,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
           const targetX = tx + floatX;
           const targetY = ty + floatY;
 
-          // smooth follow
           p.x += (targetX - p.x) * 0.05;
           p.y += (targetY - p.y) * 0.05;
         }
@@ -1440,15 +1306,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       // =======================
       // DRAW PARTICLES
       // =======================
-      const particlesToDraw = particlesRef.current;
-
-      // In game: draw cue stick BEFORE balls (so ball is on top)
-      if (isGameMode) {
-        const cueBall = particlesToDraw.find(p => String(p.coin.id).toLowerCase() === 'bitcoin');
-        if (cueBall) drawCueStick(ctx, cueBall, now, toScreenX, toScreenY, k, isDark);
-      }
-
-      for (const p of particlesToDraw) {
+      for (const p of particlesRef.current) {
         const screenX = toScreenX(p.x);
         const screenY = toScreenY(p.y);
 
@@ -1458,7 +1316,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         let alpha = 1.0;
 
         if (p.isFalling) {
-          const t = mathClamp((p.fallT || 0) / 0.35, 0, 1);
+          const t = clamp((p.fallT || 0) / 0.35, 0, 1);
           drawRadius = p.radius * (1 - t);
           alpha = 1 - t;
         }
@@ -1508,7 +1366,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         ctx.save();
         ctx.globalAlpha = alpha;
 
-        // BTC in game: white ball with centered logo
         if (isBTC && isGameMode) {
           ctx.beginPath();
           ctx.arc(screenX, screenY, drawRadius, 0, Math.PI * 2);
@@ -1566,6 +1423,12 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         }
 
         ctx.restore();
+      }
+
+      // Draw cue stick LAST so it stays visible and never "under the ball"
+      if (isGameMode) {
+        const cueBall = particlesRef.current.find(p => String(p.coin.id).toLowerCase() === 'bitcoin');
+        if (cueBall) drawCueStick(ctx, cueBall, now, toScreenX, toScreenY, k, isDark);
       }
 
       reqIdRef.current = requestAnimationFrame(loop);
@@ -1792,14 +1655,14 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         </div>
       )}
 
-      {/* DETAIL PANEL (map click) */}
+      {/* DETAIL PANEL */}
       {detailOpen && detailCoin && (
         <div
-          className="absolute inset-0 z-[60] flex items-center justify-center bg-black/40"
+          className="absolute inset-0 z-[60] flex items-center justify-center bg-black/45"
           onMouseDown={() => setDetailOpen(false)}
         >
           <div
-            className="w-[92vw] max-w-[520px] rounded-2xl border border-gray-200 dark:border-white/10 bg-white/95 dark:bg-black/80 backdrop-blur-md shadow-2xl p-5 transform transition-transform duration-200 scale-100"
+            className="w-[92vw] max-w-[560px] rounded-2xl border border-gray-200 dark:border-white/10 bg-white/95 dark:bg-black/80 backdrop-blur-md shadow-2xl p-5"
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4">

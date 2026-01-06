@@ -16,7 +16,7 @@ export const ENDPOINTS = {
       global: "/cg_global.json",
       main: "/cachecko.json",
       fng: "/fearandgreed_data.json",
-      rsiAvg: "/rsiavg.json", // Corrected filename if needed, ensure match with server
+      rsiAvg: "/rsi_avg.json", // Fixed 404 error
       rsiTracker: "/rsitrackerhist.json",
       macdAvg: "/macdavg.json",
       macdTracker: "/macdtracker.json",
@@ -35,11 +35,15 @@ export const ENDPOINTS = {
   },
   special: {
     news: "/cachecko/news.php"
-  }
+  },
+  // Added Taxonomy endpoints for consistency
+  taxonomy: "/cachecko/categories/taxonomy-master.json",
+  categoryMap: "/cachecko/categories/category_coins_map.json"
 };
 
 export const ENDPOINT_FALLBACKS = {
-    // Fallbacks vazios para evitar erro de importação se referenciado
+    COINS_ANY: [ENDPOINTS.cachecko.files.main, "/cachecko/cachecko_lite.json"],
+    CAT_MAP_ANY: [ENDPOINTS.categoryMap, "/cachecko/category-coin-map.json"]
 };
 
 export const getCacheckoUrl = (path: string) => `${ENDPOINTS.cachecko.base}${path}`;
