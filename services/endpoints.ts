@@ -16,7 +16,7 @@ export const ENDPOINTS = {
       global: "/cg_global.json",
       main: "/cachecko.json",
       fng: "/fearandgreed_data.json",
-      rsiAvg: "/rsi_avg.json", // Fixed 404 error
+      rsiAvg: "/rsiavg.json", 
       rsiTracker: "/rsitrackerhist.json",
       macdAvg: "/macdavg.json",
       macdTracker: "/macdtracker.json",
@@ -36,7 +36,7 @@ export const ENDPOINTS = {
   special: {
     news: "/cachecko/news.php"
   },
-  // Added Taxonomy endpoints for consistency
+  // Added required endpoints
   taxonomy: "/cachecko/categories/taxonomy-master.json",
   categoryMap: "/cachecko/categories/category_coins_map.json"
 };
