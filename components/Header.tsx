@@ -48,13 +48,31 @@ const formatUSD = (val: number) => {
 };
 
 const TickerItem: React.FC<{ symbol: string; data: TickerData; meta: CoinMeta; onHover: any; onLeave: any; }> = ({ symbol, data, meta, onHover, onLeave }) => {
-  const { p, c } = data;
+  const { p, c, rawPrice } = data;
+  const [flashClass, setFlashClass] = useState('');
+  const prevPriceRef = useRef(rawPrice);
+
+  useEffect(() => {
+    // Lógica de Flash: Compara preço atual com anterior
+    if (rawPrice > prevPriceRef.current) {
+        setFlashClass('bg-green-500/20');
+    } else if (rawPrice < prevPriceRef.current) {
+        setFlashClass('bg-red-500/20');
+    }
+    prevPriceRef.current = rawPrice;
+
+    // Remove o flash após 400ms
+    const timer = setTimeout(() => setFlashClass(''), 400);
+    return () => clearTimeout(timer);
+  }, [rawPrice]);
+
   if (!p || p === '---' || p === '$0.00' || p === '0') return null;
   const isPositive = c >= 0;
   const iconUrl = `https://assets.coincap.io/assets/icons/${symbol.toLowerCase()}@2x.png`;
+  
   return (
     <div 
-      className="relative flex items-center h-full px-4 border-r border-transparent dark:border-tech-800/30 min-w-[200px] hover:bg-gray-100/50 dark:hover:bg-tech-800/40 transition-colors cursor-pointer select-none shrink-0 group/item" 
+      className={`relative flex items-center h-full px-4 border-r border-transparent dark:border-tech-800/30 min-w-[200px] hover:bg-gray-100/50 dark:hover:bg-tech-800/40 transition-colors duration-300 cursor-pointer select-none shrink-0 group/item ${flashClass}`} 
       onMouseEnter={(e) => onHover(e, symbol, data, meta)} 
       onMouseMove={(e) => onHover(e, symbol, data, meta)}
     >
@@ -218,11 +236,13 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
                 <div className="flex items-center gap-4 mb-4 border-b border-gray-100 dark:border-white/5 pb-4">
                     <div className="relative">
                         <img src={`https://assets.coincap.io/assets/icons/${tooltip.symbol.toLowerCase()}@2x.png`} className="w-12 h-12 rounded-full bg-white p-1 shadow-md" alt="" />
-                        <span className="absolute -top-1 -right-1 bg-[#dd9933] text-black text-[10px] font-black w-6 h-6 flex items-center justify-center rounded-full shadow-lg border-2 border-white dark:border-[#1e2022]">#{tooltip.meta?.rank || '?'}</span>
                     </div>
                     <div className="flex flex-col">
                         <div className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-tighter leading-none">{tooltip.meta?.name || tooltip.symbol}</div>
-                        <div className="text-xs font-black text-[#dd9933] uppercase mt-1 tracking-widest">{tooltip.symbol}/USDT</div>
+                        {/* RANK MOVIDO PARA AQUI JUNTO COM O SIMBOLO */}
+                        <div className="text-xs font-black text-[#dd9933] uppercase mt-1 tracking-widest">
+                           #{tooltip.meta?.rank || '?'} {tooltip.symbol}/USDT
+                        </div>
                     </div>
                 </div>
                 <div className="grid grid-cols-2 gap-y-4 gap-x-6">
@@ -323,7 +343,6 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
               </div>
             </div>
             <div className="xl:hidden flex items-center z-40">
-                {/* Fix: replaced non-existent setIsMobileMenuOpen with setIsMenuOpen */}
                 <button onClick={() => setIsMenuOpen(true)} className="p-3.5 bg-white dark:bg-tech-800 rounded-2xl text-tech-accent shadow-xl border border-gray-200 dark:border-tech-700 active:scale-90 transition-transform"><Menu size={26} /></button>
             </div>
             <nav className="hidden xl:flex items-center absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 h-full z-10">

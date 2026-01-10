@@ -1,14 +1,8 @@
-// CryptoHeatmapDemo.tsx
-// ✅ Highcharts Treemap no estilo do demo (S&P) + drilldown + cabeçalhos no TOPO (não no meio)
-// ✅ Popup fullscreen com botão X (e SÓ isso)
+// HeatmapWidget.tsx
+// ✅ Demo-style Treemap (igual S&P) + drilldown + headers no TOPO
+// ✅ Popup fullscreen com X pra fechar (e pronto)
 // ✅ Consome JSON via HTTP em /cachecko/... (nunca filesystem)
-// ✅ Funciona em prod (mesma origem) e em dev com proxy do Vite (se você configurar)
-//
-// Requisitos:
-// npm i highcharts
-//
-// Vite proxy (DEV) — coloque no vite.config.ts:
-// server: { proxy: { '/cachecko': { target: 'https://centralcrypto.com.br', changeOrigin: true, secure: false } } }
+// ✅ Sem import de breadcrumbs module (pra não quebrar teu build)
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -16,10 +10,6 @@ import Highcharts from 'highcharts';
 import TreemapModule from 'highcharts/modules/treemap';
 import ExportingModule from 'highcharts/modules/exporting';
 import AccessibilityModule from 'highcharts/modules/accessibility';
-import { DashboardItem, Language } from '../../../types';
-
-// (Opcional, mas ajuda dependendo da versão do Highcharts)
-import BreadcrumbsModule from 'highcharts/modules/breadcrumbs';
 
 type Coin = {
   id: string;
@@ -30,12 +20,9 @@ type Coin = {
   price_change_percentage_24h?: number;
 };
 
-// taxonomy-master.json pode variar. Aqui a gente tenta ler “parent” de forma tolerante.
 type TaxonomyCategory = {
   id: string;
   name: string;
-
-  // possíveis campos de parent (depende do teu JSON)
   parent?: string | null;
   parentId?: string | null;
   parent_id?: string | null;
@@ -71,11 +58,6 @@ function initHighchartsOnce() {
   (TreemapModule as any)(Highcharts);
   (ExportingModule as any)(Highcharts);
   (AccessibilityModule as any)(Highcharts);
-  try {
-    (BreadcrumbsModule as any)(Highcharts);
-  } catch {
-    // se não existir na versão, segue o baile
-  }
 
   Highcharts.setOptions({
     chart: {
@@ -85,9 +67,7 @@ function initHighchartsOnce() {
     }
   });
 
-  // ✅ Plugin do demo (com correção do erro toColor):
-  // - Ajusta font-size relativo pela área do retângulo
-  // - Colore os headers (level 2) com base em colorValue
+  // ✅ Plugin do demo (com correção do toColor)
   Highcharts.addEvent(Highcharts.Series, 'drawDataLabels', function () {
     // @ts-ignore
     if (this.type !== 'treemap') return;
@@ -97,16 +77,16 @@ function initHighchartsOnce() {
 
     // @ts-ignore
     this.points.forEach((p: any) => {
-      // Cabeçalhos de categorias/subcategorias (level 1/2): fundo seguindo o colorValue
+      // pinta header de level 1/2 com base no colorValue
       if ((p?.node?.level === 1 || p?.node?.level === 2) && p?.dlOptions && ca && Number.isFinite(p.colorValue)) {
         try {
           p.dlOptions.backgroundColor = ca.toColor(p.colorValue);
         } catch {
-          // não explode se o Highcharts mudar internals
+          // no-op
         }
       }
 
-      // Leafs (moedas) no level 3: font-size baseado na área
+      // leaf font-size baseado na área
       if (p?.node?.level === 3 && p?.shapeArgs && p?.dlOptions?.style) {
         const area = Number(p.shapeArgs.width || 0) * Number(p.shapeArgs.height || 0);
         const px = Math.min(32, 7 + Math.round(area * 0.0008));
@@ -124,11 +104,11 @@ function getCacheckoUrl(path: string) {
 const ENDPOINTS = {
   COINS_LITE: getCacheckoUrl('cachecko_lite.json'),
   TAXONOMY: getCacheckoUrl('categories/taxonomy-master.json'),
-  CAT_MAP: getCacheckoUrl('categories/category_coins_map.json') // ajuste se teu nome for diferente
+  CAT_MAP: getCacheckoUrl('categories/category_coins_map.json') // ajusta se teu nome for outro
 };
 
 function withCb(url: string) {
-  const salt = Math.floor(Date.now() / 60000); // troca a cada 1 min
+  const salt = Math.floor(Date.now() / 60000);
   return url.includes('?') ? `${url}&_cb=${salt}` : `${url}?_cb=${salt}`;
 }
 
@@ -150,7 +130,6 @@ async function httpGetJson(url: string, opts?: { timeoutMs?: number; retries?: n
       window.clearTimeout(t);
     }
   }
-
   throw new Error('httpGetJson: unreachable');
 }
 
@@ -174,25 +153,16 @@ function fmtMc(v: number) {
 }
 
 function pickParentId(c: TaxonomyCategory): string | null {
-  const v =
-    c.parent ??
-    c.parentId ??
-    c.parent_id ??
-    c.master ??
-    c.masterId ??
-    c.group ??
-    c.groupId ??
-    null;
-
+  const v = c.parent ?? c.parentId ?? c.parent_id ?? c.master ?? c.masterId ?? c.group ?? c.groupId ?? null;
   if (!v) return null;
   const s = String(v).trim();
   return s ? s : null;
 }
 
-// Calcula “performance” (média ponderada por market cap) para um node (categoria)
 function weightedPerf(coinIds: string[], coinById: Map<string, Coin>) {
   let totalMc = 0;
   let acc = 0;
+
   for (const id of coinIds) {
     const c = coinById.get(id);
     if (!c) continue;
@@ -201,6 +171,7 @@ function weightedPerf(coinIds: string[], coinById: Map<string, Coin>) {
     totalMc += mc;
     acc += mc * ch;
   }
+
   if (totalMc <= 0) return 0;
   const v = acc / totalMc;
   return Number.isFinite(v) ? v : 0;
@@ -216,7 +187,6 @@ function buildTreemapData(params: {
   const coinById = new Map<string, Coin>();
   for (const c of coins) if (c?.id) coinById.set(c.id, c);
 
-  // Root
   const data: TreemapPoint[] = [
     {
       id: 'All',
@@ -225,13 +195,11 @@ function buildTreemapData(params: {
     }
   ];
 
-  // Index de categorias por id
   const catById = new Map<string, TaxonomyCategory>();
   taxonomy.forEach(c => {
     if (c?.id) catById.set(c.id, c);
   });
 
-  // Garantir que todo parent exista (se taxonomy vier “solta”)
   function ensureNode(id: string, name: string, parent: string) {
     if (!id) return;
     if (data.find(p => p.id === id)) return;
@@ -239,17 +207,15 @@ function buildTreemapData(params: {
       id,
       parent,
       name,
-      // ✅ não coloca value em node, igual demo (pai soma filhos)
       custom: { fullName: name, kind: 'category' }
     });
   }
 
-  // Monta árvore: se tem parent, usa; senão vai direto para All
+  // categorias e subcategorias
   taxonomy.forEach(cat => {
     if (!cat?.id || !cat?.name) return;
     const parentId = pickParentId(cat) || 'All';
 
-    // se parent não existe na taxonomy, cria “virtual” em All
     if (parentId !== 'All' && !catById.has(parentId)) {
       ensureNode(parentId, parentId, 'All');
     }
@@ -257,18 +223,17 @@ function buildTreemapData(params: {
     ensureNode(cat.id, cat.name, parentId);
   });
 
-  // Leafs (moedas) por categoria
-  // ⚠️ id precisa ser único: coin pode estar em várias categorias => usa composite
+  // moedas dentro das categorias
   Object.entries(catMap || {}).forEach(([catId, coinIds]) => {
     if (!catId || !Array.isArray(coinIds) || coinIds.length === 0) return;
 
-    // Se não existir node da categoria, cria em All
     if (!data.find(p => p.id === catId)) {
       ensureNode(catId, catId, 'All');
     }
 
-    // setar colorValue do node (categoria) para ficar “pintado” como no demo
-    const perf = weightedPerf(Array.from(new Set(coinIds)), coinById);
+    const uniq = Array.from(new Set(coinIds));
+    const perf = weightedPerf(uniq, coinById);
+
     const node = data.find(p => p.id === catId);
     if (node) {
       node.colorValue = perf;
@@ -276,7 +241,6 @@ function buildTreemapData(params: {
       node.custom.performance = fmtPct(perf);
     }
 
-    const uniq = Array.from(new Set(coinIds));
     for (const coinId of uniq) {
       const c = coinById.get(coinId);
       if (!c) continue;
@@ -305,8 +269,8 @@ function buildTreemapData(params: {
   return data;
 }
 
-export default function CryptoHeatmapDemo({ item, language }: { item?: DashboardItem, language?: Language }) {
-  const [open, setOpen] = useState(true); // abre direto pra você “ver a porra”
+export default function HeatmapWidget() {
+  const [open, setOpen] = useState(true); // abre direto
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string>('');
 
@@ -357,11 +321,9 @@ export default function CryptoHeatmapDemo({ item, language }: { item?: Dashboard
 
   const treemapData = useMemo(() => {
     if (!coins.length) return [];
-    // taxonomy e catMap podem vir vazios; ainda dá pra renderizar “All” e nada dentro
     return buildTreemapData({ coins, taxonomy, catMap });
   }, [coins, taxonomy, catMap]);
 
-  // trava scroll quando popup abre
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -375,13 +337,11 @@ export default function CryptoHeatmapDemo({ item, language }: { item?: Dashboard
     if (!open) return;
     if (!containerRef.current) return;
 
-    // destrói anterior
     if (chartRef.current) {
       chartRef.current.destroy();
       chartRef.current = null;
     }
 
-    // render
     const chart = Highcharts.chart(containerRef.current, {
       chart: {
         backgroundColor: '#252931',
@@ -404,8 +364,7 @@ export default function CryptoHeatmapDemo({ item, language }: { item?: Dashboard
         followPointer: true,
         outside: true,
         useHTML: true,
-        headerFormat:
-          '<span style="font-size: 0.9em">{point.custom.fullName}</span><br/>',
+        headerFormat: '<span style="font-size: 0.9em">{point.custom.fullName}</span><br/>',
         pointFormatter: function () {
           // @ts-ignore
           const p = this as any;
@@ -413,10 +372,7 @@ export default function CryptoHeatmapDemo({ item, language }: { item?: Dashboard
           const perf = p?.custom?.performance ?? (Number.isFinite(p.colorValue) ? fmtPct(p.colorValue) : '');
           const isLeaf = p?.custom?.kind === 'coin';
 
-          if (!isLeaf) {
-            return `<b>Performance:</b> ${perf}<br/><b>Market Cap:</b> $${fmtMc(mc)}`;
-          }
-
+          if (!isLeaf) return `<b>Performance:</b> ${perf}<br/><b>Market Cap:</b> $${fmtMc(mc)}`;
           return `<b>Market Cap:</b> $${fmtMc(mc)}<br/><b>24h:</b> ${perf}`;
         }
       },
@@ -440,7 +396,6 @@ export default function CryptoHeatmapDemo({ item, language }: { item?: Dashboard
       legend: {
         itemStyle: { color: 'white' }
       },
-
       series: [
         {
           name: 'All',
@@ -455,14 +410,10 @@ export default function CryptoHeatmapDemo({ item, language }: { item?: Dashboard
           dataLabels: {
             enabled: false,
             allowOverlap: true,
-            style: {
-              fontSize: '0.9em',
-              textOutline: 'none'
-            }
+            style: { fontSize: '0.9em', textOutline: 'none' }
           },
 
-          // ✅ AQUI É ONDE ARRUMA O “NOME DA CATEGORIA NO MEIO”
-          // A mágica é: headers=true + align left + verticalAlign top + padding + x/y
+          // ✅ HEADERS NO TOPO (igual demo)
           levels: [
             {
               level: 1,
@@ -509,25 +460,21 @@ export default function CryptoHeatmapDemo({ item, language }: { item?: Dashboard
               },
               groupPadding: 1
             },
-
-            // Leafs (moedas)
             {
               level: 3,
               dataLabels: {
                 enabled: true,
                 align: 'center',
-                format:
-                  '{point.name}<br><span style="font-size: 0.7em">{point.custom.performance}</span>',
-                style: {
-                  color: 'white',
-                  textOutline: 'none'
-                }
+                format: '{point.name}<br><span style="font-size: 0.7em">{point.custom.performance}</span>',
+                style: { color: 'white', textOutline: 'none' }
               }
             }
           ],
 
           accessibility: { exposeAsGroupOnly: true },
 
+          // Breadcrumbs funciona em várias versões sem módulo extra.
+          // Se a tua versão não renderizar, não quebra nada.
           breadcrumbs: {
             buttonTheme: {
               style: { color: 'silver' },
@@ -538,9 +485,7 @@ export default function CryptoHeatmapDemo({ item, language }: { item?: Dashboard
             }
           },
 
-          // Importantíssimo: pra treemap usar colorAxis
           colorKey: 'colorValue',
-
           data: treemapData as any
         } as any
       ]
@@ -583,7 +528,6 @@ export default function CryptoHeatmapDemo({ item, language }: { item?: Dashboard
             position: 'relative'
           }}
         >
-          {/* X de fechar (só isso) */}
           <button
             onClick={() => setOpen(false)}
             style={{
@@ -606,7 +550,6 @@ export default function CryptoHeatmapDemo({ item, language }: { item?: Dashboard
             ✕
           </button>
 
-          {/* Mensagens de estado */}
           {(loading || err) && (
             <div
               style={{
@@ -625,7 +568,6 @@ export default function CryptoHeatmapDemo({ item, language }: { item?: Dashboard
             >
               {loading ? 'Carregando dados…' : null}
               {!loading && err ? `Erro: ${err}` : null}
-              {!loading && !err && null}
               <div style={{ opacity: 0.8, fontWeight: 700, marginTop: 6, fontSize: 12 }}>
                 {ENDPOINTS.COINS_LITE} | {ENDPOINTS.TAXONOMY} | {ENDPOINTS.CAT_MAP}
               </div>
@@ -638,8 +580,6 @@ export default function CryptoHeatmapDemo({ item, language }: { item?: Dashboard
     </div>
   );
 
-  // Se você quer SEM botão nenhum fora: deixa return null e força open=true no state.
-  // Aqui eu deixo um “reabrir” simples, porque fechar e ficar preso é chato.
   return (
     <div style={{ width: '100%' }}>
       {!open && (

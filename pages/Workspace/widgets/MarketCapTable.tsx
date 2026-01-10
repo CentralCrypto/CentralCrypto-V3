@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   ChevronDown,
@@ -12,20 +11,21 @@ import {
   Star,
   TrendingDown,
   TrendingUp,
-  RefreshCw
+  RefreshCw,
+  RotateCcw
 } from 'lucide-react';
 import {
-    DndContext,
-    closestCenter,
-    PointerSensor,
-    useSensor,
-    useSensors
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors
 } from '@dnd-kit/core';
 import {
-    SortableContext,
-    arrayMove,
-    horizontalListSortingStrategy,
-    useSortable
+  SortableContext,
+  arrayMove,
+  horizontalListSortingStrategy,
+  useSortable
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Area, AreaChart, ResponsiveContainer, YAxis } from 'recharts';
@@ -209,6 +209,31 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
   const reconnectTimerRef = useRef<number | null>(null);
   const reconnectAttemptRef = useRef<number>(0);
 
+  // ✅ Price flash state
+  const [priceFlash, setPriceFlash] = useState<Record<string, 'up' | 'down' | undefined>>({});
+  const lastPriceRef = useRef<Record<string, number>>({});
+  const flashTimersRef = useRef<Record<string, number>>({});
+
+  const GREEN = '#22c55e'; // tailwind green-500
+  const RED = '#ef4444';   // tailwind red-500
+
+  const triggerPriceFlash = useCallback((coinId: string, dir: 'up' | 'down') => {
+    setPriceFlash(prev => ({ ...prev, [coinId]: dir }));
+
+    if (flashTimersRef.current[coinId]) {
+      window.clearTimeout(flashTimersRef.current[coinId]);
+    }
+
+    flashTimersRef.current[coinId] = window.setTimeout(() => {
+      setPriceFlash(prev => {
+        const next = { ...prev };
+        delete next[coinId];
+        return next;
+      });
+      delete flashTimersRef.current[coinId];
+    }, 450);
+  }, []);
+
   const flushPending = useCallback(() => {
     const payload = pendingRef.current;
     pendingRef.current = {};
@@ -339,6 +364,32 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     if (viewMode === 'categories') loadCategoriesLocal();
     else loadCoins();
   }, [viewMode, loadCategoriesLocal, loadCoins]);
+
+  // ✅ RESET total da tabela (sem filtros, ordenado por rank, volta pro coins)
+  const resetTable = useCallback(() => {
+    setBuyOpen(false);
+
+    setViewMode('coins');
+
+    setSearchTerm('');
+    setFavOnly(false);
+    setTopMode('none');
+
+    setActiveMasterId(null);
+    setActiveSubId('__all__');
+    setActiveCategoryId('__all__');
+
+    setSortConfig({ key: 'market_cap_rank', direction: 'asc' });
+    setCatSortConfig({ key: 'marketCap', direction: 'desc' });
+
+    setPageSize(100);
+    setPage(0);
+
+    setColOrder(DEFAULT_COLS);
+    setCatColOrder(CAT_DEFAULT_COLS);
+
+    scrollToTop();
+  }, [scrollToTop, DEFAULT_COLS, CAT_DEFAULT_COLS]);
 
   const handleSort = (key: string) => {
     let direction: 'asc' | 'desc' = 'desc';
@@ -1160,15 +1211,15 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                                     <AreaChart data={r.spark}>
                                       <defs>
                                         <linearGradient id={`cg_${r.id}`} x1="0" y1="0" x2="0" y2="1">
-                                          <stop offset="0%" stopColor={pos24 ? '#26a269' : '#e01b24'} stopOpacity={0.55} />
-                                          <stop offset="75%" stopColor={pos24 ? '#26a269' : '#e01b24'} stopOpacity={0.18} />
-                                          <stop offset="100%" stopColor={pos24 ? '#26a269' : '#e01b24'} stopOpacity={0.02} />
+                                          <stop offset="0%" stopColor={pos24 ? GREEN : RED} stopOpacity={0.45} />
+                                          <stop offset="75%" stopColor={pos24 ? GREEN : RED} stopOpacity={0.16} />
+                                          <stop offset="100%" stopColor={pos24 ? GREEN : RED} stopOpacity={0.03} />
                                         </linearGradient>
                                       </defs>
                                       <Area
                                         type="monotone"
                                         dataKey="v"
-                                        stroke={pos24 ? '#26a269' : '#e01b24'}
+                                        stroke={pos24 ? GREEN : RED}
                                         strokeWidth={2}
                                         fill={`url(#cg_${r.id})`}
                                         fillOpacity={1}
@@ -1283,6 +1334,22 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
 
   return (
     <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-100 dark:border-slate-800 shadow-xl overflow-hidden flex flex-col">
+      {/* Price flash CSS */}
+      <style>{`
+        @keyframes priceFlashUp {
+          0% { background-color: rgba(34, 197, 94, 0.0); }
+          20% { background-color: rgba(34, 197, 94, 0.22); }
+          100% { background-color: rgba(34, 197, 94, 0.0); }
+        }
+        @keyframes priceFlashDown {
+          0% { background-color: rgba(239, 68, 68, 0.0); }
+          20% { background-color: rgba(239, 68, 68, 0.22); }
+          100% { background-color: rgba(239, 68, 68, 0.0); }
+        }
+        .price-flash-up { animation: priceFlashUp 450ms ease-out; border-radius: 0.5rem; }
+        .price-flash-down { animation: priceFlashDown 450ms ease-out; border-radius: 0.5rem; }
+      `}</style>
+
       {/* Header */}
       <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col gap-3 bg-gray-50/50 dark:bg-black/20 shrink-0">
         <div className="flex flex-col lg:flex-row justify-between items-center gap-3">
@@ -1435,6 +1502,16 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
 
             <Paginator compact />
 
+            {/* RESET */}
+            <button
+              onClick={resetTable}
+              className="p-2.5 hover:bg-gray-200 dark:hover:bg-slate-700 rounded-lg text-gray-500 transition-colors"
+              title="Resetar (estado inicial)"
+            >
+              <RotateCcw size={22} />
+            </button>
+
+            {/* REFRESH */}
             <button
               onClick={refresh}
               className="p-2.5 hover:bg-gray-200 dark:hover:bg-slate-700 rounded-lg text-gray-500 transition-colors"
@@ -1516,6 +1593,15 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
 
                     const livePrice = live && isFinite(live.price) ? live.price : Number(coin.current_price || 0);
 
+                    // ✅ trigger flash when price changes (per coin)
+                    const prev = lastPriceRef.current[coin.id];
+                    if (isFinite(livePrice)) {
+                      if (typeof prev === 'number' && isFinite(prev) && prev !== livePrice) {
+                        triggerPriceFlash(coin.id, livePrice > prev ? 'up' : 'down');
+                      }
+                      lastPriceRef.current[coin.id] = livePrice;
+                    }
+
                     const change24Base =
                       (coin as any).price_change_percentage_24h_in_currency ??
                       coin.price_change_percentage_24h ??
@@ -1530,6 +1616,13 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
 
                     const sparkData = Array.isArray(prices) ? prices.map((v, i) => ({ i, v })) : [];
                     const isFav = !!favorites[coin.id];
+
+                    const flashClass =
+                      priceFlash[coin.id] === 'up'
+                        ? 'price-flash-up'
+                        : priceFlash[coin.id] === 'down'
+                          ? 'price-flash-down'
+                          : '';
 
                     return (
                       <tr key={coin.id} className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors group h-[56px]">
@@ -1586,7 +1679,9 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                                 key={cid}
                                 className="p-2 text-right font-mono text-[15px] font-black text-gray-900 dark:text-slate-200"
                               >
-                                {formatUSD(livePrice)}
+                                <span className={`inline-block px-2 py-1 ${flashClass}`}>
+                                  {formatUSD(livePrice)}
+                                </span>
                               </td>
                             );
                           }
@@ -1659,15 +1754,15 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                                       <AreaChart data={sparkData}>
                                         <defs>
                                           <linearGradient id={`g_${coin.id}`} x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="0%" stopColor={isPos24 ? '#26a269' : '#e01b24'} stopOpacity={0.55} />
-                                            <stop offset="75%" stopColor={isPos24 ? '#26a269' : '#e01b24'} stopOpacity={0.18} />
-                                            <stop offset="100%" stopColor={isPos24 ? '#26a269' : '#e01b24'} stopOpacity={0.02} />
+                                            <stop offset="0%" stopColor={isPos24 ? GREEN : RED} stopOpacity={0.45} />
+                                            <stop offset="75%" stopColor={isPos24 ? GREEN : RED} stopOpacity={0.16} />
+                                            <stop offset="100%" stopColor={isPos24 ? GREEN : RED} stopOpacity={0.03} />
                                           </linearGradient>
                                         </defs>
                                         <Area
                                           type="monotone"
                                           dataKey="v"
-                                          stroke={isPos24 ? '#26a269' : '#e01b24'}
+                                          stroke={isPos24 ? GREEN : RED}
                                           strokeWidth={2}
                                           fill={`url(#g_${coin.id})`}
                                           fillOpacity={1}
