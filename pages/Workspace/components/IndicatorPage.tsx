@@ -1,4 +1,3 @@
-
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiCoin, Language, WidgetType, UserTier } from '../../../types';
 import { getTranslations } from '../../../locales';
@@ -178,6 +177,25 @@ const getGainersLosersLabel = (language: Language) => {
   return { gainers: 'Gainers', losers: 'Losers' };
 };
 
+type BinanceMiniTicker = {
+  e?: string;
+  E?: number;
+  s: string;
+  c: string;
+  o?: string;
+  h?: string;
+  l?: string;
+  v?: string;
+  q?: string;
+  P: string;
+};
+
+const normalizeBinanceSymbol = (coin: ApiCoin) => {
+  const sym = String(coin?.symbol || '').trim().toUpperCase();
+  if (!sym) return null;
+  return `${sym}USDT`;
+};
+
 const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) => {
   const [coins, setCoins] = useState<ApiCoin[]>([]);
   const [loading, setLoading] = useState(true);
@@ -263,6 +281,33 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   );
+
+  // ✅ Binance WS live (price + 24h%)
+  const [binanceLive, setBinanceLive] = useState<Record<string, { price: number; ch24: number }>>({});
+  const wsRef = useRef<WebSocket | null>(null);
+  const watchSymbolsRef = useRef<Set<string>>(new Set());
+  const flushTimerRef = useRef<number | null>(null);
+  const pendingRef = useRef<Record<string, { price: number; ch24: number }>>({});
+
+  const flushPending = useCallback(() => {
+    const payload = pendingRef.current;
+    pendingRef.current = {};
+    if (Object.keys(payload).length === 0) return;
+
+    setBinanceLive(prev => {
+      const next = { ...prev };
+      for (const [s, v] of Object.entries(payload)) next[s] = v;
+      return next;
+    });
+  }, []);
+
+  const scheduleFlush = useCallback(() => {
+    if (flushTimerRef.current) return;
+    flushTimerRef.current = window.setTimeout(() => {
+      flushTimerRef.current = null;
+      flushPending();
+    }, 250);
+  }, [flushPending]);
 
   // ✅ Scroll-to-top helper (corrige abrir “lá embaixo”)
   const scrollToTop = useCallback(() => {
@@ -742,6 +787,67 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     viewMode
   ]);
 
+  // ✅ atualiza watch-list pro WS (só o que está na página atual)
+  useEffect(() => {
+    if (viewMode !== 'coins') {
+      watchSymbolsRef.current = new Set();
+      return;
+    }
+    const set = new Set<string>();
+    for (const c of pageCoins) {
+      const s = normalizeBinanceSymbol(c);
+      if (s) set.add(s);
+    }
+    watchSymbolsRef.current = set;
+  }, [pageCoins, viewMode]);
+
+  // ✅ liga/desliga WS Binance (price + 24h%)
+  useEffect(() => {
+    if (viewMode !== 'coins') {
+      if (wsRef.current) {
+        try { wsRef.current.close(); } catch {}
+        wsRef.current = null;
+      }
+      return;
+    }
+
+    if (wsRef.current) return;
+
+    const ws = new WebSocket('wss://stream.binance.com:9443/ws/!miniTicker@arr');
+    wsRef.current = ws;
+
+    ws.onmessage = (ev) => {
+      try {
+        const data = JSON.parse(ev.data);
+        const arr: BinanceMiniTicker[] = Array.isArray(data) ? data : [data];
+        const watch = watchSymbolsRef.current;
+
+        for (const t of arr) {
+          if (!t?.s || !watch.has(t.s)) continue;
+
+          const price = Number(t.c);
+          const ch24 = Number(t.P);
+          if (!isFinite(price) || !isFinite(ch24)) continue;
+
+          pendingRef.current[t.s] = { price, ch24 };
+        }
+
+        scheduleFlush();
+      } catch {}
+    };
+
+    ws.onerror = () => {};
+
+    ws.onclose = () => {
+      wsRef.current = null;
+    };
+
+    return () => {
+      try { ws.close(); } catch {}
+      wsRef.current = null;
+    };
+  }, [viewMode, scheduleFlush]);
+
   const Paginator = ({ compact = false }: { compact?: boolean }) => {
     const start = safePage * pageSize + 1;
     const end = Math.min(totalCount, (safePage + 1) * pageSize);
@@ -789,7 +895,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     );
   };
 
-  // ✅ Colunas % mais justas + minichart mais estreito
+  // ✅ colunas: outras fixas, spark “elástica”
   const COLS: Record<string, { id: string; label: string; sortKey?: string; w: string; }> = {
     rank: { id: 'rank', label: '#', sortKey: 'market_cap_rank', w: 'w-[64px]' },
     asset: { id: 'asset', label: 'Ativo', sortKey: 'name', w: 'w-[210px]' },
@@ -801,7 +907,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     vol24h: { id: 'vol24h', label: 'Vol (24h)', sortKey: 'total_volume', w: 'w-[125px]' },
     vol7d: { id: 'vol7d', label: 'Vol (7d)', sortKey: 'vol_7d_est', w: 'w-[125px]' },
     supply: { id: 'supply', label: 'Circ. Supply', sortKey: 'circulating_supply', w: 'w-[120px]' },
-    spark7d: { id: 'spark7d', label: 'Mini-chart (7d)', sortKey: undefined, w: 'w-[280px]' },
+    spark7d: { id: 'spark7d', label: 'Mini-chart (7d)', sortKey: undefined, w: 'min-w-[220px] w-auto' },
   };
 
   const CAT_COLS: Record<string, { id: string; label: string; sortKey?: string; w: string; }> = {
@@ -814,14 +920,14 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     mcap: { id: 'mcap', label: 'Market Cap', sortKey: 'marketCap', w: 'w-[150px]' },
     vol24h: { id: 'vol24h', label: '24h Volume', sortKey: 'volume24h', w: 'w-[145px]' },
     coins: { id: 'coins', label: '# Coins', sortKey: 'coinsCount', w: 'w-[96px]' },
-    spark7d: { id: 'spark7d', label: 'Gráfico (7d)', sortKey: undefined, w: 'w-[210px]' },
+    spark7d: { id: 'spark7d', label: 'Gráfico (7d)', sortKey: undefined, w: 'min-w-[180px] w-auto' },
   };
 
   const SortIcon = ({ active }: { active: boolean }) => (
     <ChevronsUpDown size={14} className={`text-gray-400 group-hover:text-[#dd9933] ${active ? 'text-[#dd9933]' : ''}`} />
   );
 
-  // ✅ Header com puxador “invisível até hover” + título realmente centralizado
+  // ✅ Header com 3 slots: puxador | título | chevrons (sem margem “comendo” espaço)
   const SortableThGeneric = ({
     colId,
     label,
@@ -848,40 +954,44 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
       <th
         ref={setNodeRef}
         style={style}
-        className={`relative p-3 select-none group border-b border-gray-100 dark:border-slate-800 ${w}
+        className={`p-2.5 select-none group border-b border-gray-100 dark:border-slate-800 ${w}
           hover:bg-gray-100 dark:hover:bg-white/5 transition-colors`}
       >
-        {/* puxador: some e só aparece no hover (e sempre aparece se estiver dragando) */}
-        <span
-          className={`absolute left-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-7 h-7 rounded-md
-            hover:bg-gray-200 dark:hover:bg-white/10 text-gray-400
-            transition-opacity ${isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-          onClick={(e) => e.stopPropagation()}
-          {...attributes}
-          {...listeners}
-          title="Arraste para reordenar"
-        >
-          <GripVertical size={16} />
-        </span>
+        <div className="grid grid-cols-[28px_1fr_22px] items-center gap-0">
+          {/* puxador: SEM margem à esquerda */}
+          <span
+            className={`inline-flex items-center justify-center w-7 h-7 rounded-md text-gray-400
+              hover:bg-gray-200 dark:hover:bg-white/10 transition-opacity
+              ${isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+            onClick={(e) => e.stopPropagation()}
+            {...attributes}
+            {...listeners}
+            title="Arraste para reordenar"
+          >
+            <GripVertical size={16} />
+          </span>
 
-        {/* título: centralizado de verdade */}
-        <div className="flex items-center justify-center min-w-0">
+          {/* título: ocupa centro */}
           <button
             type="button"
-            className="inline-flex items-center gap-1 font-black uppercase tracking-widest text-xs text-gray-400 dark:text-slate-400 justify-center max-w-full"
+            className="min-w-0 inline-flex items-center justify-center font-black uppercase tracking-widest text-xs text-gray-400 dark:text-slate-400 w-full"
             onClick={() => sortKey && onSort(sortKey)}
             disabled={!sortKey}
             title={sortKey ? 'Ordenar' : ''}
           >
-            <span className="whitespace-nowrap">{label}</span>
-            {sortKey ? <SortIcon active={activeKey === sortKey} /> : null}
+            <span className="truncate">{label}</span>
           </button>
+
+          {/* chevrons: SEM margem à direita */}
+          <span className="inline-flex items-center justify-center">
+            {sortKey ? <SortIcon active={activeKey === sortKey} /> : null}
+          </span>
         </div>
       </th>
     );
   };
 
-  // ✅ FIX drag coins (faltava ligar o handler)
+  // ✅ FIX drag coins
   const onDragEnd = (event: any) => {
     const { active, over } = event;
     if (!over) return;
@@ -933,7 +1043,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
               <span className="font-bold text-sm uppercase tracking-widest animate-pulse">Carregando Categorias...</span>
             </div>
           ) : (
-            <table className="w-full text-left border-collapse min-w-[1100px] table-fixed">
+            <table className="w-full text-left border-collapse min-w-[1100px] table-auto">
               <thead className="sticky top-0 z-20 bg-white dark:bg-[#2f3032]">
                 <tr className="border-b border-gray-100 dark:border-slate-800">
                   <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onCatDragEnd}>
@@ -1072,7 +1182,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
 
                         if (cid === 'spark7d') {
                           return (
-                            <td key={cid} className="p-3 w-[210px] overflow-hidden">
+                            <td key={cid} className="p-3 overflow-hidden">
                               <div className="w-full h-10 overflow-hidden">
                                 {Array.isArray(r.spark) && r.spark.length > 5 ? (
                                   <ResponsiveContainer width="100%" height="100%">
@@ -1163,27 +1273,33 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
 
   const gl = getGainersLosersLabel(language);
 
-  // ✅ Botões “Gainers/Losers” com layout tipo “Top Movers” (pills com ícone)
+  // ✅ Botões: ativos com verde/vermelho (igual “cor dos números”)
   const TopToggleButton = ({
     active,
+    variant,
     icon,
     label,
     onClick,
     title
   }: {
     active: boolean;
+    variant: 'gainers' | 'losers';
     icon: React.ReactNode;
     label: string;
     onClick: () => void;
     title: string;
   }) => {
+    const activeClass = variant === 'gainers'
+      ? 'bg-green-600 text-white border-transparent shadow-md'
+      : 'bg-red-600 text-white border-transparent shadow-md';
+
     return (
       <button
         type="button"
         onClick={onClick}
         className={`px-3 py-2 rounded-lg border font-black transition-colors whitespace-nowrap flex items-center gap-2
           ${active
-            ? 'bg-[#dd9933] text-black border-transparent shadow-md'
+            ? activeClass
             : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5'
           }`}
         title={title}
@@ -1280,6 +1396,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
               <>
                 <TopToggleButton
                   active={topMode === 'gainers'}
+                  variant="gainers"
                   icon={<TrendingUp size={18} />}
                   label={gl.gainers}
                   onClick={() => setTop('gainers')}
@@ -1288,6 +1405,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
 
                 <TopToggleButton
                   active={topMode === 'losers'}
+                  variant="losers"
                   icon={<TrendingDown size={18} />}
                   label={gl.losers}
                   onClick={() => setTop('losers')}
@@ -1384,7 +1502,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                 <span className="font-bold text-sm uppercase tracking-widest animate-pulse">Sincronizando Mercado...</span>
               </div>
             ) : (
-              <table className="w-full text-left border-collapse min-w-[1200px] table-fixed">
+              <table className="w-full text-left border-collapse min-w-[1200px] table-auto">
                 <thead className="sticky top-0 z-20 bg-white dark:bg-[#2f3032]">
                   <tr className="border-b border-gray-100 dark:border-slate-800">
                     <th className="p-3 w-[48px] text-center">
@@ -1393,7 +1511,6 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                       </span>
                     </th>
 
-                    {/* ✅ FIX: agora o onDragEnd real está ligado */}
                     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
                       <SortableContext items={colOrder} strategy={horizontalListSortingStrategy}>
                         {colOrder.map((cid) => {
@@ -1417,11 +1534,17 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
 
                 <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
                   {pageCoins.map((coin) => {
-                    const change24 =
+                    const binSym = normalizeBinanceSymbol(coin);
+                    const live = binSym ? binanceLive[binSym] : undefined;
+
+                    const livePrice = live && isFinite(live.price) ? live.price : Number(coin.current_price || 0);
+
+                    const change24Base =
                       (coin as any).price_change_percentage_24h_in_currency ??
                       coin.price_change_percentage_24h ??
                       0;
 
+                    const change24 = live && isFinite(live.ch24) ? live.ch24 : Number(change24Base || 0);
                     const isPos24 = Number(change24 || 0) >= 0;
 
                     const prices = coin.sparkline_in_7d?.price;
@@ -1483,8 +1606,8 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
 
                           if (cid === 'price') {
                             return (
-                              <td key={cid} className="p-3 text-right font-mono text-[15px] font-black text-gray-900 dark:text-slate-200 w-[130px]">
-                                {formatUSD(Number(coin.current_price || 0))}
+                              <td key={cid} className="p-3 text-right font-mono text-[15px] font-black text-gray-900 dark:text-slate-200 w-[130px]" title={binSym ? `${binSym} (Binance WS)` : ''}>
+                                {formatUSD(livePrice)}
                               </td>
                             );
                           }
@@ -1503,7 +1626,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
 
                           if (cid === 'ch24h') {
                             return (
-                              <td key={cid} className={`p-3 text-right font-mono text-[13px] font-black w-[82px] ${isPos24 ? 'text-green-500' : 'text-red-500'}`}>
+                              <td key={cid} className={`p-3 text-right font-mono text-[13px] font-black w-[82px] ${isPos24 ? 'text-green-500' : 'text-red-500'}`} title={binSym ? `${binSym} (Binance WS)` : ''}>
                                 {isPos24 ? '+' : ''}{Number(change24 || 0).toFixed(2)}%
                               </td>
                             );
@@ -1555,7 +1678,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
 
                           if (cid === 'spark7d') {
                             return (
-                              <td key={cid} className="p-3 w-[280px] overflow-hidden">
+                              <td key={cid} className="p-3 overflow-hidden">
                                 <div className="w-full h-12 min-w-0 overflow-hidden">
                                   {sparkData.length > 1 ? (
                                     <ResponsiveContainer width="100%" height="100%">
@@ -1638,7 +1761,6 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
   const GROUPS = [
     { title: 'Market', items: [
       { id: 'MARKETCAP' as PageType, label: tPages.marketcap, icon: <List size={18} /> },
-      // ✅ REMOVIDO: Top Movers (menu)
       { id: 'HEATMAP' as PageType, label: "Heatmap Square", icon: <LayoutGrid size={18} /> },
       { id: 'BUBBLES' as PageType, label: "Crypto Bubbles", icon: <CircleDashed size={18} /> },
       { id: 'RSI' as PageType, label: tWs.rsi.title, icon: <Activity size={18} /> },
@@ -1678,7 +1800,6 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
                       key={item.id}
                       onClick={() => {
                         setActivePage(item.id);
-                        // também sobe pro topo ao trocar páginas
                         if (mainScrollRef.current) mainScrollRef.current.scrollTo({ top: 0, behavior: 'auto' });
                       }}
                       className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-black transition-all tracking-wide ${activePage === item.id ? 'bg-[#dd9933] text-black shadow-md' : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-[#2f3032]'}`}
