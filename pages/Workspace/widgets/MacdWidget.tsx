@@ -132,7 +132,7 @@ const HighchartsMacdTracker: React.FC<HighchartsMacdTrackerProps> = ({ data, tim
         { name: 'Bullish', data: bullishSeries, color: 'rgba(0, 158, 79, 0.7)' },
         { name: 'Bearish', data: bearishSeries, color: 'rgba(224, 58, 62, 0.7)' }
       ]
-    });
+    } as any);
   }, [data, timeframe, xMode, labels]);
 
   return <div ref={chartRef} style={{ width: '100%', height: '100%', minHeight: '300px' }} />;

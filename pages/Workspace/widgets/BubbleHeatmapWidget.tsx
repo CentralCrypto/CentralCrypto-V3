@@ -8,7 +8,7 @@ import Highcharts from 'highcharts';
 import addHighchartsMore from 'highcharts/highcharts-more';
 
 // Initialize
-try { addHighchartsMore(Highcharts); } catch(e) { console.error("Highcharts More init error", e); }
+try { (addHighchartsMore as any)(Highcharts); } catch(e) { console.error("Highcharts More init error", e); }
 
 declare global {
   interface Window {
@@ -279,7 +279,7 @@ const BubbleHeatmapWidget: React.FC<Props> = ({ item, language = 'pt' }) => {
                 }
             },
             series: [{ name: 'MarketData', data: filteredBubbleData }]
-        });
+        } as any);
 
         return () => {
             if (chartInstance.current) {

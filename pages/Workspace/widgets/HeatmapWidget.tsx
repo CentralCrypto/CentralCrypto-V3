@@ -16,6 +16,7 @@ import Highcharts from 'highcharts';
 import TreemapModule from 'highcharts/modules/treemap';
 import ExportingModule from 'highcharts/modules/exporting';
 import AccessibilityModule from 'highcharts/modules/accessibility';
+import { DashboardItem, Language } from '../../../types';
 
 // (Opcional, mas ajuda dependendo da versão do Highcharts)
 import BreadcrumbsModule from 'highcharts/modules/breadcrumbs';
@@ -304,7 +305,7 @@ function buildTreemapData(params: {
   return data;
 }
 
-export default function CryptoHeatmapDemo() {
+export default function CryptoHeatmapDemo({ item, language }: { item?: DashboardItem, language?: Language }) {
   const [open, setOpen] = useState(true); // abre direto pra você “ver a porra”
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string>('');

@@ -225,7 +225,7 @@ const HighchartsRsiTracker: React.FC<{ data: RsiTrackerPoint[], timeframe: strin
                 { name: 'Neutral', data: neutral, color: '#94a3b8' }, 
                 { name: 'Oversold (<30)', data: oversold, color: '#4ade80' }
             ]
-        });
+        } as any);
     }, [data, timeframe, xMode, isDark]);
 
     return (

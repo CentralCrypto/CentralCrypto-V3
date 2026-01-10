@@ -167,7 +167,7 @@ const HighchartsEtfChart: React.FC<HighchartsEtfChartProps> = ({ data, title, co
                 valueDecimals: 0
             },
             series: series.length > 0 ? series : [{ name: 'No Data', data: [] }]
-        });
+        } as any);
 
     }, [data, title, colorBase]);
 
