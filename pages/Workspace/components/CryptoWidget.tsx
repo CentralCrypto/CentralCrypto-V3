@@ -11,7 +11,7 @@ const MacdWidget = React.lazy(() => import('../widgets/MacdWidget'));
 const FearGreedWidget = React.lazy(() => import('../widgets/FearGreedWidget'));
 const LsrWidget = React.lazy(() => import('../widgets/LsrWidget'));
 const AltcoinSeasonWidget = React.lazy(() => import('../widgets/AltcoinSeasonWidget'));
-const TrumpMeterWidget = React.lazy(() => import('../widgets/TrumpMeterWidget'));
+const TrumpMeterWidget = React.lazy(() => import('../widgets/TrumpMeterWidget')) as React.FC<{ item: DashboardItem, language?: Language }>;
 const EtfFlowWidget = React.lazy(() => import('../widgets/EtfFlowWidget'));
 const GainersLosersWidget = React.lazy(() => import('../widgets/GainersLosersWidget'));
 const CalendarWidget = React.lazy(() => import('../widgets/CalendarWidget'));

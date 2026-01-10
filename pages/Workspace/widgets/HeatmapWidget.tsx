@@ -1,3 +1,4 @@
+
 // HeatmapWidget.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -98,39 +99,16 @@ function initHighchartsOnce() {
 }
 
 // =============================
-// Cachecko endpoints (HTTP only)
+// HTTP robusto & Endpoints
 // =============================
-function getCacheckoUrl(path: string) {
-  if (!path) return '/cachecko';
-  return path.startsWith('/cachecko') ? path : `/cachecko/${path.replace(/^\/+/, '')}`;
-}
 
+// URLs fixas para o VPS (baseadas na estrutura do MarketCapTable)
 const ENDPOINTS = {
-  COINS_LITE: getCacheckoUrl('cachecko_lite.json')
+  COINS_LITE: '/cachecko/cachecko_lite.json',
+  TAXONOMY: '/cachecko/categories/taxonomy-master.json',
+  CAT_MAP: '/cachecko/categories/category_coins_map.json'
 };
 
-// Fallbacks porque teu arquivo real pode estar com outro nome
-const TAXONOMY_CANDIDATES = [
-  getCacheckoUrl('categories/taxonomy-master.json'),
-  getCacheckoUrl('categories/taxonomy_master.json'),
-  getCacheckoUrl('categories/taxonomyMaster.json'),
-  getCacheckoUrl('categories/taxonomy.json'),
-  // fallback: lista simples de categorias
-  getCacheckoUrl('categories/coingecko_categories_list.json'),
-  getCacheckoUrl('categories/coingecko_categories_market.json')
-];
-
-const CATMAP_CANDIDATES = [
-  getCacheckoUrl('categories/category_coins_map.json'),
-  getCacheckoUrl('categories/category-coins-map.json'),
-  getCacheckoUrl('categories/category_coin_map.json'),
-  getCacheckoUrl('categories/category-coin-map.json'),
-  getCacheckoUrl('categories/category_coins_map.min.json')
-];
-
-// =============================
-// HTTP robusto
-// =============================
 function withCb(url: string) {
   const salt = Math.floor(Date.now() / 60000);
   return url.includes('?') ? `${url}&_cb=${salt}` : `${url}?_cb=${salt}`;
@@ -154,21 +132,6 @@ async function httpGetJson(url: string, opts?: { timeoutMs?: number; retries?: n
     }
   }
   throw new Error('httpGetJson: unreachable');
-}
-
-async function loadFirstWorkingJson(candidates: string[], opts?: { timeoutMs?: number; retries?: number }) {
-  let lastErr: any = null;
-  for (const url of candidates) {
-    try {
-      const data = await httpGetJson(url, opts);
-      return { url, data };
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-  const list = candidates.join(' | ');
-  const msg = lastErr?.message ? String(lastErr.message) : 'unknown';
-  throw new Error(`Nenhum endpoint respondeu. Tentativas: ${list}. Último erro: ${msg}`);
 }
 
 // =============================
@@ -210,24 +173,12 @@ function safeUpper(s?: string) {
 // =============================
 // Categories normalizer
 // =============================
-function pickParentId(c: TaxonomyRow): string | null {
-  const v = c.parent ?? c.parentId ?? c.parent_id ?? c.master ?? c.masterId ?? c.group ?? c.groupId ?? null;
-  if (!v) return null;
-  const s = String(v).trim();
-  return s ? s : null;
-}
-
-// Aceita:
-// - taxonomy-master (hierárquico)
-// - categories_list / categories_market (lista simples)
 function normalizeCategories(raw: any): CategoryRow[] {
   if (!raw) return [];
 
   // taxonomy array
   if (Array.isArray(raw) && raw.length && raw[0] && typeof raw[0] === 'object' && 'id' in raw[0] && 'name' in raw[0]) {
     const arr = raw as Array<TaxonomyRow>;
-    // Queremos dropdown com categorias "selecionáveis" (tanto folhas quanto pais, ok)
-    // mas de preferência só as que existem no map. A gente filtra depois.
     return arr
       .map(r => ({ id: String(r.id), name: String(r.name) }))
       .filter(x => x.id && x.name);
@@ -249,7 +200,7 @@ function buildPoints(coins: Coin[], valueMode: ValueMode): TreemapPoint[] {
   const sorted = [...coins]
     .filter(c => c && c.id)
     .sort((a, b) => safeNum(b.market_cap) - safeNum(a.market_cap))
-    .slice(0, 450); // evita virar uma sopa de pixels (ajusta se quiser)
+    .slice(0, 450); // evita virar uma sopa de pixels
 
   return sorted.map(c => {
     const change24 = safeNum(c.price_change_percentage_24h);
@@ -323,52 +274,37 @@ export default function HeatmapWidget() {
 
     (async () => {
       try {
-        const coinsData = await httpGetJson(ENDPOINTS.COINS_LITE, { timeoutMs: 12000, retries: 2 });
+        // Fetch paralelo para os 3 endpoints fixos
+        const [coinsData, taxonomyData, mapData] = await Promise.all([
+            httpGetJson(ENDPOINTS.COINS_LITE, { timeoutMs: 15000, retries: 2 }),
+            httpGetJson(ENDPOINTS.TAXONOMY, { timeoutMs: 15000, retries: 2 }).catch(() => []), // Falha silenciosa pra categoria não travar tudo
+            httpGetJson(ENDPOINTS.CAT_MAP, { timeoutMs: 15000, retries: 2 }).catch(() => ({}))  // Falha silenciosa
+        ]);
+
+        if (!alive) return;
+
+        // Processa Coins
         const coinsArr = Array.isArray(coinsData) ? coinsData : (Array.isArray(coinsData?.data) ? coinsData.data : []);
         if (!Array.isArray(coinsArr)) throw new Error(`Formato inesperado em ${ENDPOINTS.COINS_LITE}`);
 
-        // Taxonomy (com fallback)
-        let taxonomyArr: any[] = [];
-        let taxonomyUrl = '';
-        try {
-          const t = await loadFirstWorkingJson(TAXONOMY_CANDIDATES, { timeoutMs: 12000, retries: 1 });
-          taxonomyUrl = t.url;
-          taxonomyArr = Array.isArray(t.data) ? t.data : (Array.isArray(t.data?.data) ? t.data.data : []);
-        } catch (e: any) {
-          taxonomyArr = [];
-          taxonomyUrl = '';
-        }
-
-        // Cat map (com fallback)
-        let mapObj: any = {};
-        let mapUrl = '';
-        try {
-          const m = await loadFirstWorkingJson(CATMAP_CANDIDATES, { timeoutMs: 12000, retries: 1 });
-          mapUrl = m.url;
-          mapObj = m.data && typeof m.data === 'object' ? m.data : {};
-        } catch (e: any) {
-          mapObj = {};
-          mapUrl = '';
-        }
-
-        if (!alive) return;
+        // Processa Taxonomy
+        const taxonomyArr = Array.isArray(taxonomyData) ? taxonomyData : (Array.isArray(taxonomyData?.data) ? taxonomyData.data : []);
+        
+        // Processa Map
+        const mapObj = mapData && typeof mapData === 'object' ? mapData : {};
+        // Se vier aninhado em "categories" ou "data" (depende do formato exato)
+        const finalMap = mapObj.categories || mapObj.data || mapObj;
 
         setCoins(coinsArr as Coin[]);
         setCategories(normalizeCategories(taxonomyArr));
-        setCatMap(mapObj as CategoryCoinsMap);
-        setLoadedTaxonomyUrl(taxonomyUrl);
-        setLoadedMapUrl(mapUrl);
+        setCatMap(finalMap as CategoryCoinsMap);
+        
+        setLoadedTaxonomyUrl(ENDPOINTS.TAXONOMY);
+        setLoadedMapUrl(ENDPOINTS.CAT_MAP);
 
-        // Se taxonomy não carregou, retorna erro só informativo, mas não mata o heatmap
-        if (!taxonomyUrl) {
-          setErr(prev => prev || `Aviso: taxonomy não carregou (dropdown pode ficar limitado).`);
-        }
-        if (!mapUrl) {
-          setErr(prev => prev || `Aviso: category map não carregou (filtro por categoria pode ficar indisponível).`);
-        }
       } catch (e: any) {
         if (!alive) return;
-        setErr(e?.message ? String(e.message) : 'Falha ao carregar dados.');
+        setErr(e?.message ? String(e.message) : 'Falha ao carregar dados do Heatmap.');
       } finally {
         if (!alive) return;
         setLoading(false);
@@ -397,7 +333,7 @@ export default function HeatmapWidget() {
   }, [coins]);
 
   const categoryOptions = useMemo(() => {
-    // Só lista categorias que existem no map (pra evitar dropdown inútil)
+    // Só lista categorias que existem no map
     const idsInMap = new Set(Object.keys(catMap || {}));
     const base = categories
       .filter(c => c?.id && c?.name)
@@ -731,12 +667,6 @@ export default function HeatmapWidget() {
       <span>
         Cor = variação 24h • {valueMode === 'marketcap' ? 'Área = Market Cap' : 'Área = |Var 24h|'}
       </span>
-
-      <span style={{ opacity: 0.9 }}>
-        {ENDPOINTS.COINS_LITE}
-        {loadedTaxonomyUrl ? ` • taxonomy: ${loadedTaxonomyUrl}` : ''}
-        {loadedMapUrl ? ` • map: ${loadedMapUrl}` : ''}
-      </span>
     </div>
   );
 
@@ -796,6 +726,8 @@ export default function HeatmapWidget() {
     </div>
   );
 
+  // Se você quer SEM botão nenhum fora: deixa return null e força open=true no state.
+  // Aqui eu deixo um “reabrir” simples, porque fechar e ficar preso é chato.
   return (
     <div style={{ width: '100%' }}>
       {!open && (
