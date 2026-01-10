@@ -1,20 +1,68 @@
-import React, { useEffect, useRef, useState } from 'react';
+// CryptoHeatmapDemo.tsx
+// ✅ Highcharts Treemap no estilo do demo (S&P) + drilldown + cabeçalhos no TOPO (não no meio)
+// ✅ Popup fullscreen com botão X (e SÓ isso)
+// ✅ Consome JSON via HTTP em /cachecko/... (nunca filesystem)
+// ✅ Funciona em prod (mesma origem) e em dev com proxy do Vite (se você configurar)
+//
+// Requisitos:
+// npm i highcharts
+//
+// Vite proxy (DEV) — coloque no vite.config.ts:
+// server: { proxy: { '/cachecko': { target: 'https://centralcrypto.com.br', changeOrigin: true, secure: false } } }
+
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Highcharts from 'highcharts';
 import TreemapModule from 'highcharts/modules/treemap';
 import ExportingModule from 'highcharts/modules/exporting';
 import AccessibilityModule from 'highcharts/modules/accessibility';
-import DataModule from 'highcharts/modules/data';
-import ColorAxisModule from 'highcharts/modules/coloraxis';
 
-// =============================
-// FULLSCREEN DEMO (SÓ X PRA FECHAR)
-// - Replica o demo ORIGINAL (S&P 500) pra você ver funcionando no site.
-// =============================
+// (Opcional, mas ajuda dependendo da versão do Highcharts)
+import BreadcrumbsModule from 'highcharts/modules/breadcrumbs';
+
+type Coin = {
+  id: string;
+  symbol?: string;
+  name?: string;
+  image?: string;
+  market_cap?: number;
+  price_change_percentage_24h?: number;
+};
+
+// taxonomy-master.json pode variar. Aqui a gente tenta ler “parent” de forma tolerante.
+type TaxonomyCategory = {
+  id: string;
+  name: string;
+
+  // possíveis campos de parent (depende do teu JSON)
+  parent?: string | null;
+  parentId?: string | null;
+  parent_id?: string | null;
+  master?: string | null;
+  masterId?: string | null;
+  group?: string | null;
+  groupId?: string | null;
+};
+
+type CategoryCoinsMap = Record<string, string[]>;
+
+type TreemapPoint = {
+  id: string;
+  name?: string;
+  parent?: string;
+  value?: number;
+  colorValue?: number;
+  custom?: {
+    fullName?: string;
+    performance?: string;
+    logo?: string;
+    marketCap?: number;
+    change24h?: number;
+    kind?: 'root' | 'category' | 'coin';
+  };
+};
 
 let HC_INITED = false;
-let TREEMAP_LABEL_PLUGIN_INITED = false;
-
 function initHighchartsOnce() {
   if (HC_INITED) return;
   HC_INITED = true;
@@ -22,8 +70,11 @@ function initHighchartsOnce() {
   (TreemapModule as any)(Highcharts);
   (ExportingModule as any)(Highcharts);
   (AccessibilityModule as any)(Highcharts);
-  (DataModule as any)(Highcharts);
-  (ColorAxisModule as any)(Highcharts);
+  try {
+    (BreadcrumbsModule as any)(Highcharts);
+  } catch {
+    // se não existir na versão, segue o baile
+  }
 
   Highcharts.setOptions({
     chart: {
@@ -32,227 +83,284 @@ function initHighchartsOnce() {
       }
     }
   });
-}
 
-function initTreemapRelativeFontPluginOnce() {
-  if (TREEMAP_LABEL_PLUGIN_INITED) return;
-  TREEMAP_LABEL_PLUGIN_INITED = true;
-
-  Highcharts.addEvent(Highcharts.Series as any, 'drawDataLabels', function () {
+  // ✅ Plugin do demo (com correção do erro toColor):
+  // - Ajusta font-size relativo pela área do retângulo
+  // - Colore os headers (level 2) com base em colorValue
+  Highcharts.addEvent(Highcharts.Series, 'drawDataLabels', function () {
     // @ts-ignore
     if (this.type !== 'treemap') return;
 
-    // ✅ robusto: tenta pegar do Series, senão do Chart
     // @ts-ignore
-    const ca = this.colorAxis || (this.chart && this.chart.colorAxis && this.chart.colorAxis[0]);
+    const ca = this.chart?.colorAxis?.[0];
 
     // @ts-ignore
-    this.points.forEach((point: any) => {
-      // Color the level 2 headers with the combined performance of its children
-      if (point?.node?.level === 2 && Number.isFinite(point.value)) {
-        const previousValue = (point.node.children || []).reduce(
-          (acc: number, child: any) =>
-            acc +
-            (child?.point?.value || 0) -
-            (child?.point?.value || 0) * (child?.point?.colorValue || 0) / 100,
-          0
-        );
-
-        const perf = 100 * (point.value - previousValue) / (previousValue || 1);
-
-        point.custom = {
-          ...(point.custom || {}),
-          performance: (perf < 0 ? '' : '+') + perf.toFixed(2) + '%'
-        };
-
-        // ✅ só tenta se existir
-        if (point.dlOptions && ca && typeof ca.toColor === 'function') {
-          point.dlOptions.backgroundColor = ca.toColor(perf);
+    this.points.forEach((p: any) => {
+      // Cabeçalhos de categorias/subcategorias (level 1/2): fundo seguindo o colorValue
+      if ((p?.node?.level === 1 || p?.node?.level === 2) && p?.dlOptions && ca && Number.isFinite(p.colorValue)) {
+        try {
+          p.dlOptions.backgroundColor = ca.toColor(p.colorValue);
+        } catch {
+          // não explode se o Highcharts mudar internals
         }
       }
 
-      // Set font size based on area of the point
-      if (point?.node?.level === 3 && point.shapeArgs && point.dlOptions?.style) {
-        const area = point.shapeArgs.width * point.shapeArgs.height;
-        point.dlOptions.style.fontSize = `${Math.min(32, 7 + Math.round(area * 0.0008))}px`;
+      // Leafs (moedas) no level 3: font-size baseado na área
+      if (p?.node?.level === 3 && p?.shapeArgs && p?.dlOptions?.style) {
+        const area = Number(p.shapeArgs.width || 0) * Number(p.shapeArgs.height || 0);
+        const px = Math.min(32, 7 + Math.round(area * 0.0008));
+        p.dlOptions.style.fontSize = `${px}px`;
       }
     });
   });
 }
 
-const renderChart = (container: HTMLElement, data: any[]) => {
-  return Highcharts.chart(container, {
-    chart: {
-      backgroundColor: '#252931'
-    },
-    series: [
-      {
-        name: 'All',
-        type: 'treemap',
-        layoutAlgorithm: 'squarified',
-        allowDrillToNode: true,
-        animationLimit: 1000,
-        borderColor: '#252931',
-        color: '#252931',
-        opacity: 0.01,
-        nodeSizeBy: 'leaf',
-        dataLabels: {
-          enabled: false,
-          allowOverlap: true,
-          style: {
-            fontSize: '0.9em',
-            textOutline: 'none'
-          }
-        },
-        levels: [
-          {
-            level: 1,
-            dataLabels: {
-              enabled: true,
-              headers: true,
-              align: 'left',
-              style: {
-                fontWeight: 'bold',
-                fontSize: '0.7em',
-                lineClamp: 1,
-                textTransform: 'uppercase'
-              },
-              padding: 3
-            },
-            borderWidth: 3,
-            levelIsConstant: false
-          },
-          {
-            level: 2,
-            dataLabels: {
-              enabled: true,
-              headers: true,
-              align: 'center',
-              shape: 'callout',
-              backgroundColor: 'gray',
-              borderWidth: 1,
-              borderColor: '#252931',
-              padding: 0,
-              style: {
-                color: 'white',
-                fontWeight: 'normal',
-                fontSize: '0.6em',
-                lineClamp: 1,
-                textOutline: 'none',
-                textTransform: 'uppercase'
-              }
-            },
-            groupPadding: 1
-          },
-          {
-            level: 3,
-            dataLabels: {
-              enabled: true,
-              align: 'center',
-              format:
-                '{point.name}<br><span style="font-size: 0.7em">{point.custom.performance}</span>',
-              style: {
-                color: 'white'
-              }
-            }
-          }
-        ],
-        accessibility: {
-          exposeAsGroupOnly: true
-        },
-        breadcrumbs: {
-          buttonTheme: {
-            style: {
-              color: 'silver'
-            },
-            states: {
-              hover: {
-                fill: '#333'
-              },
-              select: {
-                style: {
-                  color: 'white'
-                }
-              }
-            }
-          }
-        },
-        data
-      } as any
-    ],
-    title: {
-      text: 'S&P 500 Companies',
-      align: 'left',
-      style: {
-        color: 'white'
-      }
-    },
-    subtitle: {
-      text: 'Click points to drill down. Source: <a href="http://okfn.org/">okfn.org</a>.',
-      align: 'left',
-      style: {
-        color: 'silver'
-      }
-    },
-    tooltip: {
-      followPointer: true,
-      outside: true,
-      headerFormat: '<span style="font-size: 0.9em">{point.custom.fullName}</span><br/>',
-      pointFormat:
-        '<b>Market Cap:</b> USD {(divide point.value 1000000000):.1f} bln<br/>' +
-        '{#if point.custom.performance}<b>1 month performance:</b> {point.custom.performance}{/if}'
-    },
-    colorAxis: {
-      minColor: '#f73539',
-      maxColor: '#2ecc59',
-      stops: [
-        [0, '#f73539'],
-        [0.5, '#414555'],
-        [1, '#2ecc59']
-      ],
-      min: -10,
-      max: 10,
-      gridLineWidth: 0,
-      labels: {
-        overflow: 'allow',
-        format: '{#gt value 0}+{value}{else}{value}{/gt}%',
-        style: {
-          color: 'white'
-        }
-      }
-    },
-    legend: {
-      itemStyle: {
-        color: 'white'
-      }
-    },
-    exporting: {
-      enabled: false
-    },
-    credits: { enabled: false }
-  });
-};
-
-async function getCSV(url: string) {
-  const csv = await fetch(url).then(r => r.text());
-  const data = new (Highcharts as any).Data({ csv });
-
-  const arr = data.columns[0].map((_: any, i: number) =>
-    data.columns.reduce((obj: any, column: any[]) => {
-      obj[column[0]] = column[i];
-      return obj;
-    }, {})
-  );
-
-  return arr;
+function getCacheckoUrl(path: string) {
+  if (!path) return '/cachecko';
+  return path.startsWith('/cachecko') ? path : `/cachecko/${path.replace(/^\/+/, '')}`;
 }
 
-export default function DemoTreemapFullscreen() {
-  const [open, setOpen] = useState(true);
-  const [error, setError] = useState<string>('');
+const ENDPOINTS = {
+  COINS_LITE: getCacheckoUrl('cachecko_lite.json'),
+  TAXONOMY: getCacheckoUrl('categories/taxonomy-master.json'),
+  CAT_MAP: getCacheckoUrl('categories/category_coins_map.json') // ajuste se teu nome for diferente
+};
+
+function withCb(url: string) {
+  const salt = Math.floor(Date.now() / 60000); // troca a cada 1 min
+  return url.includes('?') ? `${url}&_cb=${salt}` : `${url}?_cb=${salt}`;
+}
+
+async function httpGetJson(url: string, opts?: { timeoutMs?: number; retries?: number }) {
+  const timeoutMs = opts?.timeoutMs ?? 10000;
+  const retries = opts?.retries ?? 2;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const ctrl = new AbortController();
+    const t = window.setTimeout(() => ctrl.abort(), timeoutMs);
+
+    try {
+      const r = await fetch(withCb(url), { signal: ctrl.signal, cache: 'no-store' });
+      if (!r.ok) throw new Error(`${url} -> ${r.status}`);
+      return await r.json();
+    } catch (e) {
+      if (attempt === retries) throw e;
+    } finally {
+      window.clearTimeout(t);
+    }
+  }
+
+  throw new Error('httpGetJson: unreachable');
+}
+
+function safeUpper(s?: string) {
+  return (s || '').toUpperCase();
+}
+
+function fmtPct(v: number) {
+  const n = Number.isFinite(v) ? v : 0;
+  const sign = n > 0 ? '+' : '';
+  return `${sign}${n.toFixed(2)}%`;
+}
+
+function fmtMc(v: number) {
+  const n = Number.isFinite(v) ? v : 0;
+  if (n >= 1e12) return `${(n / 1e12).toFixed(2)}T`;
+  if (n >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
+  if (n >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
+  if (n >= 1e3) return `${(n / 1e3).toFixed(2)}K`;
+  return `${Math.round(n)}`;
+}
+
+function pickParentId(c: TaxonomyCategory): string | null {
+  const v =
+    c.parent ??
+    c.parentId ??
+    c.parent_id ??
+    c.master ??
+    c.masterId ??
+    c.group ??
+    c.groupId ??
+    null;
+
+  if (!v) return null;
+  const s = String(v).trim();
+  return s ? s : null;
+}
+
+// Calcula “performance” (média ponderada por market cap) para um node (categoria)
+function weightedPerf(coinIds: string[], coinById: Map<string, Coin>) {
+  let totalMc = 0;
+  let acc = 0;
+  for (const id of coinIds) {
+    const c = coinById.get(id);
+    if (!c) continue;
+    const mc = Number(c.market_cap || 0);
+    const ch = Number(c.price_change_percentage_24h ?? 0);
+    totalMc += mc;
+    acc += mc * ch;
+  }
+  if (totalMc <= 0) return 0;
+  const v = acc / totalMc;
+  return Number.isFinite(v) ? v : 0;
+}
+
+function buildTreemapData(params: {
+  coins: Coin[];
+  taxonomy: TaxonomyCategory[];
+  catMap: CategoryCoinsMap;
+}) {
+  const { coins, taxonomy, catMap } = params;
+
+  const coinById = new Map<string, Coin>();
+  for (const c of coins) if (c?.id) coinById.set(c.id, c);
+
+  // Root
+  const data: TreemapPoint[] = [
+    {
+      id: 'All',
+      name: 'All',
+      custom: { fullName: 'All', kind: 'root' }
+    }
+  ];
+
+  // Index de categorias por id
+  const catById = new Map<string, TaxonomyCategory>();
+  taxonomy.forEach(c => {
+    if (c?.id) catById.set(c.id, c);
+  });
+
+  // Garantir que todo parent exista (se taxonomy vier “solta”)
+  function ensureNode(id: string, name: string, parent: string) {
+    if (!id) return;
+    if (data.find(p => p.id === id)) return;
+    data.push({
+      id,
+      parent,
+      name,
+      // ✅ não coloca value em node, igual demo (pai soma filhos)
+      custom: { fullName: name, kind: 'category' }
+    });
+  }
+
+  // Monta árvore: se tem parent, usa; senão vai direto para All
+  taxonomy.forEach(cat => {
+    if (!cat?.id || !cat?.name) return;
+    const parentId = pickParentId(cat) || 'All';
+
+    // se parent não existe na taxonomy, cria “virtual” em All
+    if (parentId !== 'All' && !catById.has(parentId)) {
+      ensureNode(parentId, parentId, 'All');
+    }
+
+    ensureNode(cat.id, cat.name, parentId);
+  });
+
+  // Leafs (moedas) por categoria
+  // ⚠️ id precisa ser único: coin pode estar em várias categorias => usa composite
+  Object.entries(catMap || {}).forEach(([catId, coinIds]) => {
+    if (!catId || !Array.isArray(coinIds) || coinIds.length === 0) return;
+
+    // Se não existir node da categoria, cria em All
+    if (!data.find(p => p.id === catId)) {
+      ensureNode(catId, catId, 'All');
+    }
+
+    // setar colorValue do node (categoria) para ficar “pintado” como no demo
+    const perf = weightedPerf(Array.from(new Set(coinIds)), coinById);
+    const node = data.find(p => p.id === catId);
+    if (node) {
+      node.colorValue = perf;
+      node.custom = node.custom || {};
+      node.custom.performance = fmtPct(perf);
+    }
+
+    const uniq = Array.from(new Set(coinIds));
+    for (const coinId of uniq) {
+      const c = coinById.get(coinId);
+      if (!c) continue;
+
+      const mc = Number(c.market_cap || 0) || 1;
+      const ch = Number(c.price_change_percentage_24h ?? 0);
+
+      data.push({
+        id: `${catId}:${coinId}`,
+        parent: catId,
+        name: safeUpper(c.symbol) || safeUpper(c.name) || coinId,
+        value: mc,
+        colorValue: ch,
+        custom: {
+          fullName: c.name || coinId,
+          performance: fmtPct(ch),
+          logo: c.image,
+          marketCap: mc,
+          change24h: ch,
+          kind: 'coin'
+        }
+      });
+    }
+  });
+
+  return data;
+}
+
+export default function CryptoHeatmapDemo() {
+  const [open, setOpen] = useState(true); // abre direto pra você “ver a porra”
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string>('');
+
+  const [coins, setCoins] = useState<Coin[]>([]);
+  const [taxonomy, setTaxonomy] = useState<TaxonomyCategory[]>([]);
+  const [catMap, setCatMap] = useState<CategoryCoinsMap>({});
+
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<Highcharts.Chart | null>(null);
 
+  useEffect(() => {
+    initHighchartsOnce();
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setErr('');
+
+    Promise.allSettled([
+      httpGetJson(ENDPOINTS.COINS_LITE, { timeoutMs: 12000, retries: 2 }),
+      httpGetJson(ENDPOINTS.TAXONOMY, { timeoutMs: 12000, retries: 1 }),
+      httpGetJson(ENDPOINTS.CAT_MAP, { timeoutMs: 12000, retries: 1 })
+    ])
+      .then(res => {
+        if (!alive) return;
+
+        const [rCoins, rTax, rMap] = res;
+
+        if (rCoins.status === 'fulfilled' && Array.isArray(rCoins.value)) setCoins(rCoins.value);
+        else setErr(prev => prev || `Falha ao carregar ${ENDPOINTS.COINS_LITE}`);
+
+        if (rTax.status === 'fulfilled' && Array.isArray(rTax.value)) setTaxonomy(rTax.value);
+        else setErr(prev => prev || `Falha ao carregar ${ENDPOINTS.TAXONOMY}`);
+
+        if (rMap.status === 'fulfilled' && rMap.value && typeof rMap.value === 'object') setCatMap(rMap.value);
+        else setErr(prev => prev || `Falha ao carregar ${ENDPOINTS.CAT_MAP}`);
+      })
+      .finally(() => {
+        if (!alive) return;
+        setLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const treemapData = useMemo(() => {
+    if (!coins.length) return [];
+    // taxonomy e catMap podem vir vazios; ainda dá pra renderizar “All” e nada dentro
+    return buildTreemapData({ coins, taxonomy, catMap });
+  }, [coins, taxonomy, catMap]);
+
+  // trava scroll quando popup abre
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -264,241 +372,192 @@ export default function DemoTreemapFullscreen() {
 
   useEffect(() => {
     if (!open) return;
-
-    initHighchartsOnce();
-    initTreemapRelativeFontPluginOnce();
-
     if (!containerRef.current) return;
 
-    let alive = true;
+    // destrói anterior
+    if (chartRef.current) {
+      chartRef.current.destroy();
+      chartRef.current = null;
+    }
 
-    (async () => {
-      try {
-        setError('');
+    // render
+    const chart = Highcharts.chart(containerRef.current, {
+      chart: {
+        backgroundColor: '#252931',
+        spacing: [12, 12, 12, 12]
+      },
+      title: {
+        text: 'Market Heatmap',
+        align: 'left',
+        style: { color: 'white', fontWeight: '800' }
+      },
+      subtitle: {
+        text: 'Click points to drill down.',
+        align: 'left',
+        style: { color: 'silver' }
+      },
+      credits: { enabled: false },
+      exporting: { enabled: false },
+      accessibility: { enabled: true },
+      tooltip: {
+        followPointer: true,
+        outside: true,
+        useHTML: true,
+        headerFormat:
+          '<span style="font-size: 0.9em">{point.custom.fullName}</span><br/>',
+        pointFormatter: function () {
+          // @ts-ignore
+          const p = this as any;
+          const mc = Number(p?.custom?.marketCap ?? p.value ?? 0);
+          const perf = p?.custom?.performance ?? (Number.isFinite(p.colorValue) ? fmtPct(p.colorValue) : '');
+          const isLeaf = p?.custom?.kind === 'coin';
 
-        const csvData = await getCSV(
-          'https://cdn.jsdelivr.net/gh/datasets/s-and-p-500-companies-financials@67dd99e/data/constituents-financials.csv'
-        );
-
-        const oldData = await getCSV(
-          'https://cdn.jsdelivr.net/gh/datasets/s-and-p-500-companies-financials@9f63bc5/data/constituents-financials.csv'
-        );
-
-        const data: any[] = [
-          { id: 'Technology' },
-          { id: 'Financial' },
-          { id: 'Consumer Cyclical' },
-          { id: 'Communication Services' },
-          { id: 'Healthcare' },
-          { id: 'Consumer Defensive' },
-          { id: 'Industrials' },
-          { id: 'Real Estate' },
-          { id: 'Energy' },
-          { id: 'Utilities' },
-          { id: 'Basic Materials' }
-        ];
-
-        const sectorToIndustry: Record<string, string> = {
-          'Industrial Conglomerates': 'Industrials',
-          'Building Products': 'Industrials',
-          'Health Care Equipment': 'Healthcare',
-          Biotechnology: 'Healthcare',
-          'IT Consulting & Other Services': 'Technology',
-          'Application Software': 'Technology',
-          Semiconductors: 'Technology',
-          'Independent Power Producers & Energy Traders': 'Energy',
-          'Life & Health Insurance': 'Financial',
-          'Life Sciences Tools & Services': 'Healthcare',
-          'Industrial Gases': 'Basic Materials',
-          'Hotels, Resorts & Cruise Lines': 'Consumer Cyclical',
-          'Internet Services & Infrastructure': 'Technology',
-          'Specialty Chemicals': 'Basic Materials',
-          'Office REITs': 'Real Estate',
-          'Health Care Supplies': 'Healthcare',
-          'Electric Utilities': 'Utilities',
-          'Property & Casualty Insurance': 'Financial',
-          'Interactive Media & Services': 'Communication Services',
-          Tobacco: 'Consumer Defensive',
-          'Broadline Retail': 'Consumer Cyclical',
-          'Paper & Plastic Packaging Products & Materials': 'Basic Materials',
-          'Diversified Support Services': 'Industrials',
-          'Multi-Utilities': 'Utilities',
-          'Consumer Finance': 'Financial',
-          'Multi-line Insurance': 'Financial',
-          'Telecom Tower REITs': 'Real Estate',
-          'Water Utilities': 'Utilities',
-          'Asset Management & Custody Banks': 'Financial',
-          'Electrical Components & Equipment': 'Industrials',
-          'Electronic Components': 'Technology',
-          'Insurance Brokers': 'Financial',
-          'Oil & Gas Exploration & Production': 'Energy',
-          'Technology Hardware, Storage & Peripherals': 'Technology',
-          'Semiconductor Materials & Equipment': 'Technology',
-          'Automotive Parts & Equipment': 'Consumer Cyclical',
-          'Agricultural Products & Services': 'Consumer Defensive',
-          'Communications Equipment': 'Technology',
-          'Integrated Telecommunication Services': 'Communication Services',
-          'Gas Utilities': 'Utilities',
-          'Human Resource & Employment Services': 'Industrials',
-          'Automotive Retail': 'Consumer Cyclical',
-          'Multi-Family Residential REITs': 'Real Estate',
-          'Aerospace & Defense': 'Industrials',
-          'Oil & Gas Equipment & Services': 'Energy',
-          'Metal, Glass & Plastic Containers': 'Basic Materials',
-          'Diversified Banks': 'Financial',
-          'Multi-Sector Holdings': 'Financial',
-          'Computer & Electronics Retail': 'Consumer Cyclical',
-          Pharmaceuticals: 'Healthcare',
-          'Data Processing & Outsourced Services': 'Technology',
-          'Distillers & Vintners': 'Consumer Defensive',
-          'Air Freight & Logistics': 'Industrials',
-          'Casinos & Gaming': 'Consumer Cyclical',
-          'Packaged Foods & Meats': 'Consumer Defensive',
-          'Health Care Distributors': 'Healthcare',
-          'Construction Machinery & Heavy Transportation Equipment': 'Industrials',
-          'Financial Exchanges & Data': 'Financial',
-          'Real Estate Services': 'Real Estate',
-          'Technology Distributors': 'Technology',
-          'Managed Health Care': 'Healthcare',
-          'Fertilizers & Agricultural Chemicals': 'Basic Materials',
-          'Investment Banking & Brokerage': 'Financial',
-          'Cable & Satellite': 'Communication Services',
-          'Integrated Oil & Gas': 'Energy',
-          Restaurants: 'Consumer Cyclical',
-          'Household Products': 'Consumer Defensive',
-          'Health Care Services': 'Healthcare',
-          'Regional Banks': 'Financial',
-          'Soft Drinks & Non-alcoholic Beverages': 'Consumer Defensive',
-          'Transaction & Payment Processing Services': 'Technology',
-          'Consumer Staples Merchandise Retail': 'Consumer Defensive',
-          'Systems Software': 'Technology',
-          'Rail Transportation': 'Industrials',
-          Homebuilding: 'Consumer Cyclical',
-          Footwear: 'Consumer Cyclical',
-          'Agricultural & Farm Machinery': 'Consumer Cyclical',
-          'Passenger Airlines': 'Industrials',
-          'Data Center REITs': 'Real Estate',
-          'Industrial Machinery & Supplies & Components': 'Industrials',
-          'Commodity Chemicals': 'Basic Materials',
-          'Interactive Home Entertainment': 'Communication Services',
-          'Research & Consulting Services': 'Industrials',
-          'Personal Care Products': 'Consumer Defensive',
-          Reinsurance: 'Financial',
-          'Self-Storage REITs': 'Real Estate',
-          'Trading Companies & Distributors': 'Industrials',
-          'Retail REITs': 'Real Estate',
-          'Automobile Manufacturers': 'Consumer Cyclical',
-          Broadcasting: 'Communication Services',
-          Copper: 'Basic Materials',
-          'Consumer Electronics': 'Technology',
-          'Heavy Electrical Equipment': 'Industrials',
-          Distributors: 'Industrials',
-          'Leisure Products': 'Consumer Cyclical',
-          'Health Care Facilities': 'Healthcare',
-          'Health Care REITs': 'Real Estate',
-          'Home Improvement Retail': 'Consumer Cyclical',
-          'Hotel & Resort REITs': 'Real Estate',
-          Advertising: 'Communication Services',
-          'Single-Family Residential REITs': 'Real Estate',
-          'Other Specialized REITs': 'Real Estate',
-          'Cargo Ground Transportation': 'Industrials',
-          'Electronic Manufacturing Services': 'Technology',
-          'Construction & Engineering': 'Industrials',
-          'Electronic Equipment & Instruments': 'Technology',
-          'Oil & Gas Storage & Transportation': 'Energy',
-          'Food Retail': 'Consumer Defensive',
-          'Movies & Entertainment': 'Communication Services',
-          'Apparel, Accessories & Luxury Goods': 'Consumer Cyclical',
-          'Oil & Gas Refining & Marketing': 'Energy',
-          'Construction Materials': 'Basic Materials',
-          'Home Furnishings': 'Consumer Cyclical',
-          Brewers: 'Consumer Defensive',
-          Gold: 'Basic Materials',
-          Publishing: 'Communication Services',
-          Steel: 'Basic Materials',
-          'Industrial REITs': 'Real Estate',
-          'Environmental & Facilities Services': 'Industrials',
-          'Apparel Retail': 'Consumer Cyclical',
-          'Health Care Technology': 'Healthcare',
-          'Food Distributors': 'Consumer Defensive',
-          'Wireless Telecommunication Services': 'Communication Services',
-          'Other Specialty Retail': 'Consumer Cyclical',
-          'Passenger Ground Transportation': 'Industrials',
-          'Drug Retail': 'Consumer Cyclical',
-          'Timber REITs': 'Real Estate'
-        };
-
-        csvData.forEach((row: any) => {
-          const sector = row.Sector;
-          if (!data.find(point => point.id === sector)) {
-            data.push({
-              id: sector,
-              parent: sectorToIndustry[sector]
-            });
+          if (!isLeaf) {
+            return `<b>Performance:</b> ${perf}<br/><b>Market Cap:</b> $${fmtMc(mc)}`;
           }
-        });
 
-        data.forEach(point => {
-          point.name = point.id;
-          point.custom = { fullName: point.id };
-        });
-
-        csvData
-          .filter((row: any) => row.Symbol !== 'GOOG' && row.Price && row['Market Cap'])
-          .forEach((row: any) => {
-            const old = oldData.find((oldRow: any) => oldRow.Symbol === row.Symbol);
-
-            let perf: number | null = null;
-            if (old) {
-              const oldPrice = parseFloat(old.Price);
-              const newPrice = parseFloat(row.Price);
-              perf = 100 * (newPrice - oldPrice) / oldPrice;
-            }
-
-            data.push({
-              name: row.Symbol,
-              id: row.Symbol,
-              value: parseFloat(row['Market Cap']),
-              parent: row.Sector,
-              colorValue: perf,
-              custom: {
-                fullName: row.Name,
-                performance: (perf !== null && perf < 0 ? '' : '+') + (perf ?? 0).toFixed(2) + '%'
-              }
-            });
-          });
-
-        if (!alive) return;
-
-        if (chartRef.current) {
-          chartRef.current.destroy();
-          chartRef.current = null;
+          return `<b>Market Cap:</b> $${fmtMc(mc)}<br/><b>24h:</b> ${perf}`;
         }
+      },
+      colorAxis: {
+        minColor: '#f73539',
+        maxColor: '#2ecc59',
+        stops: [
+          [0, '#f73539'],
+          [0.5, '#414555'],
+          [1, '#2ecc59']
+        ],
+        min: -10,
+        max: 10,
+        gridLineWidth: 0,
+        labels: {
+          overflow: 'allow',
+          format: '{#gt value 0}+{value}{else}{value}{/gt}%',
+          style: { color: 'white' }
+        }
+      },
+      legend: {
+        itemStyle: { color: 'white' }
+      },
 
-        chartRef.current = renderChart(containerRef.current!, data);
+      series: [
+        {
+          name: 'All',
+          type: 'treemap',
+          layoutAlgorithm: 'squarified',
+          allowDrillToNode: true,
+          animationLimit: 1000,
+          borderColor: '#252931',
+          color: '#252931',
+          opacity: 0.01,
+          nodeSizeBy: 'leaf',
+          dataLabels: {
+            enabled: false,
+            allowOverlap: true,
+            style: {
+              fontSize: '0.9em',
+              textOutline: 'none'
+            }
+          },
 
-        const ro = new ResizeObserver(() => {
-          if (chartRef.current) chartRef.current.reflow();
-        });
-        ro.observe(containerRef.current!);
+          // ✅ AQUI É ONDE ARRUMA O “NOME DA CATEGORIA NO MEIO”
+          // A mágica é: headers=true + align left + verticalAlign top + padding + x/y
+          levels: [
+            {
+              level: 1,
+              dataLabels: {
+                enabled: true,
+                headers: true,
+                align: 'left',
+                verticalAlign: 'top',
+                x: 6,
+                y: 4,
+                style: {
+                  fontWeight: 'bold',
+                  fontSize: '0.75em',
+                  lineClamp: 1,
+                  textTransform: 'uppercase',
+                  textOutline: 'none'
+                },
+                padding: 3
+              },
+              borderWidth: 3,
+              levelIsConstant: false
+            },
+            {
+              level: 2,
+              dataLabels: {
+                enabled: true,
+                headers: true,
+                align: 'left',
+                verticalAlign: 'top',
+                x: 6,
+                y: 4,
+                shape: 'callout',
+                borderWidth: 1,
+                borderColor: '#252931',
+                padding: 0,
+                style: {
+                  color: 'white',
+                  fontWeight: 'normal',
+                  fontSize: '0.65em',
+                  lineClamp: 1,
+                  textOutline: 'none',
+                  textTransform: 'uppercase'
+                }
+              },
+              groupPadding: 1
+            },
 
-        return () => ro.disconnect();
-      } catch (e: any) {
-        if (!alive) return;
-        setError(String(e?.message || e));
-      }
-    })();
+            // Leafs (moedas)
+            {
+              level: 3,
+              dataLabels: {
+                enabled: true,
+                align: 'center',
+                format:
+                  '{point.name}<br><span style="font-size: 0.7em">{point.custom.performance}</span>',
+                style: {
+                  color: 'white',
+                  textOutline: 'none'
+                }
+              }
+            }
+          ],
+
+          accessibility: { exposeAsGroupOnly: true },
+
+          breadcrumbs: {
+            buttonTheme: {
+              style: { color: 'silver' },
+              states: {
+                hover: { fill: '#333' },
+                select: { style: { color: 'white' } }
+              }
+            }
+          },
+
+          // Importantíssimo: pra treemap usar colorAxis
+          colorKey: 'colorValue',
+
+          data: treemapData as any
+        } as any
+      ]
+    });
+
+    chartRef.current = chart;
+
+    const ro = new ResizeObserver(() => chart.reflow());
+    ro.observe(containerRef.current);
 
     return () => {
-      alive = false;
+      ro.disconnect();
       if (chartRef.current) {
         chartRef.current.destroy();
         chartRef.current = null;
       }
     };
-  }, [open]);
-
-  if (!open) return null;
+  }, [open, treemapData]);
 
   const modal = (
     <div
@@ -506,8 +565,8 @@ export default function DemoTreemapFullscreen() {
         position: 'fixed',
         inset: 0,
         zIndex: 2147483647,
-        background: 'rgba(0,0,0,0.78)',
-        backdropFilter: 'blur(8px)'
+        background: 'rgba(0,0,0,0.72)',
+        backdropFilter: 'blur(6px)'
       }}
     >
       <div style={{ position: 'absolute', inset: 0, padding: 14 }}>
@@ -523,56 +582,83 @@ export default function DemoTreemapFullscreen() {
             position: 'relative'
           }}
         >
+          {/* X de fechar (só isso) */}
           <button
             onClick={() => setOpen(false)}
-            aria-label="Fechar"
             style={{
               position: 'absolute',
-              top: 12,
-              right: 12,
-              width: 40,
-              height: 40,
+              top: 10,
+              right: 10,
+              width: 44,
+              height: 44,
               borderRadius: 12,
               border: '1px solid rgba(255,255,255,0.18)',
-              background: 'rgba(255,255,255,0.08)',
-              color: '#fff',
-              fontWeight: 1000,
+              background: 'rgba(0,0,0,0.35)',
+              color: 'white',
+              fontWeight: 900,
               cursor: 'pointer',
-              fontSize: 18,
-              lineHeight: '40px',
-              textAlign: 'center',
               zIndex: 10
             }}
+            aria-label="Fechar"
             title="Fechar"
           >
             ✕
           </button>
 
-          <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
-
-          {error ? (
+          {/* Mensagens de estado */}
+          {(loading || err) && (
             <div
               style={{
                 position: 'absolute',
-                left: 14,
-                bottom: 14,
-                right: 14,
+                left: 12,
+                bottom: 12,
+                zIndex: 10,
                 padding: '10px 12px',
                 borderRadius: 12,
-                background: 'rgba(0,0,0,0.55)',
                 border: '1px solid rgba(255,255,255,0.10)',
-                color: '#ff6b6b',
-                fontWeight: 900,
-                zIndex: 10
+                background: 'rgba(0,0,0,0.35)',
+                color: 'white',
+                fontWeight: 800,
+                maxWidth: 520
               }}
             >
-              {error}
+              {loading ? 'Carregando dados…' : null}
+              {!loading && err ? `Erro: ${err}` : null}
+              {!loading && !err && null}
+              <div style={{ opacity: 0.8, fontWeight: 700, marginTop: 6, fontSize: 12 }}>
+                {ENDPOINTS.COINS_LITE} | {ENDPOINTS.TAXONOMY} | {ENDPOINTS.CAT_MAP}
+              </div>
             </div>
-          ) : null}
+          )}
+
+          <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
         </div>
       </div>
     </div>
   );
 
-  return createPortal(modal, document.body);
+  // Se você quer SEM botão nenhum fora: deixa return null e força open=true no state.
+  // Aqui eu deixo um “reabrir” simples, porque fechar e ficar preso é chato.
+  return (
+    <div style={{ width: '100%' }}>
+      {!open && (
+        <button
+          onClick={() => setOpen(true)}
+          style={{
+            padding: '10px 14px',
+            borderRadius: 12,
+            border: '1px solid rgba(255,255,255,0.15)',
+            background: 'rgba(255,255,255,0.06)',
+            color: '#fff',
+            fontWeight: 900,
+            cursor: 'pointer'
+          }}
+        >
+          Abrir Heatmap
+        </button>
+      )}
+
+      {open && createPortal(modal, document.body)}
+    </div>
+  );
 }
