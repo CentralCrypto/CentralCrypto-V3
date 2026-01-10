@@ -28,3 +28,6 @@ dist-ssr
 
 # lockfile (ignore if using npm ci elsewhere)
 package-lock.json
+
+# local artifacts
+.v3_pkg_sha
