@@ -72,9 +72,9 @@ function initHighchartsOnce() {
   if (HC_INITED) return;
   HC_INITED = true;
 
-  (TreemapModule as any)(Highcharts);
-  (ExportingModule as any)(Highcharts);
-  (AccessibilityModule as any)(Highcharts);
+  try { (TreemapModule as any)(Highcharts); } catch (e) { console.error('Highcharts Treemap error', e); }
+  try { (ExportingModule as any)(Highcharts); } catch (e) { }
+  try { (AccessibilityModule as any)(Highcharts); } catch (e) { }
 
   Highcharts.setOptions({
     chart: {
@@ -176,17 +176,20 @@ function safeUpper(s?: string) {
 function normalizeCategories(raw: any): CategoryRow[] {
   if (!raw) return [];
 
-  // taxonomy array
-  if (Array.isArray(raw) && raw.length && raw[0] && typeof raw[0] === 'object' && 'id' in raw[0] && 'name' in raw[0]) {
-    const arr = raw as Array<TaxonomyRow>;
-    return arr
-      .map(r => ({ id: String(r.id), name: String(r.name) }))
-      .filter(x => x.id && x.name);
+  // Se vier empacotado como { data: [...] }
+  if (raw && !Array.isArray(raw) && Array.isArray(raw.data)) {
+      return normalizeCategories(raw.data);
   }
 
-  // alguns arquivos podem vir como { data: [...] }
-  if (raw?.data && Array.isArray(raw.data)) {
-    return normalizeCategories(raw.data);
+  // taxonomy array
+  if (Array.isArray(raw)) {
+      // Tenta achar sub-array se for wrapper
+      const sub = raw.find(x => x && Array.isArray(x.data));
+      if (sub) return normalizeCategories(sub.data);
+
+      return raw
+        .map((r: any) => ({ id: String(r.id), name: String(r.name) }))
+        .filter(x => x.id && x.name);
   }
 
   return [];
@@ -277,26 +280,46 @@ export default function HeatmapWidget() {
         // Fetch paralelo para os 3 endpoints fixos
         const [coinsData, taxonomyData, mapData] = await Promise.all([
             httpGetJson(ENDPOINTS.COINS_LITE, { timeoutMs: 15000, retries: 2 }),
-            httpGetJson(ENDPOINTS.TAXONOMY, { timeoutMs: 15000, retries: 2 }).catch(() => []), // Falha silenciosa pra categoria não travar tudo
-            httpGetJson(ENDPOINTS.CAT_MAP, { timeoutMs: 15000, retries: 2 }).catch(() => ({}))  // Falha silenciosa
+            httpGetJson(ENDPOINTS.TAXONOMY, { timeoutMs: 15000, retries: 2 }).catch(() => []), 
+            httpGetJson(ENDPOINTS.CAT_MAP, { timeoutMs: 15000, retries: 2 }).catch(() => ({}))
         ]);
 
         if (!alive) return;
 
-        // Processa Coins
-        const coinsArr = Array.isArray(coinsData) ? coinsData : (Array.isArray(coinsData?.data) ? coinsData.data : []);
-        if (!Array.isArray(coinsArr)) throw new Error(`Formato inesperado em ${ENDPOINTS.COINS_LITE}`);
+        // Processa Coins com lógica robusta (igual ao api.ts)
+        let coinsArr: any[] = [];
+        if (Array.isArray(coinsData)) {
+            // Tenta encontrar um item que tenha propriedade .data (formato n8n/wrapper)
+            const subData = coinsData.find(item => item && Array.isArray(item.data));
+            if (subData) {
+                coinsArr = subData.data;
+            } else if (coinsData.length > 0 && Array.isArray(coinsData[0])) {
+                // Array de arrays?
+                coinsArr = coinsData[0];
+            } else {
+                // Array plano
+                coinsArr = coinsData;
+            }
+        } else if (coinsData && typeof coinsData === 'object') {
+            if (Array.isArray(coinsData.data)) {
+                coinsArr = coinsData.data;
+            } else {
+                // Fallback: se for objeto único mas não tem .data, talvez seja vazio ou erro
+                coinsArr = []; 
+            }
+        }
 
-        // Processa Taxonomy
-        const taxonomyArr = Array.isArray(taxonomyData) ? taxonomyData : (Array.isArray(taxonomyData?.data) ? taxonomyData.data : []);
-        
+        if (!Array.isArray(coinsArr) || coinsArr.length === 0) {
+             throw new Error(`Dados vazios ou formato inválido em ${ENDPOINTS.COINS_LITE}`);
+        }
+
         // Processa Map
         const mapObj = mapData && typeof mapData === 'object' ? mapData : {};
         // Se vier aninhado em "categories" ou "data" (depende do formato exato)
         const finalMap = mapObj.categories || mapObj.data || mapObj;
 
         setCoins(coinsArr as Coin[]);
-        setCategories(normalizeCategories(taxonomyArr));
+        setCategories(normalizeCategories(taxonomyData));
         setCatMap(finalMap as CategoryCoinsMap);
         
         setLoadedTaxonomyUrl(ENDPOINTS.TAXONOMY);
@@ -304,6 +327,7 @@ export default function HeatmapWidget() {
 
       } catch (e: any) {
         if (!alive) return;
+        console.error("Heatmap Load Error:", e);
         setErr(e?.message ? String(e.message) : 'Falha ao carregar dados do Heatmap.');
       } finally {
         if (!alive) return;
@@ -374,6 +398,10 @@ export default function HeatmapWidget() {
     if (chartRef.current) {
       chartRef.current.destroy();
       chartRef.current = null;
+    }
+
+    if (points.length === 0 && !loading) {
+        return; // Don't render empty chart if data isn't ready
     }
 
     const chart = Highcharts.chart(containerRef.current, {
@@ -534,7 +562,7 @@ export default function HeatmapWidget() {
         chartRef.current = null;
       }
     };
-  }, [open, points, subtitle]);
+  }, [open, points, subtitle, loading]);
 
   const canFilterCategory = useMemo(() => {
     return Object.keys(catMap || {}).length > 0 && categoryOptions.length > 0;
@@ -726,8 +754,6 @@ export default function HeatmapWidget() {
     </div>
   );
 
-  // Se você quer SEM botão nenhum fora: deixa return null e força open=true no state.
-  // Aqui eu deixo um “reabrir” simples, porque fechar e ficar preso é chato.
   return (
     <div style={{ width: '100%' }}>
       {!open && (
