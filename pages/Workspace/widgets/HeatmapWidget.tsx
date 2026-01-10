@@ -1,161 +1,17 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Highcharts from 'highcharts';
 import TreemapModule from 'highcharts/modules/treemap';
 import ExportingModule from 'highcharts/modules/exporting';
 import AccessibilityModule from 'highcharts/modules/accessibility';
-
-type Coin = {
-  id: string;
-  symbol?: string;
-  name?: string;
-  image?: string;
-  market_cap?: number;
-  price_change_percentage_24h?: number;
-};
-
-type Category = {
-  id: string;
-  name: string;
-};
-
-type CategoryCoinMap = Record<string, string[]>;
-
-type Mode = 'market' | 'categories';
-
-type TreemapPoint = {
-  id: string;
-  parent?: string;
-  name?: string;
-  value?: number;
-  colorValue?: number;
-  custom?: {
-    fullName?: string;
-    performance?: string;
-    logo?: string;
-    change24h?: number;
-    marketCap?: number;
-  };
-};
+import DataModule from 'highcharts/modules/data';
 
 // =============================
-// URLS PÚBLICAS (HTTP)
+// FULLSCREEN DEMO (SEM BOTÕES, SÓ X PRA FECHAR)
+// - Replica o demo ORIGINAL (S&P 500) pra você VER FUNCIONANDO no site.
+// - Abre automaticamente em popup tela cheia.
 // =============================
-function getCacheckoUrl(path: string) {
-  if (!path) return '/cachecko';
-  return path.startsWith('/cachecko') ? path : `/cachecko/${path.replace(/^\/+/, '')}`;
-}
 
-const ENDPOINTS = {
-  COINS_LITE: getCacheckoUrl('cachecko_lite.json'),
-  COINS_FULL: getCacheckoUrl('cachecko.json'),
-  TAXONOMY: getCacheckoUrl('categories/taxonomy-master.json')
-};
-
-// Map pode ter nome diferente no teu servidor, então tenta vários
-const MAP_CANDIDATES = [
-  getCacheckoUrl('categories/category_coins_map.json'),
-  getCacheckoUrl('categories/category-coins-map.json'),
-  getCacheckoUrl('categories/category_coin_map.json'),
-  getCacheckoUrl('categories/category-coin-map.json'),
-  getCacheckoUrl('categories/category_coins_map.json')
-];
-
-// =============================
-// HTTP ROBUSTO (timeout + retry + cache-buster)
-// =============================
-function withCb(url: string) {
-  const salt = Math.floor(Date.now() / 60000);
-  return url.includes('?') ? `${url}&_cb=${salt}` : `${url}?_cb=${salt}`;
-}
-
-async function httpGetJson<T>(url: string, opts?: { timeoutMs?: number; retries?: number }) {
-  const timeoutMs = opts?.timeoutMs ?? 10000;
-  const retries = opts?.retries ?? 2;
-  const finalUrl = withCb(url);
-
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), timeoutMs);
-
-    try {
-      const r = await fetch(finalUrl, { signal: ctrl.signal, cache: 'no-store' });
-      if (!r.ok) throw new Error(`${finalUrl} -> HTTP ${r.status}`);
-      return (await r.json()) as T;
-    } catch (e) {
-      if (attempt === retries) throw e;
-    } finally {
-      clearTimeout(t);
-    }
-  }
-
-  throw new Error('httpGetJson: unreachable');
-}
-
-async function httpGetFirstJson<T>(urls: string[], opts?: { timeoutMs?: number; retries?: number }) {
-  let lastErr: any = null;
-  for (const u of urls) {
-    try {
-      const data = await httpGetJson<T>(u, opts);
-      return { data, usedUrl: u };
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-  throw lastErr || new Error('httpGetFirstJson: all failed');
-}
-
-// =============================
-// HELPERS
-// =============================
-function safeUpper(s?: string) {
-  return (s || '').toUpperCase();
-}
-
-function formatPct(v: number) {
-  const n = Number.isFinite(v) ? v : 0;
-  const sign = n > 0 ? '+' : '';
-  return `${sign}${n.toFixed(2)}%`;
-}
-
-function formatMc(mc: number) {
-  const n = Number.isFinite(mc) ? mc : 0;
-  if (n >= 1e12) return `${(n / 1e12).toFixed(2)}T`;
-  if (n >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
-  if (n >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
-  if (n >= 1e3) return `${(n / 1e3).toFixed(2)}K`;
-  return `${Math.round(n)}`;
-}
-
-function normalizeCoinsPayload(data: any): Coin[] {
-  if (Array.isArray(data)) return data as Coin[];
-  if (Array.isArray(data?.coins)) return data.coins as Coin[];
-  return [];
-}
-
-function makeCoinMap(coins: Coin[]) {
-  const m = new Map<string, Coin>();
-  for (const c of coins) if (c?.id) m.set(c.id, c);
-  return m;
-}
-
-// Dedup forte: se o coin aparece em várias categorias, escolhe uma “primária” pela ordem da taxonomy
-function buildPrimaryCategoryAssignment(categories: Category[], categoryCoinMap: CategoryCoinMap) {
-  const assigned = new Map<string, string>(); // coinId -> categoryId
-
-  for (const cat of categories) {
-    const ids = Array.from(new Set(categoryCoinMap[cat.id] || []));
-    for (const coinId of ids) {
-      if (!assigned.has(coinId)) assigned.set(coinId, cat.id);
-    }
-  }
-
-  return assigned;
-}
-
-// =============================
-// HIGHCHARTS INIT + PLUGIN (igual demo)
-// =============================
 let HC_INITED = false;
 function initHighchartsOnce() {
   if (HC_INITED) return;
@@ -164,219 +20,14 @@ function initHighchartsOnce() {
   (TreemapModule as any)(Highcharts);
   (ExportingModule as any)(Highcharts);
   (AccessibilityModule as any)(Highcharts);
-
-  Highcharts.setOptions({
-    chart: {
-      style: {
-        fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
-      }
-    }
-  });
-
-  // Plugin: pinta header nível 2 pela performance + ajusta fonte por área (nível 3)
-  Highcharts.addEvent(Highcharts.Series as any, 'drawDataLabels', function () {
-    // @ts-ignore
-    if (this.type !== 'treemap') return;
-
-    // @ts-ignore
-    const axis = this.colorAxis;
-
-    // @ts-ignore
-    this.points.forEach((point: any) => {
-      // Level 2 (categorias): aplica background no label usando colorAxis
-      if (point?.node?.level === 2 && Number.isFinite(point?.colorValue)) {
-        if (point.dlOptions) {
-          const c = axis ? axis.toColor(point.colorValue) : undefined;
-          if (c) point.dlOptions.backgroundColor = c;
-        }
-      }
-
-      // Level 3 (moedas): fonte proporcional à área
-      if (point?.node?.level === 3 && point?.shapeArgs && point?.dlOptions?.style) {
-        const area = point.shapeArgs.width * point.shapeArgs.height;
-        point.dlOptions.style.fontSize = `${Math.min(32, 7 + Math.round(area * 0.0008))}px`;
-      }
-    });
-  });
+  (DataModule as any)(Highcharts);
 }
 
-// =============================
-// BUILD SERIES DATA (demo style)
-// =============================
-function buildMarketData(coins: Coin[], limit = 350): TreemapPoint[] {
-  const arr = coins
-    .filter(c => c?.id)
-    .slice()
-    .sort((a, b) => Number(b.market_cap || 0) - Number(a.market_cap || 0))
-    .slice(0, limit);
-
-  const data: TreemapPoint[] = [{ id: 'All' }];
-
-  for (const c of arr) {
-    const ch = Number(c.price_change_percentage_24h ?? 0);
-    const mc = Number(c.market_cap || 1);
-
-    data.push({
-      id: `coin:${c.id}`,
-      parent: 'All',
-      name: safeUpper(c.symbol) || safeUpper(c.name) || c.id,
-      value: mc,
-      colorValue: ch,
-      custom: {
-        fullName: c.name || c.id,
-        logo: c.image,
-        change24h: ch,
-        marketCap: mc,
-        performance: formatPct(ch)
-      }
-    });
-  }
-
-  return data;
-}
-
-function buildCategoryTreemapData(
-  coins: Coin[],
-  categories: Category[],
-  categoryCoinMap: CategoryCoinMap,
-  limitPerCategory = 200
-): TreemapPoint[] {
-  const coinById = makeCoinMap(coins);
-  const primary = buildPrimaryCategoryAssignment(categories, categoryCoinMap);
-
-  const data: TreemapPoint[] = [{ id: 'All' }];
-
-  // Level 1: root->All, Level 2: categories, Level 3: coins
-  // No demo: industries (lvl1) -> sectors (lvl2) -> companies (lvl3)
-  // Aqui: All (lvl1) -> categorias (lvl2) -> moedas (lvl3)
-
-  // Cria nós de categoria com value (marketcap total) e colorValue (perf ponderada)
-  for (const cat of categories) {
-    const ids = Array.from(new Set(categoryCoinMap[cat.id] || []))
-      .filter(coinId => primary.get(coinId) === cat.id); // só os “primários”
-
-    const members = ids
-      .map(id => coinById.get(id))
-      .filter(Boolean) as Coin[];
-
-    const sorted = members
-      .slice()
-      .sort((a, b) => Number(b.market_cap || 0) - Number(a.market_cap || 0))
-      .slice(0, limitPerCategory);
-
-    const totalMc = sorted.reduce((a, c) => a + Number(c.market_cap || 0), 0);
-    const denom = totalMc || 1;
-
-    const weightedPerf =
-      sorted.reduce((a, c) => {
-        const mc = Number(c.market_cap || 0);
-        const ch = Number(c.price_change_percentage_24h ?? 0);
-        return a + mc * ch;
-      }, 0) / denom;
-
-    const perf = Number.isFinite(weightedPerf) ? weightedPerf : 0;
-
-    // Categoria (lvl2)
-    data.push({
-      id: `cat:${cat.id}`,
-      parent: 'All',
-      name: cat.name,
-      value: totalMc || 1,
-      colorValue: perf,
-      custom: {
-        fullName: cat.name,
-        change24h: perf,
-        marketCap: totalMc,
-        performance: formatPct(perf)
-      }
-    });
-
-    // Moedas (lvl3)
-    for (const c of sorted) {
-      const ch = Number(c.price_change_percentage_24h ?? 0);
-      const mc = Number(c.market_cap || 1);
-
-      data.push({
-        id: `cat:${cat.id}|coin:${c.id}`, // id único por categoria
-        parent: `cat:${cat.id}`,
-        name: safeUpper(c.symbol) || safeUpper(c.name) || c.id,
-        value: mc,
-        colorValue: ch,
-        custom: {
-          fullName: c.name || c.id,
-          logo: c.image,
-          change24h: ch,
-          marketCap: mc,
-          performance: formatPct(ch)
-        }
-      });
-    }
-  }
-
-  return data;
-}
-
-// =============================
-// CHART RENDER
-// =============================
-function renderChart(container: HTMLElement, mode: Mode, data: TreemapPoint[]) {
-  const title = mode === 'market' ? 'Market Monitor' : 'Heatmap por Categoria';
-
+const renderChart = (container: HTMLElement, data: any[]) => {
   return Highcharts.chart(container, {
     chart: {
       backgroundColor: '#252931'
     },
-
-    title: {
-      text: title,
-      align: 'left',
-      style: { color: 'white' }
-    },
-
-    subtitle: {
-      text: mode === 'categories'
-        ? 'Clique nos blocos para navegar (drilldown)'
-        : 'Mapa geral. Cor = variação 24h. Área = market cap.',
-      align: 'left',
-      style: { color: 'silver' }
-    },
-
-    credits: { enabled: false },
-
-    exporting: { enabled: false },
-
-    tooltip: {
-      followPointer: true,
-      outside: true,
-      useHTML: true,
-      headerFormat: '<span style="font-size: 0.95em">{point.custom.fullName}</span><br/>',
-      pointFormat:
-        '<b>Market Cap:</b> ${point.custom.marketCap}<br/>' +
-        '<b>24h:</b> {point.custom.performance}'
-    },
-
-    colorAxis: {
-      minColor: '#f73539',
-      maxColor: '#2ecc59',
-      stops: [
-        [0, '#f73539'],
-        [0.5, '#414555'],
-        [1, '#2ecc59']
-      ],
-      min: -10,
-      max: 10,
-      gridLineWidth: 0,
-      labels: {
-        overflow: 'allow',
-        format: '{#gt value 0}+{value}{else}{value}{/gt}%',
-        style: { color: 'white' }
-      }
-    },
-
-    legend: {
-      itemStyle: { color: 'white' }
-    },
-
     series: [
       {
         name: 'All',
@@ -396,10 +47,8 @@ function renderChart(container: HTMLElement, mode: Mode, data: TreemapPoint[]) {
             textOutline: 'none'
           }
         },
-
         levels: [
           {
-            // Level 1 headers (All)
             level: 1,
             dataLabels: {
               enabled: true,
@@ -417,7 +66,6 @@ function renderChart(container: HTMLElement, mode: Mode, data: TreemapPoint[]) {
             levelIsConstant: false
           },
           {
-            // Level 2 headers (categorias)
             level: 2,
             dataLabels: {
               enabled: true,
@@ -440,7 +88,6 @@ function renderChart(container: HTMLElement, mode: Mode, data: TreemapPoint[]) {
             groupPadding: 1
           },
           {
-            // Level 3: moedas
             level: 3,
             dataLabels: {
               enabled: true,
@@ -448,84 +95,118 @@ function renderChart(container: HTMLElement, mode: Mode, data: TreemapPoint[]) {
               format:
                 '{point.name}<br><span style="font-size: 0.7em">' +
                 '{point.custom.performance}</span>',
-              style: { color: 'white', textOutline: 'none' }
+              style: {
+                color: 'white'
+              }
             }
           }
         ],
-
         accessibility: {
           exposeAsGroupOnly: true
         },
-
         breadcrumbs: {
           buttonTheme: {
-            style: { color: 'silver' },
+            style: {
+              color: 'silver'
+            },
             states: {
-              hover: { fill: '#333' },
-              select: { style: { color: 'white' } }
+              hover: {
+                fill: '#333'
+              },
+              select: {
+                style: {
+                  color: 'white'
+                }
+              }
             }
           }
         },
-
-        data: data as any
+        data
       } as any
-    ]
+    ],
+    title: {
+      text: 'S&P 500 Companies',
+      align: 'left',
+      style: {
+        color: 'white'
+      }
+    },
+    subtitle: {
+      text:
+        'Click points to drill down. Source: <a href="http://okfn.org/">okfn.org</a>.',
+      align: 'left',
+      style: {
+        color: 'silver'
+      }
+    },
+    tooltip: {
+      followPointer: true,
+      outside: true,
+      headerFormat:
+        '<span style="font-size: 0.9em">' +
+        '{point.custom.fullName}</span><br/>',
+      pointFormat:
+        '<b>Market Cap:</b>' +
+        ' USD {(divide point.value 1000000000):.1f} bln<br/>' +
+        '{#if point.custom.performance}' +
+        '<b>1 month performance:</b> {point.custom.performance}{/if}'
+    },
+    colorAxis: {
+      minColor: '#f73539',
+      maxColor: '#2ecc59',
+      stops: [
+        [0, '#f73539'],
+        [0.5, '#414555'],
+        [1, '#2ecc59']
+      ],
+      min: -10,
+      max: 10,
+      gridLineWidth: 0,
+      labels: {
+        overflow: 'allow',
+        format: '{#gt value 0}+{value}{else}{value}{/gt}%',
+        style: {
+          color: 'white'
+        }
+      }
+    },
+    legend: {
+      itemStyle: {
+        color: 'white'
+      }
+    },
+    // 👇 Removido: nada de botões de export/fullscreen do Highcharts.
+    exporting: {
+      enabled: false
+    },
+    navigation: {
+      buttonOptions: {
+        enabled: false
+      } as any
+    }
   });
+};
+
+async function getCSV(url: string) {
+  const csv = await fetch(url).then(r => r.text());
+  const data = new (Highcharts as any).Data({ csv });
+
+  const arr = data.columns[0].map((_: any, i: number) =>
+    data.columns.reduce((obj: any, column: any[]) => {
+      obj[column[0]] = column[i];
+      return obj;
+    }, {})
+  );
+
+  return arr;
 }
 
-// =============================
-// MAIN COMPONENT (FULLSCREEN POPUP)
-// =============================
-export default function CryptoHeatmapDemoStyle() {
-  const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<Mode>('market');
-
-  const [coins, setCoins] = useState<Coin[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [catMap, setCatMap] = useState<CategoryCoinMap>({});
-
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState('');
-
+export default function DemoTreemapFullscreen() {
+  const [open, setOpen] = useState(true);
+  const [error, setError] = useState<string>('');
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<Highcharts.Chart | null>(null);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    setErr('');
-
-    try {
-      initHighchartsOnce();
-
-      // Coins: tenta lite -> full
-      const coinsRes = await httpGetFirstJson<any>(
-        [ENDPOINTS.COINS_LITE, ENDPOINTS.COINS_FULL],
-        { timeoutMs: 12000, retries: 2 }
-      );
-      const coinsArr = normalizeCoinsPayload(coinsRes.data);
-      setCoins(coinsArr);
-
-      // Taxonomy
-      const tax = await httpGetJson<any>(ENDPOINTS.TAXONOMY, { timeoutMs: 12000, retries: 2 });
-      setCategories(Array.isArray(tax) ? (tax as Category[]) : []);
-
-      // Map (fallbacks)
-      const mapRes = await httpGetFirstJson<any>(MAP_CANDIDATES, { timeoutMs: 12000, retries: 2 });
-      const mapData = mapRes.data && typeof mapRes.data === 'object' ? (mapRes.data as CategoryCoinMap) : {};
-      setCatMap(mapData);
-    } catch (e: any) {
-      setErr(String(e?.message || e));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // Carrega 1x
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  // trava scroll quando modal abre
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -535,50 +216,293 @@ export default function CryptoHeatmapDemoStyle() {
     };
   }, [open]);
 
-  const treemapData = useMemo(() => {
-    if (mode === 'market') return buildMarketData(coins);
-    return buildCategoryTreemapData(coins, categories, catMap);
-  }, [mode, coins, categories, catMap]);
-
-  // Render chart quando abrir modal ou mudar modo/dados
   useEffect(() => {
     if (!open) return;
+    initHighchartsOnce();
+
     if (!containerRef.current) return;
 
-    if (chartRef.current) {
-      chartRef.current.destroy();
-      chartRef.current = null;
-    }
+    let alive = true;
 
-    chartRef.current = renderChart(containerRef.current, mode, treemapData);
+    (async () => {
+      try {
+        setError('');
 
-    const ro = new ResizeObserver(() => {
-      if (chartRef.current) chartRef.current.reflow();
-    });
-    ro.observe(containerRef.current);
+        // Plugin for relative font size
+        Highcharts.addEvent(Highcharts.Series as any, 'drawDataLabels', function () {
+          // @ts-ignore
+          if (this.type === 'treemap') {
+            // @ts-ignore
+            this.points.forEach((point: any) => {
+              // Color the level 2 headers with the combined performance of its children
+              if (point.node.level === 2 && Number.isFinite(point.value)) {
+                const previousValue = point.node.children.reduce(
+                  (acc: number, child: any) =>
+                    acc +
+                    (child.point.value || 0) -
+                    (child.point.value || 0) * (child.point.colorValue || 0) / 100,
+                  0
+                );
+
+                const perf = 100 * (point.value - previousValue) / (previousValue || 1);
+
+                point.custom = {
+                  performance: (perf < 0 ? '' : '+') + perf.toFixed(2) + '%'
+                };
+
+                if (point.dlOptions) {
+                  // @ts-ignore
+                  point.dlOptions.backgroundColor = this.colorAxis.toColor(perf);
+                }
+              }
+
+              // Set font size based on area of the point
+              if (point.node.level === 3 && point.shapeArgs) {
+                const area = point.shapeArgs.width * point.shapeArgs.height;
+                point.dlOptions.style.fontSize = `${Math.min(
+                  32,
+                  7 + Math.round(area * 0.0008)
+                )}px`;
+              }
+            });
+          }
+        });
+
+        const csvData = await getCSV(
+          'https://cdn.jsdelivr.net/gh/datasets/s-and-p-500-companies-financials@67dd99e/data/constituents-financials.csv'
+        );
+        const oldData = await getCSV(
+          'https://cdn.jsdelivr.net/gh/datasets/s-and-p-500-companies-financials@9f63bc5/data/constituents-financials.csv'
+        );
+
+        // Create the industries for the top level
+        const data: any[] = [
+          { id: 'Technology' },
+          { id: 'Financial' },
+          { id: 'Consumer Cyclical' },
+          { id: 'Communication Services' },
+          { id: 'Healthcare' },
+          { id: 'Consumer Defensive' },
+          { id: 'Industrials' },
+          { id: 'Real Estate' },
+          { id: 'Energy' },
+          { id: 'Utilities' },
+          { id: 'Basic Materials' }
+        ];
+
+        // Static mapping object
+        const sectorToIndustry: Record<string, string> = {
+          'Industrial Conglomerates': 'Industrials',
+          'Building Products': 'Industrials',
+          'Health Care Equipment': 'Healthcare',
+          Biotechnology: 'Healthcare',
+          'IT Consulting & Other Services': 'Technology',
+          'Application Software': 'Technology',
+          Semiconductors: 'Technology',
+          'Independent Power Producers & Energy Traders': 'Energy',
+          'Life & Health Insurance': 'Financial',
+          'Life Sciences Tools & Services': 'Healthcare',
+          'Industrial Gases': 'Basic Materials',
+          'Hotels, Resorts & Cruise Lines': 'Consumer Cyclical',
+          'Internet Services & Infrastructure': 'Technology',
+          'Specialty Chemicals': 'Basic Materials',
+          'Office REITs': 'Real Estate',
+          'Health Care Supplies': 'Healthcare',
+          'Electric Utilities': 'Utilities',
+          'Property & Casualty Insurance': 'Financial',
+          'Interactive Media & Services': 'Communication Services',
+          Tobacco: 'Consumer Defensive',
+          'Broadline Retail': 'Consumer Cyclical',
+          'Paper & Plastic Packaging Products & Materials': 'Basic Materials',
+          'Diversified Support Services': 'Industrials',
+          'Multi-Utilities': 'Utilities',
+          'Consumer Finance': 'Financial',
+          'Multi-line Insurance': 'Financial',
+          'Telecom Tower REITs': 'Real Estate',
+          'Water Utilities': 'Utilities',
+          'Asset Management & Custody Banks': 'Financial',
+          'Electrical Components & Equipment': 'Industrials',
+          'Electronic Components': 'Technology',
+          'Insurance Brokers': 'Financial',
+          'Oil & Gas Exploration & Production': 'Energy',
+          'Technology Hardware, Storage & Peripherals': 'Technology',
+          'Semiconductor Materials & Equipment': 'Technology',
+          'Automotive Parts & Equipment': 'Consumer Cyclical',
+          'Agricultural Products & Services': 'Consumer Defensive',
+          'Communications Equipment': 'Technology',
+          'Integrated Telecommunication Services': 'Communication Services',
+          'Gas Utilities': 'Utilities',
+          'Human Resource & Employment Services': 'Industrials',
+          'Automotive Retail': 'Consumer Cyclical',
+          'Multi-Family Residential REITs': 'Real Estate',
+          'Aerospace & Defense': 'Industrials',
+          'Oil & Gas Equipment & Services': 'Energy',
+          'Metal, Glass & Plastic Containers': 'Basic Materials',
+          'Diversified Banks': 'Financial',
+          'Multi-Sector Holdings': 'Financial',
+          'Computer & Electronics Retail': 'Consumer Cyclical',
+          Pharmaceuticals: 'Healthcare',
+          'Data Processing & Outsourced Services': 'Technology',
+          'Distillers & Vintners': 'Consumer Defensive',
+          'Air Freight & Logistics': 'Industrials',
+          'Casinos & Gaming': 'Consumer Cyclical',
+          'Packaged Foods & Meats': 'Consumer Defensive',
+          'Health Care Distributors': 'Healthcare',
+          'Construction Machinery & Heavy Transportation Equipment': 'Industrials',
+          'Financial Exchanges & Data': 'Financial',
+          'Real Estate Services': 'Real Estate',
+          'Technology Distributors': 'Technology',
+          'Managed Health Care': 'Healthcare',
+          'Fertilizers & Agricultural Chemicals': 'Basic Materials',
+          'Investment Banking & Brokerage': 'Financial',
+          'Cable & Satellite': 'Communication Services',
+          'Integrated Oil & Gas': 'Energy',
+          Restaurants: 'Consumer Cyclical',
+          'Household Products': 'Consumer Defensive',
+          'Health Care Services': 'Healthcare',
+          'Regional Banks': 'Financial',
+          'Soft Drinks & Non-alcoholic Beverages': 'Consumer Defensive',
+          'Transaction & Payment Processing Services': 'Technology',
+          'Consumer Staples Merchandise Retail': 'Consumer Defensive',
+          'Systems Software': 'Technology',
+          'Rail Transportation': 'Industrials',
+          Homebuilding: 'Consumer Cyclical',
+          Footwear: 'Consumer Cyclical',
+          'Agricultural & Farm Machinery': 'Consumer Cyclical',
+          'Passenger Airlines': 'Industrials',
+          'Data Center REITs': 'Real Estate',
+          'Industrial Machinery & Supplies & Components': 'Industrials',
+          'Commodity Chemicals': 'Basic Materials',
+          'Interactive Home Entertainment': 'Communication Services',
+          'Research & Consulting Services': 'Industrials',
+          'Personal Care Products': 'Consumer Defensive',
+          Reinsurance: 'Financial',
+          'Self-Storage REITs': 'Real Estate',
+          'Trading Companies & Distributors': 'Industrials',
+          'Retail REITs': 'Real Estate',
+          'Automobile Manufacturers': 'Consumer Cyclical',
+          Broadcasting: 'Communication Services',
+          Copper: 'Basic Materials',
+          'Consumer Electronics': 'Technology',
+          'Heavy Electrical Equipment': 'Industrials',
+          Distributors: 'Industrials',
+          'Leisure Products': 'Consumer Cyclical',
+          'Health Care Facilities': 'Healthcare',
+          'Health Care REITs': 'Real Estate',
+          'Home Improvement Retail': 'Consumer Cyclical',
+          'Hotel & Resort REITs': 'Real Estate',
+          Advertising: 'Communication Services',
+          'Single-Family Residential REITs': 'Real Estate',
+          'Other Specialized REITs': 'Real Estate',
+          'Cargo Ground Transportation': 'Industrials',
+          'Electronic Manufacturing Services': 'Technology',
+          'Construction & Engineering': 'Industrials',
+          'Electronic Equipment & Instruments': 'Technology',
+          'Oil & Gas Storage & Transportation': 'Energy',
+          'Food Retail': 'Consumer Defensive',
+          'Movies & Entertainment': 'Communication Services',
+          'Apparel, Accessories & Luxury Goods': 'Consumer Cyclical',
+          'Oil & Gas Refining & Marketing': 'Energy',
+          'Construction Materials': 'Basic Materials',
+          'Home Furnishings': 'Consumer Cyclical',
+          Brewers: 'Consumer Defensive',
+          Gold: 'Basic Materials',
+          Publishing: 'Communication Services',
+          Steel: 'Basic Materials',
+          'Industrial REITs': 'Real Estate',
+          'Environmental & Facilities Services': 'Industrials',
+          'Apparel Retail': 'Consumer Cyclical',
+          'Health Care Technology': 'Healthcare',
+          'Food Distributors': 'Consumer Defensive',
+          'Wireless Telecommunication Services': 'Communication Services',
+          'Other Specialty Retail': 'Consumer Cyclical',
+          'Passenger Ground Transportation': 'Industrials',
+          'Drug Retail': 'Consumer Cyclical',
+          'Timber REITs': 'Real Estate'
+        };
+
+        // Create the sectors for the second level
+        csvData.forEach((row: any) => {
+          const sector = row.Sector;
+          if (!data.find(point => point.id === sector)) {
+            data.push({
+              id: sector,
+              parent: sectorToIndustry[sector]
+            });
+          }
+        });
+
+        // Register name for the categories and sectors
+        data.forEach(point => {
+          point.name = point.id;
+          point.custom = {
+            fullName: point.id
+          };
+        });
+
+        csvData
+          .filter(
+            (row: any) =>
+              row.Symbol !== 'GOOG' &&
+              row.Price &&
+              row['Market Cap']
+          )
+          .forEach((row: any) => {
+            const old = oldData.find((oldRow: any) => oldRow.Symbol === row.Symbol);
+
+            let perf: number | null = null;
+            if (old) {
+              const oldPrice = parseFloat(old.Price);
+              const newPrice = parseFloat(row.Price);
+              perf = 100 * (newPrice - oldPrice) / oldPrice;
+            }
+
+            data.push({
+              name: row.Symbol,
+              id: row.Symbol,
+              value: parseFloat(row['Market Cap']),
+              parent: row.Sector,
+              colorValue: perf,
+              custom: {
+                fullName: row.Name,
+                performance: (perf !== null && perf < 0 ? '' : '+') + (perf ?? 0).toFixed(2) + '%'
+              }
+            });
+          });
+
+        if (!alive) return;
+
+        if (chartRef.current) {
+          chartRef.current.destroy();
+          chartRef.current = null;
+        }
+
+        chartRef.current = renderChart(containerRef.current!, data);
+
+        const ro = new ResizeObserver(() => {
+          if (chartRef.current) chartRef.current.reflow();
+        });
+        ro.observe(containerRef.current!);
+
+        return () => {
+          ro.disconnect();
+        };
+      } catch (e: any) {
+        if (!alive) return;
+        setError(String(e?.message || e));
+      }
+    })();
 
     return () => {
-      ro.disconnect();
+      alive = false;
       if (chartRef.current) {
         chartRef.current.destroy();
         chartRef.current = null;
       }
     };
-  }, [open, mode, treemapData]);
+  }, [open]);
 
-  const openMarket = useCallback(() => {
-    setMode('market');
-    setOpen(true);
-  }, []);
-
-  const openCategories = useCallback(() => {
-    setMode('categories');
-    setOpen(true);
-  }, []);
-
-  const close = useCallback(() => {
-    setOpen(false);
-  }, []);
+  if (!open) return null;
 
   const modal = (
     <div
@@ -586,7 +510,7 @@ export default function CryptoHeatmapDemoStyle() {
         position: 'fixed',
         inset: 0,
         zIndex: 2147483647,
-        background: 'rgba(0,0,0,0.75)',
+        background: 'rgba(0,0,0,0.78)',
         backdropFilter: 'blur(8px)'
       }}
     >
@@ -600,208 +524,62 @@ export default function CryptoHeatmapDemoStyle() {
             border: '1px solid rgba(255,255,255,0.10)',
             background: '#252931',
             boxShadow: '0 30px 90px rgba(0,0,0,0.55)',
-            display: 'flex',
-            flexDirection: 'column'
+            position: 'relative'
           }}
         >
-          {/* Top bar */}
-          <div
+          {/* X pra fechar (único controle) */}
+          <button
+            onClick={() => setOpen(false)}
+            aria-label="Fechar"
             style={{
-              padding: '10px 12px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              borderBottom: '1px solid rgba(255,255,255,0.10)'
+              position: 'absolute',
+              top: 12,
+              right: 12,
+              width: 40,
+              height: 40,
+              borderRadius: 12,
+              border: '1px solid rgba(255,255,255,0.18)',
+              background: 'rgba(255,255,255,0.08)',
+              color: '#fff',
+              fontWeight: 1000,
+              cursor: 'pointer',
+              fontSize: 18,
+              lineHeight: '40px',
+              textAlign: 'center',
+              zIndex: 10
             }}
+            title="Fechar"
           >
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <button
-                onClick={() => setMode('market')}
-                style={{
-                  padding: '8px 10px',
-                  borderRadius: 10,
-                  border: '1px solid rgba(255,255,255,0.15)',
-                  background: mode === 'market' ? 'rgba(221,153,51,0.22)' : 'rgba(255,255,255,0.06)',
-                  color: '#fff',
-                  fontWeight: 900,
-                  cursor: 'pointer'
-                }}
-              >
-                Market Monitor
-              </button>
+            ✕
+          </button>
 
-              <button
-                onClick={() => setMode('categories')}
-                disabled={categories.length === 0 || Object.keys(catMap).length === 0}
-                style={{
-                  padding: '8px 10px',
-                  borderRadius: 10,
-                  border: '1px solid rgba(255,255,255,0.15)',
-                  background: mode === 'categories' ? 'rgba(221,153,51,0.22)' : 'rgba(255,255,255,0.06)',
-                  color:
-                    categories.length === 0 || Object.keys(catMap).length === 0
-                      ? 'rgba(255,255,255,0.45)'
-                      : '#fff',
-                  fontWeight: 900,
-                  cursor:
-                    categories.length === 0 || Object.keys(catMap).length === 0
-                      ? 'not-allowed'
-                      : 'pointer'
-                }}
-                title={
-                  categories.length === 0 || Object.keys(catMap).length === 0
-                    ? 'Sem taxonomy/map carregado'
-                    : ''
-                }
-              >
-                Por Categoria
-              </button>
+          {/* Container do chart */}
+          <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
 
-              <button
-                onClick={loadData}
-                style={{
-                  padding: '8px 10px',
-                  borderRadius: 10,
-                  border: '1px solid rgba(255,255,255,0.15)',
-                  background: 'rgba(255,255,255,0.06)',
-                  color: '#fff',
-                  fontWeight: 900,
-                  cursor: 'pointer'
-                }}
-                title="Recarregar JSONs"
-              >
-                Recarregar
-              </button>
-
-              {loading && (
-                <span style={{ color: 'rgba(255,255,255,0.75)', fontWeight: 800 }}>
-                  Carregando…
-                </span>
-              )}
-              {!!err && !loading && (
-                <span style={{ color: '#ff6b6b', fontWeight: 900 }}>
-                  {err}
-                </span>
-              )}
-            </div>
-
-            {/* Close X */}
-            <button
-              onClick={close}
-              aria-label="Fechar"
+          {/* Erro (se der) */}
+          {error ? (
+            <div
               style={{
-                width: 40,
-                height: 40,
+                position: 'absolute',
+                left: 14,
+                bottom: 14,
+                right: 14,
+                padding: '10px 12px',
                 borderRadius: 12,
-                border: '1px solid rgba(255,255,255,0.18)',
-                background: 'rgba(255,255,255,0.08)',
-                color: '#fff',
-                fontWeight: 1000,
-                cursor: 'pointer',
-                fontSize: 18,
-                lineHeight: '40px',
-                textAlign: 'center'
+                background: 'rgba(0,0,0,0.55)',
+                border: '1px solid rgba(255,255,255,0.10)',
+                color: '#ff6b6b',
+                fontWeight: 900,
+                zIndex: 10
               }}
-              title="Fechar"
             >
-              ✕
-            </button>
-          </div>
-
-          {/* Chart body */}
-          <div style={{ flex: 1, minHeight: 0 }}>
-            <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
-          </div>
-
-          {/* Footer */}
-          <div
-            style={{
-              padding: '10px 12px',
-              borderTop: '1px solid rgba(255,255,255,0.10)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              color: 'rgba(255,255,255,0.65)',
-              fontWeight: 800,
-              fontSize: 12
-            }}
-          >
-            <span>
-              {mode === 'market'
-                ? `Moedas (top): ${Math.min(350, coins.length)}`
-                : `Categorias: ${categories.length} | (cada categoria mostra top ${200})`}
-            </span>
-            <span>Cor = variação 24h | Área = market cap</span>
-          </div>
+              {error}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
   );
 
-  return (
-    <div style={{ width: '100%' }}>
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-        <button
-          onClick={openMarket}
-          style={{
-            padding: '10px 14px',
-            borderRadius: 12,
-            border: '1px solid rgba(255,255,255,0.15)',
-            background: 'rgba(255,255,255,0.06)',
-            color: '#fff',
-            fontWeight: 900,
-            cursor: 'pointer'
-          }}
-        >
-          Abrir Market Monitor
-        </button>
-
-        <button
-          onClick={openCategories}
-          disabled={categories.length === 0 || Object.keys(catMap).length === 0}
-          style={{
-            padding: '10px 14px',
-            borderRadius: 12,
-            border: '1px solid rgba(255,255,255,0.15)',
-            background: 'rgba(255,255,255,0.06)',
-            color:
-              categories.length === 0 || Object.keys(catMap).length === 0
-                ? 'rgba(255,255,255,0.45)'
-                : '#fff',
-            fontWeight: 900,
-            cursor:
-              categories.length === 0 || Object.keys(catMap).length === 0
-                ? 'not-allowed'
-                : 'pointer'
-          }}
-          title={
-            categories.length === 0 || Object.keys(catMap).length === 0
-              ? 'Sem taxonomy/map carregado'
-              : ''
-          }
-        >
-          Abrir Por Categoria
-        </button>
-
-        <button
-          onClick={loadData}
-          style={{
-            padding: '10px 14px',
-            borderRadius: 12,
-            border: '1px solid rgba(255,255,255,0.15)',
-            background: 'rgba(255,255,255,0.06)',
-            color: '#fff',
-            fontWeight: 900,
-            cursor: 'pointer'
-          }}
-        >
-          Recarregar JSONs
-        </button>
-
-        {loading && <span style={{ color: 'rgba(255,255,255,0.75)', fontWeight: 800 }}>Carregando…</span>}
-        {!!err && !loading && <span style={{ color: '#ff6b6b', fontWeight: 900 }}>{err}</span>}
-      </div>
-
-      {open && createPortal(modal, document.body)}
-    </div>
-  );
+  return createPortal(modal, document.body);
 }
