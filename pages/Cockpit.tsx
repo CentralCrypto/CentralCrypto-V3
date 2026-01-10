@@ -1,15 +1,26 @@
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import * as React from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 // @ts-ignore
-import { Responsive, WidthProvider } from 'react-grid-layout';
-import { v4 as uuidv4 } from 'uuid';
+import * as RGL from 'react-grid-layout';
+import * as uuidModule from 'uuid';
 import { CheckCircle, Loader2, Plus, Save, RotateCcw, Layout as LayoutIcon } from 'lucide-react';
 import { DashboardItem, WidgetType, ApiCoin, Language, Layout } from '../types';
 import { fetchTopCoins } from './Workspace/services/api';
 import GridHeader from './Workspace/components/GridHeader';
 import TVChartContainer from './Cockpit/components/TVChartContainer';
 
-const ResponsiveGridLayout = WidthProvider(Responsive);
+// Robust Import handling
+// @ts-ignore
+const Responsive = RGL.Responsive || (RGL as any).default?.Responsive || (RGL as any).default;
+// @ts-ignore
+const WidthProvider = RGL.WidthProvider || (RGL as any).default?.WidthProvider;
+// @ts-ignore
+const uuidv4 = uuidModule.v4 || (uuidModule as any).default?.v4 || (uuidModule as any).default;
+
+// If RGL failed completely, create a dummy component to prevent crash
+const ResponsiveGridLayout = WidthProvider ? WidthProvider(Responsive) : (props: any) => <div className="text-red-500 p-4 border border-red-500 rounded">Grid Layout Failed to Load</div>;
+
 const STORAGE_KEY = 'cct-cockpit-layout-v11'; // Nova versão para forçar reset absoluto
 
 const COLS = { lg: 20, md: 10, sm: 6, xs: 4, xxs: 2 };

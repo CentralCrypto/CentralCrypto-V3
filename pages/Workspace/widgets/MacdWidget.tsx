@@ -4,10 +4,7 @@ import { Loader2, Info } from 'lucide-react';
 import { MacdAvgData, MacdTrackerPoint, fetchMacdAverage, fetchMacdTracker } from '../services/api';
 import { DashboardItem, Language } from '../../../types';
 import { getTranslations } from '../../../locales';
-
-declare global {
-  interface Window { Highcharts: any; }
-}
+import Highcharts from 'highcharts';
 
 const TIMEFRAMES = ['15m', '1h', '4h', '24h', '7d'] as const;
 type Timeframe = (typeof TIMEFRAMES)[number];
@@ -35,7 +32,7 @@ const HighchartsMacdTracker: React.FC<HighchartsMacdTrackerProps> = ({ data, tim
   const chartRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!chartRef.current || !window.Highcharts) return;
+    if (!chartRef.current) return;
 
     const isDark = document.documentElement.classList.contains('dark');
     const textColor = isDark ? '#94a3b8' : '#334155';
@@ -75,7 +72,7 @@ const HighchartsMacdTracker: React.FC<HighchartsMacdTrackerProps> = ({ data, tim
 
     const xTitle = isMarketCapMode ? 'Market Cap' : 'Price Change 24h';
 
-    window.Highcharts.chart(chartRef.current, {
+    Highcharts.chart(chartRef.current, {
       chart: {
         type: 'scatter',
         backgroundColor: 'transparent',

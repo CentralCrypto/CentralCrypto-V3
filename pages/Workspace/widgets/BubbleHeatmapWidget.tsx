@@ -1,8 +1,20 @@
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import * as React from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { CircleDashed, RefreshCw, ChevronDown, X } from 'lucide-react';
 import { fetchTopCoins } from '../services/api';
 import { DashboardItem, Language, ApiCoin } from '../../../types';
+import Highcharts from 'highcharts';
+import addHighchartsMore from 'highcharts/highcharts-more';
+
+// Initialize
+try { addHighchartsMore(Highcharts); } catch(e) { console.error("Highcharts More init error", e); }
+
+declare global {
+  interface Window {
+    Highcharts: any;
+  }
+}
 
 interface Props {
   item: DashboardItem;
@@ -163,7 +175,7 @@ const BubbleHeatmapWidget: React.FC<Props> = ({ item, language = 'pt' }) => {
             chartInstance.current.destroy();
         }
 
-        chartInstance.current = window.Highcharts.chart(chartRef.current, {
+        chartInstance.current = Highcharts.chart(chartRef.current, {
             chart: {
                 type: 'packedbubble',
                 backgroundColor: 'transparent',

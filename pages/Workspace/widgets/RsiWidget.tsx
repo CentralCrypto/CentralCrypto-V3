@@ -1,12 +1,10 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import { RsiAvgData, RsiTrackerPoint, fetchRsiAverage, fetchRsiTracker } from '../services/api';
 import { DashboardItem, Language } from '../../../types';
 import { getTranslations } from '../../../locales';
-
-declare global {
-  interface Window { Highcharts: any; }
-}
+import Highcharts from 'highcharts';
 
 const TIMEFRAMES = ['15m', '1h', '4h', '24h', '7d'];
 const LIMIT_OPTIONS = [50, 100, 150, 200, 300];
@@ -39,7 +37,7 @@ const HighchartsRsiTracker: React.FC<{ data: RsiTrackerPoint[], timeframe: strin
     const isDark = useIsDark();
 
     useEffect(() => {
-        if (!chartRef.current || !window.Highcharts) return;
+        if (!chartRef.current) return;
         
         const textColor = isDark ? '#94a3b8' : '#475569';
         const gridColor = isDark ? '#334155' : '#e2e8f0';
@@ -98,7 +96,7 @@ const HighchartsRsiTracker: React.FC<{ data: RsiTrackerPoint[], timeframe: strin
             }
         };
 
-        window.Highcharts.chart(chartRef.current, {
+        Highcharts.chart(chartRef.current, {
             chart: { 
                 type: 'scatter', 
                 backgroundColor: 'transparent', 

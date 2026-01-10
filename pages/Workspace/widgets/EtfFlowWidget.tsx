@@ -4,10 +4,7 @@ import { Loader2, ArrowUp, ArrowDown, XCircle } from 'lucide-react';
 import { EtfFlowData, fetchEtfFlow } from '../services/api';
 import { DashboardItem, Language } from '../../../types';
 import { getTranslations } from '../../../locales';
-
-declare global {
-  interface Window { Highcharts: any; }
-}
+import Highcharts from 'highcharts';
 
 const formatCompactNumber = (number: number) => {
   if (!number || number === 0) return "---";
@@ -72,7 +69,6 @@ const HighchartsEtfChart: React.FC<HighchartsEtfChartProps> = ({ data, title, co
     const chartRef = useRef<HTMLDivElement>(null);
     const chartInstance = useRef<any>(null);
 
-    // Function to expose for resetting filters
     const resetFilters = () => {
         if (chartInstance.current && chartInstance.current.series) {
             chartInstance.current.series.forEach((s: any) => {
@@ -82,11 +78,8 @@ const HighchartsEtfChart: React.FC<HighchartsEtfChartProps> = ({ data, title, co
         }
     };
 
-    // Attach to window or use ref for parent access (simplified here: just render button in parent or use context)
-    // For simplicity, we will add a custom button inside the component below the chart.
-
     useEffect(() => {
-        if (!chartRef.current || !window.Highcharts) return;
+        if (!chartRef.current) return;
 
         // Check Theme for Text Colors
         const isDark = document.documentElement.classList.contains('dark');
@@ -118,7 +111,7 @@ const HighchartsEtfChart: React.FC<HighchartsEtfChartProps> = ({ data, title, co
             };
         });
 
-        chartInstance.current = window.Highcharts.chart(chartRef.current, {
+        chartInstance.current = Highcharts.chart(chartRef.current, {
             chart: {
                 type: 'column',
                 backgroundColor: 'transparent',

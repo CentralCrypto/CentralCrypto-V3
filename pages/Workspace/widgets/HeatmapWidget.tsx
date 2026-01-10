@@ -1,16 +1,15 @@
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import * as React from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { DashboardItem, Language, ApiCoin } from '../../../types';
 import { fetchTopCoins } from '../services/api';
 import { ENDPOINTS, ENDPOINT_FALLBACKS } from '../../../services/endpoints';
-import { Loader2, LayoutGrid, Layers, RefreshCw } from 'lucide-react';
+import { Loader2, LayoutGrid, Layers, RefreshCw, AlertTriangle } from 'lucide-react';
+import Highcharts from 'highcharts';
+import addTreemap from 'highcharts/modules/treemap';
 
-// Use global Highcharts from index.html to avoid module linking errors
-declare global {
-  interface Window {
-    Highcharts: any;
-  }
-}
+// Initialize Highcharts module
+try { addTreemap(Highcharts); } catch (e) { console.error("Highcharts Treemap init error", e); }
 
 interface HeatmapWidgetProps {
   item: DashboardItem;
@@ -38,11 +37,11 @@ const HeatmapWidget: React.FC<HeatmapWidgetProps> = ({ item, language = 'pt' }) 
     setErrorMsg('');
     try {
         const [coinsData, taxData, mapData] = await Promise.all([
-            fetchTopCoins({ force: true }),
-            fetch(ENDPOINTS.taxonomy).then(r => r.json()).catch(() => []),
+            fetchTopCoins({ force: true }).catch(() => []),
+            fetch(ENDPOINTS.taxonomy).then(r => r.ok ? r.json() : []).catch(() => []),
             fetch(ENDPOINT_FALLBACKS.CAT_MAP_ANY[0])
-                .then(r => r.json())
-                .catch(() => fetch(ENDPOINT_FALLBACKS.CAT_MAP_ANY[1]).then(r => r.json()).catch(() => ({})))
+                .then(r => r.ok ? r.json() : fetch(ENDPOINT_FALLBACKS.CAT_MAP_ANY[1]).then(r => r.ok ? r.json() : {}))
+                .catch(() => ({}))
         ]);
 
         if (coinsData && coinsData.length > 0) setCoins(coinsData);
@@ -50,16 +49,16 @@ const HeatmapWidget: React.FC<HeatmapWidgetProps> = ({ item, language = 'pt' }) 
         let masters = [];
         if (Array.isArray(taxData)) masters = taxData;
         else if (taxData?.masters) masters = taxData.masters;
-        setTaxonomy(masters);
+        setTaxonomy(masters || []);
 
         let cMap = {};
         if (mapData && typeof mapData === 'object') {
             cMap = mapData.categories || mapData;
         }
-        setCategoryMap(cMap);
+        setCategoryMap(cMap || {});
 
     } catch (e) {
-        console.error(e);
+        console.error("Heatmap Load Error:", e);
         setErrorMsg('Erro ao carregar dados.');
     } finally {
         setLoading(false);
@@ -74,7 +73,7 @@ const HeatmapWidget: React.FC<HeatmapWidgetProps> = ({ item, language = 'pt' }) 
   const chartSeriesData = useMemo(() => {
     if (!coins.length) return [];
 
-    const coinMap = new Map(coins.map(c => [String(c.id), c]));
+    const coinMap = new Map<string, ApiCoin>(coins.map(c => [String(c.id), c]));
 
     const formatCoinPoint = (c: ApiCoin, parentId?: string) => ({
         id: parentId ? `${c.id}_${parentId}` : c.id, // Unique ID if nested
@@ -100,10 +99,13 @@ const HeatmapWidget: React.FC<HeatmapWidgetProps> = ({ item, language = 'pt' }) 
     // 2. CATEGORIES MODE (Hierarchical)
     if (mode === 'categories') {
         const points: any[] = [];
-        const addedCoins = new Set<string>();
+        
+        // Safety check for taxonomy
+        if (!taxonomy || taxonomy.length === 0) return [];
 
         // Create Category Parents
         taxonomy.forEach((cat: any) => {
+            if (!cat) return;
             const catId = String(cat.id);
             const catName = cat.name || cat.title || catId;
             
@@ -111,7 +113,7 @@ const HeatmapWidget: React.FC<HeatmapWidgetProps> = ({ item, language = 'pt' }) 
             points.push({
                 id: catId,
                 name: catName,
-                color: window.Highcharts?.getOptions().colors?.[0] || '#333' // Placeholder, overwritten by colorAxis usually or series
+                color: Highcharts?.getOptions().colors?.[0] || '#333' 
             });
 
             // Find Coins in this Category
@@ -119,6 +121,7 @@ const HeatmapWidget: React.FC<HeatmapWidgetProps> = ({ item, language = 'pt' }) 
             if (Array.isArray(cat.categoryIds)) cat.categoryIds.forEach((id: any) => allCatIds.add(String(id)));
             if (Array.isArray(cat.children)) {
                 cat.children.forEach((child: any) => {
+                    if (!child) return;
                     const cIds = child.categoryIds || child.categories;
                     if(Array.isArray(cIds)) cIds.forEach((id:any) => allCatIds.add(String(id)));
                 });
@@ -139,7 +142,6 @@ const HeatmapWidget: React.FC<HeatmapWidgetProps> = ({ item, language = 'pt' }) 
             });
         });
 
-        // Filter out empty categories? (Highcharts handles empty parents automatically usually, but keeps them small)
         return points;
     }
 
@@ -148,7 +150,20 @@ const HeatmapWidget: React.FC<HeatmapWidgetProps> = ({ item, language = 'pt' }) 
 
   // --- CHART RENDERING ---
   useEffect(() => {
-    if (!chartContainerRef.current || !window.Highcharts || chartSeriesData.length === 0) return;
+    // Only proceed if Highcharts is available and we have a container
+    if (!chartContainerRef.current) return;
+    
+    // Safely destroy existing chart
+    if (chartInstanceRef.current) {
+        try {
+            chartInstanceRef.current.destroy();
+        } catch(e) {
+            console.warn("Chart destroy error", e);
+        }
+        chartInstanceRef.current = null;
+    }
+
+    if (chartSeriesData.length === 0) return;
 
     const isDark = document.documentElement.classList.contains('dark');
     const bg = 'transparent';
@@ -179,87 +194,87 @@ const HeatmapWidget: React.FC<HeatmapWidgetProps> = ({ item, language = 'pt' }) 
         }
     ] : undefined;
 
-    if (chartInstanceRef.current) {
-        chartInstanceRef.current.destroy();
-    }
-
-    chartInstanceRef.current = window.Highcharts.chart(chartContainerRef.current, {
-        chart: {
-            type: 'treemap',
-            backgroundColor: bg,
-            style: { fontFamily: 'Inter, sans-serif' },
-            animation: false
-        },
-        title: { text: null },
-        credits: { enabled: false },
-        exporting: { enabled: false },
-        tooltip: {
-            useHTML: true,
-            backgroundColor: isDark ? 'rgba(20, 20, 20, 0.95)' : 'rgba(255, 255, 255, 0.95)',
-            borderColor: isDark ? '#333' : '#ccc',
-            borderRadius: 8,
-            shadow: true,
-            style: { color: text },
-            formatter: function (this: any) {
-                const p = this.point;
-                // If it's a category header
-                if (!p.custom && p.node && p.node.children.length > 0) {
-                    return `<b>${p.name}</b><br/>${p.node.children.length} Assets`;
-                }
-                // If it's a coin
-                if (p.custom) {
-                    const val = p.custom.change;
-                    const color = val >= 0 ? '#22c55e' : '#ef4444';
-                    return `
-                        <div style="padding: 4px">
-                            <div style="font-weight:800; font-size: 14px; margin-bottom:2px">${p.custom.fullName} (${p.name})</div>
-                            <div>Price: <b>$${p.custom.price?.toLocaleString()}</b></div>
-                            <div>Change: <b style="color:${color}">${val > 0 ? '+' : ''}${val?.toFixed(2)}%</b></div>
-                            <div>Mkt Cap: $${(p.value/1e9).toFixed(2)}B</div>
-                        </div>
-                    `;
-                }
-                return `<b>${p.name}</b>`;
-            }
-        },
-        colorAxis: {
-            min: -10,
-            max: 10,
-            stops: [
-                [0, '#ef4444'], // Red
-                [0.5, '#1f2937'], // Neutral Dark (or Gray)
-                [1, '#22c55e']  // Green
-            ]
-        },
-        series: [{
-            type: 'treemap',
-            layoutAlgorithm: 'squarified',
-            allowDrillToNode: true,
-            alternateStartingDirection: true,
-            levels: levels,
-            data: chartSeriesData,
-            dataLabels: {
-                enabled: true,
-                style: { textOutline: 'none', color: '#fff', fontWeight: 'bold', fontSize: '13px' },
+    try {
+        chartInstanceRef.current = Highcharts.chart(chartContainerRef.current, {
+            chart: {
+                type: 'treemap',
+                backgroundColor: bg,
+                style: { fontFamily: 'Inter, sans-serif' },
+                animation: false
+            },
+            title: { text: null },
+            credits: { enabled: false },
+            exporting: { enabled: false },
+            tooltip: {
+                useHTML: true,
+                backgroundColor: isDark ? 'rgba(20, 20, 20, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+                borderColor: isDark ? '#333' : '#ccc',
+                borderRadius: 8,
+                shadow: true,
+                style: { color: text },
                 formatter: function (this: any) {
                     const p = this.point;
-                    // Dont show label for categories in this formatter (handled by levels) if mode is categories
-                    if (mode === 'categories' && !p.parent) return null; 
-                    
-                    const ch = p.custom?.change;
-                    if (typeof ch !== 'number') return p.name;
-                    
-                    if (this.point.shapeArgs && (this.point.shapeArgs.width < 40 || this.point.shapeArgs.height < 30)) return '';
+                    // If it's a category header
+                    if (!p.custom && p.node && p.node.children.length > 0) {
+                        return `<b>${p.name}</b><br/>${p.node.children.length} Assets`;
+                    }
+                    // If it's a coin
+                    if (p.custom) {
+                        const val = p.custom.change;
+                        const color = val >= 0 ? '#22c55e' : '#ef4444';
+                        return `
+                            <div style="padding: 4px">
+                                <div style="font-weight:800; font-size: 14px; margin-bottom:2px">${p.custom.fullName} (${p.name})</div>
+                                <div>Price: <b>$${p.custom.price?.toLocaleString()}</b></div>
+                                <div>Change: <b style="color:${color}">${val > 0 ? '+' : ''}${val?.toFixed(2)}%</b></div>
+                                <div>Mkt Cap: $${(p.value/1e9).toFixed(2)}B</div>
+                            </div>
+                        `;
+                    }
+                    return `<b>${p.name}</b>`;
+                }
+            },
+            colorAxis: {
+                min: -10,
+                max: 10,
+                stops: [
+                    [0, '#ef4444'], // Red
+                    [0.5, '#1f2937'], // Neutral Dark (or Gray)
+                    [1, '#22c55e']  // Green
+                ]
+            },
+            series: [{
+                type: 'treemap',
+                layoutAlgorithm: 'squarified',
+                allowDrillToNode: true,
+                alternateStartingDirection: true,
+                levels: levels,
+                data: chartSeriesData,
+                dataLabels: {
+                    enabled: true,
+                    style: { textOutline: 'none', color: '#fff', fontWeight: 'bold', fontSize: '13px' },
+                    formatter: function (this: any) {
+                        const p = this.point;
+                        // Dont show label for categories in this formatter (handled by levels) if mode is categories
+                        if (mode === 'categories' && !p.parent) return null; 
+                        
+                        const ch = p.custom?.change;
+                        if (typeof ch !== 'number') return p.name;
+                        
+                        if (this.point.shapeArgs && (this.point.shapeArgs.width < 40 || this.point.shapeArgs.height < 30)) return '';
 
-                    return `<div style="text-align:center">
-                        <span style="font-size:12px">${p.name}</span><br/>
-                        <span style="font-size:10px; opacity:0.8">${ch > 0 ? '+' : ''}${ch.toFixed(1)}%</span>
-                    </div>`;
-                },
-                useHTML: true
-            }
-        }]
-    });
+                        return `<div style="text-align:center">
+                            <span style="font-size:12px">${p.name}</span><br/>
+                            <span style="font-size:10px; opacity:0.8">${ch > 0 ? '+' : ''}${ch.toFixed(1)}%</span>
+                        </div>`;
+                    },
+                    useHTML: true
+                }
+            }]
+        });
+    } catch (err) {
+        console.error("Highcharts initialization error:", err);
+    }
 
   }, [chartSeriesData, mode, item.isMaximized]);
 
@@ -293,9 +308,13 @@ const HeatmapWidget: React.FC<HeatmapWidgetProps> = ({ item, language = 'pt' }) 
         {/* Chart */}
         <div className="flex-1 w-full min-h-0 relative p-1">
             <div ref={chartContainerRef} className="absolute inset-0" />
-            {errorMsg && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-20">
-                    <span className="text-red-400 font-bold">{errorMsg}</span>
+            
+            {/* Show empty state if not loading but no data */}
+            {!loading && chartSeriesData.length === 0 && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center z-20 text-gray-400">
+                    <AlertTriangle size={32} className="mb-2 opacity-50"/>
+                    <span className="text-xs font-bold">Sem dados para exibir</span>
+                    {errorMsg && <span className="text-[10px] text-red-400 mt-1">{errorMsg}</span>}
                 </div>
             )}
         </div>

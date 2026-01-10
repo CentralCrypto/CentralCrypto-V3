@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+
+import * as React from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { ApiCoin, Language } from '../../../types';
 import { Search, XCircle, Settings, Droplets, X as CloseIcon, Atom, Coins, Maximize, Wind, Info } from 'lucide-react';
 import { fetchTopCoins } from '../services/api';
@@ -331,7 +333,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       logMaxY: Math.log10(Math.max(1, maxY))
     };
 
-    const coinMap = new Map(topCoins.map(c => [c.id, c] as const));
+    const coinMap = new Map<string, ApiCoin>(topCoins.map(c => [c.id, c]));
     for (const p of particlesRef.current) {
       const updated = coinMap.get(p.id);
       if (updated) p.coin = updated;
@@ -547,7 +549,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       }
     }
 
-    const existingMap = new Map(particlesRef.current.map(p => [p.id, p] as const));
+    const existingMap = new Map<string, Particle>(particlesRef.current.map(p => [p.id, p]));
     const w = stageRef.current?.clientWidth || 1000;
     const h = stageRef.current?.clientHeight || 800;
 
@@ -973,7 +975,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       const toScreenX = (val: number) => val * k + panX;
       const toScreenY = (val: number) => val * k + panY;
 
-      const particles = particlesRef.current;
+      const particles: Particle[] = particlesRef.current;
 
       for (const p of particles) {
         const viewRadius = p.targetRadius * Math.pow(k, 0.25);

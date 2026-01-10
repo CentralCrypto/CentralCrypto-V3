@@ -1,26 +1,28 @@
-import React, { useMemo } from 'react';
+
+import * as React from 'react';
+import { Suspense, useMemo } from 'react';
 import { WidgetType, DashboardItem, Language } from '../../../types';
 import WidgetErrorBoundary from '../widgets/WidgetErrorBoundary';
+import { Loader2 } from 'lucide-react';
 
-// Main Board Widgets
-import RsiWidget from '../widgets/RsiWidget';
-import MacdWidget from '../widgets/MacdWidget';
-import FearGreedWidget from '../widgets/FearGreedWidget';
-import LsrWidget from '../widgets/LsrWidget';
-import AltcoinSeasonWidget from '../widgets/AltcoinSeasonWidget';
-import TrumpMeterWidget from '../widgets/TrumpMeterWidget';
-import EtfFlowWidget from '../widgets/EtfFlowWidget';
-import GainersLosersWidget from '../widgets/GainersLosersWidget';
-import CalendarWidget from '../widgets/CalendarWidget';
-import HeatmapWidget from '../widgets/HeatmapWidget';
+// Lazy load widgets to ensure the shell loads even if a widget fails to import (e.g. Highcharts issues)
+const RsiWidget = React.lazy(() => import('../widgets/RsiWidget'));
+const MacdWidget = React.lazy(() => import('../widgets/MacdWidget'));
+const FearGreedWidget = React.lazy(() => import('../widgets/FearGreedWidget'));
+const LsrWidget = React.lazy(() => import('../widgets/LsrWidget'));
+const AltcoinSeasonWidget = React.lazy(() => import('../widgets/AltcoinSeasonWidget'));
+const TrumpMeterWidget = React.lazy(() => import('../widgets/TrumpMeterWidget'));
+const EtfFlowWidget = React.lazy(() => import('../widgets/EtfFlowWidget'));
+const GainersLosersWidget = React.lazy(() => import('../widgets/GainersLosersWidget'));
+const CalendarWidget = React.lazy(() => import('../widgets/CalendarWidget'));
+const HeatmapWidget = React.lazy(() => import('../widgets/HeatmapWidget'));
 
-// Board 2 Widgets
-import PriceWidget from '../widgets/PriceWidget';
-import VolumeWidget from '../widgets/VolumeWidget';
-import TrendWidget from '../widgets/TrendWidget';
-import SentimentWidget from '../widgets/SentimentWidget';
-import NewsWidget from '../widgets/NewsWidget';
-import OrderBookWidget from '../widgets/OrderBookWidget';
+const PriceWidget = React.lazy(() => import('../widgets/PriceWidget'));
+const VolumeWidget = React.lazy(() => import('../widgets/VolumeWidget'));
+const TrendWidget = React.lazy(() => import('../widgets/TrendWidget'));
+const SentimentWidget = React.lazy(() => import('../widgets/SentimentWidget'));
+const NewsWidget = React.lazy(() => import('../widgets/NewsWidget'));
+const OrderBookWidget = React.lazy(() => import('../widgets/OrderBookWidget'));
 
 interface Props {
   item: DashboardItem;
@@ -32,6 +34,12 @@ interface Props {
   coinName?: string;
   language?: Language;
 }
+
+const LoadingWidget = () => (
+    <div className="flex items-center justify-center h-full w-full bg-white/50 dark:bg-black/20">
+        <Loader2 className="animate-spin text-gray-400" size={24} />
+    </div>
+);
 
 const CryptoWidget: React.FC<Props> = (props) => {
   const { item, currentPrice, priceChange, sparkline, totalVolume, marketCap, coinName, language = 'pt' } = props;
@@ -88,7 +96,9 @@ const CryptoWidget: React.FC<Props> = (props) => {
   return (
     <WidgetErrorBoundary>
       <div className="flex-1 w-full h-full min-h-0 overflow-hidden relative bg-white dark:bg-[#2f3032] transition-colors">
-        {renderContent()}
+        <Suspense fallback={<LoadingWidget />}>
+            {renderContent()}
+        </Suspense>
       </div>
     </WidgetErrorBoundary>
   );

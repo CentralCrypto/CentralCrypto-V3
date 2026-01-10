@@ -1,3 +1,4 @@
+
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiCoin, Language, WidgetType, UserTier } from '../../../types';
 import { getTranslations } from '../../../locales';
@@ -24,6 +25,7 @@ import {
   RefreshCw,
   Search,
   Star,
+  TrendingDown,
   TrendingUp,
   User
 } from 'lucide-react';
@@ -167,6 +169,13 @@ function PageFaq({ language, pageType }: { language: Language; pageType: string 
 type MarketCapTableProps = {
   language: Language;
   scrollContainerRef?: React.RefObject<HTMLDivElement>;
+};
+
+const getGainersLosersLabel = (language: Language) => {
+  const lang = String(language || 'en').toLowerCase();
+  if (lang.startsWith('pt')) return { gainers: 'Ganhadores', losers: 'Perdedores' };
+  if (lang.startsWith('es')) return { gainers: 'Ganadores', losers: 'Perdedores' };
+  return { gainers: 'Gainers', losers: 'Losers' };
 };
 
 const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) => {
@@ -812,6 +821,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     <ChevronsUpDown size={14} className={`text-gray-400 group-hover:text-[#dd9933] ${active ? 'text-[#dd9933]' : ''}`} />
   );
 
+  // ✅ Header com puxador “invisível até hover” + título realmente centralizado
   const SortableThGeneric = ({
     colId,
     label,
@@ -838,32 +848,34 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
       <th
         ref={setNodeRef}
         style={style}
-        className={`p-3 select-none group border-b border-gray-100 dark:border-slate-800 ${w}
+        className={`relative p-3 select-none group border-b border-gray-100 dark:border-slate-800 ${w}
           hover:bg-gray-100 dark:hover:bg-white/5 transition-colors`}
       >
-        <div className="flex items-center gap-2">
-          <span
-            className="inline-flex items-center justify-center w-6 h-6 rounded-md hover:bg-gray-200 dark:hover:bg-white/10 text-gray-400 shrink-0"
-            onClick={(e) => e.stopPropagation()}
-            {...attributes}
-            {...listeners}
-            title="Arraste para reordenar"
-          >
-            <GripVertical size={16} />
-          </span>
+        {/* puxador: some e só aparece no hover (e sempre aparece se estiver dragando) */}
+        <span
+          className={`absolute left-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-7 h-7 rounded-md
+            hover:bg-gray-200 dark:hover:bg-white/10 text-gray-400
+            transition-opacity ${isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+          onClick={(e) => e.stopPropagation()}
+          {...attributes}
+          {...listeners}
+          title="Arraste para reordenar"
+        >
+          <GripVertical size={16} />
+        </span>
 
-          <div className="flex-1 flex justify-center min-w-0">
-            <button
-              type="button"
-              className="inline-flex items-center gap-1 font-black uppercase tracking-widest text-xs text-gray-400 dark:text-slate-400 justify-center"
-              onClick={() => sortKey && onSort(sortKey)}
-              disabled={!sortKey}
-              title={sortKey ? 'Ordenar' : ''}
-            >
-              <span className="whitespace-nowrap">{label}</span>
-              {sortKey ? <SortIcon active={activeKey === sortKey} /> : null}
-            </button>
-          </div>
+        {/* título: centralizado de verdade */}
+        <div className="flex items-center justify-center min-w-0">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 font-black uppercase tracking-widest text-xs text-gray-400 dark:text-slate-400 justify-center max-w-full"
+            onClick={() => sortKey && onSort(sortKey)}
+            disabled={!sortKey}
+            title={sortKey ? 'Ordenar' : ''}
+          >
+            <span className="whitespace-nowrap">{label}</span>
+            {sortKey ? <SortIcon active={activeKey === sortKey} /> : null}
+          </button>
         </div>
       </th>
     );
@@ -1149,6 +1161,39 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     else goBackToCategories();
   };
 
+  const gl = getGainersLosersLabel(language);
+
+  // ✅ Botões “Gainers/Losers” com layout tipo “Top Movers” (pills com ícone)
+  const TopToggleButton = ({
+    active,
+    icon,
+    label,
+    onClick,
+    title
+  }: {
+    active: boolean;
+    icon: React.ReactNode;
+    label: string;
+    onClick: () => void;
+    title: string;
+  }) => {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={`px-3 py-2 rounded-lg border font-black transition-colors whitespace-nowrap flex items-center gap-2
+          ${active
+            ? 'bg-[#dd9933] text-black border-transparent shadow-md'
+            : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5'
+          }`}
+        title={title}
+      >
+        {icon}
+        {label}
+      </button>
+    );
+  };
+
   return (
     <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-100 dark:border-slate-800 shadow-xl overflow-hidden flex flex-col">
       {/* Header */}
@@ -1230,34 +1275,24 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
               </button>
             )}
 
-            {/* Top movers só na tabela principal */}
+            {/* Gainers/Losers só na tabela principal */}
             {viewMode === 'coins' && !activeMasterId && (
               <>
-                <button
-                  type="button"
+                <TopToggleButton
+                  active={topMode === 'gainers'}
+                  icon={<TrendingUp size={18} />}
+                  label={gl.gainers}
                   onClick={() => setTop('gainers')}
-                  className={`px-3 py-2 rounded-lg border font-black transition-colors whitespace-nowrap
-                    ${topMode === 'gainers'
-                      ? 'bg-[#dd9933] text-black border-transparent'
-                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5'
-                    }`}
-                  title="Ordenar por Top Gainers (24h%)"
-                >
-                  Top Gainers
-                </button>
+                  title="Ordenar por Gainers (24h%)"
+                />
 
-                <button
-                  type="button"
+                <TopToggleButton
+                  active={topMode === 'losers'}
+                  icon={<TrendingDown size={18} />}
+                  label={gl.losers}
                   onClick={() => setTop('losers')}
-                  className={`px-3 py-2 rounded-lg border font-black transition-colors whitespace-nowrap
-                    ${topMode === 'losers'
-                      ? 'bg-[#dd9933] text-black border-transparent'
-                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5'
-                    }`}
-                  title="Ordenar por Top Losers (24h%)"
-                >
-                  Top Losers
-                </button>
+                  title="Ordenar por Losers (24h%)"
+                />
               </>
             )}
 
@@ -1590,7 +1625,7 @@ interface IndicatorPageProps {
   userTier: UserTier;
 }
 
-type PageType = 'MARKETCAP' | 'RSI' | 'MACD' | 'FNG' | 'LSR' | 'ALTSEASON' | 'ETF' | 'GAINERS' | 'HEATMAP' | 'BUBBLES' | 'CALENDAR' | 'TRUMP';
+type PageType = 'MARKETCAP' | 'RSI' | 'MACD' | 'FNG' | 'LSR' | 'ALTSEASON' | 'ETF' | 'HEATMAP' | 'BUBBLES' | 'CALENDAR' | 'TRUMP';
 
 function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageProps) {
   const [activePage, setActivePage] = useState<PageType>('MARKETCAP');
@@ -1603,7 +1638,7 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
   const GROUPS = [
     { title: 'Market', items: [
       { id: 'MARKETCAP' as PageType, label: tPages.marketcap, icon: <List size={18} /> },
-      { id: 'GAINERS' as PageType, label: tPages.topmovers, icon: <TrendingUp size={18} /> },
+      // ✅ REMOVIDO: Top Movers (menu)
       { id: 'HEATMAP' as PageType, label: "Heatmap Square", icon: <LayoutGrid size={18} /> },
       { id: 'BUBBLES' as PageType, label: "Crypto Bubbles", icon: <CircleDashed size={18} /> },
       { id: 'RSI' as PageType, label: tWs.rsi.title, icon: <Activity size={18} /> },
@@ -1671,7 +1706,6 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
             {activePage === 'FNG' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'fng-page', type: WidgetType.FEAR_GREED, title: 'Fear & Greed Index', symbol: 'GLOBAL', isMaximized: true }} language={language} /></div>}
             {activePage === 'RSI' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'rsi-page', type: WidgetType.RSI_AVG, title: 'RSI Average Tracker', symbol: 'MARKET', isMaximized: true }} language={language} /></div>}
             {activePage === 'MACD' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'macd-page', type: WidgetType.MACD_AVG, title: 'MACD Average Tracker', symbol: 'MARKET', isMaximized: true }} language={language} /></div>}
-            {activePage === 'GAINERS' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'gainers-page', type: WidgetType.GAINERS_LOSERS, title: 'Top Movers (24h)', symbol: 'MARKET', isMaximized: true }} language={language} /></div>}
             {activePage === 'HEATMAP' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'heatmap-page', type: WidgetType.HEATMAP, title: 'Crypto Heatmap', symbol: 'MARKET', isMaximized: true }} language={language} /></div>}
             {activePage === 'CALENDAR' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'cal-page', type: WidgetType.CALENDAR, title: 'Calendar', symbol: 'CAL', isMaximized: true }} language={language} /></div>}
             {activePage === 'TRUMP' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'trump-page', type: WidgetType.TRUMP_METER, title: 'Trump-o-Meter', symbol: 'SENTIMENT', isMaximized: true }} language={language} /></div>}
