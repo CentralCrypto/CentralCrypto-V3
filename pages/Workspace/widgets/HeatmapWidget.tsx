@@ -5,14 +5,16 @@ import TreemapModule from 'highcharts/modules/treemap';
 import ExportingModule from 'highcharts/modules/exporting';
 import AccessibilityModule from 'highcharts/modules/accessibility';
 import DataModule from 'highcharts/modules/data';
+import ColorAxisModule from 'highcharts/modules/coloraxis';
 
 // =============================
-// FULLSCREEN DEMO (SEM BOTÕES, SÓ X PRA FECHAR)
-// - Replica o demo ORIGINAL (S&P 500) pra você VER FUNCIONANDO no site.
-// - Abre automaticamente em popup tela cheia.
+// FULLSCREEN DEMO (SÓ X PRA FECHAR)
+// - Replica o demo ORIGINAL (S&P 500) pra você ver funcionando no site.
 // =============================
 
 let HC_INITED = false;
+let TREEMAP_LABEL_PLUGIN_INITED = false;
+
 function initHighchartsOnce() {
   if (HC_INITED) return;
   HC_INITED = true;
@@ -21,6 +23,61 @@ function initHighchartsOnce() {
   (ExportingModule as any)(Highcharts);
   (AccessibilityModule as any)(Highcharts);
   (DataModule as any)(Highcharts);
+  (ColorAxisModule as any)(Highcharts);
+
+  Highcharts.setOptions({
+    chart: {
+      style: {
+        fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
+      }
+    }
+  });
+}
+
+function initTreemapRelativeFontPluginOnce() {
+  if (TREEMAP_LABEL_PLUGIN_INITED) return;
+  TREEMAP_LABEL_PLUGIN_INITED = true;
+
+  Highcharts.addEvent(Highcharts.Series as any, 'drawDataLabels', function () {
+    // @ts-ignore
+    if (this.type !== 'treemap') return;
+
+    // ✅ robusto: tenta pegar do Series, senão do Chart
+    // @ts-ignore
+    const ca = this.colorAxis || (this.chart && this.chart.colorAxis && this.chart.colorAxis[0]);
+
+    // @ts-ignore
+    this.points.forEach((point: any) => {
+      // Color the level 2 headers with the combined performance of its children
+      if (point?.node?.level === 2 && Number.isFinite(point.value)) {
+        const previousValue = (point.node.children || []).reduce(
+          (acc: number, child: any) =>
+            acc +
+            (child?.point?.value || 0) -
+            (child?.point?.value || 0) * (child?.point?.colorValue || 0) / 100,
+          0
+        );
+
+        const perf = 100 * (point.value - previousValue) / (previousValue || 1);
+
+        point.custom = {
+          ...(point.custom || {}),
+          performance: (perf < 0 ? '' : '+') + perf.toFixed(2) + '%'
+        };
+
+        // ✅ só tenta se existir
+        if (point.dlOptions && ca && typeof ca.toColor === 'function') {
+          point.dlOptions.backgroundColor = ca.toColor(perf);
+        }
+      }
+
+      // Set font size based on area of the point
+      if (point?.node?.level === 3 && point.shapeArgs && point.dlOptions?.style) {
+        const area = point.shapeArgs.width * point.shapeArgs.height;
+        point.dlOptions.style.fontSize = `${Math.min(32, 7 + Math.round(area * 0.0008))}px`;
+      }
+    });
+  });
 }
 
 const renderChart = (container: HTMLElement, data: any[]) => {
@@ -93,8 +150,7 @@ const renderChart = (container: HTMLElement, data: any[]) => {
               enabled: true,
               align: 'center',
               format:
-                '{point.name}<br><span style="font-size: 0.7em">' +
-                '{point.custom.performance}</span>',
+                '{point.name}<br><span style="font-size: 0.7em">{point.custom.performance}</span>',
               style: {
                 color: 'white'
               }
@@ -132,8 +188,7 @@ const renderChart = (container: HTMLElement, data: any[]) => {
       }
     },
     subtitle: {
-      text:
-        'Click points to drill down. Source: <a href="http://okfn.org/">okfn.org</a>.',
+      text: 'Click points to drill down. Source: <a href="http://okfn.org/">okfn.org</a>.',
       align: 'left',
       style: {
         color: 'silver'
@@ -142,14 +197,10 @@ const renderChart = (container: HTMLElement, data: any[]) => {
     tooltip: {
       followPointer: true,
       outside: true,
-      headerFormat:
-        '<span style="font-size: 0.9em">' +
-        '{point.custom.fullName}</span><br/>',
+      headerFormat: '<span style="font-size: 0.9em">{point.custom.fullName}</span><br/>',
       pointFormat:
-        '<b>Market Cap:</b>' +
-        ' USD {(divide point.value 1000000000):.1f} bln<br/>' +
-        '{#if point.custom.performance}' +
-        '<b>1 month performance:</b> {point.custom.performance}{/if}'
+        '<b>Market Cap:</b> USD {(divide point.value 1000000000):.1f} bln<br/>' +
+        '{#if point.custom.performance}<b>1 month performance:</b> {point.custom.performance}{/if}'
     },
     colorAxis: {
       minColor: '#f73539',
@@ -175,15 +226,10 @@ const renderChart = (container: HTMLElement, data: any[]) => {
         color: 'white'
       }
     },
-    // 👇 Removido: nada de botões de export/fullscreen do Highcharts.
     exporting: {
       enabled: false
     },
-    navigation: {
-      buttonOptions: {
-        enabled: false
-      } as any
-    }
+    credits: { enabled: false }
   });
 };
 
@@ -218,7 +264,9 @@ export default function DemoTreemapFullscreen() {
 
   useEffect(() => {
     if (!open) return;
+
     initHighchartsOnce();
+    initTreemapRelativeFontPluginOnce();
 
     if (!containerRef.current) return;
 
@@ -228,54 +276,14 @@ export default function DemoTreemapFullscreen() {
       try {
         setError('');
 
-        // Plugin for relative font size
-        Highcharts.addEvent(Highcharts.Series as any, 'drawDataLabels', function () {
-          // @ts-ignore
-          if (this.type === 'treemap') {
-            // @ts-ignore
-            this.points.forEach((point: any) => {
-              // Color the level 2 headers with the combined performance of its children
-              if (point.node.level === 2 && Number.isFinite(point.value)) {
-                const previousValue = point.node.children.reduce(
-                  (acc: number, child: any) =>
-                    acc +
-                    (child.point.value || 0) -
-                    (child.point.value || 0) * (child.point.colorValue || 0) / 100,
-                  0
-                );
-
-                const perf = 100 * (point.value - previousValue) / (previousValue || 1);
-
-                point.custom = {
-                  performance: (perf < 0 ? '' : '+') + perf.toFixed(2) + '%'
-                };
-
-                if (point.dlOptions) {
-                  // @ts-ignore
-                  point.dlOptions.backgroundColor = this.colorAxis.toColor(perf);
-                }
-              }
-
-              // Set font size based on area of the point
-              if (point.node.level === 3 && point.shapeArgs) {
-                const area = point.shapeArgs.width * point.shapeArgs.height;
-                point.dlOptions.style.fontSize = `${Math.min(
-                  32,
-                  7 + Math.round(area * 0.0008)
-                )}px`;
-              }
-            });
-          }
-        });
-
         const csvData = await getCSV(
           'https://cdn.jsdelivr.net/gh/datasets/s-and-p-500-companies-financials@67dd99e/data/constituents-financials.csv'
         );
+
         const oldData = await getCSV(
           'https://cdn.jsdelivr.net/gh/datasets/s-and-p-500-companies-financials@9f63bc5/data/constituents-financials.csv'
         );
 
-        // Create the industries for the top level
         const data: any[] = [
           { id: 'Technology' },
           { id: 'Financial' },
@@ -290,7 +298,6 @@ export default function DemoTreemapFullscreen() {
           { id: 'Basic Materials' }
         ];
 
-        // Static mapping object
         const sectorToIndustry: Record<string, string> = {
           'Industrial Conglomerates': 'Industrials',
           'Building Products': 'Industrials',
@@ -421,7 +428,6 @@ export default function DemoTreemapFullscreen() {
           'Timber REITs': 'Real Estate'
         };
 
-        // Create the sectors for the second level
         csvData.forEach((row: any) => {
           const sector = row.Sector;
           if (!data.find(point => point.id === sector)) {
@@ -432,21 +438,13 @@ export default function DemoTreemapFullscreen() {
           }
         });
 
-        // Register name for the categories and sectors
         data.forEach(point => {
           point.name = point.id;
-          point.custom = {
-            fullName: point.id
-          };
+          point.custom = { fullName: point.id };
         });
 
         csvData
-          .filter(
-            (row: any) =>
-              row.Symbol !== 'GOOG' &&
-              row.Price &&
-              row['Market Cap']
-          )
+          .filter((row: any) => row.Symbol !== 'GOOG' && row.Price && row['Market Cap'])
           .forEach((row: any) => {
             const old = oldData.find((oldRow: any) => oldRow.Symbol === row.Symbol);
 
@@ -484,9 +482,7 @@ export default function DemoTreemapFullscreen() {
         });
         ro.observe(containerRef.current!);
 
-        return () => {
-          ro.disconnect();
-        };
+        return () => ro.disconnect();
       } catch (e: any) {
         if (!alive) return;
         setError(String(e?.message || e));
@@ -527,7 +523,6 @@ export default function DemoTreemapFullscreen() {
             position: 'relative'
           }}
         >
-          {/* X pra fechar (único controle) */}
           <button
             onClick={() => setOpen(false)}
             aria-label="Fechar"
@@ -553,10 +548,8 @@ export default function DemoTreemapFullscreen() {
             ✕
           </button>
 
-          {/* Container do chart */}
           <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
 
-          {/* Erro (se der) */}
           {error ? (
             <div
               style={{
