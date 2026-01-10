@@ -1203,6 +1203,8 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                         }
 
                         if (cid === 'spark7d') {
+                          const sparkIsUp = (Number(r.ch7d) >= 0); // mini-chart 7d coerente com 7d%
+
                           return (
                             <td key={cid} className="p-3 overflow-hidden">
                               <div className="w-full h-10 overflow-hidden">
@@ -1211,15 +1213,15 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                                     <AreaChart data={r.spark}>
                                       <defs>
                                         <linearGradient id={`cg_${r.id}`} x1="0" y1="0" x2="0" y2="1">
-                                          <stop offset="0%" stopColor={pos24 ? GREEN : RED} stopOpacity={0.45} />
-                                          <stop offset="75%" stopColor={pos24 ? GREEN : RED} stopOpacity={0.16} />
-                                          <stop offset="100%" stopColor={pos24 ? GREEN : RED} stopOpacity={0.03} />
+                                          <stop offset="0%" stopColor={sparkIsUp ? GREEN : RED} stopOpacity={0.45} />
+                                          <stop offset="75%" stopColor={sparkIsUp ? GREEN : RED} stopOpacity={0.16} />
+                                          <stop offset="100%" stopColor={sparkIsUp ? GREEN : RED} stopOpacity={0.03} />
                                         </linearGradient>
                                       </defs>
                                       <Area
                                         type="monotone"
                                         dataKey="v"
-                                        stroke={pos24 ? GREEN : RED}
+                                        stroke={sparkIsUp ? GREEN : RED}
                                         strokeWidth={2}
                                         fill={`url(#cg_${r.id})`}
                                         fillOpacity={1}
@@ -1744,8 +1746,9 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                               </td>
                             );
                           }
-
                           if (cid === 'spark7d') {
+                            const sparkIsUp = (Number(c7d) >= 0); // mini-chart 7d coerente com 7d%
+
                             return (
                               <td key={cid} className="p-2 overflow-hidden">
                                 <div className="w-full h-12 min-w-[320px] overflow-hidden">
@@ -1754,15 +1757,15 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                                       <AreaChart data={sparkData}>
                                         <defs>
                                           <linearGradient id={`g_${coin.id}`} x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="0%" stopColor={isPos24 ? GREEN : RED} stopOpacity={0.45} />
-                                            <stop offset="75%" stopColor={isPos24 ? GREEN : RED} stopOpacity={0.16} />
-                                            <stop offset="100%" stopColor={isPos24 ? GREEN : RED} stopOpacity={0.03} />
+                                            <stop offset="0%" stopColor={sparkIsUp ? GREEN : RED} stopOpacity={0.45} />
+                                            <stop offset="75%" stopColor={sparkIsUp ? GREEN : RED} stopOpacity={0.16} />
+                                            <stop offset="100%" stopColor={sparkIsUp ? GREEN : RED} stopOpacity={0.03} />
                                           </linearGradient>
                                         </defs>
                                         <Area
                                           type="monotone"
                                           dataKey="v"
-                                          stroke={isPos24 ? GREEN : RED}
+                                          stroke={sparkIsUp ? GREEN : RED}
                                           strokeWidth={2}
                                           fill={`url(#g_${coin.id})`}
                                           fillOpacity={1}
@@ -1781,7 +1784,6 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                               </td>
                             );
                           }
-
                           return <td key={cid} className="p-2" />;
                         })}
                       </tr>

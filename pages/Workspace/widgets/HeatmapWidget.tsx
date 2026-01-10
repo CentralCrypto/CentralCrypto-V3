@@ -1,9 +1,4 @@
 // HeatmapWidget.tsx
-// ✅ Demo-style Treemap (igual S&P) + drilldown + headers no TOPO
-// ✅ Popup fullscreen com X pra fechar (e pronto)
-// ✅ Consome JSON via HTTP em /cachecko/... (nunca filesystem)
-// ✅ Sem import de breadcrumbs module (pra não quebrar teu build)
-
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Highcharts from 'highcharts';
@@ -16,11 +11,38 @@ type Coin = {
   symbol?: string;
   name?: string;
   image?: string;
+
+  // CoinGecko-ish fields (dependem do teu cachecko_lite.json)
+  current_price?: number;
   market_cap?: number;
+  market_cap_rank?: number;
+  fully_diluted_valuation?: number;
+
+  total_volume?: number;
+  volume_24h?: number; // caso teu json use esse nome
+
   price_change_percentage_24h?: number;
+  price_change_percentage_1h_in_currency?: number;
+  price_change_percentage_7d_in_currency?: number;
+
+  price_change_24h?: number;
+
+  circulating_supply?: number;
+  total_supply?: number;
+  max_supply?: number;
+
+  ath?: number;
+  atl?: number;
+  high_24h?: number;
+  low_24h?: number;
 };
 
-type TaxonomyCategory = {
+type CategoryRow = {
+  id: string;
+  name: string;
+};
+
+type TaxonomyRow = {
   id: string;
   name: string;
   parent?: string | null;
@@ -34,20 +56,14 @@ type TaxonomyCategory = {
 
 type CategoryCoinsMap = Record<string, string[]>;
 
+type ValueMode = 'marketcap' | 'var24h';
+
 type TreemapPoint = {
   id: string;
-  name?: string;
-  parent?: string;
-  value?: number;
-  colorValue?: number;
-  custom?: {
-    fullName?: string;
-    performance?: string;
-    logo?: string;
-    marketCap?: number;
-    change24h?: number;
-    kind?: 'root' | 'category' | 'coin';
-  };
+  name: string;
+  value: number;
+  colorValue: number;
+  custom?: any;
 };
 
 let HC_INITED = false;
@@ -67,46 +83,54 @@ function initHighchartsOnce() {
     }
   });
 
-  // ✅ Plugin do demo (com correção do toColor)
+  // Font size automático p/ leaf baseado em área (bem leve)
   Highcharts.addEvent(Highcharts.Series, 'drawDataLabels', function () {
     // @ts-ignore
     if (this.type !== 'treemap') return;
-
-    // @ts-ignore
-    const ca = this.chart?.colorAxis?.[0];
-
     // @ts-ignore
     this.points.forEach((p: any) => {
-      // pinta header de level 1/2 com base no colorValue
-      if ((p?.node?.level === 1 || p?.node?.level === 2) && p?.dlOptions && ca && Number.isFinite(p.colorValue)) {
-        try {
-          p.dlOptions.backgroundColor = ca.toColor(p.colorValue);
-        } catch {
-          // no-op
-        }
-      }
-
-      // leaf font-size baseado na área
-      if (p?.node?.level === 3 && p?.shapeArgs && p?.dlOptions?.style) {
-        const area = Number(p.shapeArgs.width || 0) * Number(p.shapeArgs.height || 0);
-        const px = Math.min(32, 7 + Math.round(area * 0.0008));
-        p.dlOptions.style.fontSize = `${px}px`;
-      }
+      if (!p?.shapeArgs || !p?.dlOptions?.style) return;
+      const area = Number(p.shapeArgs.width || 0) * Number(p.shapeArgs.height || 0);
+      const px = Math.min(34, 9 + Math.round(area * 0.0008));
+      p.dlOptions.style.fontSize = `${px}px`;
     });
   });
 }
 
+// =============================
+// Cachecko endpoints (HTTP only)
+// =============================
 function getCacheckoUrl(path: string) {
   if (!path) return '/cachecko';
   return path.startsWith('/cachecko') ? path : `/cachecko/${path.replace(/^\/+/, '')}`;
 }
 
 const ENDPOINTS = {
-  COINS_LITE: getCacheckoUrl('cachecko_lite.json'),
-  TAXONOMY: getCacheckoUrl('categories/taxonomy-master.json'),
-  CAT_MAP: getCacheckoUrl('categories/category_coins_map.json') // ajusta se teu nome for outro
+  COINS_LITE: getCacheckoUrl('cachecko_lite.json')
 };
 
+// Fallbacks porque teu arquivo real pode estar com outro nome
+const TAXONOMY_CANDIDATES = [
+  getCacheckoUrl('categories/taxonomy-master.json'),
+  getCacheckoUrl('categories/taxonomy_master.json'),
+  getCacheckoUrl('categories/taxonomyMaster.json'),
+  getCacheckoUrl('categories/taxonomy.json'),
+  // fallback: lista simples de categorias
+  getCacheckoUrl('categories/coingecko_categories_list.json'),
+  getCacheckoUrl('categories/coingecko_categories_market.json')
+];
+
+const CATMAP_CANDIDATES = [
+  getCacheckoUrl('categories/category_coins_map.json'),
+  getCacheckoUrl('categories/category-coins-map.json'),
+  getCacheckoUrl('categories/category_coin_map.json'),
+  getCacheckoUrl('categories/category-coin-map.json'),
+  getCacheckoUrl('categories/category_coins_map.min.json')
+];
+
+// =============================
+// HTTP robusto
+// =============================
 function withCb(url: string) {
   const salt = Math.floor(Date.now() / 60000);
   return url.includes('?') ? `${url}&_cb=${salt}` : `${url}?_cb=${salt}`;
@@ -119,7 +143,6 @@ async function httpGetJson(url: string, opts?: { timeoutMs?: number; retries?: n
   for (let attempt = 0; attempt <= retries; attempt++) {
     const ctrl = new AbortController();
     const t = window.setTimeout(() => ctrl.abort(), timeoutMs);
-
     try {
       const r = await fetch(withCb(url), { signal: ctrl.signal, cache: 'no-store' });
       if (!r.ok) throw new Error(`${url} -> ${r.status}`);
@@ -133,8 +156,27 @@ async function httpGetJson(url: string, opts?: { timeoutMs?: number; retries?: n
   throw new Error('httpGetJson: unreachable');
 }
 
-function safeUpper(s?: string) {
-  return (s || '').toUpperCase();
+async function loadFirstWorkingJson(candidates: string[], opts?: { timeoutMs?: number; retries?: number }) {
+  let lastErr: any = null;
+  for (const url of candidates) {
+    try {
+      const data = await httpGetJson(url, opts);
+      return { url, data };
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  const list = candidates.join(' | ');
+  const msg = lastErr?.message ? String(lastErr.message) : 'unknown';
+  throw new Error(`Nenhum endpoint respondeu. Tentativas: ${list}. Último erro: ${msg}`);
+}
+
+// =============================
+// Format helpers
+// =============================
+function safeNum(v: any) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
 }
 
 function fmtPct(v: number) {
@@ -143,140 +185,129 @@ function fmtPct(v: number) {
   return `${sign}${n.toFixed(2)}%`;
 }
 
-function fmtMc(v: number) {
+function fmtMoney(v: number) {
   const n = Number.isFinite(v) ? v : 0;
-  if (n >= 1e12) return `${(n / 1e12).toFixed(2)}T`;
-  if (n >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
-  if (n >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
-  if (n >= 1e3) return `${(n / 1e3).toFixed(2)}K`;
+  if (Math.abs(n) >= 1e12) return `$${(n / 1e12).toFixed(2)}T`;
+  if (Math.abs(n) >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
+  if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
+  if (Math.abs(n) >= 1e3) return `$${(n / 1e3).toFixed(2)}K`;
+  return `$${n.toFixed(2)}`;
+}
+
+function fmtNumber(v: number) {
+  const n = Number.isFinite(v) ? v : 0;
+  if (Math.abs(n) >= 1e12) return `${(n / 1e12).toFixed(2)}T`;
+  if (Math.abs(n) >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
+  if (Math.abs(n) >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
+  if (Math.abs(n) >= 1e3) return `${(n / 1e3).toFixed(2)}K`;
   return `${Math.round(n)}`;
 }
 
-function pickParentId(c: TaxonomyCategory): string | null {
+function safeUpper(s?: string) {
+  return (s || '').toUpperCase();
+}
+
+// =============================
+// Categories normalizer
+// =============================
+function pickParentId(c: TaxonomyRow): string | null {
   const v = c.parent ?? c.parentId ?? c.parent_id ?? c.master ?? c.masterId ?? c.group ?? c.groupId ?? null;
   if (!v) return null;
   const s = String(v).trim();
   return s ? s : null;
 }
 
-function weightedPerf(coinIds: string[], coinById: Map<string, Coin>) {
-  let totalMc = 0;
-  let acc = 0;
+// Aceita:
+// - taxonomy-master (hierárquico)
+// - categories_list / categories_market (lista simples)
+function normalizeCategories(raw: any): CategoryRow[] {
+  if (!raw) return [];
 
-  for (const id of coinIds) {
-    const c = coinById.get(id);
-    if (!c) continue;
-    const mc = Number(c.market_cap || 0);
-    const ch = Number(c.price_change_percentage_24h ?? 0);
-    totalMc += mc;
-    acc += mc * ch;
+  // taxonomy array
+  if (Array.isArray(raw) && raw.length && raw[0] && typeof raw[0] === 'object' && 'id' in raw[0] && 'name' in raw[0]) {
+    const arr = raw as Array<TaxonomyRow>;
+    // Queremos dropdown com categorias "selecionáveis" (tanto folhas quanto pais, ok)
+    // mas de preferência só as que existem no map. A gente filtra depois.
+    return arr
+      .map(r => ({ id: String(r.id), name: String(r.name) }))
+      .filter(x => x.id && x.name);
   }
 
-  if (totalMc <= 0) return 0;
-  const v = acc / totalMc;
-  return Number.isFinite(v) ? v : 0;
-}
-
-function buildTreemapData(params: {
-  coins: Coin[];
-  taxonomy: TaxonomyCategory[];
-  catMap: CategoryCoinsMap;
-}) {
-  const { coins, taxonomy, catMap } = params;
-
-  const coinById = new Map<string, Coin>();
-  for (const c of coins) if (c?.id) coinById.set(c.id, c);
-
-  const data: TreemapPoint[] = [
-    {
-      id: 'All',
-      name: 'All',
-      custom: { fullName: 'All', kind: 'root' }
-    }
-  ];
-
-  const catById = new Map<string, TaxonomyCategory>();
-  taxonomy.forEach(c => {
-    if (c?.id) catById.set(c.id, c);
-  });
-
-  function ensureNode(id: string, name: string, parent: string) {
-    if (!id) return;
-    if (data.find(p => p.id === id)) return;
-    data.push({
-      id,
-      parent,
-      name,
-      custom: { fullName: name, kind: 'category' }
-    });
+  // alguns arquivos podem vir como { data: [...] }
+  if (raw?.data && Array.isArray(raw.data)) {
+    return normalizeCategories(raw.data);
   }
 
-  // categorias e subcategorias
-  taxonomy.forEach(cat => {
-    if (!cat?.id || !cat?.name) return;
-    const parentId = pickParentId(cat) || 'All';
-
-    if (parentId !== 'All' && !catById.has(parentId)) {
-      ensureNode(parentId, parentId, 'All');
-    }
-
-    ensureNode(cat.id, cat.name, parentId);
-  });
-
-  // moedas dentro das categorias
-  Object.entries(catMap || {}).forEach(([catId, coinIds]) => {
-    if (!catId || !Array.isArray(coinIds) || coinIds.length === 0) return;
-
-    if (!data.find(p => p.id === catId)) {
-      ensureNode(catId, catId, 'All');
-    }
-
-    const uniq = Array.from(new Set(coinIds));
-    const perf = weightedPerf(uniq, coinById);
-
-    const node = data.find(p => p.id === catId);
-    if (node) {
-      node.colorValue = perf;
-      node.custom = node.custom || {};
-      node.custom.performance = fmtPct(perf);
-    }
-
-    for (const coinId of uniq) {
-      const c = coinById.get(coinId);
-      if (!c) continue;
-
-      const mc = Number(c.market_cap || 0) || 1;
-      const ch = Number(c.price_change_percentage_24h ?? 0);
-
-      data.push({
-        id: `${catId}:${coinId}`,
-        parent: catId,
-        name: safeUpper(c.symbol) || safeUpper(c.name) || coinId,
-        value: mc,
-        colorValue: ch,
-        custom: {
-          fullName: c.name || coinId,
-          performance: fmtPct(ch),
-          logo: c.image,
-          marketCap: mc,
-          change24h: ch,
-          kind: 'coin'
-        }
-      });
-    }
-  });
-
-  return data;
+  return [];
 }
 
+// =============================
+// Build Treemap points
+// =============================
+function buildPoints(coins: Coin[], valueMode: ValueMode): TreemapPoint[] {
+  // Default sort por market cap para estabilidade visual
+  const sorted = [...coins]
+    .filter(c => c && c.id)
+    .sort((a, b) => safeNum(b.market_cap) - safeNum(a.market_cap))
+    .slice(0, 450); // evita virar uma sopa de pixels (ajusta se quiser)
+
+  return sorted.map(c => {
+    const change24 = safeNum(c.price_change_percentage_24h);
+    const mc = Math.max(1, safeNum(c.market_cap));
+    const value =
+      valueMode === 'marketcap'
+        ? mc
+        : Math.max(0.01, Math.abs(change24)); // área pela magnitude da variação (%)
+
+    const vol = safeNum((c as any).total_volume ?? (c as any).volume_24h);
+
+    return {
+      id: c.id,
+      name: safeUpper(c.symbol) || safeUpper(c.name) || c.id,
+      value,
+      colorValue: change24,
+      custom: {
+        fullName: c.name || c.id,
+        symbol: safeUpper(c.symbol),
+        logo: c.image,
+        price: safeNum((c as any).current_price),
+        change24h: change24,
+        change24hAbs: Math.abs(change24),
+        priceChange24h: safeNum((c as any).price_change_24h),
+        marketCap: mc,
+        marketCapRank: safeNum((c as any).market_cap_rank),
+        volume24h: vol,
+        fdv: safeNum((c as any).fully_diluted_valuation),
+        circ: safeNum((c as any).circulating_supply),
+        total: safeNum((c as any).total_supply),
+        max: safeNum((c as any).max_supply),
+        high24: safeNum((c as any).high_24h),
+        low24: safeNum((c as any).low_24h),
+        ath: safeNum((c as any).ath),
+        atl: safeNum((c as any).atl)
+      }
+    };
+  });
+}
+
+// =============================
+// Main Component
+// =============================
 export default function HeatmapWidget() {
-  const [open, setOpen] = useState(true); // abre direto
+  const [open, setOpen] = useState(true);
+
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string>('');
 
   const [coins, setCoins] = useState<Coin[]>([]);
-  const [taxonomy, setTaxonomy] = useState<TaxonomyCategory[]>([]);
+  const [categories, setCategories] = useState<CategoryRow[]>([]);
   const [catMap, setCatMap] = useState<CategoryCoinsMap>({});
+
+  const [valueMode, setValueMode] = useState<ValueMode>('marketcap');
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>(''); // '' => All
+
+  const [loadedTaxonomyUrl, setLoadedTaxonomyUrl] = useState<string>('');
+  const [loadedMapUrl, setLoadedMapUrl] = useState<string>('');
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<Highcharts.Chart | null>(null);
@@ -290,40 +321,66 @@ export default function HeatmapWidget() {
     setLoading(true);
     setErr('');
 
-    Promise.allSettled([
-      httpGetJson(ENDPOINTS.COINS_LITE, { timeoutMs: 12000, retries: 2 }),
-      httpGetJson(ENDPOINTS.TAXONOMY, { timeoutMs: 12000, retries: 1 }),
-      httpGetJson(ENDPOINTS.CAT_MAP, { timeoutMs: 12000, retries: 1 })
-    ])
-      .then(res => {
+    (async () => {
+      try {
+        const coinsData = await httpGetJson(ENDPOINTS.COINS_LITE, { timeoutMs: 12000, retries: 2 });
+        const coinsArr = Array.isArray(coinsData) ? coinsData : (Array.isArray(coinsData?.data) ? coinsData.data : []);
+        if (!Array.isArray(coinsArr)) throw new Error(`Formato inesperado em ${ENDPOINTS.COINS_LITE}`);
+
+        // Taxonomy (com fallback)
+        let taxonomyArr: any[] = [];
+        let taxonomyUrl = '';
+        try {
+          const t = await loadFirstWorkingJson(TAXONOMY_CANDIDATES, { timeoutMs: 12000, retries: 1 });
+          taxonomyUrl = t.url;
+          taxonomyArr = Array.isArray(t.data) ? t.data : (Array.isArray(t.data?.data) ? t.data.data : []);
+        } catch (e: any) {
+          taxonomyArr = [];
+          taxonomyUrl = '';
+        }
+
+        // Cat map (com fallback)
+        let mapObj: any = {};
+        let mapUrl = '';
+        try {
+          const m = await loadFirstWorkingJson(CATMAP_CANDIDATES, { timeoutMs: 12000, retries: 1 });
+          mapUrl = m.url;
+          mapObj = m.data && typeof m.data === 'object' ? m.data : {};
+        } catch (e: any) {
+          mapObj = {};
+          mapUrl = '';
+        }
+
         if (!alive) return;
 
-        const [rCoins, rTax, rMap] = res;
+        setCoins(coinsArr as Coin[]);
+        setCategories(normalizeCategories(taxonomyArr));
+        setCatMap(mapObj as CategoryCoinsMap);
+        setLoadedTaxonomyUrl(taxonomyUrl);
+        setLoadedMapUrl(mapUrl);
 
-        if (rCoins.status === 'fulfilled' && Array.isArray(rCoins.value)) setCoins(rCoins.value);
-        else setErr(prev => prev || `Falha ao carregar ${ENDPOINTS.COINS_LITE}`);
-
-        if (rTax.status === 'fulfilled' && Array.isArray(rTax.value)) setTaxonomy(rTax.value);
-        else setErr(prev => prev || `Falha ao carregar ${ENDPOINTS.TAXONOMY}`);
-
-        if (rMap.status === 'fulfilled' && rMap.value && typeof rMap.value === 'object') setCatMap(rMap.value);
-        else setErr(prev => prev || `Falha ao carregar ${ENDPOINTS.CAT_MAP}`);
-      })
-      .finally(() => {
+        // Se taxonomy não carregou, retorna erro só informativo, mas não mata o heatmap
+        if (!taxonomyUrl) {
+          setErr(prev => prev || `Aviso: taxonomy não carregou (dropdown pode ficar limitado).`);
+        }
+        if (!mapUrl) {
+          setErr(prev => prev || `Aviso: category map não carregou (filtro por categoria pode ficar indisponível).`);
+        }
+      } catch (e: any) {
+        if (!alive) return;
+        setErr(e?.message ? String(e.message) : 'Falha ao carregar dados.');
+      } finally {
         if (!alive) return;
         setLoading(false);
-      });
+      }
+    })();
 
     return () => {
       alive = false;
     };
   }, []);
 
-  const treemapData = useMemo(() => {
-    if (!coins.length) return [];
-    return buildTreemapData({ coins, taxonomy, catMap });
-  }, [coins, taxonomy, catMap]);
-
+  // trava scroll quando modal está aberto
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -333,6 +390,47 @@ export default function HeatmapWidget() {
     };
   }, [open]);
 
+  const coinById = useMemo(() => {
+    const m = new Map<string, Coin>();
+    for (const c of coins) if (c?.id) m.set(c.id, c);
+    return m;
+  }, [coins]);
+
+  const categoryOptions = useMemo(() => {
+    // Só lista categorias que existem no map (pra evitar dropdown inútil)
+    const idsInMap = new Set(Object.keys(catMap || {}));
+    const base = categories
+      .filter(c => c?.id && c?.name)
+      .filter(c => idsInMap.size === 0 ? true : idsInMap.has(c.id))
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+
+    return base;
+  }, [categories, catMap]);
+
+  const filteredCoins = useMemo(() => {
+    if (!selectedCategoryId) return coins;
+
+    const ids = Array.isArray(catMap?.[selectedCategoryId]) ? catMap[selectedCategoryId] : [];
+    if (!ids.length) return [];
+
+    const uniq = Array.from(new Set(ids));
+    const arr = uniq.map(id => coinById.get(id)).filter(Boolean) as Coin[];
+    return arr;
+  }, [selectedCategoryId, coins, catMap, coinById]);
+
+  const points = useMemo(() => {
+    return buildPoints(filteredCoins, valueMode);
+  }, [filteredCoins, valueMode]);
+
+  const subtitle = useMemo(() => {
+    const modeText = valueMode === 'marketcap' ? 'Área = Market Cap' : 'Área = |Variação 24h|';
+    const catText = selectedCategoryId
+      ? `Categoria filtrada`
+      : 'Todas as moedas';
+    return `${catText} • Cor = Variação 24h • ${modeText}`;
+  }, [valueMode, selectedCategoryId]);
+
+  // Render chart
   useEffect(() => {
     if (!open) return;
     if (!containerRef.current) return;
@@ -345,47 +443,101 @@ export default function HeatmapWidget() {
     const chart = Highcharts.chart(containerRef.current, {
       chart: {
         backgroundColor: '#252931',
-        spacing: [12, 12, 12, 12]
+        spacing: [10, 10, 10, 10],
+        animation: true
       },
       title: {
-        text: 'Market Heatmap',
+        text: '',
         align: 'left',
-        style: { color: 'white', fontWeight: '800' }
+        style: { color: 'white' }
       },
       subtitle: {
-        text: 'Click points to drill down.',
+        text: subtitle,
         align: 'left',
         style: { color: 'silver' }
       },
       credits: { enabled: false },
       exporting: { enabled: false },
       accessibility: { enabled: true },
+
       tooltip: {
         followPointer: true,
         outside: true,
         useHTML: true,
-        headerFormat: '<span style="font-size: 0.9em">{point.custom.fullName}</span><br/>',
-        pointFormatter: function () {
+        backgroundColor: 'rgba(18,20,26,0.96)',
+        borderColor: 'rgba(255,255,255,0.10)',
+        style: { color: 'white' },
+        formatter: function () {
           // @ts-ignore
-          const p = this as any;
-          const mc = Number(p?.custom?.marketCap ?? p.value ?? 0);
-          const perf = p?.custom?.performance ?? (Number.isFinite(p.colorValue) ? fmtPct(p.colorValue) : '');
-          const isLeaf = p?.custom?.kind === 'coin';
+          const p: any = this.point;
+          const c = p?.custom || {};
+          const logo = c.logo
+            ? `<img src="${c.logo}" style="width:18px;height:18px;border-radius:50%;vertical-align:-3px;margin-right:8px" />`
+            : '';
 
-          if (!isLeaf) return `<b>Performance:</b> ${perf}<br/><b>Market Cap:</b> $${fmtMc(mc)}`;
-          return `<b>Market Cap:</b> $${fmtMc(mc)}<br/><b>24h:</b> ${perf}`;
+          const line = (label: string, value: string) =>
+            `<div style="display:flex;justify-content:space-between;gap:12px">
+               <span style="opacity:.78">${label}</span>
+               <span style="font-weight:800">${value}</span>
+             </div>`;
+
+          const nameLine = `
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+              ${logo}
+              <div style="font-weight:900;font-size:13px;line-height:1.1">
+                ${c.fullName || p.name}
+                <div style="opacity:.75;font-weight:800;font-size:11px;margin-top:2px">
+                  ${c.symbol ? c.symbol : p.name}${c.marketCapRank ? ` • Rank #${Math.round(c.marketCapRank)}` : ''}
+                </div>
+              </div>
+            </div>
+          `;
+
+          const parts: string[] = [];
+          parts.push(nameLine);
+
+          if (Number.isFinite(c.price) && c.price) parts.push(line('Preço', fmtMoney(c.price)));
+          if (Number.isFinite(c.change24h)) parts.push(line('Variação 24h', fmtPct(c.change24h)));
+          if (Number.isFinite(c.priceChange24h) && c.priceChange24h) parts.push(line('Δ preço 24h', fmtMoney(c.priceChange24h)));
+
+          if (Number.isFinite(c.marketCap) && c.marketCap) parts.push(line('Market Cap', fmtMoney(c.marketCap)));
+          if (Number.isFinite(c.volume24h) && c.volume24h) parts.push(line('Volume 24h', fmtMoney(c.volume24h)));
+          if (Number.isFinite(c.fdv) && c.fdv) parts.push(line('FDV', fmtMoney(c.fdv)));
+
+          const supplyParts: string[] = [];
+          if (Number.isFinite(c.circ) && c.circ) supplyParts.push(`Circ ${fmtNumber(c.circ)}`);
+          if (Number.isFinite(c.total) && c.total) supplyParts.push(`Total ${fmtNumber(c.total)}`);
+          if (Number.isFinite(c.max) && c.max) supplyParts.push(`Max ${fmtNumber(c.max)}`);
+          if (supplyParts.length) {
+            parts.push(`<div style="margin-top:6px;opacity:.8;font-weight:800;font-size:11px">Supply: ${supplyParts.join(' • ')}</div>`);
+          }
+
+          const rangeParts: string[] = [];
+          if (Number.isFinite(c.low24) && c.low24) rangeParts.push(`Low ${fmtMoney(c.low24)}`);
+          if (Number.isFinite(c.high24) && c.high24) rangeParts.push(`High ${fmtMoney(c.high24)}`);
+          if (rangeParts.length) {
+            parts.push(`<div style="margin-top:6px;opacity:.8;font-weight:800;font-size:11px">24h Range: ${rangeParts.join(' • ')}</div>`);
+          }
+
+          const athAtlParts: string[] = [];
+          if (Number.isFinite(c.ath) && c.ath) athAtlParts.push(`ATH ${fmtMoney(c.ath)}`);
+          if (Number.isFinite(c.atl) && c.atl) athAtlParts.push(`ATL ${fmtMoney(c.atl)}`);
+          if (athAtlParts.length) {
+            parts.push(`<div style="margin-top:6px;opacity:.8;font-weight:800;font-size:11px">${athAtlParts.join(' • ')}</div>`);
+          }
+
+          return `<div style="min-width:280px">${parts.join('')}</div>`;
         }
       },
+
       colorAxis: {
-        minColor: '#f73539',
-        maxColor: '#2ecc59',
+        min: -10,
+        max: 10,
         stops: [
           [0, '#f73539'],
           [0.5, '#414555'],
           [1, '#2ecc59']
         ],
-        min: -10,
-        max: 10,
         gridLineWidth: 0,
         labels: {
           overflow: 'allow',
@@ -393,100 +545,43 @@ export default function HeatmapWidget() {
           style: { color: 'white' }
         }
       },
+
       legend: {
         itemStyle: { color: 'white' }
       },
+
       series: [
         {
           name: 'All',
           type: 'treemap',
           layoutAlgorithm: 'squarified',
-          allowDrillToNode: true,
+          allowDrillToNode: false,
           animationLimit: 1000,
           borderColor: '#252931',
           color: '#252931',
           opacity: 0.01,
           nodeSizeBy: 'leaf',
-          dataLabels: {
-            enabled: false,
-            allowOverlap: true,
-            style: { fontSize: '0.9em', textOutline: 'none' }
-          },
-
-          // ✅ HEADERS NO TOPO (igual demo)
-          levels: [
-            {
-              level: 1,
-              dataLabels: {
-                enabled: true,
-                headers: true,
-                align: 'left',
-                verticalAlign: 'top',
-                x: 6,
-                y: 4,
-                style: {
-                  fontWeight: 'bold',
-                  fontSize: '0.75em',
-                  lineClamp: 1,
-                  textTransform: 'uppercase',
-                  textOutline: 'none'
-                },
-                padding: 3
-              },
-              borderWidth: 3,
-              levelIsConstant: false
-            },
-            {
-              level: 2,
-              dataLabels: {
-                enabled: true,
-                headers: true,
-                align: 'left',
-                verticalAlign: 'top',
-                x: 6,
-                y: 4,
-                shape: 'callout',
-                borderWidth: 1,
-                borderColor: '#252931',
-                padding: 0,
-                style: {
-                  color: 'white',
-                  fontWeight: 'normal',
-                  fontSize: '0.65em',
-                  lineClamp: 1,
-                  textOutline: 'none',
-                  textTransform: 'uppercase'
-                }
-              },
-              groupPadding: 1
-            },
-            {
-              level: 3,
-              dataLabels: {
-                enabled: true,
-                align: 'center',
-                format: '{point.name}<br><span style="font-size: 0.7em">{point.custom.performance}</span>',
-                style: { color: 'white', textOutline: 'none' }
-              }
-            }
-          ],
-
-          accessibility: { exposeAsGroupOnly: true },
-
-          // Breadcrumbs funciona em várias versões sem módulo extra.
-          // Se a tua versão não renderizar, não quebra nada.
-          breadcrumbs: {
-            buttonTheme: {
-              style: { color: 'silver' },
-              states: {
-                hover: { fill: '#333' },
-                select: { style: { color: 'white' } }
-              }
-            }
-          },
-
           colorKey: 'colorValue',
-          data: treemapData as any
+          data: points as any,
+
+          dataLabels: {
+            enabled: true,
+            allowOverlap: false,
+            useHTML: true,
+            formatter: function () {
+              // @ts-ignore
+              const p: any = this.point;
+              const c = p?.custom || {};
+              const perf = Number.isFinite(c.change24h) ? fmtPct(c.change24h) : fmtPct(p.colorValue);
+              return `<div style="text-align:center;line-height:1.05">
+                        <div style="font-weight:900;color:white;text-shadow:none">${p.name}</div>
+                        <div style="font-weight:900;color:white;opacity:.9;font-size:.85em">${perf}</div>
+                      </div>`;
+            },
+            style: {
+              textOutline: 'none'
+            }
+          }
         } as any
       ]
     });
@@ -503,7 +598,147 @@ export default function HeatmapWidget() {
         chartRef.current = null;
       }
     };
-  }, [open, treemapData]);
+  }, [open, points, subtitle]);
+
+  const canFilterCategory = useMemo(() => {
+    return Object.keys(catMap || {}).length > 0 && categoryOptions.length > 0;
+  }, [catMap, categoryOptions]);
+
+  const header = (
+    <div
+      style={{
+        padding: '12px 14px',
+        borderBottom: '1px solid rgba(255,255,255,0.08)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12
+      }}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ color: 'white', fontWeight: 900, fontSize: 14 }}>
+          Market Heatmap
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Toggle valor */}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ color: 'rgba(255,255,255,0.75)', fontWeight: 800, fontSize: 12 }}>Área:</span>
+
+            <button
+              onClick={() => setValueMode('marketcap')}
+              style={{
+                padding: '7px 10px',
+                borderRadius: 10,
+                border: '1px solid rgba(255,255,255,0.15)',
+                background: valueMode === 'marketcap' ? 'rgba(46,204,89,0.18)' : 'rgba(255,255,255,0.06)',
+                color: 'white',
+                fontWeight: 900,
+                cursor: 'pointer'
+              }}
+            >
+              Market Cap
+            </button>
+
+            <button
+              onClick={() => setValueMode('var24h')}
+              style={{
+                padding: '7px 10px',
+                borderRadius: 10,
+                border: '1px solid rgba(255,255,255,0.15)',
+                background: valueMode === 'var24h' ? 'rgba(247,53,57,0.18)' : 'rgba(255,255,255,0.06)',
+                color: 'white',
+                fontWeight: 900,
+                cursor: 'pointer'
+              }}
+            >
+              Var 24h
+            </button>
+          </div>
+
+          {/* Dropdown categorias */}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ color: 'rgba(255,255,255,0.75)', fontWeight: 800, fontSize: 12 }}>Categoria:</span>
+
+            <select
+              value={selectedCategoryId}
+              onChange={e => setSelectedCategoryId(e.target.value)}
+              disabled={!canFilterCategory}
+              style={{
+                padding: '7px 10px',
+                borderRadius: 10,
+                border: '1px solid rgba(255,255,255,0.15)',
+                background: 'rgba(0,0,0,0.25)',
+                color: 'white',
+                fontWeight: 900,
+                cursor: canFilterCategory ? 'pointer' : 'not-allowed',
+                minWidth: 260
+              }}
+              title={!canFilterCategory ? 'Categoria indisponível (taxonomy/map não carregou)' : ''}
+            >
+              <option value="">Todas</option>
+              {categoryOptions.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Status pequeno */}
+          <div style={{ color: 'rgba(255,255,255,0.60)', fontWeight: 800, fontSize: 12 }}>
+            {selectedCategoryId ? `Moedas na categoria: ${filteredCoins.length}` : `Moedas: ${coins.length}`}
+            {loading ? ' • carregando…' : ''}
+          </div>
+        </div>
+      </div>
+
+      <button
+        onClick={() => setOpen(false)}
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: 12,
+          border: '1px solid rgba(255,255,255,0.18)',
+          background: 'rgba(0,0,0,0.35)',
+          color: 'white',
+          fontWeight: 900,
+          cursor: 'pointer'
+        }}
+        aria-label="Fechar"
+        title="Fechar"
+      >
+        ✕
+      </button>
+    </div>
+  );
+
+  const footer = (
+    <div
+      style={{
+        padding: '10px 14px',
+        borderTop: '1px solid rgba(255,255,255,0.08)',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        color: 'rgba(255,255,255,0.60)',
+        fontWeight: 800,
+        fontSize: 12,
+        gap: 12,
+        flexWrap: 'wrap'
+      }}
+    >
+      <span>
+        Cor = variação 24h • {valueMode === 'marketcap' ? 'Área = Market Cap' : 'Área = |Var 24h|'}
+      </span>
+
+      <span style={{ opacity: 0.9 }}>
+        {ENDPOINTS.COINS_LITE}
+        {loadedTaxonomyUrl ? ` • taxonomy: ${loadedTaxonomyUrl}` : ''}
+        {loadedMapUrl ? ` • map: ${loadedMapUrl}` : ''}
+      </span>
+    </div>
+  );
 
   const modal = (
     <div
@@ -525,56 +760,37 @@ export default function HeatmapWidget() {
             border: '1px solid rgba(255,255,255,0.10)',
             background: '#252931',
             boxShadow: '0 30px 90px rgba(0,0,0,0.55)',
-            position: 'relative'
+            display: 'flex',
+            flexDirection: 'column'
           }}
         >
-          <button
-            onClick={() => setOpen(false)}
-            style={{
-              position: 'absolute',
-              top: 10,
-              right: 10,
-              width: 44,
-              height: 44,
-              borderRadius: 12,
-              border: '1px solid rgba(255,255,255,0.18)',
-              background: 'rgba(0,0,0,0.35)',
-              color: 'white',
-              fontWeight: 900,
-              cursor: 'pointer',
-              zIndex: 10
-            }}
-            aria-label="Fechar"
-            title="Fechar"
-          >
-            ✕
-          </button>
+          {header}
 
-          {(loading || err) && (
-            <div
-              style={{
-                position: 'absolute',
-                left: 12,
-                bottom: 12,
-                zIndex: 10,
-                padding: '10px 12px',
-                borderRadius: 12,
-                border: '1px solid rgba(255,255,255,0.10)',
-                background: 'rgba(0,0,0,0.35)',
-                color: 'white',
-                fontWeight: 800,
-                maxWidth: 520
-              }}
-            >
-              {loading ? 'Carregando dados…' : null}
-              {!loading && err ? `Erro: ${err}` : null}
-              <div style={{ opacity: 0.8, fontWeight: 700, marginTop: 6, fontSize: 12 }}>
-                {ENDPOINTS.COINS_LITE} | {ENDPOINTS.TAXONOMY} | {ENDPOINTS.CAT_MAP}
+          <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+            {!!err && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 12,
+                  bottom: 12,
+                  zIndex: 10,
+                  padding: '10px 12px',
+                  borderRadius: 12,
+                  border: '1px solid rgba(255,255,255,0.10)',
+                  background: 'rgba(0,0,0,0.35)',
+                  color: 'white',
+                  fontWeight: 900,
+                  maxWidth: 680
+                }}
+              >
+                {err}
               </div>
-            </div>
-          )}
+            )}
 
-          <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+            <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+          </div>
+
+          {footer}
         </div>
       </div>
     </div>
