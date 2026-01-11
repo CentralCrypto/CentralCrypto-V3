@@ -11,8 +11,7 @@ import {
   Star,
   TrendingDown,
   TrendingUp,
-  RefreshCw,
-  RotateCcw
+  RefreshCw
 } from 'lucide-react';
 import {
   DndContext,
@@ -33,6 +32,9 @@ import { Area, AreaChart, ResponsiveContainer, YAxis } from 'recharts';
 import { ApiCoin, Language } from '../../../types';
 import { getTranslations } from '../../../locales';
 import { fetchTopCoins } from '../services/api';
+
+const GREEN = '#26a269';
+const RED = '#e01b24';
 
 const formatUSD = (val: number, compact = false) => {
   if (val === undefined || val === null) return '---';
@@ -209,31 +211,6 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
   const reconnectTimerRef = useRef<number | null>(null);
   const reconnectAttemptRef = useRef<number>(0);
 
-  // ✅ Price flash state
-  const [priceFlash, setPriceFlash] = useState<Record<string, 'up' | 'down' | undefined>>({});
-  const lastPriceRef = useRef<Record<string, number>>({});
-  const flashTimersRef = useRef<Record<string, number>>({});
-
-  const GREEN = '#22c55e'; // tailwind green-500
-  const RED = '#ef4444';   // tailwind red-500
-
-  const triggerPriceFlash = useCallback((coinId: string, dir: 'up' | 'down') => {
-    setPriceFlash(prev => ({ ...prev, [coinId]: dir }));
-
-    if (flashTimersRef.current[coinId]) {
-      window.clearTimeout(flashTimersRef.current[coinId]);
-    }
-
-    flashTimersRef.current[coinId] = window.setTimeout(() => {
-      setPriceFlash(prev => {
-        const next = { ...prev };
-        delete next[coinId];
-        return next;
-      });
-      delete flashTimersRef.current[coinId];
-    }, 450);
-  }, []);
-
   const flushPending = useCallback(() => {
     const payload = pendingRef.current;
     pendingRef.current = {};
@@ -364,32 +341,6 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     if (viewMode === 'categories') loadCategoriesLocal();
     else loadCoins();
   }, [viewMode, loadCategoriesLocal, loadCoins]);
-
-  // ✅ RESET total da tabela (sem filtros, ordenado por rank, volta pro coins)
-  const resetTable = useCallback(() => {
-    setBuyOpen(false);
-
-    setViewMode('coins');
-
-    setSearchTerm('');
-    setFavOnly(false);
-    setTopMode('none');
-
-    setActiveMasterId(null);
-    setActiveSubId('__all__');
-    setActiveCategoryId('__all__');
-
-    setSortConfig({ key: 'market_cap_rank', direction: 'asc' });
-    setCatSortConfig({ key: 'marketCap', direction: 'desc' });
-
-    setPageSize(100);
-    setPage(0);
-
-    setColOrder(DEFAULT_COLS);
-    setCatColOrder(CAT_DEFAULT_COLS);
-
-    scrollToTop();
-  }, [scrollToTop, DEFAULT_COLS, CAT_DEFAULT_COLS]);
 
   const handleSort = (key: string) => {
     let direction: 'asc' | 'desc' = 'desc';
@@ -1143,37 +1094,43 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                         }
 
                         if (cid === 'ch1h') {
+                          const v = Number(r.ch1h);
+                          const ok = isFinite(v);
                           return (
                             <td
                               key={cid}
-                              className={`p-3 text-center font-mono text-[13px] font-black w-[92px]
-                                ${!isFinite(r.ch1h) ? 'text-gray-400 dark:text-slate-500' : (r.ch1h >= 0 ? 'text-green-500' : 'text-red-500')}`}
+                              className="p-3 text-center font-mono text-[13px] font-black"
+                              style={{ color: !ok ? undefined : (v >= 0 ? GREEN : RED) }}
                             >
-                              {safePct(Number(r.ch1h))}
+                              {safePct(v)}
                             </td>
                           );
                         }
 
                         if (cid === 'ch24h') {
+                          const v = Number(r.ch24h);
+                          const ok = isFinite(v);
                           return (
                             <td
                               key={cid}
-                              className={`p-3 text-center font-mono text-[13px] font-black w-[98px]
-                                ${!isFinite(r.ch24h) ? 'text-gray-400 dark:text-slate-500' : (pos24 ? 'text-green-500' : 'text-red-500')}`}
+                              className="p-3 text-center font-mono text-[13px] font-black"
+                              style={{ color: !ok ? undefined : (pos24 ? GREEN : RED) }}
                             >
-                              {safePct(Number(r.ch24h))}
+                              {safePct(v)}
                             </td>
                           );
                         }
 
                         if (cid === 'ch7d') {
+                          const v = Number(r.ch7d);
+                          const ok = isFinite(v);
                           return (
                             <td
                               key={cid}
-                              className={`p-3 text-center font-mono text-[13px] font-black w-[98px]
-                                ${!isFinite(r.ch7d) ? 'text-gray-400 dark:text-slate-500' : (r.ch7d >= 0 ? 'text-green-500' : 'text-red-500')}`}
+                              className="p-3 text-center font-mono text-[13px] font-black"
+                              style={{ color: !ok ? undefined : (v >= 0 ? GREEN : RED) }}
                             >
-                              {safePct(Number(r.ch7d))}
+                              {safePct(v)}
                             </td>
                           );
                         }
@@ -1203,8 +1160,6 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                         }
 
                         if (cid === 'spark7d') {
-                          const sparkIsUp = (Number(r.ch7d) >= 0); // mini-chart 7d coerente com 7d%
-
                           return (
                             <td key={cid} className="p-3 overflow-hidden">
                               <div className="w-full h-10 overflow-hidden">
@@ -1213,15 +1168,15 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                                     <AreaChart data={r.spark}>
                                       <defs>
                                         <linearGradient id={`cg_${r.id}`} x1="0" y1="0" x2="0" y2="1">
-                                          <stop offset="0%" stopColor={sparkIsUp ? GREEN : RED} stopOpacity={0.45} />
-                                          <stop offset="75%" stopColor={sparkIsUp ? GREEN : RED} stopOpacity={0.16} />
-                                          <stop offset="100%" stopColor={sparkIsUp ? GREEN : RED} stopOpacity={0.03} />
+                                          <stop offset="0%" stopColor={pos24 ? GREEN : RED} stopOpacity={0.45} />
+                                          <stop offset="75%" stopColor={pos24 ? GREEN : RED} stopOpacity={0.16} />
+                                          <stop offset="100%" stopColor={pos24 ? GREEN : RED} stopOpacity={0.03} />
                                         </linearGradient>
                                       </defs>
                                       <Area
                                         type="monotone"
                                         dataKey="v"
-                                        stroke={sparkIsUp ? GREEN : RED}
+                                        stroke={pos24 ? GREEN : RED}
                                         strokeWidth={2}
                                         fill={`url(#cg_${r.id})`}
                                         fillOpacity={1}
@@ -1336,22 +1291,6 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
 
   return (
     <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-100 dark:border-slate-800 shadow-xl overflow-hidden flex flex-col">
-      {/* Price flash CSS */}
-      <style>{`
-        @keyframes priceFlashUp {
-          0% { background-color: rgba(34, 197, 94, 0.0); }
-          20% { background-color: rgba(34, 197, 94, 0.22); }
-          100% { background-color: rgba(34, 197, 94, 0.0); }
-        }
-        @keyframes priceFlashDown {
-          0% { background-color: rgba(239, 68, 68, 0.0); }
-          20% { background-color: rgba(239, 68, 68, 0.22); }
-          100% { background-color: rgba(239, 68, 68, 0.0); }
-        }
-        .price-flash-up { animation: priceFlashUp 450ms ease-out; border-radius: 0.5rem; }
-        .price-flash-down { animation: priceFlashDown 450ms ease-out; border-radius: 0.5rem; }
-      `}</style>
-
       {/* Header */}
       <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col gap-3 bg-gray-50/50 dark:bg-black/20 shrink-0">
         <div className="flex flex-col lg:flex-row justify-between items-center gap-3">
@@ -1504,16 +1443,6 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
 
             <Paginator compact />
 
-            {/* RESET */}
-            <button
-              onClick={resetTable}
-              className="p-2.5 hover:bg-gray-200 dark:hover:bg-slate-700 rounded-lg text-gray-500 transition-colors"
-              title="Resetar (estado inicial)"
-            >
-              <RotateCcw size={22} />
-            </button>
-
-            {/* REFRESH */}
             <button
               onClick={refresh}
               className="p-2.5 hover:bg-gray-200 dark:hover:bg-slate-700 rounded-lg text-gray-500 transition-colors"
@@ -1595,15 +1524,6 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
 
                     const livePrice = live && isFinite(live.price) ? live.price : Number(coin.current_price || 0);
 
-                    // ✅ trigger flash when price changes (per coin)
-                    const prev = lastPriceRef.current[coin.id];
-                    if (isFinite(livePrice)) {
-                      if (typeof prev === 'number' && isFinite(prev) && prev !== livePrice) {
-                        triggerPriceFlash(coin.id, livePrice > prev ? 'up' : 'down');
-                      }
-                      lastPriceRef.current[coin.id] = livePrice;
-                    }
-
                     const change24Base =
                       (coin as any).price_change_percentage_24h_in_currency ??
                       coin.price_change_percentage_24h ??
@@ -1618,13 +1538,6 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
 
                     const sparkData = Array.isArray(prices) ? prices.map((v, i) => ({ i, v })) : [];
                     const isFav = !!favorites[coin.id];
-
-                    const flashClass =
-                      priceFlash[coin.id] === 'up'
-                        ? 'price-flash-up'
-                        : priceFlash[coin.id] === 'down'
-                          ? 'price-flash-down'
-                          : '';
 
                     return (
                       <tr key={coin.id} className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors group h-[56px]">
@@ -1681,18 +1594,18 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                                 key={cid}
                                 className="p-2 text-right font-mono text-[15px] font-black text-gray-900 dark:text-slate-200"
                               >
-                                <span className={`inline-block px-2 py-1 ${flashClass}`}>
-                                  {formatUSD(livePrice)}
-                                </span>
+                                {formatUSD(livePrice)}
                               </td>
                             );
                           }
 
                           if (cid === 'ch1h') {
+                            const ok = isFinite(c1h);
                             return (
                               <td
                                 key={cid}
-                                className={`p-2 text-right font-mono text-[13px] font-black ${!isFinite(c1h) ? 'text-gray-400 dark:text-slate-500' : (c1h >= 0 ? 'text-green-500' : 'text-red-500')}`}
+                                className="p-2 text-right font-mono text-[13px] font-black"
+                                style={{ color: !ok ? undefined : (c1h >= 0 ? GREEN : RED) }}
                                 title="Estimativa via sparkline 7d"
                               >
                                 {safePct(c1h)}
@@ -1704,7 +1617,8 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                             return (
                               <td
                                 key={cid}
-                                className={`p-2 text-right font-mono text-[13px] font-black ${isPos24 ? 'text-green-500' : 'text-red-500'}`}
+                                className="p-2 text-right font-mono text-[13px] font-black"
+                                style={{ color: isPos24 ? GREEN : RED }}
                               >
                                 {isPos24 ? '+' : ''}{Number(change24 || 0).toFixed(2)}%
                               </td>
@@ -1712,10 +1626,12 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                           }
 
                           if (cid === 'ch7d') {
+                            const ok = isFinite(c7d);
                             return (
                               <td
                                 key={cid}
-                                className={`p-2 text-right font-mono text-[13px] font-black ${!isFinite(c7d) ? 'text-gray-400 dark:text-slate-500' : (c7d >= 0 ? 'text-green-500' : 'text-red-500')}`}
+                                className="p-2 text-right font-mono text-[13px] font-black"
+                                style={{ color: !ok ? undefined : (c7d >= 0 ? GREEN : RED) }}
                                 title="Estimativa via sparkline 7d"
                               >
                                 {safePct(c7d)}
@@ -1746,9 +1662,8 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                               </td>
                             );
                           }
-                          if (cid === 'spark7d') {
-                            const sparkIsUp = (Number(c7d) >= 0); // mini-chart 7d coerente com 7d%
 
+                          if (cid === 'spark7d') {
                             return (
                               <td key={cid} className="p-2 overflow-hidden">
                                 <div className="w-full h-12 min-w-[320px] overflow-hidden">
@@ -1757,15 +1672,15 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                                       <AreaChart data={sparkData}>
                                         <defs>
                                           <linearGradient id={`g_${coin.id}`} x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="0%" stopColor={sparkIsUp ? GREEN : RED} stopOpacity={0.45} />
-                                            <stop offset="75%" stopColor={sparkIsUp ? GREEN : RED} stopOpacity={0.16} />
-                                            <stop offset="100%" stopColor={sparkIsUp ? GREEN : RED} stopOpacity={0.03} />
+                                            <stop offset="0%" stopColor={isPos24 ? GREEN : RED} stopOpacity={0.45} />
+                                            <stop offset="75%" stopColor={isPos24 ? GREEN : RED} stopOpacity={0.16} />
+                                            <stop offset="100%" stopColor={isPos24 ? GREEN : RED} stopOpacity={0.03} />
                                           </linearGradient>
                                         </defs>
                                         <Area
                                           type="monotone"
                                           dataKey="v"
-                                          stroke={sparkIsUp ? GREEN : RED}
+                                          stroke={isPos24 ? GREEN : RED}
                                           strokeWidth={2}
                                           fill={`url(#g_${coin.id})`}
                                           fillOpacity={1}
@@ -1784,6 +1699,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                               </td>
                             );
                           }
+
                           return <td key={cid} className="p-2" />;
                         })}
                       </tr>

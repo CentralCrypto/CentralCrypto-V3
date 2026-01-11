@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Loader2, TrendingUp, TrendingDown, AlertTriangle, RefreshCw, ChevronsUpDown } from 'lucide-react';
+import { Loader2, TrendingUp, TrendingDown, AlertTriangle, ChevronsUpDown } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts';
-import { fetchTopCoins, isStablecoin, fetchWithFallback } from '../services/api';
+import { fetchWithFallback } from '../services/api';
 import { DashboardItem, Language, ApiCoin } from '../../../types';
 import { getTranslations } from '../../../locales';
 import { getCacheckoUrl, ENDPOINTS } from '../../../services/endpoints';
@@ -17,9 +17,7 @@ const formatCompactNumber = (number: number) => {
   return shortValue + suffixes[suffixNum];
 };
 
-// Fix: Updated type to accept 'gainers' | 'losers' for consistency.
 const TickerList: React.FC<{ tickers: ApiCoin[], type: 'gainers' | 'losers' }> = ({ tickers, type }) => {
-    // Fix: Updated logic to check for 'gainers'.
     const color = type === 'gainers' ? 'text-green-500' : 'text-red-500';
     return (
         <div className="flex flex-col gap-1.5">
@@ -142,9 +140,13 @@ const MaximizedTable: React.FC<{ data: ApiCoin[], type: 'gainers' | 'losers' }> 
     );
 }
 
-const GainersLosersWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ item, language = 'pt' }) => {
+interface GainersLosersWidgetProps {
+  item: DashboardItem;
+  language?: Language;
+}
+
+const GainersLosersWidget: React.FC<GainersLosersWidgetProps> = ({ item, language = 'pt' }) => {
     const [data, setData] = useState<{ gainers: any[], losers: any[] }>({ gainers: [], losers: [] });
-    // Fix: Add explicit type to useState to prevent type inference to 'string'.
     const [tab, setTab] = useState<'gainers' | 'losers'>('gainers');
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(false);
