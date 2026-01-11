@@ -1,3 +1,4 @@
+
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Highcharts from 'highcharts';
 import TreemapModule from 'highcharts/modules/treemap';
@@ -116,7 +117,7 @@ function fmtPrice(p: number) {
   return `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 }
 function colorFor(v: number) {
-  return safeNum(v) >= 0 ? '#2ecc59' : '#f73539';
+  return safeNum(v) >= 0 ? '#77dd77' : '#ff6961';
 }
 function withCb(url: string) {
   const salt = Math.floor(Date.now() / 60000);
@@ -353,9 +354,9 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
         min: -10,
         max: 10,
         stops: [
-          [0, '#f73539'],
+          [0, '#ff6961'],
           [0.5, '#414555'],
-          [1, '#2ecc59']
+          [1, '#77dd77']
         ],
         labels: {
           style: { color: '#fff', fontWeight: '900' },

@@ -35,13 +35,13 @@ import { ApiCoin, Language } from '../../../types';
 import { fetchTopCoins } from '../services/api';
 
 // ======================
-// CORES PADRONIZADAS (Mesmas do Flash de Preço)
+// CORES PADRONIZADAS (Heatmap / Price Flash Bright - PASTEL FOSCO)
 // ======================
-const GREEN = '#22c55e'; 
-const RED = '#ef4444';   
+const GREEN = '#77dd77';
+const RED = '#ff6961';
 
-const FLASH_GREEN_BG = 'rgba(34, 197, 94, 0.18)';
-const FLASH_RED_BG = 'rgba(239, 68, 68, 0.18)';
+const FLASH_GREEN_BG = 'rgba(119, 221, 119, 0.18)';
+const FLASH_RED_BG = 'rgba(255, 105, 97, 0.18)';
 
 const formatUSD = (val: number, compact = false) => {
   if (val === undefined || val === null) return '---';
@@ -249,7 +249,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     }
   }, []);
 
-  // ✅ Scroll-to-top helper
+  // ✅ Scroll-to-top helper (corrige abrir “lá embaixo”)
   const scrollToTop = useCallback(() => {
     const el = scrollContainerRef?.current;
     if (el) el.scrollTo({ top: 0, behavior: 'auto' });
@@ -348,32 +348,6 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     if (viewMode === 'categories') loadCategoriesLocal();
     else loadCoins();
   }, [viewMode, loadCategoriesLocal, loadCoins]);
-
-  // ✅ RESET DE ESTADO DA TABELA (pedido)
-  const resetTableState = useCallback(() => {
-    setViewMode('coins');
-
-    setSearchTerm('');
-    setFavOnly(false);
-
-    setActiveMasterId(null);
-    setActiveSubId('__all__');
-    setActiveCategoryId('__all__');
-
-    setTopMode('none');
-
-    setSortConfig({
-      key: 'market_cap_rank',
-      direction: 'asc'
-    });
-
-    setPage(0);
-
-    // volta colunas default
-    setColOrder(DEFAULT_COLS);
-
-    scrollToTop();
-  }, [scrollToTop, DEFAULT_COLS]);
 
   const handleSort = (key: string) => {
     let direction: 'asc' | 'desc' = 'desc';
@@ -1130,10 +1104,8 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                           return (
                             <td
                               key={cid}
-                              className="p-3 text-center font-mono text-[13px] font-black w-[92px]"
-                              style={{
-                                color: !isFinite(r.ch1h) ? undefined : (r.ch1h >= 0 ? GREEN : RED)
-                              }}
+                              className={`p-3 text-center font-mono text-[13px] font-black w-[92px]
+                                ${!isFinite(r.ch1h) ? 'text-gray-400 dark:text-slate-500' : (r.ch1h >= 0 ? 'text-tech-success' : 'text-tech-danger')}`}
                             >
                               {safePct(Number(r.ch1h))}
                             </td>
@@ -1144,10 +1116,8 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                           return (
                             <td
                               key={cid}
-                              className="p-3 text-center font-mono text-[13px] font-black w-[98px]"
-                              style={{
-                                color: !isFinite(r.ch24h) ? undefined : (pos24 ? GREEN : RED)
-                              }}
+                              className={`p-3 text-center font-mono text-[13px] font-black w-[98px]
+                                ${!isFinite(r.ch24h) ? 'text-gray-400 dark:text-slate-500' : (pos24 ? 'text-tech-success' : 'text-tech-danger')}`}
                             >
                               {safePct(Number(r.ch24h))}
                             </td>
@@ -1158,10 +1128,8 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                           return (
                             <td
                               key={cid}
-                              className="p-3 text-center font-mono text-[13px] font-black w-[98px]"
-                              style={{
-                                color: !isFinite(r.ch7d) ? undefined : (r.ch7d >= 0 ? GREEN : RED)
-                              }}
+                              className={`p-3 text-center font-mono text-[13px] font-black w-[98px]
+                                ${!isFinite(r.ch7d) ? 'text-gray-400 dark:text-slate-500' : (r.ch7d >= 0 ? 'text-tech-success' : 'text-tech-danger')}`}
                             >
                               {safePct(Number(r.ch7d))}
                             </td>
@@ -1192,7 +1160,6 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                           );
                         }
 
-                        // ✅ SPARKLINE CATEGORIAS (cores fixas)
                         if (cid === 'spark7d') {
                           return (
                             <td key={cid} className="p-3 overflow-hidden">
@@ -1202,9 +1169,9 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                                     <AreaChart data={r.spark}>
                                       <defs>
                                         <linearGradient id={`cg_${r.id}`} x1="0" y1="0" x2="0" y2="1">
-                                          <stop offset="0%" stopColor={pos24 ? GREEN : RED} stopOpacity={0.45} />
-                                          <stop offset="75%" stopColor={pos24 ? GREEN : RED} stopOpacity={0.16} />
-                                          <stop offset="100%" stopColor={pos24 ? GREEN : RED} stopOpacity={0.03} />
+                                          <stop offset="0%" stopColor={pos24 ? GREEN : RED} stopOpacity={0.55} />
+                                          <stop offset="75%" stopColor={pos24 ? GREEN : RED} stopOpacity={0.18} />
+                                          <stop offset="100%" stopColor={pos24 ? GREEN : RED} stopOpacity={0.02} />
                                         </linearGradient>
                                       </defs>
                                       <Area
@@ -1286,7 +1253,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
 
   const gl = getGainersLosersLabel(language);
 
-  // ✅ Botões: ativos com verde/vermelho (fixo)
+  // ✅ Botões: ativos com verde/vermelho
   const TopToggleButton = ({
     active,
     variant,
@@ -1302,16 +1269,19 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     onClick: () => void;
     title: string;
   }) => {
+    const activeClass = variant === 'gainers'
+      ? 'bg-tech-success text-white border-transparent shadow-md'
+      : 'bg-tech-danger text-white border-transparent shadow-md';
+
     return (
       <button
         type="button"
         onClick={onClick}
         className={`px-3 py-2 rounded-lg border font-black transition-colors whitespace-nowrap flex items-center gap-2
           ${active
-            ? 'text-white border-transparent shadow-md'
+            ? activeClass
             : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5'
           }`}
-        style={active ? { backgroundColor: variant === 'gainers' ? GREEN : RED, color: 'white', border: 'transparent' } : {}}
         title={title}
       >
         {icon}
@@ -1319,56 +1289,6 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
       </button>
     );
   };
-
-  // ======================
-  // PREÇO PISCANDO (flash)
-  // ======================
-  const prevPriceRef = useRef<Record<string, number>>({});
-  const [priceFlash, setPriceFlash] = useState<Record<string, 'up' | 'down' | null>>({});
-  const flashTimersRef = useRef<Record<string, number>>({});
-
-  const triggerFlash = useCallback((coinId: string, dir: 'up' | 'down') => {
-    // limpa timer antigo
-    const old = flashTimersRef.current[coinId];
-    if (old) window.clearTimeout(old);
-
-    setPriceFlash(prev => ({ ...prev, [coinId]: dir }));
-
-    flashTimersRef.current[coinId] = window.setTimeout(() => {
-      setPriceFlash(prev => ({ ...prev, [coinId]: null }));
-      delete flashTimersRef.current[coinId];
-    }, 650);
-  }, []);
-
-  // detecta mudanças de preço da página atual (se live estiver mudando)
-  useEffect(() => {
-    if (viewMode !== 'coins') return;
-
-    for (const coin of pageCoins) {
-      const binSym = normalizeBinanceSymbol(coin);
-      const live = binSym ? binanceLive[binSym] : undefined;
-      const livePrice = live && isFinite(live.price) ? live.price : Number(coin.current_price || 0);
-
-      if (!isFinite(livePrice) || livePrice <= 0) continue;
-
-      const prev = prevPriceRef.current[coin.id];
-      if (isFinite(prev) && prev > 0 && livePrice !== prev) {
-        if (livePrice > prev) triggerFlash(coin.id, 'up');
-        else triggerFlash(coin.id, 'down');
-      }
-      prevPriceRef.current[coin.id] = livePrice;
-    }
-  }, [binanceLive, pageCoins, triggerFlash, viewMode]);
-
-  // cleanup timers on unmount
-  useEffect(() => {
-    return () => {
-      for (const t of Object.values(flashTimersRef.current)) {
-        try { window.clearTimeout(t); } catch {}
-      }
-      flashTimersRef.current = {};
-    };
-  }, []);
 
   return (
     <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-100 dark:border-slate-800 shadow-xl overflow-hidden flex flex-col">
@@ -1524,19 +1444,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
 
             <Paginator compact />
 
-            {/* ✅ RESET (VOLTOU) */}
             <button
-              type="button"
-              onClick={resetTableState}
-              className="p-2.5 hover:bg-gray-200 dark:hover:bg-slate-700 rounded-lg text-gray-500 transition-colors"
-              title="Resetar tabela (rank, sem filtros)"
-            >
-              <RotateCcw size={22} />
-            </button>
-
-            {/* Refresh (recarrega) */}
-            <button
-              type="button"
               onClick={refresh}
               className="p-2.5 hover:bg-gray-200 dark:hover:bg-slate-700 rounded-lg text-gray-500 transition-colors"
               title="Atualizar"
@@ -1632,13 +1540,6 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                     const sparkData = Array.isArray(prices) ? prices.map((v, i) => ({ i, v })) : [];
                     const isFav = !!favorites[coin.id];
 
-                    const flashDir = priceFlash[coin.id];
-                    const flashBg = flashDir === 'up'
-                      ? FLASH_GREEN_BG
-                      : flashDir === 'down'
-                        ? FLASH_RED_BG
-                        : 'transparent';
-
                     return (
                       <tr key={coin.id} className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors group h-[56px]">
                         <td className="p-2 text-center">
@@ -1688,19 +1589,13 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                             );
                           }
 
-                          // ✅ PREÇO COM PISCA (fundo)
                           if (cid === 'price') {
                             return (
                               <td
                                 key={cid}
                                 className="p-2 text-right font-mono text-[15px] font-black text-gray-900 dark:text-slate-200"
                               >
-                                <span
-                                  className="inline-flex px-2 py-1 rounded-md transition-colors"
-                                  style={{ backgroundColor: flashBg }}
-                                >
-                                  {formatUSD(livePrice)}
-                                </span>
+                                {formatUSD(livePrice)}
                               </td>
                             );
                           }
@@ -1709,10 +1604,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                             return (
                               <td
                                 key={cid}
-                                className="p-2 text-right font-mono text-[13px] font-black"
-                                style={{
-                                  color: !isFinite(c1h) ? undefined : (c1h >= 0 ? GREEN : RED)
-                                }}
+                                className={`p-2 text-right font-mono text-[13px] font-black ${!isFinite(c1h) ? 'text-gray-400 dark:text-slate-500' : (c1h >= 0 ? 'text-tech-success' : 'text-tech-danger')}`}
                                 title="Estimativa via sparkline 7d"
                               >
                                 {safePct(c1h)}
@@ -1724,8 +1616,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                             return (
                               <td
                                 key={cid}
-                                className="p-2 text-right font-mono text-[13px] font-black"
-                                style={{ color: isPos24 ? GREEN : RED }}
+                                className={`p-2 text-right font-mono text-[13px] font-black ${isPos24 ? 'text-tech-success' : 'text-tech-danger'}`}
                               >
                                 {isPos24 ? '+' : ''}{Number(change24 || 0).toFixed(2)}%
                               </td>
@@ -1736,10 +1627,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                             return (
                               <td
                                 key={cid}
-                                className="p-2 text-right font-mono text-[13px] font-black"
-                                style={{
-                                  color: !isFinite(c7d) ? undefined : (c7d >= 0 ? GREEN : RED)
-                                }}
+                                className={`p-2 text-right font-mono text-[13px] font-black ${!isFinite(c7d) ? 'text-gray-400 dark:text-slate-500' : (c7d >= 0 ? 'text-tech-success' : 'text-tech-danger')}`}
                                 title="Estimativa via sparkline 7d"
                               >
                                 {safePct(c7d)}
@@ -1771,7 +1659,6 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                             );
                           }
 
-                          // ✅ SPARKLINE COINS (cores fixas)
                           if (cid === 'spark7d') {
                             return (
                               <td key={cid} className="p-2 overflow-hidden">
@@ -1781,9 +1668,9 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                                       <AreaChart data={sparkData}>
                                         <defs>
                                           <linearGradient id={`g_${coin.id}`} x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="0%" stopColor={isPos24 ? GREEN : RED} stopOpacity={0.45} />
-                                            <stop offset="75%" stopColor={isPos24 ? GREEN : RED} stopOpacity={0.16} />
-                                            <stop offset="100%" stopColor={isPos24 ? GREEN : RED} stopOpacity={0.03} />
+                                            <stop offset="0%" stopColor={isPos24 ? GREEN : RED} stopOpacity={0.55} />
+                                            <stop offset="75%" stopColor={isPos24 ? GREEN : RED} stopOpacity={0.18} />
+                                            <stop offset="100%" stopColor={isPos24 ? GREEN : RED} stopOpacity={0.02} />
                                           </linearGradient>
                                         </defs>
                                         <Area

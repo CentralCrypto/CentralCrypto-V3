@@ -1,3 +1,4 @@
+
 import * as React from 'react';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { ApiCoin, Language } from '../../../types';
@@ -342,7 +343,8 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       if (updated) p.coin = updated;
 
       const pct = getCoinPerfPct(p.coin) || 0;
-      const baseColor = pct >= 0 ? '#089981' : '#f23645';
+      // PASTEL COLORS
+      const baseColor = pct >= 0 ? '#77dd77' : '#ff6961';
       const isBTC = String(p.coin.id).toLowerCase() === 'bitcoin';
 
       let metric = 1;
@@ -836,7 +838,8 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
   const detailColor = useMemo(() => {
     if (!detailPerf) return '#dd9933';
-    return detailPerf.pct >= 0 ? '#089981' : '#f23645';
+    // PASTEL
+    return detailPerf.pct >= 0 ? '#77dd77' : '#ff6961';
   }, [detailPerf]);
 
   // =======================

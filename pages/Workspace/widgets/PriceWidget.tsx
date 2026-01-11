@@ -50,7 +50,7 @@ const CustomChartTooltip = ({ active, payload, item, marketCap, priceChange, lab
                         {labels.mcap}: <span className="text-blue-400">${formatCompactNumber(marketCap || 0)}</span>
                     </div>
                     <div className={`${isMaximized ? 'text-lg' : 'text-sm'} text-gray-600 dark:text-slate-300`}>
-                        {labels.change24h}: <span className={(priceChange || 0) >= 0 ? 'text-green-500' : 'text-red-500'}>
+                        {labels.change24h}: <span className={(priceChange || 0) >= 0 ? 'text-tech-success' : 'text-tech-danger'}>
                             {(priceChange || 0).toFixed(2)}%
                         </span>
                     </div>
@@ -94,7 +94,8 @@ const PriceWidget: React.FC<Props> = ({ item, currentPrice = 0, priceChange = 0,
     }
 
     const isPositive = priceChange >= 0;
-    const gradientColor = isPositive ? '#009E4F' : '#E03A3E';
+    // PASTEL MATTE COLORS
+    const gradientColor = isPositive ? '#77dd77' : '#ff6961';
     const displayPrice = currentPrice || 0;
 
     return (
@@ -102,7 +103,7 @@ const PriceWidget: React.FC<Props> = ({ item, currentPrice = 0, priceChange = 0,
             <div className="flex justify-between items-end mb-1 z-10 px-2">
                 <div>
                     <div className="text-2xl font-bold text-gray-900 dark:text-white">${displayPrice.toLocaleString()}</div>
-                    <div className={`text-sm font-semibold flex items-center gap-1 ${isPositive ? 'text-green-500' : 'text-red-500'}`}>
+                    <div className={`text-sm font-semibold flex items-center gap-1 ${isPositive ? 'text-tech-success' : 'text-tech-danger'}`}>
                         {isPositive ? <TrendingUp size={16}/> : <TrendingDown size={16}/>}
                         {Math.abs(priceChange).toFixed(2)}%
                     </div>
