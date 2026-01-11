@@ -6,9 +6,8 @@ import ExportingModule from 'highcharts/modules/exporting';
 import AccessibilityModule from 'highcharts/modules/accessibility';
 import { DashboardItem, Language } from '../../../types';
 
-// =====================
-// TIPOS
-// =====================
+type ValueMode = 'marketcap' | 'var24h';
+
 type Coin = {
   id: string;
   symbol?: string;
@@ -18,182 +17,178 @@ type Coin = {
   current_price?: number;
   market_cap?: number;
   market_cap_rank?: number;
-
   total_volume?: number;
-  volume_24h?: number;
 
   price_change_percentage_24h?: number;
   price_change_percentage_1h_in_currency?: number;
   price_change_percentage_7d_in_currency?: number;
 
-  high_24h?: number;
-  low_24h?: number;
-  ath?: number;
-
   circulating_supply?: number;
   total_supply?: number;
   max_supply?: number;
-  fully_diluted_valuation?: number;
+
+  high_24h?: number;
+  low_24h?: number;
+  ath?: number;
 };
 
 type CategoryRow = { id: string; name: string };
 type CategoryCoinsMap = Record<string, string[]>;
-type ValueMode = 'marketcap' | 'var24h';
 
-// =====================
-// HIGHCHARTS INIT
-// =====================
+type TreemapPoint = {
+  id: string;
+  name: string;
+  value: number;
+  colorValue: number;
+  custom?: any;
+};
+
+const ENDPOINTS = {
+  COINS_LITE: '/cachecko/cachecko_lite.json',
+  TAXONOMY: '/cachecko/categories/taxonomy-master.json',
+  CAT_LIST: '/cachecko/categories/coingecko_categories_list.json',
+  CAT_MAP: '/cachecko/categories/category_coins_map.json'
+};
+
 let HC_INITED = false;
 function initHighchartsOnce() {
   if (HC_INITED) return;
   HC_INITED = true;
 
-  try { (TreemapModule as any)(Highcharts); } catch (e) { console.error(e); }
+  try { (TreemapModule as any)(Highcharts); } catch {}
   try { (ExportingModule as any)(Highcharts); } catch {}
   try { (AccessibilityModule as any)(Highcharts); } catch {}
 
   Highcharts.setOptions({
-    chart: { style: { fontFamily: 'Inter, system-ui, sans-serif' } }
-  });
-
-  // Ajuste de fonte por área (leve e útil)
-  Highcharts.addEvent(Highcharts.Series, 'drawDataLabels', function () {
-    // @ts-ignore
-    if (this.type !== 'treemap') return;
-    // @ts-ignore
-    this.points.forEach((p: any) => {
-      if (!p?.shapeArgs || !p?.dlOptions?.style) return;
-      const area = Number(p.shapeArgs.width || 0) * Number(p.shapeArgs.height || 0);
-      const px = Math.min(36, 9 + Math.round(area * 0.0008));
-      p.dlOptions.style.fontSize = `${px}px`;
-    });
+    chart: {
+      style: {
+        fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
+      }
+    }
   });
 }
 
-// =====================
-// ENDPOINTS (HTTP)
-// =====================
-const ENDPOINTS = {
-  COINS_LITE: '/cachecko/cachecko_lite.json'
-};
-
-// Fallbacks porque teu nome final pode variar
-const TAXONOMY_CANDIDATES = [
-  '/cachecko/categories/taxonomy-master.json',
-  '/cachecko/categories/taxonomy_master.json',
-  '/cachecko/categories/taxonomy.json',
-  '/cachecko/categories/coingecko_categories_list.json',
-  '/cachecko/categories/coingecko_categories_market.json'
-];
-
-const CATMAP_CANDIDATES = [
-  '/cachecko/categories/category_coins_map.json',
-  '/cachecko/categories/category-coins-map.json',
-  '/cachecko/categories/category_coin_map.json',
-  '/cachecko/categories/category-coin-map.json'
-];
-
-// =====================
-// HTTP
-// =====================
 function withCb(url: string) {
   const salt = Math.floor(Date.now() / 60000);
   return url.includes('?') ? `${url}&_cb=${salt}` : `${url}?_cb=${salt}`;
 }
 
-async function httpGetJson(url: string, opts?: { timeoutMs?: number; retries?: number }) {
+async function httpGetJson<T = any>(
+  url: string,
+  opts?: { timeoutMs?: number; retries?: number }
+): Promise<T> {
   const timeoutMs = opts?.timeoutMs ?? 12000;
   const retries = opts?.retries ?? 2;
 
+  const finalUrl = withCb(url);
+
   for (let attempt = 0; attempt <= retries; attempt++) {
     const ctrl = new AbortController();
-    const t = window.setTimeout(() => ctrl.abort(), timeoutMs);
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+
     try {
-      const r = await fetch(withCb(url), { cache: 'no-store', signal: ctrl.signal });
-      if (!r.ok) throw new Error(`${url} -> HTTP ${r.status}`);
-      return await r.json();
+      const r = await fetch(finalUrl, { signal: ctrl.signal, cache: 'no-store' });
+      if (!r.ok) throw new Error(`${finalUrl} -> HTTP ${r.status}`);
+      return (await r.json()) as T;
     } catch (e) {
       if (attempt === retries) throw e;
     } finally {
-      window.clearTimeout(t);
+      clearTimeout(t);
     }
   }
+
   throw new Error('httpGetJson: unreachable');
 }
 
-async function loadFirstWorkingJson(candidates: string[]) {
-  let last: any = null;
-  for (const url of candidates) {
-    try {
-      const data = await httpGetJson(url, { timeoutMs: 12000, retries: 1 });
-      return { url, data };
-    } catch (e) {
-      last = e;
-    }
-  }
-  const msg = last?.message ? String(last.message) : 'unknown';
-  throw new Error(`Falha ao carregar (tentativas): ${candidates.join(' | ')} | último erro: ${msg}`);
-}
-
-// =====================
-// HELPERS
-// =====================
 function safeNum(v: any) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
-function safeUpper(s?: string) { return (s || '').toUpperCase(); }
-
+function safeUpper(s?: string) {
+  return (s || '').toUpperCase();
+}
 function fmtPct(v: number) {
-  const n = Number.isFinite(v) ? v : 0;
-  return `${n > 0 ? '+' : ''}${n.toFixed(2)}%`;
+  const n = safeNum(v);
+  const sign = n > 0 ? '+' : '';
+  return `${sign}${n.toFixed(2)}%`;
 }
-
 function fmtMoney(v: number) {
-  const n = Number.isFinite(v) ? v : 0;
-  if (Math.abs(n) >= 1e12) return `$${(n / 1e12).toFixed(2)}T`;
-  if (Math.abs(n) >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
-  if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
-  if (Math.abs(n) >= 1e3) return `$${(n / 1e3).toFixed(2)}K`;
-  return `$${n.toLocaleString()}`;
+  const n = safeNum(v);
+  const a = Math.abs(n);
+
+  if (a >= 1e12) return `$${(n / 1e12).toFixed(2)}T`;
+  if (a >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
+  if (a >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
+  if (a >= 1e3) return `$${(n / 1e3).toFixed(2)}K`;
+  return `$${Math.round(n).toLocaleString()}`;
+}
+function fmtNum(v: number) {
+  const n = safeNum(v);
+  const a = Math.abs(n);
+  if (a >= 1e12) return `${(n / 1e12).toFixed(2)}T`;
+  if (a >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
+  if (a >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
+  if (a >= 1e3) return `${(n / 1e3).toFixed(2)}K`;
+  return `${n.toLocaleString()}`;
+}
+function fmtPrice(p: number) {
+  const n = safeNum(p);
+  if (n === 0) return '$0';
+  if (n < 0.01) return `$${n.toFixed(6)}`;
+  if (n < 1) return `$${n.toFixed(4)}`;
+  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+}
+function colorFor(v: number) {
+  const n = safeNum(v);
+  return n >= 0 ? '#2ecc59' : '#f73539';
 }
 
-function fmtNumber(v: number) {
-  const n = Number.isFinite(v) ? v : 0;
-  if (Math.abs(n) >= 1e12) return `${(n / 1e12).toFixed(2)}T`;
-  if (Math.abs(n) >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
-  if (Math.abs(n) >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
-  if (Math.abs(n) >= 1e3) return `${(n / 1e3).toFixed(2)}K`;
-  return `${Math.round(n)}`;
+function normalizeCoins(raw: any): Coin[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw as Coin[];
+  if (Array.isArray(raw?.data)) return raw.data as Coin[];
+  if (Array.isArray(raw?.[0]?.data)) return raw[0].data as Coin[];
+  return [];
 }
 
-// Normalizador: aceita array direto ou {data:[...]}
 function normalizeCategories(raw: any): CategoryRow[] {
-  const arr = Array.isArray(raw) ? raw : (Array.isArray(raw?.data) ? raw.data : []);
-  if (!Array.isArray(arr)) return [];
-  return arr
-    .filter((x: any) => x && x.id && x.name)
-    .map((x: any) => ({ id: String(x.id), name: String(x.name) }));
+  if (!raw) return [];
+
+  if (Array.isArray(raw)) {
+    const direct = raw
+      .filter(x => x && (x.id || x.category_id) && (x.name || x.category_name))
+      .map(x => ({
+        id: String(x.id ?? x.category_id),
+        name: String(x.name ?? x.category_name)
+      }));
+    if (direct.length) return direct;
+
+    const maybe = raw.find(x => x && Array.isArray(x.data));
+    if (maybe) return normalizeCategories(maybe.data);
+  }
+
+  if (raw?.data && Array.isArray(raw.data)) {
+    return normalizeCategories(raw.data);
+  }
+
+  return [];
 }
 
 function normalizeCatMap(raw: any): CategoryCoinsMap {
   if (!raw) return {};
-  if (raw?.categories && typeof raw.categories === 'object') return raw.categories;
-  if (raw?.data && typeof raw.data === 'object' && !Array.isArray(raw.data)) return raw.data;
-  if (typeof raw === 'object' && !Array.isArray(raw)) return raw;
+  if (raw.categories && typeof raw.categories === 'object') return raw.categories;
+  if (raw.data && typeof raw.data === 'object') return raw.data;
+  if (typeof raw === 'object') return raw;
   return {};
 }
 
-// =====================
-// COMPONENT
-// =====================
 interface HeatmapWidgetProps {
   item?: DashboardItem;
   language?: Language;
 }
 
 export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string>('');
@@ -205,143 +200,132 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
   const [valueMode, setValueMode] = useState<ValueMode>('marketcap');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
 
-  const [taxonomyUrl, setTaxonomyUrl] = useState<string>('');
-  const [catMapUrl, setCatMapUrl] = useState<string>('');
-
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<Highcharts.Chart | null>(null);
 
-  useEffect(() => { initHighchartsOnce(); }, []);
+  useEffect(() => {
+    initHighchartsOnce();
+  }, []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     setErr('');
 
     try {
-      const coinsData = await httpGetJson(ENDPOINTS.COINS_LITE, { timeoutMs: 15000, retries: 2 });
+      const coinsRaw = await httpGetJson<any>(ENDPOINTS.COINS_LITE, { timeoutMs: 12000, retries: 2 });
+      const coinArr = normalizeCoins(coinsRaw);
+      setCoins(Array.isArray(coinArr) ? coinArr : []);
 
-      let coinsArr: any[] = [];
-      if (Array.isArray(coinsData)) coinsArr = coinsData;
-      else if (Array.isArray(coinsData?.data)) coinsArr = coinsData.data;
+      const mapRaw = await httpGetJson<any>(ENDPOINTS.CAT_MAP, { timeoutMs: 12000, retries: 1 }).catch(() => ({}));
+      const mapObj = normalizeCatMap(mapRaw);
+      setCatMap(mapObj || {});
 
-      const tRes = await loadFirstWorkingJson(TAXONOMY_CANDIDATES).catch(() => ({ url: '', data: [] as any[] }));
-      const mRes = await loadFirstWorkingJson(CATMAP_CANDIDATES).catch(() => ({ url: '', data: {} as any }));
+      // taxonomy pode falhar, então: taxonomy -> cat_list -> fallback ids do map
+      let cats: CategoryRow[] = [];
+      const taxRaw = await httpGetJson<any>(ENDPOINTS.TAXONOMY, { timeoutMs: 9000, retries: 0 }).catch(() => null);
+      cats = normalizeCategories(taxRaw);
 
-      setCoins(coinsArr as Coin[]);
-      setCategories(normalizeCategories(tRes.data));
-      setCatMap(normalizeCatMap(mRes.data));
-
-      setTaxonomyUrl(tRes.url || '');
-      setCatMapUrl(mRes.url || '');
-
-      if (!coinsArr.length) {
-        setErr(`coins vazio/inesperado em ${ENDPOINTS.COINS_LITE}`);
+      if (!cats.length) {
+        const listRaw = await httpGetJson<any>(ENDPOINTS.CAT_LIST, { timeoutMs: 9000, retries: 0 }).catch(() => null);
+        cats = normalizeCategories(listRaw);
       }
+
+      if (!cats.length) {
+        const ids = Object.keys(mapObj || {});
+        cats = ids.map(id => ({ id, name: id }));
+      }
+
+      cats = cats
+        .filter(c => c && c.id && c.name)
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      setCategories(cats);
     } catch (e: any) {
-      setErr(e?.message ? String(e.message) : 'Falha ao carregar dados do heatmap.');
       console.error('Heatmap load error:', e);
+      setErr(e?.message || 'Falha ao carregar dados do heatmap');
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    // carrega uma vez (sem loop)
+    loadData();
+  }, [loadData]);
 
-  // trava scroll quando popup aberto
+  // trava scroll ao abrir popup
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
+    return () => {
+      document.body.style.overflow = prev;
+    };
   }, [open]);
 
-  const coinById = useMemo(() => {
-    const m = new Map<string, Coin>();
-    for (const c of coins) if (c?.id) m.set(c.id, c);
-    return m;
-  }, [coins]);
-
-  const categoryOptions = useMemo(() => {
-    const idsInMap = new Set(Object.keys(catMap || {}));
-    return (categories || [])
-      .filter(c => c?.id && c?.name)
-      .filter(c => idsInMap.size === 0 ? true : idsInMap.has(c.id))
-      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
-  }, [categories, catMap]);
+  const hasCategories = categories.length > 0;
 
   const filteredCoins = useMemo(() => {
-    if (!selectedCategoryId) return coins;
-    const ids = Array.isArray(catMap?.[selectedCategoryId]) ? catMap[selectedCategoryId] : [];
-    if (!ids.length) return [];
-    const set = new Set(ids.map(String));
-    return coins.filter(c => set.has(String(c.id)));
+    let list = coins;
+
+    if (selectedCategoryId && catMap[selectedCategoryId]) {
+      const ids = new Set((catMap[selectedCategoryId] || []).map(String));
+      list = list.filter(c => ids.has(String(c.id)));
+    }
+
+    return list;
   }, [coins, selectedCategoryId, catMap]);
 
-  const chartData = useMemo(() => {
-    const list = filteredCoins;
-
-    const sorted = [...list]
-      .filter(c => c?.id && c?.symbol)
+  const chartData: TreemapPoint[] = useMemo(() => {
+    const list = [...filteredCoins]
+      .filter(c => c && c.id && (c.symbol || c.name))
       .sort((a, b) => safeNum(b.market_cap) - safeNum(a.market_cap))
       .slice(0, 450);
 
-    return sorted.map(c => {
-      const change24 = safeNum(c.price_change_percentage_24h);
+    return list.map(c => {
+      const sym = safeUpper(c.symbol) || safeUpper(c.name) || c.id;
       const mc = Math.max(1, safeNum(c.market_cap));
-      const vol = Math.max(1, safeNum(c.total_volume ?? c.volume_24h));
+      const ch24 = safeNum(c.price_change_percentage_24h);
 
-      // área: mcap OU volume (no teu botão você chamou de VOLUME)
-      const value = valueMode === 'marketcap' ? mc : vol;
+      // tamanho = marketcap OU magnitude da var24h (escalada)
+      const value =
+        valueMode === 'marketcap'
+          ? mc
+          : Math.max(1, Math.abs(ch24) * 1000);
 
       return {
-        id: c.id,
-        name: safeUpper(c.symbol),
+        id: String(c.id),
+        name: sym,
         value,
-        colorValue: change24,
+        colorValue: ch24,
         custom: {
           fullName: c.name || c.id,
-          logo: c.image,
-
-          price: safeNum(c.current_price),
+          logo: c.image || '',
           rank: safeNum(c.market_cap_rank),
+          price: safeNum(c.current_price),
 
-          change24,
           change1h: safeNum(c.price_change_percentage_1h_in_currency),
+          change24h: ch24,
           change7d: safeNum(c.price_change_percentage_7d_in_currency),
 
-          mcap: mc,
-          vol: vol,
+          marketCap: mc,
+          volume24h: safeNum(c.total_volume),
 
-          fdv: safeNum(c.fully_diluted_valuation),
-          circ: safeNum(c.circulating_supply),
-          total: safeNum(c.total_supply),
-          max: safeNum(c.max_supply),
+          circulating: safeNum(c.circulating_supply),
+          totalSupply: safeNum(c.total_supply),
+          maxSupply: safeNum(c.max_supply),
 
-          high24: safeNum(c.high_24h),
-          low24: safeNum(c.low_24h),
+          high24h: safeNum(c.high_24h),
+          low24h: safeNum(c.low_24h),
           ath: safeNum(c.ath)
         }
       };
     });
   }, [filteredCoins, valueMode]);
 
-  // RENDER CHART (com reflow/resize)
-  useEffect(() => {
-    if (!open) return;
+  const renderChart = useCallback(() => {
     if (!containerRef.current) return;
-
-    // Se o container ainda não tem tamanho, não tenta renderizar agora
-    const w0 = containerRef.current.clientWidth;
-    const h0 = containerRef.current.clientHeight;
-    if (w0 < 10 || h0 < 10) return;
-
-    if (!chartData.length) {
-      if (chartRef.current) {
-        chartRef.current.destroy();
-        chartRef.current = null;
-      }
-      return;
-    }
+    if (!chartData.length) return;
 
     if (chartRef.current) {
       chartRef.current.destroy();
@@ -351,141 +335,144 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
     chartRef.current = Highcharts.chart(containerRef.current, {
       chart: {
         backgroundColor: '#252931',
-        margin: 0,
-        height: h0, // <- força altura real, evita 0px
-        animation: false
+        animation: false,
+        spacing: [10, 10, 10, 10]
       },
       title: { text: null },
-      subtitle: { text: null },
       credits: { enabled: false },
       exporting: { enabled: false },
-
+      accessibility: { enabled: true },
       tooltip: {
         useHTML: true,
-        backgroundColor: 'rgba(20, 20, 25, 0.96)',
-        borderColor: 'rgba(255,255,255,0.12)',
-        borderRadius: 12,
-        shadow: true,
-        padding: 0,
+        outside: true,
         followPointer: true,
+        backgroundColor: 'rgba(20,20,25,0.96)',
+        borderColor: 'rgba(255,255,255,0.12)',
+        borderRadius: 14,
+        padding: 0,
+        shadow: true,
         formatter: function () {
-          // @ts-ignore
-          const p: any = this.point;
+          const p: any = (this as any).point;
           const c = p?.custom || {};
-          const color = (v: number) => (v >= 0 ? '#2ecc59' : '#f73539');
+          const full = c.fullName || p.name;
 
-          const line = (label: string, value: string) =>
-            `<div style="display:flex;justify-content:space-between;gap:12px">
-              <span style="opacity:.75">${label}</span>
-              <span style="font-weight:900">${value}</span>
-            </div>`;
-
-          const supplyParts: string[] = [];
-          if (c.circ) supplyParts.push(`Circ ${fmtNumber(c.circ)}`);
-          if (c.total) supplyParts.push(`Total ${fmtNumber(c.total)}`);
-          if (c.max) supplyParts.push(`Max ${fmtNumber(c.max)}`);
-
-          const rangeParts: string[] = [];
-          if (c.low24) rangeParts.push(`Low ${fmtMoney(c.low24)}`);
-          if (c.high24) rangeParts.push(`High ${fmtMoney(c.high24)}`);
+          const row = (label: string, value: string) => `
+            <div style="display:flex; justify-content:space-between; gap:12px; margin-top:6px;">
+              <span style="color:rgba(255,255,255,0.55); font-weight:800;">${label}</span>
+              <span style="color:#fff; font-weight:900;">${value}</span>
+            </div>
+          `;
 
           return `
-            <div style="font-family: Inter, system-ui, sans-serif; padding: 12px; min-width: 260px; color: white;">
-              <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.10);padding-bottom:8px;">
-                ${c.logo ? `<img src="${c.logo}" style="width:24px;height:24px;border-radius:50%;">` : ''}
-                <div>
-                  <div style="font-weight: 950; font-size: 14px;">${p.name}</div>
-                  <div style="font-size: 10px; color: #8a8f9b; text-transform: uppercase;">
-                    ${c.fullName}${c.rank ? ` • #${Math.round(c.rank)}` : ''}
+            <div style="min-width:280px; padding:12px 12px 10px; color:#fff; font-family:Inter,system-ui,sans-serif;">
+              <div style="display:flex; align-items:center; gap:10px; padding-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.10);">
+                ${c.logo ? `<img src="${c.logo}" style="width:28px;height:28px;border-radius:50%;"/>` : ''}
+                <div style="min-width:0">
+                  <div style="font-weight:1000; font-size:14px; line-height:1.1;">${p.name}</div>
+                  <div style="color:rgba(255,255,255,0.6); font-size:11px; font-weight:800; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:220px;">
+                    ${full}${c.rank ? ` • #${c.rank}` : ''}
                   </div>
                 </div>
               </div>
 
-              ${c.price ? `<div style="font-size: 18px; font-weight: 950; margin-bottom: 8px;">${fmtMoney(c.price)}</div>` : ''}
-
-              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;text-align:center;background:rgba(255,255,255,0.05);padding:6px;border-radius:10px;">
-                <div><div style="font-size:9px;opacity:.65">1H</div><div style="font-size:11px;font-weight:900;color:${color(c.change1h)}">${fmtPct(c.change1h)}</div></div>
-                <div><div style="font-size:9px;opacity:.65">24H</div><div style="font-size:11px;font-weight:900;color:${color(c.change24)}">${fmtPct(c.change24)}</div></div>
-                <div><div style="font-size:9px;opacity:.65">7D</div><div style="font-size:11px;font-weight:900;color:${color(c.change7d)}">${fmtPct(c.change7d)}</div></div>
+              <div style="margin-top:10px; font-size:18px; font-weight:1000;">
+                ${fmtPrice(c.price)}
               </div>
 
-              <div style="margin-top:10px;display:grid;gap:6px;font-size:11px;">
-                ${line('Market Cap', fmtMoney(c.mcap))}
-                ${line('Volume 24h', fmtMoney(c.vol))}
-                ${c.fdv ? line('FDV', fmtMoney(c.fdv)) : ''}
+              <div style="margin-top:10px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
+                <div style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:8px; text-align:center;">
+                  <div style="font-size:10px; color:rgba(255,255,255,0.55); font-weight:900;">1H</div>
+                  <div style="font-size:12px; font-weight:1000; color:${colorFor(c.change1h)}">${fmtPct(c.change1h)}</div>
+                </div>
+                <div style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:8px; text-align:center;">
+                  <div style="font-size:10px; color:rgba(255,255,255,0.55); font-weight:900;">24H</div>
+                  <div style="font-size:12px; font-weight:1000; color:${colorFor(c.change24h)}">${fmtPct(c.change24h)}</div>
+                </div>
+                <div style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:8px; text-align:center;">
+                  <div style="font-size:10px; color:rgba(255,255,255,0.55); font-weight:900;">7D</div>
+                  <div style="font-size:12px; font-weight:1000; color:${colorFor(c.change7d)}">${fmtPct(c.change7d)}</div>
+                </div>
               </div>
 
-              ${supplyParts.length ? `<div style="margin-top:10px;font-size:11px;opacity:.85"><b>Supply:</b> ${supplyParts.join(' • ')}</div>` : ''}
-              ${rangeParts.length ? `<div style="margin-top:6px;font-size:11px;opacity:.85"><b>24h:</b> ${rangeParts.join(' • ')}</div>` : ''}
-              ${c.ath ? `<div style="margin-top:6px;font-size:11px;opacity:.85"><b>ATH:</b> ${fmtMoney(c.ath)}</div>` : ''}
+              <div style="margin-top:10px;">
+                ${row('Market Cap', fmtMoney(c.marketCap))}
+                ${row('Volume 24h', fmtMoney(c.volume24h))}
+                ${row('Circulating', fmtNum(c.circulating))}
+                ${row('Total Supply', c.totalSupply ? fmtNum(c.totalSupply) : '—')}
+                ${row('Max Supply', c.maxSupply ? fmtNum(c.maxSupply) : '—')}
+                ${row('High 24h', c.high24h ? fmtPrice(c.high24h) : '—')}
+                ${row('Low 24h', c.low24h ? fmtPrice(c.low24h) : '—')}
+                ${row('ATH', c.ath ? fmtPrice(c.ath) : '—')}
+              </div>
             </div>
           `;
         }
       },
-
       colorAxis: {
-        min: -10,
-        max: 10,
+        minColor: '#f73539',
+        maxColor: '#2ecc59',
         stops: [
           [0, '#f73539'],
           [0.5, '#414555'],
           [1, '#2ecc59']
         ],
+        min: -10,
+        max: 10,
         gridLineWidth: 0,
         labels: {
-          overflow: 'allow',
-          format: '{#gt value 0}+{value}{else}{value}{/gt}%',
-          style: { color: 'white' }
+          style: { color: 'white', fontWeight: '700' },
+          format: '{#gt value 0}+{value}{else}{value}{/gt}%'
         }
       },
+      series: [
+        {
+          name: 'All',
+          type: 'treemap',
+          layoutAlgorithm: 'squarified',
+          allowDrillToNode: false,
+          animationLimit: 1000,
+          borderColor: '#252931',
+          borderWidth: 2,
+          colorKey: 'colorValue',
+          data: chartData as any,
+          dataLabels: {
+            enabled: true,
+            useHTML: true,
+            align: 'center',
+            verticalAlign: 'middle',
+            style: {
+              textOutline: 'none'
+            },
+            formatter: function () {
+              const p: any = (this as any).point;
+              const w = p.shapeArgs?.width || 0;
+              const h = p.shapeArgs?.height || 0;
 
-      series: [{
-        name: 'All',
-        type: 'treemap',
-        layoutAlgorithm: 'squarified',
-        allowDrillToNode: false,
-        animationLimit: 1000,
-        borderColor: '#252931',
-        color: '#252931',
-        opacity: 0.01,
-        nodeSizeBy: 'leaf',
-        colorKey: 'colorValue',
-        data: chartData as any,
-        borderWidth: 1,
-        dataLabels: {
-          enabled: true,
-          useHTML: true,
-          style: { textOutline: 'none', color: '#fff' },
-          formatter: function () {
-            // @ts-ignore
-            const p: any = this.point;
-            const w = p.shapeArgs?.width || 0;
-            const h = p.shapeArgs?.height || 0;
-            if (w < 38 || h < 26) return '';
+              if (w < 40 || h < 28) return '';
 
-            const fontSize = Math.min(Math.max(10, w / 5), 40);
-            const showLogo = w > 70 && h > 70 && p.custom?.logo;
-            const logoSize = Math.min(30, Math.round(fontSize * 1.1));
+              const fontSize = Math.min(30, Math.max(11, Math.round((w * h) * 0.00035)));
+              const showLogo = w > 70 && h > 60 && p.custom?.logo;
 
-            return `
-              <div style="text-align:center;pointer-events:none;line-height:1.05;">
-                ${showLogo ? `<img src="${p.custom.logo}" style="width:${logoSize}px;height:${logoSize}px;border-radius:50%;margin-bottom:4px;" /><br/>` : ''}
-                <span style="font-size:${fontSize}px;font-weight:900;text-shadow:0 1px 2px rgba(0,0,0,0.8);">${p.name}</span><br/>
-                <span style="font-size:${Math.max(10, fontSize * 0.7)}px;font-weight:900;opacity:.9;text-shadow:0 1px 2px rgba(0,0,0,0.8);">${fmtPct(p.colorValue)}</span>
-              </div>
-            `;
+              return `
+                <div style="pointer-events:none; text-align:center; line-height:1.05;">
+                  ${showLogo ? `<img src="${p.custom.logo}" style="width:${Math.min(28, fontSize + 6)}px;height:${Math.min(28, fontSize + 6)}px;border-radius:50%;margin-bottom:4px;"/>` : ''}
+                  <div style="color:white; font-weight:1000; font-size:${fontSize}px; text-shadow:0 1px 2px rgba(0,0,0,0.75);">
+                    ${p.name}
+                  </div>
+                  <div style="color:white; opacity:0.92; font-weight:900; font-size:${Math.max(10, Math.round(fontSize * 0.7))}px; text-shadow:0 1px 2px rgba(0,0,0,0.75);">
+                    ${fmtPct(p.colorValue)}
+                  </div>
+                </div>
+              `;
+            }
           }
-        }
-      }] as any
-    } as any);
-
-    const ro = new ResizeObserver(() => {
-      if (!containerRef.current || !chartRef.current) return;
-      const h = containerRef.current.clientHeight;
-      chartRef.current.setSize(undefined as any, h as any, false);
-      chartRef.current.reflow();
+        } as any
+      ]
     });
 
+    const ro = new ResizeObserver(() => {
+      if (chartRef.current) chartRef.current.reflow();
+    });
     ro.observe(containerRef.current);
 
     return () => {
@@ -495,9 +482,26 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
         chartRef.current = null;
       }
     };
-  }, [open, chartData]);
+  }, [chartData]);
 
-  const hasCategories = categoryOptions.length > 0 && Object.keys(catMap || {}).length > 0;
+  useEffect(() => {
+    if (!open) return;
+    if (!containerRef.current) return;
+    if (loading) return;
+
+    // render e reflow “garantido” ao abrir modal
+    const cleanup = renderChart();
+    const t = setTimeout(() => chartRef.current?.reflow(), 60);
+
+    return () => {
+      clearTimeout(t);
+      if (typeof cleanup === 'function') cleanup();
+    };
+  }, [open, loading, renderChart]);
+
+  function close() {
+    setOpen(false);
+  }
 
   const modal = (
     <div
@@ -505,11 +509,21 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
         position: 'fixed',
         inset: 0,
         zIndex: 2147483647,
-        background: 'rgba(0,0,0,0.72)',
-        backdropFilter: 'blur(6px)'
+        background: 'rgba(0,0,0,0.78)',
+        backdropFilter: 'blur(8px)'
+      }}
+      onMouseDown={(e) => {
+        // não fecha clicando fora (você queria X, então X)
+        e.stopPropagation();
       }}
     >
-      <div style={{ position: 'absolute', inset: 0, padding: 14 }}>
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          padding: 12
+        }}
+      >
         <div
           style={{
             width: '100%',
@@ -517,99 +531,111 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
             borderRadius: 18,
             overflow: 'hidden',
             border: '1px solid rgba(255,255,255,0.10)',
-            background: '#111216',
+            background: '#252931',
             boxShadow: '0 30px 90px rgba(0,0,0,0.55)',
             display: 'flex',
             flexDirection: 'column'
           }}
         >
-          {/* Header */}
+          {/* HEADER */}
           <div
             style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: 12,
               padding: '10px 12px',
-              borderBottom: '1px solid rgba(255,255,255,0.07)',
-              background: '#111216'
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 10,
+              borderBottom: '1px solid rgba(255,255,255,0.10)'
             }}
           >
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-              <div style={{ display: 'flex', background: 'rgba(255,255,255,0.06)', borderRadius: 10, padding: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+              <div style={{ color: '#fff', fontWeight: 1000, fontSize: 13, whiteSpace: 'nowrap' }}>
+                Heatmap
+              </div>
+
+              {/* Toggle tamanho */}
+              <div
+                style={{
+                  display: 'flex',
+                  background: 'rgba(255,255,255,0.07)',
+                  border: '1px solid rgba(255,255,255,0.10)',
+                  borderRadius: 12,
+                  padding: 3,
+                  gap: 4
+                }}
+              >
                 <button
                   onClick={() => setValueMode('marketcap')}
                   style={{
-                    padding: '7px 10px',
-                    borderRadius: 8,
-                    border: '1px solid transparent',
-                    background: valueMode === 'marketcap' ? '#dd9933' : 'transparent',
-                    color: valueMode === 'marketcap' ? '#0b0d10' : 'rgba(255,255,255,0.75)',
-                    fontWeight: 900,
                     cursor: 'pointer',
-                    fontSize: 11
+                    border: 'none',
+                    borderRadius: 10,
+                    padding: '7px 10px',
+                    fontWeight: 1000,
+                    fontSize: 11,
+                    color: valueMode === 'marketcap' ? '#0b0d10' : 'rgba(255,255,255,0.75)',
+                    background: valueMode === 'marketcap' ? '#dd9933' : 'transparent'
                   }}
                 >
-                  MKT CAP
+                  Tamanho: MKT CAP
                 </button>
                 <button
                   onClick={() => setValueMode('var24h')}
                   style={{
-                    padding: '7px 10px',
-                    borderRadius: 8,
-                    border: '1px solid transparent',
-                    background: valueMode === 'var24h' ? '#dd9933' : 'transparent',
-                    color: valueMode === 'var24h' ? '#0b0d10' : 'rgba(255,255,255,0.75)',
-                    fontWeight: 900,
                     cursor: 'pointer',
-                    fontSize: 11
+                    border: 'none',
+                    borderRadius: 10,
+                    padding: '7px 10px',
+                    fontWeight: 1000,
+                    fontSize: 11,
+                    color: valueMode === 'var24h' ? '#0b0d10' : 'rgba(255,255,255,0.75)',
+                    background: valueMode === 'var24h' ? '#dd9933' : 'transparent'
                   }}
                 >
-                  VOLUME
+                  Tamanho: |VAR 24H|
                 </button>
               </div>
 
+              {/* Dropdown categorias */}
               {hasCategories && (
                 <select
                   value={selectedCategoryId}
-                  onChange={e => setSelectedCategoryId(e.target.value)}
+                  onChange={(e) => setSelectedCategoryId(e.target.value)}
                   style={{
-                    background: 'rgba(255,255,255,0.06)',
+                    maxWidth: 240,
+                    background: 'rgba(255,255,255,0.07)',
                     border: '1px solid rgba(255,255,255,0.10)',
-                    color: 'rgba(255,255,255,0.85)',
-                    fontSize: 11,
+                    color: 'rgba(255,255,255,0.9)',
                     fontWeight: 900,
-                    borderRadius: 10,
+                    fontSize: 12,
                     padding: '8px 10px',
-                    outline: 'none',
-                    minWidth: 260
+                    borderRadius: 12,
+                    outline: 'none'
                   }}
+                  title="Filtrar por categoria"
                 >
-                  <option value="">Todas as Categorias</option>
-                  {categoryOptions.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                  <option value="">Todas as categorias</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
                   ))}
                 </select>
               )}
-
-              <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: 900 }}>
-                {loading ? 'Carregando…' : `Coins: ${filteredCoins.length}`}
-              </div>
             </div>
 
+            {/* X fechar */}
             <button
-              onClick={() => setOpen(false)}
+              onClick={close}
               style={{
-                width: 44,
-                height: 44,
-                borderRadius: 12,
-                border: '1px solid rgba(255,255,255,0.18)',
-                background: 'rgba(0,0,0,0.35)',
-                color: 'white',
-                fontWeight: 900,
                 cursor: 'pointer',
-                fontSize: 18,
-                lineHeight: '44px'
+                border: '1px solid rgba(255,255,255,0.15)',
+                background: 'rgba(255,255,255,0.06)',
+                color: '#fff',
+                borderRadius: 12,
+                padding: '8px 12px',
+                fontWeight: 1000,
+                fontSize: 12
               }}
               aria-label="Fechar"
               title="Fechar"
@@ -618,32 +644,48 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
             </button>
           </div>
 
-          {/* Chart */}
+          {/* BODY */}
           <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-            <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
+            <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
 
-            {!!err && (
+            {loading && (
               <div
                 style={{
                   position: 'absolute',
-                  left: 12,
-                  bottom: 12,
-                  zIndex: 5,
-                  padding: '10px 12px',
-                  borderRadius: 12,
-                  border: '1px solid rgba(255,255,255,0.10)',
+                  inset: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                   background: 'rgba(0,0,0,0.35)',
-                  color: 'white',
-                  fontWeight: 900,
-                  maxWidth: 900
+                  color: '#fff',
+                  fontWeight: 900
                 }}
               >
-                {err}
+                Carregando…
+              </div>
+            )}
+
+            {!loading && !chartData.length && (
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'rgba(0,0,0,0.20)',
+                  color: 'rgba(255,255,255,0.85)',
+                  fontWeight: 900,
+                  padding: 20,
+                  textAlign: 'center'
+                }}
+              >
+                Nada para renderizar (sem moedas após filtro).
               </div>
             )}
           </div>
 
-          {/* Footer debug (leve) */}
+          {/* FOOTER (debug leve, sem botão) */}
           <div
             style={{
               padding: '8px 12px',
@@ -654,3 +696,49 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
               display: 'flex',
               justifyContent: 'space-between',
               gap: 10,
+              flexWrap: 'wrap'
+            }}
+          >
+            <span>
+              coins: {chartData.length} {selectedCategoryId ? `• cat=${selectedCategoryId}` : ''}
+            </span>
+            <span style={{ opacity: 0.9 }}>
+              {err ? `Erro: ${err}` : `src: ${ENDPOINTS.COINS_LITE} • ${ENDPOINTS.TAXONOMY} • ${ENDPOINTS.CAT_MAP}`}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ width: '100%', height: '100%' }}>
+      {/* Botão simples pra abrir o popup */}
+      <button
+        onClick={() => setOpen(true)}
+        style={{
+          cursor: 'pointer',
+          border: '1px solid rgba(255,255,255,0.15)',
+          background: 'rgba(255,255,255,0.06)',
+          color: '#fff',
+          borderRadius: 12,
+          padding: '10px 12px',
+          fontWeight: 1000,
+          fontSize: 12
+        }}
+        title="Abrir Heatmap"
+      >
+        Abrir Heatmap
+      </button>
+
+      {/* Mensagem de erro de load (sem overlay chato) */}
+      {!loading && !!err && (
+        <div style={{ marginTop: 10, color: '#ff6b6b', fontWeight: 900, fontSize: 12 }}>
+          {err}
+        </div>
+      )}
+
+      {open && createPortal(modal, document.body)}
+    </div>
+  );
+}

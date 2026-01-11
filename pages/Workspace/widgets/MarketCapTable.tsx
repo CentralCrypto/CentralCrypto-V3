@@ -33,8 +33,8 @@ import { ApiCoin, Language } from '../../../types';
 import { getTranslations } from '../../../locales';
 import { fetchTopCoins } from '../services/api';
 
-const GREEN = '#26a269';
-const RED = '#e01b24';
+const GREEN = '#264738';
+const RED = '#4b2c32';
 
 const formatUSD = (val: number, compact = false) => {
   if (val === undefined || val === null) return '---';
