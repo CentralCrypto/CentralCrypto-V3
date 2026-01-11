@@ -125,8 +125,8 @@ const App: React.FC = () => {
     <div className="min-h-screen flex flex-col bg-tech-950 text-gray-200 selection:bg-tech-500 selection:text-white font-sans overflow-x-hidden transition-colors duration-300">
       <style>{`
         :root {
-          --color-success: #77dd77; 
-          --color-danger: #ff6961;  
+          --color-success: #16a34a; /* Emerald 600 - Matte */
+          --color-danger: #dc2626;  /* Red 600 - Matte */
         }
         .text-tech-success, .text-green-500, .text-green-400 { color: var(--color-success) !important; }
         .text-tech-danger, .text-red-500, .text-red-400 { color: var(--color-danger) !important; }

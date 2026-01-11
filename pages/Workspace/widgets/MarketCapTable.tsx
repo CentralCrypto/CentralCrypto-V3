@@ -36,10 +36,12 @@ import { fetchTopCoins } from '../services/api';
 import { getTranslations } from '../../../locales';
 
 // ======================
-// CORES PADRONIZADAS (Heatmap / Price Flash Bright - MATTE FOSCO)
+// CORES PADRONIZADAS (Heatmap / Price Flash - MATTE/SÓLIDO)
 // ======================
-const GREEN = '#16a34a'; // Emerald 600
-const RED = '#dc2626';   // Red 600
+// Verde Esmeralda (Menos Neon, Mais Profissional)
+const GREEN = '#16a34a'; 
+// Vermelho Sólido (Menos Rosado, Mais Alerta)
+const RED = '#dc2626';   
 
 const FLASH_GREEN_BG = 'rgba(22, 163, 74, 0.18)';
 const FLASH_RED_BG = 'rgba(220, 38, 38, 0.18)';
@@ -245,7 +247,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     }
   }, []);
 
-  // ✅ Scroll-to-top helper (corrige abrir “lá embaixo”)
+  // ✅ Scroll-to-top helper
   const scrollToTop = useCallback(() => {
     const el = scrollContainerRef?.current;
     if (el) el.scrollTo({ top: 0, behavior: 'auto' });
@@ -330,12 +332,10 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     return () => document.removeEventListener('mousedown', onDocClick);
   }, []);
 
-  // ✅ Carrega categorias apenas quando entra no modo categories
   useEffect(() => {
     if (viewMode === 'categories') loadCategoriesLocal();
   }, [viewMode, loadCategoriesLocal]);
 
-  // ✅ Sempre que trocar “view” ou “nível”, sobe pro topo
   useEffect(() => {
     scrollToTop();
   }, [viewMode, activeMasterId, activeSubId, activeCategoryId, scrollToTop]);
@@ -361,7 +361,6 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     scrollToTop();
   };
 
-  // ---------- Taxonomy parsing (masters + subs) ----------
   const parsedTaxonomy = useMemo(() => {
     const raw = taxonomy;
     let masters: any[] = [];
@@ -406,23 +405,6 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     return [{ id: '__all__', name: 'Todas', categoryIds: [] as string[] }, ...subs];
   }, [selectedMaster]);
 
-  // category name resolver
-  const categoryNameById = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const c of catList) {
-      const id = String((c as any).category_id ?? (c as any).id ?? '').trim();
-      const nm = String((c as any).name ?? '').trim();
-      if (id && nm) map.set(id, nm);
-    }
-    for (const c of catMarket) {
-      const id = String((c as any).category_id ?? (c as any).id ?? (c as any).categoryId ?? '').trim();
-      const nm = String((c as any).name ?? '').trim();
-      if (id && nm) map.set(id, nm);
-    }
-    return map;
-  }, [catList, catMarket]);
-
-  // ---------- Coin map -> sets ----------
   const coinById = useMemo(() => {
     const m = new Map<string, ApiCoin>();
     for (const c of coins) {
@@ -563,7 +545,6 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     };
   }, [membersFromCategoryIds]);
 
-  // --------- category rows (MASTERS ONLY) ----------
   const masterRows = useMemo(() => {
     const q = (searchTerm || '').toLowerCase().trim();
 
@@ -615,7 +596,6 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     return rows;
   }, [parsedTaxonomy, searchTerm, computeStatsFromCatIds, catSortConfig]);
 
-  // --------- COINS table filtering ----------
   const activeFilter = useMemo(() => {
     if (activeMasterId && selectedMaster) {
       if (activeSubId && activeSubId !== '__all__') {
@@ -666,7 +646,6 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
 
     if (favOnly) {
       items = items.filter(c => !!favorites[c.id]);
-      // ✅ UNIVERSAL FAVORITES: quando favOnly=true, NÃO aplica filtro de categoria
     } else {
       if (allowedCoinIdsSet) {
         items = items.filter(c => allowedCoinIdsSet.has(String(c.id)));
@@ -722,7 +701,6 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     viewMode
   ]);
 
-  // ✅ atualiza watch-list pro WS (só o que está na página atual)
   useEffect(() => {
     if (viewMode !== 'coins') {
       watchSymbolsRef.current = new Set();
@@ -796,7 +774,6 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     };
   }, [closeWs, clearTimers, scheduleFlush, viewMode]);
 
-  // ✅ liga/desliga WS Binance (price + 24h%) + reconnect
   useEffect(() => {
     if (viewMode !== 'coins') {
       clearTimers();
@@ -811,6 +788,48 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
       closeWs();
     };
   }, [viewMode, connectWs, closeWs, clearTimers]);
+
+  // ✅ Larguras responsivas por % (colgroup). Spark ganha peso.
+  const COIN_COL_WIDTH: Record<string, string> = {
+    fav: '3%',
+    rank: '4%',
+    asset: '18%',
+    price: '10%',
+    ch1h: '6%',
+    ch24h: '6%',
+    ch7d: '6%',
+    mcap: '10%',
+    vol24h: '9%',
+    supply: '7%',
+    spark7d: '21%',
+  };
+
+  // ✅ labels com quebra (Market / Cap)
+  const COLS: Record<string, { id: string; label: React.ReactNode; sortKey?: string; }> = {
+    rank: { id: 'rank', label: t.rank, sortKey: 'market_cap_rank' },
+    asset: { id: 'asset', label: t.asset, sortKey: 'name' },
+    price: { id: 'price', label: t.price, sortKey: 'current_price' },
+    ch1h: { id: 'ch1h', label: '1h %', sortKey: 'change_1h_est' },
+    ch24h: { id: 'ch24h', label: '24h %', sortKey: 'price_change_percentage_24h' },
+    ch7d: { id: 'ch7d', label: '7d %', sortKey: 'change_7d_est' },
+    mcap: { id: 'mcap', label: (<span className="leading-[1.05]">Market<br />Cap</span>), sortKey: 'market_cap' },
+    vol24h: { id: 'vol24h', label: (<span className="leading-[1.05]">{t.vol}<br />(24h)</span>), sortKey: 'total_volume' },
+    supply: { id: 'supply', label: (<span className="leading-[1.05]">{t.supply}<br /></span>), sortKey: 'circulating_supply' },
+    spark7d: { id: 'spark7d', label: t.chart, sortKey: undefined },
+  };
+
+  const CAT_COLS: Record<string, { id: string; label: string; sortKey?: string; w: string; }> = {
+    category: { id: 'category', label: t.categories, sortKey: 'displayName', w: 'w-[320px]' },
+    gainers: { id: 'gainers', label: t.gainers, sortKey: undefined, w: 'w-[150px]' },
+    losers: { id: 'losers', label: t.losers, sortKey: undefined, w: 'w-[150px]' },
+    ch1h: { id: 'ch1h', label: '1h', sortKey: 'ch1h', w: 'w-[92px]' },
+    ch24h: { id: 'ch24h', label: '24h', sortKey: 'ch24h', w: 'w-[98px]' },
+    ch7d: { id: 'ch7d', label: '7d', sortKey: 'ch7d', w: 'w-[98px]' },
+    mcap: { id: 'mcap', label: 'Market Cap', sortKey: 'marketCap', w: 'w-[155px]' },
+    vol24h: { id: 'vol24h', label: '24h Volume', sortKey: 'volume24h', w: 'w-[145px]' },
+    coins: { id: 'coins', label: '# Coins', sortKey: 'coinsCount', w: 'w-[96px]' },
+    spark7d: { id: 'spark7d', label: t.chart, sortKey: undefined, w: 'min-w-[220px] w-auto' },
+  };
 
   const Paginator = ({ compact = false }: { compact?: boolean }) => {
     const start = safePage * pageSize + 1;
@@ -859,53 +878,10 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     );
   };
 
-  // ✅ Larguras responsivas por % (colgroup). Spark ganha peso.
-  const COIN_COL_WIDTH: Record<string, string> = {
-    fav: '3%',
-    rank: '4%',
-    asset: '18%',
-    price: '10%',
-    ch1h: '6%',
-    ch24h: '6%',
-    ch7d: '6%',
-    mcap: '10%',
-    vol24h: '9%',
-    supply: '7%',
-    spark7d: '21%',
-  };
-
-  // ✅ labels com quebra (Market / Cap)
-  const COLS: Record<string, { id: string; label: React.ReactNode; sortKey?: string; }> = {
-    rank: { id: 'rank', label: t.rank, sortKey: 'market_cap_rank' },
-    asset: { id: 'asset', label: t.asset, sortKey: 'name' },
-    price: { id: 'price', label: t.price, sortKey: 'current_price' },
-    ch1h: { id: 'ch1h', label: '1h %', sortKey: 'change_1h_est' },
-    ch24h: { id: 'ch24h', label: '24h %', sortKey: 'price_change_percentage_24h' },
-    ch7d: { id: 'ch7d', label: '7d %', sortKey: 'change_7d_est' },
-    mcap: { id: 'mcap', label: (<span className="leading-[1.05]">Market<br />Cap</span>), sortKey: 'market_cap' },
-    vol24h: { id: 'vol24h', label: (<span className="leading-[1.05]">{t.vol}<br />(24h)</span>), sortKey: 'total_volume' },
-    supply: { id: 'supply', label: (<span className="leading-[1.05]">{t.supply}<br /></span>), sortKey: 'circulating_supply' },
-    spark7d: { id: 'spark7d', label: t.chart, sortKey: undefined },
-  };
-
-  const CAT_COLS: Record<string, { id: string; label: string; sortKey?: string; w: string; }> = {
-    category: { id: 'category', label: t.categories, sortKey: 'displayName', w: 'w-[320px]' },
-    gainers: { id: 'gainers', label: t.gainers, sortKey: undefined, w: 'w-[150px]' },
-    losers: { id: 'losers', label: t.losers, sortKey: undefined, w: 'w-[150px]' },
-    ch1h: { id: 'ch1h', label: '1h', sortKey: 'ch1h', w: 'w-[92px]' },
-    ch24h: { id: 'ch24h', label: '24h', sortKey: 'ch24h', w: 'w-[98px]' },
-    ch7d: { id: 'ch7d', label: '7d', sortKey: 'ch7d', w: 'w-[98px]' },
-    mcap: { id: 'mcap', label: 'Market Cap', sortKey: 'marketCap', w: 'w-[155px]' },
-    vol24h: { id: 'vol24h', label: '24h Volume', sortKey: 'volume24h', w: 'w-[145px]' },
-    coins: { id: 'coins', label: '# Coins', sortKey: 'coinsCount', w: 'w-[96px]' },
-    spark7d: { id: 'spark7d', label: t.chart, sortKey: undefined, w: 'min-w-[220px] w-auto' },
-  };
-
   const SortIcon = ({ active }: { active: boolean }) => (
     <ChevronsUpDown size={12} className={`text-gray-400 group-hover:text-[#dd9933] ${active ? 'text-[#dd9933]' : ''}`} />
   );
 
-  // ✅ Header com 3 slots compactos: puxador | título | chevrons (menos gordura)
   const SortableThGeneric = ({
     colId,
     label,
@@ -967,7 +943,6 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     );
   };
 
-  // ✅ FIX drag coins
   const onDragEnd = (event: any) => {
     const { active, over } = event;
     if (!over) return;
@@ -1165,15 +1140,15 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                                     <AreaChart data={r.spark}>
                                       <defs>
                                         <linearGradient id={`cg_${r.id}`} x1="0" y1="0" x2="0" y2="1">
-                                          <stop offset="0%" stopColor={pos24 ? GREEN : RED} stopOpacity={0.55} />
-                                          <stop offset="75%" stopColor={pos24 ? GREEN : RED} stopOpacity={0.18} />
-                                          <stop offset="100%" stopColor={pos24 ? GREEN : RED} stopOpacity={0.02} />
+                                          <stop offset="0%" stopColor={pos24 ? '#26a269' : '#e01b24'} stopOpacity={0.55} />
+                                          <stop offset="75%" stopColor={pos24 ? '#26a269' : '#e01b24'} stopOpacity={0.18} />
+                                          <stop offset="100%" stopColor={pos24 ? '#26a269' : '#e01b24'} stopOpacity={0.02} />
                                         </linearGradient>
                                       </defs>
                                       <Area
                                         type="monotone"
                                         dataKey="v"
-                                        stroke={pos24 ? GREEN : RED}
+                                        stroke={pos24 ? '#26a269' : '#e01b24'}
                                         strokeWidth={2}
                                         fill={`url(#cg_${r.id})`}
                                         fillOpacity={1}
