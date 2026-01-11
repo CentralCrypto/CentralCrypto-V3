@@ -20,6 +20,7 @@ type Coin = {
   total_volume?: number;
 
   price_change_percentage_24h?: number;
+  price_change_percentage_24h_in_currency?: number;
   price_change_percentage_1h_in_currency?: number;
   price_change_percentage_7d_in_currency?: number;
 
@@ -30,6 +31,15 @@ type Coin = {
   high_24h?: number;
   low_24h?: number;
   ath?: number;
+
+  last_updated?: string;
+};
+
+type CacheckoLiteWrapper = {
+  updated_at?: string;
+  source?: string;
+  stats?: any;
+  data?: Coin[];
 };
 
 type TreemapPoint = {
@@ -73,7 +83,6 @@ async function httpGetJson<T = any>(
 ): Promise<T> {
   const timeoutMs = opts?.timeoutMs ?? 12000;
   const retries = opts?.retries ?? 2;
-
   const finalUrl = withCb(url);
 
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -134,15 +143,35 @@ function fmtPrice(p: number) {
   return `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 }
 function colorFor(v: number) {
-  const n = safeNum(v);
-  return n >= 0 ? '#2ecc59' : '#f73539';
+  return safeNum(v) >= 0 ? '#2ecc59' : '#f73539';
 }
 
 function normalizeCoins(raw: any): Coin[] {
   if (!raw) return [];
-  if (Array.isArray(raw)) return raw as Coin[];
-  if (Array.isArray(raw?.data)) return raw.data as Coin[];
-  if (Array.isArray(raw?.[0]?.data)) return raw[0].data as Coin[];
+
+  // Caso A: wrapper array -> pega o primeiro elemento com .data
+  if (Array.isArray(raw)) {
+    const first = raw[0] as CacheckoLiteWrapper | any;
+
+    if (first && Array.isArray(first.data)) {
+      return first.data as Coin[];
+    }
+
+    // Caso B: array já é lista de coins
+    if (raw.length > 0 && raw[0] && typeof raw[0] === 'object' && 'id' in raw[0]) {
+      return raw as Coin[];
+    }
+
+    // Caso C: algum item tem .data
+    const anyWithData = raw.find((x: any) => x && Array.isArray(x.data));
+    if (anyWithData) return anyWithData.data as Coin[];
+
+    return [];
+  }
+
+  // Caso D: objeto com .data
+  if (raw && Array.isArray(raw.data)) return raw.data as Coin[];
+
   return [];
 }
 
@@ -208,21 +237,26 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
   }, [open]);
 
   const chartData: TreemapPoint[] = useMemo(() => {
-    const list = [...coins].filter(c => c && c.id && (c.symbol || c.name));
+    const list = [...coins]
+      .filter(c => c && c.id && (c.symbol || c.name));
 
-    // Sem filtro, sem limite: renderiza tudo
-    // Ordenar só pra deixar mais “bonito” no layout inicial
+    // ordena só pra ficar mais “bonito” no layout
     list.sort((a, b) => safeNum(b.market_cap) - safeNum(a.market_cap));
 
     return list.map(c => {
       const sym = safeUpper(c.symbol) || safeUpper(c.name) || c.id;
-      const ch24 = safeNum(c.price_change_percentage_24h);
+
+      const ch24 =
+        safeNum(c.price_change_percentage_24h_in_currency) ||
+        safeNum(c.price_change_percentage_24h);
+
       const mc = Math.max(1, safeNum(c.market_cap));
 
+      // tamanho do quadrado muda conforme toggle
       const value =
         valueMode === 'marketcap'
           ? mc
-          : Math.max(0.01, Math.abs(ch24)); // tamanho = variação (magnitude)
+          : Math.max(0.01, Math.abs(ch24)); // variação (magnitude) como size
 
       return {
         id: String(c.id),
@@ -248,15 +282,17 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
 
           high24h: safeNum(c.high_24h),
           low24h: safeNum(c.low_24h),
-          ath: safeNum(c.ath)
+          ath: safeNum(c.ath),
+
+          lastUpdated: c.last_updated || ''
         }
       };
     });
   }, [coins, valueMode]);
 
   const renderChart = useCallback(() => {
-    if (!containerRef.current) return;
-    if (!chartData.length) return;
+    if (!containerRef.current) return () => {};
+    if (!chartData.length) return () => {};
 
     if (chartRef.current) {
       chartRef.current.destroy();
@@ -291,27 +327,27 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
           const row = (label: string, value: string) => `
             <div style="display:flex; justify-content:space-between; gap:12px; margin-top:6px;">
               <span style="color:rgba(255,255,255,0.55); font-weight:800;">${label}</span>
-              <span style="color:#fff; font-weight:900;">${value}</span>
+              <span style="color:#fff; font-weight:1000;">${value}</span>
             </div>
           `;
 
           return `
-            <div style="min-width:320px; padding:12px; color:#fff; font-family:Inter,system-ui,sans-serif;">
+            <div style="min-width:340px; padding:12px; color:#fff; font-family:Inter,system-ui,sans-serif;">
               <div style="display:flex; align-items:center; gap:10px; padding-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.10);">
                 ${c.logo ? `<img src="${c.logo}" style="width:30px;height:30px;border-radius:50%;"/>` : ''}
                 <div style="min-width:0">
-                  <div style="font-weight:1000; font-size:14px; line-height:1.1;">${p.name}</div>
-                  <div style="color:rgba(255,255,255,0.6); font-size:11px; font-weight:800; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:260px;">
-                    ${full}${c.rank ? ` • #${c.rank}` : ''}
+                  <div style="font-weight:1100; font-size:14px; line-height:1.1;">${p.name}</div>
+                  <div style="color:rgba(255,255,255,0.6); font-size:11px; font-weight:800; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:280px;">
+                    ${full}${c.rank ? ` • #${c.rank}` : ''}${c.lastUpdated ? ` • ${c.lastUpdated}` : ''}
                   </div>
                 </div>
               </div>
 
               <div style="margin-top:10px; display:flex; align-items:flex-end; justify-content:space-between; gap:10px;">
-                <div style="font-size:20px; font-weight:1000;">
+                <div style="font-size:20px; font-weight:1100;">
                   ${fmtPrice(c.price)}
                 </div>
-                <div style="font-size:14px; font-weight:1000; color:${colorFor(c.change24h)};">
+                <div style="font-size:14px; font-weight:1100; color:${colorFor(c.change24h)};">
                   ${fmtPct(c.change24h)}
                 </div>
               </div>
@@ -319,15 +355,15 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
               <div style="margin-top:10px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
                 <div style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:8px; text-align:center;">
                   <div style="font-size:10px; color:rgba(255,255,255,0.55); font-weight:900;">1H</div>
-                  <div style="font-size:12px; font-weight:1000; color:${colorFor(c.change1h)}">${fmtPct(c.change1h)}</div>
+                  <div style="font-size:12px; font-weight:1100; color:${colorFor(c.change1h)}">${fmtPct(c.change1h)}</div>
                 </div>
                 <div style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:8px; text-align:center;">
                   <div style="font-size:10px; color:rgba(255,255,255,0.55); font-weight:900;">24H</div>
-                  <div style="font-size:12px; font-weight:1000; color:${colorFor(c.change24h)}">${fmtPct(c.change24h)}</div>
+                  <div style="font-size:12px; font-weight:1100; color:${colorFor(c.change24h)}">${fmtPct(c.change24h)}</div>
                 </div>
                 <div style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:8px; text-align:center;">
                   <div style="font-size:10px; color:rgba(255,255,255,0.55); font-weight:900;">7D</div>
-                  <div style="font-size:12px; font-weight:1000; color:${colorFor(c.change7d)}">${fmtPct(c.change7d)}</div>
+                  <div style="font-size:12px; font-weight:1100; color:${colorFor(c.change7d)}">${fmtPct(c.change7d)}</div>
                 </div>
               </div>
 
@@ -387,35 +423,25 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
               const w = p.shapeArgs?.width || 0;
               const h = p.shapeArgs?.height || 0;
 
-              // Quadrado muito pequeno: sem texto nenhum
               if (w < 46 || h < 34) return '';
 
-              // Heurísticas de espaço
               const area = w * h;
-
-              // Fonte do símbolo vai subindo com a área, mas tem teto
               const symFont = Math.min(24, Math.max(11, Math.round(7 + area * 0.00025)));
 
-              // Logo só aparece se tiver espaço decente
               const showLogo = !!c.logo && w >= 68 && h >= 58;
-
-              // Tamanho do logo proporcional, mas com limites
               const logoSize = Math.min(30, Math.max(16, Math.round(symFont + 6)));
 
-              // Preço só aparece se tiver espaço suficiente (evita “vazar”)
               const showPrice = w >= 86 && h >= 68;
-
-              // Preço formatado curto pra caber
               const priceTxt = fmtPrice(c.price);
 
               return `
                 <div style="pointer-events:none; text-align:center; line-height:1.05;">
                   ${showLogo ? `<img src="${c.logo}" style="width:${logoSize}px;height:${logoSize}px;border-radius:50%;margin-bottom:4px; box-shadow:0 1px 2px rgba(0,0,0,0.6);" />` : ''}
-                  <div style="color:white; font-weight:1000; font-size:${symFont}px; text-shadow:0 1px 2px rgba(0,0,0,0.75);">
+                  <div style="color:white; font-weight:1100; font-size:${symFont}px; text-shadow:0 1px 2px rgba(0,0,0,0.75);">
                     ${p.name}
                   </div>
                   ${showPrice ? `
-                    <div style="color:rgba(255,255,255,0.92); font-weight:900; font-size:${Math.max(10, Math.round(symFont * 0.72))}px; text-shadow:0 1px 2px rgba(0,0,0,0.75); margin-top:2px;">
+                    <div style="color:rgba(255,255,255,0.92); font-weight:1000; font-size:${Math.max(10, Math.round(symFont * 0.72))}px; text-shadow:0 1px 2px rgba(0,0,0,0.75); margin-top:2px;">
                       ${priceTxt}
                     </div>
                   ` : ''}
@@ -427,9 +453,7 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
       ]
     });
 
-    const ro = new ResizeObserver(() => {
-      chartRef.current?.reflow();
-    });
+    const ro = new ResizeObserver(() => chartRef.current?.reflow());
     ro.observe(containerRef.current);
 
     return () => {
@@ -447,11 +471,11 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
     if (loading) return;
 
     const cleanup = renderChart();
-    const t = setTimeout(() => chartRef.current?.reflow(), 60);
+    const t = setTimeout(() => chartRef.current?.reflow(), 80);
 
     return () => {
       clearTimeout(t);
-      if (typeof cleanup === 'function') cleanup();
+      cleanup?.();
     };
   }, [open, loading, renderChart]);
 
@@ -459,7 +483,6 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
     setOpen(false);
   }
 
-  // Se fechou, não mostra nada (sem botão pra reabrir, como você mandou)
   if (!open) return null;
 
   const modal = (
@@ -486,7 +509,6 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
             flexDirection: 'column'
           }}
         >
-          {/* HEADER */}
           <div
             style={{
               padding: '10px 12px',
@@ -498,7 +520,7 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-              <div style={{ color: '#fff', fontWeight: 1000, fontSize: 13, whiteSpace: 'nowrap' }}>
+              <div style={{ color: '#fff', fontWeight: 1100, fontSize: 13, whiteSpace: 'nowrap' }}>
                 Heatmap
               </div>
 
@@ -519,7 +541,7 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
                     border: 'none',
                     borderRadius: 10,
                     padding: '7px 10px',
-                    fontWeight: 1000,
+                    fontWeight: 1100,
                     fontSize: 11,
                     color: valueMode === 'marketcap' ? '#0b0d10' : 'rgba(255,255,255,0.75)',
                     background: valueMode === 'marketcap' ? '#dd9933' : 'transparent'
@@ -535,7 +557,7 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
                     border: 'none',
                     borderRadius: 10,
                     padding: '7px 10px',
-                    fontWeight: 1000,
+                    fontWeight: 1100,
                     fontSize: 11,
                     color: valueMode === 'var24h' ? '#0b0d10' : 'rgba(255,255,255,0.75)',
                     background: valueMode === 'var24h' ? '#dd9933' : 'transparent'
@@ -543,6 +565,10 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
                 >
                   Var.Preço 24Hs
                 </button>
+              </div>
+
+              <div style={{ color: 'rgba(255,255,255,0.55)', fontWeight: 900, fontSize: 11, whiteSpace: 'nowrap' }}>
+                {loading ? 'Carregando…' : `${chartData.length} moedas`}
               </div>
             </div>
 
@@ -555,7 +581,7 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
                 color: '#fff',
                 borderRadius: 12,
                 padding: '8px 12px',
-                fontWeight: 1000,
+                fontWeight: 1100,
                 fontSize: 12
               }}
               aria-label="Fechar"
@@ -565,7 +591,6 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
             </button>
           </div>
 
-          {/* BODY */}
           <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
             <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
 
@@ -596,7 +621,7 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
                   justifyContent: 'center',
                   background: 'rgba(0,0,0,0.30)',
                   color: '#ff6b6b',
-                  fontWeight: 1000,
+                  fontWeight: 1100,
                   padding: 20,
                   textAlign: 'center'
                 }}

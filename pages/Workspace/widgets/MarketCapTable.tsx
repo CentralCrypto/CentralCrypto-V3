@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   ChevronDown,
@@ -35,15 +36,14 @@ import { getTranslations } from '../../../locales';
 import { fetchTopCoins } from '../services/api';
 
 // ======================
-// CORES FIXAS (pedido do usuário)
+// CORES FIXAS (pedido do usuário - Ticker Header)
 // ======================
-const GREEN = '#264738';
-const RED = '#4b2c32';
+const GREEN = '#22c55e'; // text-tech-success
+const RED = '#ef4444';   // text-tech-danger
 
-
-// fundos "pisca" (pastel) coerentes com as cores
-const FLASH_GREEN_BG = 'rgba(38, 71, 56, 0.18)';
-const FLASH_RED_BG = 'rgba(75, 44, 50, 0.18)';
+// fundos "pisca" (pastel) coerentes com as cores (rgba)
+const FLASH_GREEN_BG = 'rgba(34, 197, 94, 0.18)';
+const FLASH_RED_BG = 'rgba(239, 68, 68, 0.18)';
 
 const formatUSD = (val: number, compact = false) => {
   if (val === undefined || val === null) return '---';
@@ -1305,8 +1305,8 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     title: string;
   }) => {
     const activeClass = variant === 'gainers'
-      ? 'bg-green-600 text-white border-transparent shadow-md'
-      : 'bg-red-600 text-white border-transparent shadow-md';
+      ? `bg-[${GREEN}] text-white border-transparent shadow-md`
+      : `bg-[${RED}] text-white border-transparent shadow-md`;
 
     return (
       <button
@@ -1317,6 +1317,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
             ? activeClass
             : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5'
           }`}
+        style={active ? { backgroundColor: variant === 'gainers' ? GREEN : RED, color: 'white', border: 'transparent' } : {}}
         title={title}
       >
         {icon}
