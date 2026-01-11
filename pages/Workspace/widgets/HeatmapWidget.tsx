@@ -3,6 +3,8 @@ import Highcharts from 'highcharts';
 import TreemapModule from 'highcharts/modules/treemap';
 import ExportingModule from 'highcharts/modules/exporting';
 import AccessibilityModule from 'highcharts/modules/accessibility';
+import ColorAxisModule from 'highcharts/modules/coloraxis';
+import { DashboardItem, Language } from '../../../types';
 
 type ValueMode = 'marketcap' | 'var24h';
 
@@ -59,9 +61,10 @@ function initHighchartsOnce() {
   if (HC_INITED) return;
   HC_INITED = true;
 
-  try { (TreemapModule as any)(Highcharts); } catch {}
-  try { (ExportingModule as any)(Highcharts); } catch {}
-  try { (AccessibilityModule as any)(Highcharts); } catch {}
+  try { (TreemapModule as any)(Highcharts); } catch (e) { console.error(e); }
+  try { (ExportingModule as any)(Highcharts); } catch (e) { console.error(e); }
+  try { (AccessibilityModule as any)(Highcharts); } catch (e) { console.error(e); }
+  try { (ColorAxisModule as any)(Highcharts); } catch (e) { console.error(e); }
 
   Highcharts.setOptions({
     chart: {
@@ -115,60 +118,28 @@ function fmtPrice(p: number) {
 function colorFor(v: number) {
   return safeNum(v) >= 0 ? '#2ecc59' : '#f73539';
 }
-
 function withCb(url: string) {
   const salt = Math.floor(Date.now() / 60000);
   return url.includes('?') ? `${url}&_cb=${salt}` : `${url}?_cb=${salt}`;
 }
-
-async function httpGetJson<T = any>(
-  url: string,
-  opts?: { timeoutMs?: number; retries?: number }
-): Promise<T> {
-  const timeoutMs = opts?.timeoutMs ?? 12000;
-  const retries = opts?.retries ?? 2;
-  const finalUrl = withCb(url);
-
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), timeoutMs);
-
-    try {
-      const r = await fetch(finalUrl, { signal: ctrl.signal, cache: 'no-store' });
-      if (!r.ok) throw new Error(`${finalUrl} -> HTTP ${r.status}`);
-      return (await r.json()) as T;
-    } catch (e) {
-      if (attempt === retries) throw e;
-    } finally {
-      clearTimeout(t);
-    }
-  }
-
-  throw new Error('httpGetJson: unreachable');
+async function httpGetJson<T = any>(url: string): Promise<T> {
+  const r = await fetch(withCb(url), { cache: 'no-store' });
+  if (!r.ok) throw new Error(`${url} -> HTTP ${r.status}`);
+  return (await r.json()) as T;
 }
-
-// ✅ Suporta exatamente seu formato: [ { data: [...] } ]
 function normalizeCoins(raw: any): Coin[] {
   if (!raw) return [];
-
   if (Array.isArray(raw)) {
     const first = raw[0] as CacheckoLiteWrapper | any;
     if (first && Array.isArray(first.data)) return first.data as Coin[];
-
-    if (raw.length > 0 && raw[0] && typeof raw[0] === 'object' && 'id' in raw[0]) {
-      return raw as Coin[];
-    }
-
+    if (raw.length > 0 && raw[0] && typeof raw[0] === 'object' && 'id' in raw[0]) return raw as Coin[];
     const anyWithData = raw.find((x: any) => x && Array.isArray(x.data));
     if (anyWithData) return anyWithData.data as Coin[];
-
     return [];
   }
-
   if (raw && Array.isArray(raw.data)) return raw.data as Coin[];
   return [];
 }
-
 function dedupById(coins: Coin[]) {
   const m = new Map<string, Coin>();
   for (const c of coins) {
@@ -178,20 +149,26 @@ function dedupById(coins: Coin[]) {
   return Array.from(m.values());
 }
 
-export default function HeatmapWidget() {
+interface HeatmapWidgetProps {
+  item: DashboardItem;
+  language?: Language;
+}
+
+export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
   const [open, setOpen] = useState(true);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string>('');
   const [coins, setCoins] = useState<Coin[]>([]);
   const [valueMode, setValueMode] = useState<ValueMode>('marketcap');
 
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<Highcharts.Chart | null>(null);
+  const roRef = useRef<ResizeObserver | null>(null);
 
   useEffect(() => {
     initHighchartsOnce();
   }, []);
 
-  // trava scroll quando popup aberto
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -204,14 +181,13 @@ export default function HeatmapWidget() {
   const loadData = useCallback(async () => {
     setLoading(true);
     setErr('');
-
     try {
-      const raw = await httpGetJson<any>(ENDPOINTS.COINS_LITE, { timeoutMs: 12000, retries: 2 });
+      const raw = await httpGetJson<any>(ENDPOINTS.COINS_LITE);
       const arr = dedupById(normalizeCoins(raw));
       setCoins(arr);
     } catch (e: any) {
       console.error('Heatmap load error:', e);
-      setErr(e?.message || 'Falha ao carregar /cachecko/cachecko_lite.json');
+      setErr(e?.message || 'Falha ao carregar cachecko_lite.json');
       setCoins([]);
     } finally {
       setLoading(false);
@@ -222,11 +198,8 @@ export default function HeatmapWidget() {
     loadData();
   }, [loadData]);
 
-  // 🔥 monta data do treemap
   const treemapData = useMemo(() => {
     const list = [...coins].filter(c => c && c.id && (c.symbol || c.name));
-
-    // ordena por mcap pra layout ficar estável
     list.sort((a, b) => safeNum(b.market_cap) - safeNum(a.market_cap));
 
     return list.map(c => {
@@ -236,17 +209,16 @@ export default function HeatmapWidget() {
         safeNum(c.price_change_percentage_24h_in_currency) ||
         safeNum(c.price_change_percentage_24h);
 
-      // ✅ NUNCA ZERO: treemap ignora value 0
-      const value =
+      const size =
         valueMode === 'marketcap'
           ? Math.max(1, safeNum(c.market_cap))
-          : Math.max(0.0001, Math.abs(ch24)); // tamanho pela variação (magnitude)
+          : Math.max(0.0001, Math.abs(ch24));
 
       return {
         id: String(c.id),
         name: sym,
-        value,
-        colorValue: clamp(ch24, -10, 10), // cor limitada ao range do colorAxis
+        value: size,
+        colorValue: clamp(ch24, -10, 10),
         custom: {
           fullName: c.name || c.id,
           logo: c.image || '',
@@ -254,18 +226,17 @@ export default function HeatmapWidget() {
 
           price: safeNum(c.current_price),
           change24h: ch24,
-
           price_change_24h: safeNum(c.price_change_24h),
 
           marketCap: safeNum(c.market_cap),
-          marketCapChange24h: safeNum(c.market_cap_change_24h),
-          marketCapChangePct24h: safeNum(c.market_cap_change_percentage_24h),
-
           fdv: safeNum(c.fully_diluted_valuation),
           volume24h: safeNum(c.total_volume),
 
           high24h: safeNum(c.high_24h),
           low24h: safeNum(c.low_24h),
+
+          marketCapChange24h: safeNum(c.market_cap_change_24h),
+          marketCapChangePct24h: safeNum(c.market_cap_change_percentage_24h),
 
           circulating: safeNum(c.circulating_supply),
           totalSupply: safeNum(c.total_supply),
@@ -285,27 +256,28 @@ export default function HeatmapWidget() {
     });
   }, [coins, valueMode]);
 
-  // ✅ render igual o demo: Highcharts.chart('containerId', ...)
-  const renderChart = useCallback(() => {
-    const el = document.getElementById('cachecko-heatmap-container');
-    if (!el) return;
-
-    // garante layout “pronto”
-    const rect = el.getBoundingClientRect();
-    if (rect.width < 10 || rect.height < 10) return;
-
+  const destroyChart = useCallback(() => {
     if (chartRef.current) {
       chartRef.current.destroy();
       chartRef.current = null;
     }
+  }, []);
 
-    chartRef.current = Highcharts.chart('cachecko-heatmap-container', {
+  const renderChart = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const rect = el.getBoundingClientRect();
+    if (rect.width < 50 || rect.height < 50) return;
+
+    destroyChart();
+
+    chartRef.current = Highcharts.chart(el, {
       chart: {
         backgroundColor: '#252931',
         animation: false,
-        spacing: [10, 10, 10, 10]
+        margin: [10, 10, 10, 10]
       },
-
       title: { text: null },
       subtitle: { text: null },
       credits: { enabled: false },
@@ -378,39 +350,29 @@ export default function HeatmapWidget() {
       },
 
       colorAxis: {
-        minColor: '#f73539',
-        maxColor: '#2ecc59',
+        min: -10,
+        max: 10,
         stops: [
           [0, '#f73539'],
           [0.5, '#414555'],
           [1, '#2ecc59']
         ],
-        min: -10,
-        max: 10,
-        gridLineWidth: 0,
         labels: {
-          overflow: 'allow',
-          format: '{#gt value 0}+{value}{else}{value}{/gt}%',
-          style: { color: 'white', fontWeight: '900' }
+          style: { color: '#fff', fontWeight: '900' },
+          format: '{#gt value 0}+{value}{else}{value}{/gt}%'
         }
       },
 
       series: [
         {
-          name: 'All',
           type: 'treemap',
           layoutAlgorithm: 'squarified',
           allowDrillToNode: false,
           animationLimit: 1000,
-
           borderColor: '#252931',
-          color: '#252931',
-          opacity: 0.01,
-          nodeSizeBy: 'leaf',
-
-          // IMPORTANTÍSSIMO: sem isso, às vezes a cor não pega direito
+          borderWidth: 1,
           colorKey: 'colorValue',
-
+          colorAxis: 0,
           data: treemapData as any,
 
           dataLabels: {
@@ -424,7 +386,6 @@ export default function HeatmapWidget() {
               const w = p.shapeArgs?.width || 0;
               const h = p.shapeArgs?.height || 0;
 
-              // quadrado pequeno: nada (só tooltip)
               if (w < 46 || h < 34) return '';
 
               const area = w * h;
@@ -454,14 +415,13 @@ export default function HeatmapWidget() {
         } as any
       ]
     } as any);
-  }, [treemapData]);
+  }, [destroyChart, treemapData]);
 
-  // render sempre que dados/mode mudam e popup está aberto
+  // render + reflow garantido com ResizeObserver
   useEffect(() => {
     if (!open) return;
     if (loading) return;
 
-    // dá 2 “batidas” pra garantir layout pronto (React/Vite às vezes monta com 0px e ajusta 1 frame depois)
     const raf1 = requestAnimationFrame(() => {
       renderChart();
       const raf2 = requestAnimationFrame(() => {
@@ -471,14 +431,23 @@ export default function HeatmapWidget() {
       return () => cancelAnimationFrame(raf2);
     });
 
+    const el = containerRef.current;
+    if (el && !roRef.current) {
+      roRef.current = new ResizeObserver(() => {
+        if (!chartRef.current) return;
+        chartRef.current.reflow();
+      });
+      roRef.current.observe(el);
+    }
+
     return () => {
       cancelAnimationFrame(raf1);
-      if (chartRef.current) {
-        chartRef.current.destroy();
-        chartRef.current = null;
+      if (roRef.current && el) {
+        roRef.current.unobserve(el);
       }
+      destroyChart();
     };
-  }, [open, loading, renderChart]);
+  }, [open, loading, renderChart, destroyChart]);
 
   const close = useCallback(() => setOpen(false), []);
 
@@ -508,7 +477,7 @@ export default function HeatmapWidget() {
             flexDirection: 'column'
           }}
         >
-          {/* HEADER (sem texto Heatmap) */}
+          {/* HEADER sem texto Heatmap */}
           <div
             style={{
               padding: '10px 12px',
@@ -519,53 +488,47 @@ export default function HeatmapWidget() {
               borderBottom: '1px solid rgba(255,255,255,0.10)'
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-              <div
+            <div
+              style={{
+                display: 'flex',
+                background: 'rgba(255,255,255,0.07)',
+                border: '1px solid rgba(255,255,255,0.10)',
+                borderRadius: 12,
+                padding: 3,
+                gap: 4
+              }}
+            >
+              <button
+                onClick={() => setValueMode('marketcap')}
                 style={{
-                  display: 'flex',
-                  background: 'rgba(255,255,255,0.07)',
-                  border: '1px solid rgba(255,255,255,0.10)',
-                  borderRadius: 12,
-                  padding: 3,
-                  gap: 4
+                  cursor: 'pointer',
+                  border: 'none',
+                  borderRadius: 10,
+                  padding: '7px 10px',
+                  fontWeight: 1100,
+                  fontSize: 11,
+                  color: valueMode === 'marketcap' ? '#0b0d10' : 'rgba(255,255,255,0.75)',
+                  background: valueMode === 'marketcap' ? '#dd9933' : 'transparent'
                 }}
               >
-                <button
-                  onClick={() => setValueMode('marketcap')}
-                  style={{
-                    cursor: 'pointer',
-                    border: 'none',
-                    borderRadius: 10,
-                    padding: '7px 10px',
-                    fontWeight: 1100,
-                    fontSize: 11,
-                    color: valueMode === 'marketcap' ? '#0b0d10' : 'rgba(255,255,255,0.75)',
-                    background: valueMode === 'marketcap' ? '#dd9933' : 'transparent'
-                  }}
-                >
-                  MarketCap
-                </button>
+                MarketCap
+              </button>
 
-                <button
-                  onClick={() => setValueMode('var24h')}
-                  style={{
-                    cursor: 'pointer',
-                    border: 'none',
-                    borderRadius: 10,
-                    padding: '7px 10px',
-                    fontWeight: 1100,
-                    fontSize: 11,
-                    color: valueMode === 'var24h' ? '#0b0d10' : 'rgba(255,255,255,0.75)',
-                    background: valueMode === 'var24h' ? '#dd9933' : 'transparent'
-                  }}
-                >
-                  Var.Preço 24Hs
-                </button>
-              </div>
-
-              <div style={{ color: 'rgba(255,255,255,0.55)', fontWeight: 900, fontSize: 11, whiteSpace: 'nowrap' }}>
-                {loading ? 'Carregando…' : `${treemapData.length} moedas`}
-              </div>
+              <button
+                onClick={() => setValueMode('var24h')}
+                style={{
+                  cursor: 'pointer',
+                  border: 'none',
+                  borderRadius: 10,
+                  padding: '7px 10px',
+                  fontWeight: 1100,
+                  fontSize: 11,
+                  color: valueMode === 'var24h' ? '#0b0d10' : 'rgba(255,255,255,0.75)',
+                  background: valueMode === 'var24h' ? '#dd9933' : 'transparent'
+                }}
+              >
+                Var.Preço 24Hs
+              </button>
             </div>
 
             <button
@@ -587,15 +550,16 @@ export default function HeatmapWidget() {
             </button>
           </div>
 
-          {/* CONTAINER DO CHART (ID igual demo) */}
+          {/* CHART */}
           <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
             <div
-              id="cachecko-heatmap-container"
+              ref={containerRef}
               style={{
                 position: 'absolute',
                 inset: 0,
                 width: '100%',
-                height: '100%'
+                height: '100%',
+                background: '#252931'
               }}
             />
 

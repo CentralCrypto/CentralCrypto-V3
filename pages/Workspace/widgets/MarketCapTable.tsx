@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronsUpDown,
@@ -13,7 +12,8 @@ import {
   TrendingDown,
   TrendingUp,
   RefreshCw,
-  RotateCcw
+  RotateCcw,
+  ChevronDown
 } from 'lucide-react';
 import {
   DndContext,
@@ -32,16 +32,14 @@ import { CSS } from '@dnd-kit/utilities';
 import { Area, AreaChart, ResponsiveContainer, YAxis } from 'recharts';
 
 import { ApiCoin, Language } from '../../../types';
-import { getTranslations } from '../../../locales';
 import { fetchTopCoins } from '../services/api';
 
 // ======================
-// CORES FIXAS (pedido do usuário - Ticker Header)
+// CORES PADRONIZADAS (Mesmas do Flash de Preço)
 // ======================
-const GREEN = '#22c55e'; // text-tech-success
-const RED = '#ef4444';   // text-tech-danger
+const GREEN = '#22c55e'; 
+const RED = '#ef4444';   
 
-// fundos "pisca" (pastel) coerentes com as cores (rgba)
 const FLASH_GREEN_BG = 'rgba(34, 197, 94, 0.18)';
 const FLASH_RED_BG = 'rgba(239, 68, 68, 0.18)';
 
@@ -251,7 +249,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     }
   }, []);
 
-  // ✅ Scroll-to-top helper (corrige abrir “lá embaixo”)
+  // ✅ Scroll-to-top helper
   const scrollToTop = useCallback(() => {
     const el = scrollContainerRef?.current;
     if (el) el.scrollTo({ top: 0, behavior: 'auto' });
@@ -1304,17 +1302,13 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     onClick: () => void;
     title: string;
   }) => {
-    const activeClass = variant === 'gainers'
-      ? `bg-[${GREEN}] text-white border-transparent shadow-md`
-      : `bg-[${RED}] text-white border-transparent shadow-md`;
-
     return (
       <button
         type="button"
         onClick={onClick}
         className={`px-3 py-2 rounded-lg border font-black transition-colors whitespace-nowrap flex items-center gap-2
           ${active
-            ? activeClass
+            ? 'text-white border-transparent shadow-md'
             : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5'
           }`}
         style={active ? { backgroundColor: variant === 'gainers' ? GREEN : RED, color: 'white', border: 'transparent' } : {}}
