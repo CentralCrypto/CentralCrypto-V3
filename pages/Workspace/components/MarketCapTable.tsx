@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronsUpDown,
@@ -12,27 +11,38 @@ import {
   Star,
   TrendingDown,
   TrendingUp,
-  RefreshCw
+  RefreshCw,
+  RotateCcw,
+  ChevronDown
 } from 'lucide-react';
 import {
-    DndContext,
-    closestCenter,
-    PointerSensor,
-    useSensor,
-    useSensors
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors
 } from '@dnd-kit/core';
 import {
-    SortableContext,
-    arrayMove,
-    horizontalListSortingStrategy,
-    useSortable
+  SortableContext,
+  arrayMove,
+  horizontalListSortingStrategy,
+  useSortable
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Area, AreaChart, ResponsiveContainer, YAxis } from 'recharts';
 
 import { ApiCoin, Language } from '../../../types';
-import { getTranslations } from '../../../locales';
 import { fetchTopCoins } from '../services/api';
+import { getTranslations } from '../../../locales';
+
+// ======================
+// CORES PADRONIZADAS (Heatmap / Price Flash Bright - PASTEL FOSCO)
+// ======================
+const GREEN = '#77dd77';
+const RED = '#ff6961';
+
+const FLASH_GREEN_BG = 'rgba(119, 221, 119, 0.18)';
+const FLASH_RED_BG = 'rgba(255, 105, 97, 0.18)';
 
 const formatUSD = (val: number, compact = false) => {
   if (val === undefined || val === null) return '---';
@@ -85,13 +95,6 @@ const pct7dFromSpark = (prices?: number[]) => {
   return ((last - first) / first) * 100;
 };
 
-const getGainersLosersLabel = (language: Language) => {
-  const lang = String(language || 'en').toLowerCase();
-  if (lang.startsWith('pt')) return { gainers: 'Ganhadores', losers: 'Perdedores' };
-  if (lang.startsWith('es')) return { gainers: 'Ganadores', losers: 'Perdedores' };
-  return { gainers: 'Gainers', losers: 'Losers' };
-};
-
 type BinanceMiniTicker = {
   e?: string;
   E?: number;
@@ -116,6 +119,8 @@ type MarketCapTableProps = {
 };
 
 const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) => {
+  const t = getTranslations(language).workspace.marketCapTable;
+  
   const [coins, setCoins] = useState<ApiCoin[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -815,7 +820,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
       <div className={`flex items-center gap-2 ${compact ? '' : 'justify-between w-full'}`}>
         {!compact && (
           <div className="text-xs font-bold text-gray-500 dark:text-slate-400">
-            {totalCount === 0 ? '0 resultados' : `Mostrando ${start}-${end} de ${totalCount}`}
+            {totalCount === 0 ? t.noResults : `${t.showing} ${start}-${end} ${t.of} ${totalCount}`}
           </div>
         )}
 
@@ -828,7 +833,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                 ? 'opacity-40 cursor-not-allowed border-slate-200 dark:border-slate-700 text-gray-400'
                 : 'border-slate-200 dark:border-slate-700 text-gray-600 dark:text-slate-200 hover:bg-gray-200 dark:hover:bg-slate-700'
               }`}
-            title="Página anterior"
+            title={t.prev}
           >
             <ChevronLeft size={18} />
           </button>
@@ -845,7 +850,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                 ? 'opacity-40 cursor-not-allowed border-slate-200 dark:border-slate-700 text-gray-400'
                 : 'border-slate-200 dark:border-slate-700 text-gray-600 dark:text-slate-200 hover:bg-gray-200 dark:hover:bg-slate-700'
               }`}
-            title="Próxima página"
+            title={t.next}
           >
             <ChevronRight size={18} />
           </button>
@@ -871,29 +876,29 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
 
   // ✅ labels com quebra (Market / Cap)
   const COLS: Record<string, { id: string; label: React.ReactNode; sortKey?: string; }> = {
-    rank: { id: 'rank', label: '#', sortKey: 'market_cap_rank' },
-    asset: { id: 'asset', label: 'Ativo', sortKey: 'name' },
-    price: { id: 'price', label: 'Preço', sortKey: 'current_price' },
+    rank: { id: 'rank', label: t.rank, sortKey: 'market_cap_rank' },
+    asset: { id: 'asset', label: t.asset, sortKey: 'name' },
+    price: { id: 'price', label: t.price, sortKey: 'current_price' },
     ch1h: { id: 'ch1h', label: '1h %', sortKey: 'change_1h_est' },
     ch24h: { id: 'ch24h', label: '24h %', sortKey: 'price_change_percentage_24h' },
     ch7d: { id: 'ch7d', label: '7d %', sortKey: 'change_7d_est' },
     mcap: { id: 'mcap', label: (<span className="leading-[1.05]">Market<br />Cap</span>), sortKey: 'market_cap' },
-    vol24h: { id: 'vol24h', label: (<span className="leading-[1.05]">Vol<br />(24h)</span>), sortKey: 'total_volume' },
-    supply: { id: 'supply', label: (<span className="leading-[1.05]">Circ<br />Supply</span>), sortKey: 'circulating_supply' },
-    spark7d: { id: 'spark7d', label: 'Mini-chart (7d)', sortKey: undefined },
+    vol24h: { id: 'vol24h', label: (<span className="leading-[1.05]">{t.vol}<br />(24h)</span>), sortKey: 'total_volume' },
+    supply: { id: 'supply', label: (<span className="leading-[1.05]">{t.supply}<br /></span>), sortKey: 'circulating_supply' },
+    spark7d: { id: 'spark7d', label: t.chart, sortKey: undefined },
   };
 
   const CAT_COLS: Record<string, { id: string; label: string; sortKey?: string; w: string; }> = {
-    category: { id: 'category', label: 'Categoria', sortKey: 'displayName', w: 'w-[320px]' },
-    gainers: { id: 'gainers', label: 'Top Gainers', sortKey: undefined, w: 'w-[150px]' },
-    losers: { id: 'losers', label: 'Top Losers', sortKey: undefined, w: 'w-[150px]' },
+    category: { id: 'category', label: t.categories, sortKey: 'displayName', w: 'w-[320px]' },
+    gainers: { id: 'gainers', label: t.gainers, sortKey: undefined, w: 'w-[150px]' },
+    losers: { id: 'losers', label: t.losers, sortKey: undefined, w: 'w-[150px]' },
     ch1h: { id: 'ch1h', label: '1h', sortKey: 'ch1h', w: 'w-[92px]' },
     ch24h: { id: 'ch24h', label: '24h', sortKey: 'ch24h', w: 'w-[98px]' },
     ch7d: { id: 'ch7d', label: '7d', sortKey: 'ch7d', w: 'w-[98px]' },
     mcap: { id: 'mcap', label: 'Market Cap', sortKey: 'marketCap', w: 'w-[155px]' },
     vol24h: { id: 'vol24h', label: '24h Volume', sortKey: 'volume24h', w: 'w-[145px]' },
     coins: { id: 'coins', label: '# Coins', sortKey: 'coinsCount', w: 'w-[96px]' },
-    spark7d: { id: 'spark7d', label: 'Gráfico (7d)', sortKey: undefined, w: 'min-w-[220px] w-auto' },
+    spark7d: { id: 'spark7d', label: t.chart, sortKey: undefined, w: 'min-w-[220px] w-auto' },
   };
 
   const SortIcon = ({ active }: { active: boolean }) => (
@@ -1096,7 +1101,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                             <td
                               key={cid}
                               className={`p-3 text-center font-mono text-[13px] font-black w-[92px]
-                                ${!isFinite(r.ch1h) ? 'text-gray-400 dark:text-slate-500' : (r.ch1h >= 0 ? 'text-green-500' : 'text-red-500')}`}
+                                ${!isFinite(r.ch1h) ? 'text-gray-400 dark:text-slate-500' : (r.ch1h >= 0 ? 'text-tech-success' : 'text-tech-danger')}`}
                             >
                               {safePct(Number(r.ch1h))}
                             </td>
@@ -1108,7 +1113,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                             <td
                               key={cid}
                               className={`p-3 text-center font-mono text-[13px] font-black w-[98px]
-                                ${!isFinite(r.ch24h) ? 'text-gray-400 dark:text-slate-500' : (pos24 ? 'text-green-500' : 'text-red-500')}`}
+                                ${!isFinite(r.ch24h) ? 'text-gray-400 dark:text-slate-500' : (pos24 ? 'text-tech-success' : 'text-tech-danger')}`}
                             >
                               {safePct(Number(r.ch24h))}
                             </td>
@@ -1120,7 +1125,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                             <td
                               key={cid}
                               className={`p-3 text-center font-mono text-[13px] font-black w-[98px]
-                                ${!isFinite(r.ch7d) ? 'text-gray-400 dark:text-slate-500' : (r.ch7d >= 0 ? 'text-green-500' : 'text-red-500')}`}
+                                ${!isFinite(r.ch7d) ? 'text-gray-400 dark:text-slate-500' : (r.ch7d >= 0 ? 'text-tech-success' : 'text-tech-danger')}`}
                             >
                               {safePct(Number(r.ch7d))}
                             </td>
@@ -1242,9 +1247,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     else goBackToCategories();
   };
 
-  const gl = getGainersLosersLabel(language);
-
-  // ✅ Botões: ativos com verde/vermelho
+  // ✅ Botões: ativos com verde/vermelho PASTEL (FOSCO)
   const TopToggleButton = ({
     active,
     variant,
@@ -1261,8 +1264,8 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     title: string;
   }) => {
     const activeClass = variant === 'gainers'
-      ? 'bg-green-600 text-white border-transparent shadow-md'
-      : 'bg-red-600 text-white border-transparent shadow-md';
+      ? 'bg-[#77dd77] text-white border-transparent shadow-md' // PASTEL GREEN
+      : 'bg-[#ff6961] text-white border-transparent shadow-md'; // PASTEL RED
 
     return (
       <button
@@ -1323,7 +1326,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
               <Search size={18} className="absolute left-3 top-2.5 text-gray-500" />
               <input
                 type="text"
-                placeholder={viewMode === 'categories' ? 'Buscar categoria...' : 'Buscar ativo...'}
+                placeholder={viewMode === 'categories' ? t.searchCategory : t.searchPlaceholder}
                 value={searchTerm}
                 onChange={(e) => { setSearchTerm(e.target.value); setPage(0); }}
                 className="w-full bg-white dark:bg-[#2f3032] rounded-lg py-2.5 pl-11 pr-4 text-[15px] text-gray-900 dark:text-white focus:border-[#dd9933] outline-none transition-all shadow-inner border border-slate-100 dark:border-slate-700"
@@ -1358,7 +1361,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                 className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] text-gray-700 dark:text-slate-200 font-black hover:bg-gray-100 dark:hover:bg-white/5 transition-colors whitespace-nowrap"
                 title="Abrir categorias"
               >
-                Categorias
+                {t.categories}
               </button>
             )}
 
@@ -1369,7 +1372,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                   active={topMode === 'gainers'}
                   variant="gainers"
                   icon={<TrendingUp size={18} />}
-                  label={gl.gainers}
+                  label={t.gainers}
                   onClick={() => setTop('gainers')}
                   title="Ordenar por Gainers (24h%)"
                 />
@@ -1378,7 +1381,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                   active={topMode === 'losers'}
                   variant="losers"
                   icon={<TrendingDown size={18} />}
-                  label={gl.losers}
+                  label={t.losers}
                   onClick={() => setTop('losers')}
                   title="Ordenar por Losers (24h%)"
                 />
@@ -1392,7 +1395,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                 className="px-3 py-2 rounded-lg bg-[#dd9933] text-black font-black hover:opacity-90 transition-opacity flex items-center gap-2 whitespace-nowrap"
                 title="BUY"
               >
-                BUY <ChevronDown size={16} />
+                {t.buy} <ChevronDown size={16} />
               </button>
 
               {buyOpen && (
@@ -1415,7 +1418,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
           <div className="flex items-center gap-2 w-full lg:w-auto justify-end">
             <div className="flex items-center gap-2">
               <span className="text-xs font-black text-gray-500 dark:text-slate-400 uppercase tracking-widest">
-                Itens
+                {t.items}
               </span>
 
               <select
@@ -1438,7 +1441,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
             <button
               onClick={refresh}
               className="p-2.5 hover:bg-gray-200 dark:hover:bg-slate-700 rounded-lg text-gray-500 transition-colors"
-              title="Atualizar"
+              title={t.refresh}
             >
               <RefreshCw size={22} className={(loading || catLoading) ? 'animate-spin' : ''} />
             </button>
@@ -1485,7 +1488,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                   <tr className="border-b border-gray-100 dark:border-slate-800">
                     <th className="p-2 text-center">
                       <span className="text-[11px] font-black uppercase tracking-widest text-gray-400 dark:text-slate-400">
-                        Fav
+                        {t.favs}
                       </span>
                     </th>
 
@@ -1595,7 +1598,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                             return (
                               <td
                                 key={cid}
-                                className={`p-2 text-right font-mono text-[13px] font-black ${!isFinite(c1h) ? 'text-gray-400 dark:text-slate-500' : (c1h >= 0 ? 'text-green-500' : 'text-red-500')}`}
+                                className={`p-2 text-right font-mono text-[13px] font-black ${!isFinite(c1h) ? 'text-gray-400 dark:text-slate-500' : (c1h >= 0 ? 'text-tech-success' : 'text-tech-danger')}`}
                                 title="Estimativa via sparkline 7d"
                               >
                                 {safePct(c1h)}
@@ -1607,7 +1610,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                             return (
                               <td
                                 key={cid}
-                                className={`p-2 text-right font-mono text-[13px] font-black ${isPos24 ? 'text-green-500' : 'text-red-500'}`}
+                                className={`p-2 text-right font-mono text-[13px] font-black ${isPos24 ? 'text-tech-success' : 'text-tech-danger'}`}
                               >
                                 {isPos24 ? '+' : ''}{Number(change24 || 0).toFixed(2)}%
                               </td>
@@ -1618,7 +1621,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                             return (
                               <td
                                 key={cid}
-                                className={`p-2 text-right font-mono text-[13px] font-black ${!isFinite(c7d) ? 'text-gray-400 dark:text-slate-500' : (c7d >= 0 ? 'text-green-500' : 'text-red-500')}`}
+                                className={`p-2 text-right font-mono text-[13px] font-black ${!isFinite(c7d) ? 'text-gray-400 dark:text-slate-500' : (c7d >= 0 ? 'text-tech-success' : 'text-tech-danger')}`}
                                 title="Estimativa via sparkline 7d"
                               >
                                 {safePct(c7d)}
@@ -1696,7 +1699,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
                   {pageCoins.length === 0 && (
                     <tr>
                       <td colSpan={1 + colOrder.length} className="p-8 text-center text-sm font-bold text-gray-500 dark:text-slate-400">
-                        Nenhum resultado.
+                        {t.noResults}
                       </td>
                     </tr>
                   )}

@@ -158,6 +158,30 @@ export const en = {
       sentiment: { extremeGreed: "Extreme Greed", greed: "Greed", extremeFear: "Extreme Fear", fear: "Fear", neutralBiasUp: "Neutral (Up)", neutralBiasDown: "Neutral (Down)", strong: "Strong", weak: "Weak", consistent: "Consistent", easing: "Easing", recovering: "Recovering", desc: "Technical sentiment" },
       orderbook: { price: "Price", size: "Size", total: "Total", noData: "No orders", desc: "Order book" },
       news: { noNews: "No news", tryAnother: "Try another asset", desc: "Linked news" }
+    },
+    marketCapTable: {
+      searchPlaceholder: "Search asset...",
+      searchCategory: "Search category...",
+      gainers: "Gainers",
+      losers: "Losers",
+      categories: "Categories",
+      buy: "BUY",
+      items: "Items",
+      showing: "Showing",
+      of: "of",
+      results: "results",
+      prev: "Prev",
+      next: "Next",
+      refresh: "Refresh",
+      noResults: "No results.",
+      noCategories: "No categories found.",
+      favs: "Fav",
+      rank: "#",
+      asset: "Asset",
+      price: "Price",
+      vol: "Vol (24h)",
+      supply: "Circ Supply",
+      chart: "Mini-chart (7d)"
     }
   },
   academy: {

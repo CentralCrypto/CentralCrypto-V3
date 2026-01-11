@@ -38,7 +38,7 @@ export const es = {
       etf: { title: "Flujo ETF", netFlow: "Flujo Neto", btcEtf: "BTC ETFs", ethEtf: "ETH ETFs", last7d: "7 Días", last30d: "30 Dias", last90d: "90 Días", lastUpdate: "Actualizado en", dailyFlow: "Flujo Diario" },
       trump: { title: "Trump-o-Meter", viewPost: "Ver Post", sarcastic: { negativeSmall: "Impacto Irrelevante", negativeMedium: "Mercado em Alerta", negativeLarge: "TORMENTA EN X", positiveSmall: "Señal de Fuerza", positiveMedium: "VIBRAS ALCISTAS", positiveLarge: "EL CIELO ES EL LÍMITE", neutral: "Silêncio Estratégico" } },
       gainers: { gainers: "Ganadores", losers: "Perdedores" },
-      calendar: { title: "Calendário Econômico", today: "HOY", tomorrow: "MAÑANA", yesterday: "AYER", previous: "Prev", forecast: "Fore", actual: "Actu" }
+      calendar: { title: "Calendario Económico", today: "HOY", tomorrow: "MAÑANA", yesterday: "AYER", previous: "Prev", forecast: "Fore", actual: "Actu" }
     },
     magazine: {
       recentStudies: "Estudios Recientes",
@@ -82,7 +82,7 @@ export const es = {
         title: "Metodologia y FAQ",
         fng: {
           q1: "¿Cómo se calcula el Fear & Greed Index?",
-          a1: "El índice es un análisis de sentimiento multifactorial. Procesamos datos de volatilidad, volumen de mercado, sentimiento en redes sociales y dominancia de Bitcoin para generar un valor de 0 a 100.",
+          a1: "El índice es un análisis de sentimiento multifatorial. Procesamos datos de volatilidad, volumen de mercado, sentimiento en redes sociales y dominancia de Bitcoin para generar un valor de 0 a 100.",
           q2: "¿Qué significa cada rango del índice?",
           a2: "<ul class='space-y-2 font-mono text-xs'><li class='flex gap-2'><b class='text-red-500 w-16 shrink-0'>0-25:</b> <span><b>Miedo Extremo</b> (oportunidad histórica de compra)</span></li><li class='flex gap-2'><b class='text-orange-500 w-16 shrink-0'>26-45:</b> <span><b>Miedo</b> (miedo presente en el mercado)</span></li><li class='flex gap-2'><b class='text-yellow-500 w-16 shrink-0'>46-55:</b> <span><b>Neutro</b> (incertidumbre y falta de volume)</span></li><li class='flex gap-2'><b class='text-green-400 w-16 shrink-0'>56-75:</b> <span><b>Codicia</b> (la codicia comienza a dominar)</span></li><li class='flex gap-2'><b class='text-green-600 w-16 shrink-0'>76-94:</b> <span><b>Codicia Extrema</b> (codicia extrema)</span></li><li class='flex gap-2'><b class='text-cyan-400 w-16 shrink-0'>95-100:</b> <span><b>Euforia</b> (euforia peligrosa, corrección inminente)</span></li></ul>"
         },
@@ -94,7 +94,7 @@ export const es = {
         },
         macd: {
           q1: "¿Cómo funciona el Rastreador MACD?",
-          a1: "Analizamos el cruce de las medias móviles de convergencia y divergencia en múltiples activos simultáneamente, filtrando por capitalización de mercado.",
+          a1: "Analizamos el cruce de las medias móviles de convergencia y divergencia en múltiples activos simultaneamente, filtrando por capitalización de mercado.",
           q2: "¿Qué representan los puntos en el gráfico?",
           a2: "Cada punto es un activo. La posición en el eje Y muestra la fuerza de la tendencia actual, lo que permite identificar reversiones globales antes de que ocurran en el precio."
         },
@@ -158,6 +158,30 @@ export const es = {
       sentiment: { extremeGreed: "Codicia Extrema", greed: "Codicia", extremeFear: "Miedo Extremo", fear: "Miedo", neutralBiasUp: "Neutro (Alza)", neutralBiasDown: "Neutro (Baja)", strong: "Forte", weak: "Débil", consistent: "Consistente", easing: "Disminuyendo", recovering: "Recuperando", desc: "Sentimento técnico" },
       orderbook: { price: "Precio", size: "Tamaño", total: "Total", noData: "Sin órdenes", desc: "Libro de órdenes" },
       news: { noNews: "Sin noticias", tryAnother: "Prueba otro activo", desc: "Noticias vinculadas" }
+    },
+    marketCapTable: {
+      searchPlaceholder: "Buscar activo...",
+      searchCategory: "Buscar categoria...",
+      gainers: "Ganadores",
+      losers: "Perdedores",
+      categories: "Categorías",
+      buy: "COMPRAR",
+      items: "Itens",
+      showing: "Mostrando",
+      of: "de",
+      results: "resultados",
+      prev: "Anterior",
+      next: "Siguiente",
+      refresh: "Actualizar",
+      noResults: "Sin resultados.",
+      noCategories: "No se encontraron categorías.",
+      favs: "Fav",
+      rank: "#",
+      asset: "Activo",
+      price: "Precio",
+      vol: "Vol (24h)",
+      supply: "Circ Supply",
+      chart: "Mini-chart (7d)"
     }
   },
   academy: {

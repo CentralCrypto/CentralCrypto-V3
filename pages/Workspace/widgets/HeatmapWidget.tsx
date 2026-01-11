@@ -1,11 +1,10 @@
-
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Highcharts from 'highcharts';
 import TreemapModule from 'highcharts/modules/treemap';
 import ExportingModule from 'highcharts/modules/exporting';
 import AccessibilityModule from 'highcharts/modules/accessibility';
 import ColorAxisModule from 'highcharts/modules/coloraxis';
-import { DashboardItem, Language } from '../../../types';
 
 type ValueMode = 'marketcap' | 'var24h';
 
@@ -117,7 +116,7 @@ function fmtPrice(p: number) {
   return `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 }
 function colorFor(v: number) {
-  return safeNum(v) >= 0 ? '#77dd77' : '#ff6961';
+  return safeNum(v) >= 0 ? '#2ecc59' : '#f73539';
 }
 function withCb(url: string) {
   const salt = Math.floor(Date.now() / 60000);
@@ -150,12 +149,7 @@ function dedupById(coins: Coin[]) {
   return Array.from(m.values());
 }
 
-interface HeatmapWidgetProps {
-  item: DashboardItem;
-  language?: Language;
-}
-
-export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
+export default function HeatmapWidget() {
   const [open, setOpen] = useState(true);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string>('');
@@ -174,9 +168,7 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
     if (!open) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
+    return () => { document.body.style.overflow = prev; };
   }, [open]);
 
   const loadData = useCallback(async () => {
@@ -227,7 +219,7 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
 
           price: safeNum(c.current_price),
           change24h: ch24,
-          price_change_24h: safeNum(c.price_change_24h),
+          priceChange24hAbs: safeNum(c.price_change_24h),
 
           marketCap: safeNum(c.market_cap),
           fdv: safeNum(c.fully_diluted_valuation),
@@ -308,7 +300,9 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
               <div style="display:flex; align-items:center; gap:10px; padding-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.10);">
                 ${c.logo ? `<img src="${c.logo}" style="width:30px;height:30px;border-radius:50%;" />` : ''}
                 <div style="min-width:0">
-                  <div style="font-weight:1200; font-size:14px; line-height:1.1;">${p.name}${c.rank ? ` <span style="color:rgba(255,255,255,0.55); font-weight:900; font-size:12px;">#${c.rank}</span>` : ''}</div>
+                  <div style="font-weight:1200; font-size:14px; line-height:1.1;">
+                    ${p.name}${c.rank ? ` <span style="color:rgba(255,255,255,0.55); font-weight:900; font-size:12px;">#${c.rank}</span>` : ''}
+                  </div>
                   <div style="color:rgba(255,255,255,0.60); font-size:11px; font-weight:900; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:300px;">
                     ${c.fullName}${c.lastUpdated ? ` • ${c.lastUpdated}` : ''}
                   </div>
@@ -330,7 +324,7 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
               <div style="margin-top:10px; border-top:1px solid rgba(255,255,255,0.10); padding-top:10px;">
                 ${row('High 24h', c.high24h ? fmtPrice(c.high24h) : '—')}
                 ${row('Low 24h', c.low24h ? fmtPrice(c.low24h) : '—')}
-                ${row('Price Δ 24h', c.price_change_24h ? fmtPrice(c.price_change_24h) : '—')}
+                ${row('Price Δ 24h', c.priceChange24hAbs ? fmtPrice(c.priceChange24hAbs) : '—')}
               </div>
 
               <div style="margin-top:10px; border-top:1px solid rgba(255,255,255,0.10); padding-top:10px;">
@@ -354,9 +348,9 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
         min: -10,
         max: 10,
         stops: [
-          [0, '#ff6961'],
+          [0, '#f73539'],
           [0.5, '#414555'],
-          [1, '#77dd77']
+          [1, '#2ecc59']
         ],
         labels: {
           style: { color: '#fff', fontWeight: '900' },
@@ -418,7 +412,6 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
     } as any);
   }, [destroyChart, treemapData]);
 
-  // render + reflow garantido com ResizeObserver
   useEffect(() => {
     if (!open) return;
     if (loading) return;
@@ -443,9 +436,7 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
 
     return () => {
       cancelAnimationFrame(raf1);
-      if (roRef.current && el) {
-        roRef.current.unobserve(el);
-      }
+      if (roRef.current && el) roRef.current.unobserve(el);
       destroyChart();
     };
   }, [open, loading, renderChart, destroyChart]);
@@ -453,8 +444,9 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
   const close = useCallback(() => setOpen(false), []);
 
   if (!open) return null;
+  if (typeof document === 'undefined') return null;
 
-  return (
+  const overlay = (
     <div
       style={{
         position: 'fixed',
@@ -478,7 +470,6 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
             flexDirection: 'column'
           }}
         >
-          {/* HEADER sem texto Heatmap */}
           <div
             style={{
               padding: '10px 12px',
@@ -551,7 +542,6 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
             </button>
           </div>
 
-          {/* CHART */}
           <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
             <div
               ref={containerRef}
@@ -623,4 +613,6 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
       </div>
     </div>
   );
+
+  return createPortal(overlay, document.body);
 }
