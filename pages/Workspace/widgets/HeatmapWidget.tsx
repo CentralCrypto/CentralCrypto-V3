@@ -32,9 +32,6 @@ type Coin = {
   ath?: number;
 };
 
-type CategoryRow = { id: string; name: string };
-type CategoryCoinsMap = Record<string, string[]>;
-
 type TreemapPoint = {
   id: string;
   name: string;
@@ -44,10 +41,7 @@ type TreemapPoint = {
 };
 
 const ENDPOINTS = {
-  COINS_LITE: '/cachecko/cachecko_lite.json',
-  TAXONOMY: '/cachecko/categories/taxonomy-master.json',
-  CAT_LIST: '/cachecko/categories/coingecko_categories_list.json',
-  CAT_MAP: '/cachecko/categories/category_coins_map.json'
+  COINS_LITE: '/cachecko/cachecko_lite.json'
 };
 
 let HC_INITED = false;
@@ -125,6 +119,7 @@ function fmtMoney(v: number) {
 function fmtNum(v: number) {
   const n = safeNum(v);
   const a = Math.abs(n);
+
   if (a >= 1e12) return `${(n / 1e12).toFixed(2)}T`;
   if (a >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
   if (a >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
@@ -151,35 +146,13 @@ function normalizeCoins(raw: any): Coin[] {
   return [];
 }
 
-function normalizeCategories(raw: any): CategoryRow[] {
-  if (!raw) return [];
-
-  if (Array.isArray(raw)) {
-    const direct = raw
-      .filter(x => x && (x.id || x.category_id) && (x.name || x.category_name))
-      .map(x => ({
-        id: String(x.id ?? x.category_id),
-        name: String(x.name ?? x.category_name)
-      }));
-    if (direct.length) return direct;
-
-    const maybe = raw.find(x => x && Array.isArray(x.data));
-    if (maybe) return normalizeCategories(maybe.data);
+function dedupById(coins: Coin[]) {
+  const m = new Map<string, Coin>();
+  for (const c of coins) {
+    if (!c?.id) continue;
+    if (!m.has(c.id)) m.set(c.id, c);
   }
-
-  if (raw?.data && Array.isArray(raw.data)) {
-    return normalizeCategories(raw.data);
-  }
-
-  return [];
-}
-
-function normalizeCatMap(raw: any): CategoryCoinsMap {
-  if (!raw) return {};
-  if (raw.categories && typeof raw.categories === 'object') return raw.categories;
-  if (raw.data && typeof raw.data === 'object') return raw.data;
-  if (typeof raw === 'object') return raw;
-  return {};
+  return Array.from(m.values());
 }
 
 interface HeatmapWidgetProps {
@@ -188,17 +161,13 @@ interface HeatmapWidgetProps {
 }
 
 export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
 
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string>('');
 
   const [coins, setCoins] = useState<Coin[]>([]);
-  const [categories, setCategories] = useState<CategoryRow[]>([]);
-  const [catMap, setCatMap] = useState<CategoryCoinsMap>({});
-
   const [valueMode, setValueMode] = useState<ValueMode>('marketcap');
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<Highcharts.Chart | null>(null);
@@ -212,48 +181,23 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
     setErr('');
 
     try {
-      const coinsRaw = await httpGetJson<any>(ENDPOINTS.COINS_LITE, { timeoutMs: 12000, retries: 2 });
-      const coinArr = normalizeCoins(coinsRaw);
-      setCoins(Array.isArray(coinArr) ? coinArr : []);
-
-      const mapRaw = await httpGetJson<any>(ENDPOINTS.CAT_MAP, { timeoutMs: 12000, retries: 1 }).catch(() => ({}));
-      const mapObj = normalizeCatMap(mapRaw);
-      setCatMap(mapObj || {});
-
-      // taxonomy pode falhar, então: taxonomy -> cat_list -> fallback ids do map
-      let cats: CategoryRow[] = [];
-      const taxRaw = await httpGetJson<any>(ENDPOINTS.TAXONOMY, { timeoutMs: 9000, retries: 0 }).catch(() => null);
-      cats = normalizeCategories(taxRaw);
-
-      if (!cats.length) {
-        const listRaw = await httpGetJson<any>(ENDPOINTS.CAT_LIST, { timeoutMs: 9000, retries: 0 }).catch(() => null);
-        cats = normalizeCategories(listRaw);
-      }
-
-      if (!cats.length) {
-        const ids = Object.keys(mapObj || {});
-        cats = ids.map(id => ({ id, name: id }));
-      }
-
-      cats = cats
-        .filter(c => c && c.id && c.name)
-        .sort((a, b) => a.name.localeCompare(b.name));
-
-      setCategories(cats);
+      const raw = await httpGetJson<any>(ENDPOINTS.COINS_LITE, { timeoutMs: 12000, retries: 2 });
+      const arr = dedupById(normalizeCoins(raw));
+      setCoins(arr);
     } catch (e: any) {
       console.error('Heatmap load error:', e);
       setErr(e?.message || 'Falha ao carregar dados do heatmap');
+      setCoins([]);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    // carrega uma vez (sem loop)
     loadData();
   }, [loadData]);
 
-  // trava scroll ao abrir popup
+  // trava scroll no popup
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -263,35 +207,22 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
     };
   }, [open]);
 
-  const hasCategories = categories.length > 0;
-
-  const filteredCoins = useMemo(() => {
-    let list = coins;
-
-    if (selectedCategoryId && catMap[selectedCategoryId]) {
-      const ids = new Set((catMap[selectedCategoryId] || []).map(String));
-      list = list.filter(c => ids.has(String(c.id)));
-    }
-
-    return list;
-  }, [coins, selectedCategoryId, catMap]);
-
   const chartData: TreemapPoint[] = useMemo(() => {
-    const list = [...filteredCoins]
-      .filter(c => c && c.id && (c.symbol || c.name))
-      .sort((a, b) => safeNum(b.market_cap) - safeNum(a.market_cap))
-      .slice(0, 450);
+    const list = [...coins].filter(c => c && c.id && (c.symbol || c.name));
+
+    // Sem filtro, sem limite: renderiza tudo
+    // Ordenar só pra deixar mais “bonito” no layout inicial
+    list.sort((a, b) => safeNum(b.market_cap) - safeNum(a.market_cap));
 
     return list.map(c => {
       const sym = safeUpper(c.symbol) || safeUpper(c.name) || c.id;
-      const mc = Math.max(1, safeNum(c.market_cap));
       const ch24 = safeNum(c.price_change_percentage_24h);
+      const mc = Math.max(1, safeNum(c.market_cap));
 
-      // tamanho = marketcap OU magnitude da var24h (escalada)
       const value =
         valueMode === 'marketcap'
           ? mc
-          : Math.max(1, Math.abs(ch24) * 1000);
+          : Math.max(0.01, Math.abs(ch24)); // tamanho = variação (magnitude)
 
       return {
         id: String(c.id),
@@ -302,8 +233,8 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
           fullName: c.name || c.id,
           logo: c.image || '',
           rank: safeNum(c.market_cap_rank),
-          price: safeNum(c.current_price),
 
+          price: safeNum(c.current_price),
           change1h: safeNum(c.price_change_percentage_1h_in_currency),
           change24h: ch24,
           change7d: safeNum(c.price_change_percentage_7d_in_currency),
@@ -321,7 +252,7 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
         }
       };
     });
-  }, [filteredCoins, valueMode]);
+  }, [coins, valueMode]);
 
   const renderChart = useCallback(() => {
     if (!containerRef.current) return;
@@ -342,6 +273,7 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
       credits: { enabled: false },
       exporting: { enabled: false },
       accessibility: { enabled: true },
+
       tooltip: {
         useHTML: true,
         outside: true,
@@ -364,19 +296,24 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
           `;
 
           return `
-            <div style="min-width:280px; padding:12px 12px 10px; color:#fff; font-family:Inter,system-ui,sans-serif;">
+            <div style="min-width:320px; padding:12px; color:#fff; font-family:Inter,system-ui,sans-serif;">
               <div style="display:flex; align-items:center; gap:10px; padding-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.10);">
-                ${c.logo ? `<img src="${c.logo}" style="width:28px;height:28px;border-radius:50%;"/>` : ''}
+                ${c.logo ? `<img src="${c.logo}" style="width:30px;height:30px;border-radius:50%;"/>` : ''}
                 <div style="min-width:0">
                   <div style="font-weight:1000; font-size:14px; line-height:1.1;">${p.name}</div>
-                  <div style="color:rgba(255,255,255,0.6); font-size:11px; font-weight:800; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:220px;">
+                  <div style="color:rgba(255,255,255,0.6); font-size:11px; font-weight:800; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:260px;">
                     ${full}${c.rank ? ` • #${c.rank}` : ''}
                   </div>
                 </div>
               </div>
 
-              <div style="margin-top:10px; font-size:18px; font-weight:1000;">
-                ${fmtPrice(c.price)}
+              <div style="margin-top:10px; display:flex; align-items:flex-end; justify-content:space-between; gap:10px;">
+                <div style="font-size:20px; font-weight:1000;">
+                  ${fmtPrice(c.price)}
+                </div>
+                <div style="font-size:14px; font-weight:1000; color:${colorFor(c.change24h)};">
+                  ${fmtPct(c.change24h)}
+                </div>
               </div>
 
               <div style="margin-top:10px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
@@ -397,7 +334,7 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
               <div style="margin-top:10px;">
                 ${row('Market Cap', fmtMoney(c.marketCap))}
                 ${row('Volume 24h', fmtMoney(c.volume24h))}
-                ${row('Circulating', fmtNum(c.circulating))}
+                ${row('Circulating', c.circulating ? fmtNum(c.circulating) : '—')}
                 ${row('Total Supply', c.totalSupply ? fmtNum(c.totalSupply) : '—')}
                 ${row('Max Supply', c.maxSupply ? fmtNum(c.maxSupply) : '—')}
                 ${row('High 24h', c.high24h ? fmtPrice(c.high24h) : '—')}
@@ -408,6 +345,7 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
           `;
         }
       },
+
       colorAxis: {
         minColor: '#f73539',
         maxColor: '#2ecc59',
@@ -424,6 +362,7 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
           format: '{#gt value 0}+{value}{else}{value}{/gt}%'
         }
       },
+
       series: [
         {
           name: 'All',
@@ -435,33 +374,51 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
           borderWidth: 2,
           colorKey: 'colorValue',
           data: chartData as any,
+
           dataLabels: {
             enabled: true,
             useHTML: true,
             align: 'center',
             verticalAlign: 'middle',
-            style: {
-              textOutline: 'none'
-            },
+            style: { textOutline: 'none' },
             formatter: function () {
               const p: any = (this as any).point;
+              const c = p?.custom || {};
               const w = p.shapeArgs?.width || 0;
               const h = p.shapeArgs?.height || 0;
 
-              if (w < 40 || h < 28) return '';
+              // Quadrado muito pequeno: sem texto nenhum
+              if (w < 46 || h < 34) return '';
 
-              const fontSize = Math.min(30, Math.max(11, Math.round((w * h) * 0.00035)));
-              const showLogo = w > 70 && h > 60 && p.custom?.logo;
+              // Heurísticas de espaço
+              const area = w * h;
+
+              // Fonte do símbolo vai subindo com a área, mas tem teto
+              const symFont = Math.min(24, Math.max(11, Math.round(7 + area * 0.00025)));
+
+              // Logo só aparece se tiver espaço decente
+              const showLogo = !!c.logo && w >= 68 && h >= 58;
+
+              // Tamanho do logo proporcional, mas com limites
+              const logoSize = Math.min(30, Math.max(16, Math.round(symFont + 6)));
+
+              // Preço só aparece se tiver espaço suficiente (evita “vazar”)
+              const showPrice = w >= 86 && h >= 68;
+
+              // Preço formatado curto pra caber
+              const priceTxt = fmtPrice(c.price);
 
               return `
                 <div style="pointer-events:none; text-align:center; line-height:1.05;">
-                  ${showLogo ? `<img src="${p.custom.logo}" style="width:${Math.min(28, fontSize + 6)}px;height:${Math.min(28, fontSize + 6)}px;border-radius:50%;margin-bottom:4px;"/>` : ''}
-                  <div style="color:white; font-weight:1000; font-size:${fontSize}px; text-shadow:0 1px 2px rgba(0,0,0,0.75);">
+                  ${showLogo ? `<img src="${c.logo}" style="width:${logoSize}px;height:${logoSize}px;border-radius:50%;margin-bottom:4px; box-shadow:0 1px 2px rgba(0,0,0,0.6);" />` : ''}
+                  <div style="color:white; font-weight:1000; font-size:${symFont}px; text-shadow:0 1px 2px rgba(0,0,0,0.75);">
                     ${p.name}
                   </div>
-                  <div style="color:white; opacity:0.92; font-weight:900; font-size:${Math.max(10, Math.round(fontSize * 0.7))}px; text-shadow:0 1px 2px rgba(0,0,0,0.75);">
-                    ${fmtPct(p.colorValue)}
-                  </div>
+                  ${showPrice ? `
+                    <div style="color:rgba(255,255,255,0.92); font-weight:900; font-size:${Math.max(10, Math.round(symFont * 0.72))}px; text-shadow:0 1px 2px rgba(0,0,0,0.75); margin-top:2px;">
+                      ${priceTxt}
+                    </div>
+                  ` : ''}
                 </div>
               `;
             }
@@ -471,7 +428,7 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
     });
 
     const ro = new ResizeObserver(() => {
-      if (chartRef.current) chartRef.current.reflow();
+      chartRef.current?.reflow();
     });
     ro.observe(containerRef.current);
 
@@ -489,7 +446,6 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
     if (!containerRef.current) return;
     if (loading) return;
 
-    // render e reflow “garantido” ao abrir modal
     const cleanup = renderChart();
     const t = setTimeout(() => chartRef.current?.reflow(), 60);
 
@@ -503,6 +459,9 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
     setOpen(false);
   }
 
+  // Se fechou, não mostra nada (sem botão pra reabrir, como você mandou)
+  if (!open) return null;
+
   const modal = (
     <div
       style={{
@@ -512,18 +471,8 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
         background: 'rgba(0,0,0,0.78)',
         backdropFilter: 'blur(8px)'
       }}
-      onMouseDown={(e) => {
-        // não fecha clicando fora (você queria X, então X)
-        e.stopPropagation();
-      }}
     >
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          padding: 12
-        }}
-      >
+      <div style={{ position: 'absolute', inset: 0, padding: 12 }}>
         <div
           style={{
             width: '100%',
@@ -553,7 +502,6 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
                 Heatmap
               </div>
 
-              {/* Toggle tamanho */}
               <div
                 style={{
                   display: 'flex',
@@ -577,8 +525,9 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
                     background: valueMode === 'marketcap' ? '#dd9933' : 'transparent'
                   }}
                 >
-                  Tamanho: MKT CAP
+                  MarketCap
                 </button>
+
                 <button
                   onClick={() => setValueMode('var24h')}
                   style={{
@@ -592,39 +541,11 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
                     background: valueMode === 'var24h' ? '#dd9933' : 'transparent'
                   }}
                 >
-                  Tamanho: |VAR 24H|
+                  Var.Preço 24Hs
                 </button>
               </div>
-
-              {/* Dropdown categorias */}
-              {hasCategories && (
-                <select
-                  value={selectedCategoryId}
-                  onChange={(e) => setSelectedCategoryId(e.target.value)}
-                  style={{
-                    maxWidth: 240,
-                    background: 'rgba(255,255,255,0.07)',
-                    border: '1px solid rgba(255,255,255,0.10)',
-                    color: 'rgba(255,255,255,0.9)',
-                    fontWeight: 900,
-                    fontSize: 12,
-                    padding: '8px 10px',
-                    borderRadius: 12,
-                    outline: 'none'
-                  }}
-                  title="Filtrar por categoria"
-                >
-                  <option value="">Todas as categorias</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              )}
             </div>
 
-            {/* X fechar */}
             <button
               onClick={close}
               style={{
@@ -665,7 +586,26 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
               </div>
             )}
 
-            {!loading && !chartData.length && (
+            {!loading && !!err && (
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'rgba(0,0,0,0.30)',
+                  color: '#ff6b6b',
+                  fontWeight: 1000,
+                  padding: 20,
+                  textAlign: 'center'
+                }}
+              >
+                {err}
+              </div>
+            )}
+
+            {!loading && !err && chartData.length === 0 && (
               <div
                 style={{
                   position: 'absolute',
@@ -680,65 +620,14 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
                   textAlign: 'center'
                 }}
               >
-                Nada para renderizar (sem moedas após filtro).
+                Sem moedas para renderizar.
               </div>
             )}
-          </div>
-
-          {/* FOOTER (debug leve, sem botão) */}
-          <div
-            style={{
-              padding: '8px 12px',
-              borderTop: '1px solid rgba(255,255,255,0.07)',
-              color: 'rgba(255,255,255,0.45)',
-              fontSize: 11,
-              fontWeight: 800,
-              display: 'flex',
-              justifyContent: 'space-between',
-              gap: 10,
-              flexWrap: 'wrap'
-            }}
-          >
-            <span>
-              coins: {chartData.length} {selectedCategoryId ? `• cat=${selectedCategoryId}` : ''}
-            </span>
-            <span style={{ opacity: 0.9 }}>
-              {err ? `Erro: ${err}` : `src: ${ENDPOINTS.COINS_LITE} • ${ENDPOINTS.TAXONOMY} • ${ENDPOINTS.CAT_MAP}`}
-            </span>
           </div>
         </div>
       </div>
     </div>
   );
 
-  return (
-    <div style={{ width: '100%', height: '100%' }}>
-      {/* Botão simples pra abrir o popup */}
-      <button
-        onClick={() => setOpen(true)}
-        style={{
-          cursor: 'pointer',
-          border: '1px solid rgba(255,255,255,0.15)',
-          background: 'rgba(255,255,255,0.06)',
-          color: '#fff',
-          borderRadius: 12,
-          padding: '10px 12px',
-          fontWeight: 1000,
-          fontSize: 12
-        }}
-        title="Abrir Heatmap"
-      >
-        Abrir Heatmap
-      </button>
-
-      {/* Mensagem de erro de load (sem overlay chato) */}
-      {!loading && !!err && (
-        <div style={{ marginTop: 10, color: '#ff6b6b', fontWeight: 900, fontSize: 12 }}>
-          {err}
-        </div>
-      )}
-
-      {open && createPortal(modal, document.body)}
-    </div>
-  );
+  return createPortal(modal, document.body);
 }

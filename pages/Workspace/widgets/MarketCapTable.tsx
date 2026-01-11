@@ -11,8 +11,10 @@ import {
   Star,
   TrendingDown,
   TrendingUp,
-  RefreshCw
+  RefreshCw,
+  RotateCcw
 } from 'lucide-react';
+
 import {
   DndContext,
   closestCenter,
