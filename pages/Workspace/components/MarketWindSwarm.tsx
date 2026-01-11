@@ -1,4 +1,3 @@
-
 import * as React from 'react';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { ApiCoin, Language } from '../../../types';
@@ -202,6 +201,10 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
   const detailOpenRef = useRef(detailOpen);
   detailOpenRef.current = detailOpen;
+
+  // ✅ IMPORTANT: keep latest chartMode in a ref so particle-build effect does NOT depend on it
+  const chartModeRef = useRef<ChartMode>(chartMode);
+  useEffect(() => { chartModeRef.current = chartMode; }, [chartMode]);
 
   useEffect(() => {
     const prevBody = document.body.style.overflow;
@@ -534,8 +537,8 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   }, []);
 
   // =========================
-  // IMPORTANT: build particles ONLY when coins/numCoins changes
-  // (this fixes the "wipe/reposition on chart switch")
+  // ✅ IMPORTANT: build particles ONLY when coins/numCoins changes
+  // (THIS is what restores smooth transitions on mode/timeframe switches)
   // =========================
   useEffect(() => {
     const topCoins = coins.slice(0, numCoins);
@@ -583,9 +586,9 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
     particlesRef.current = newParticles;
 
-    // stats/targets update after rebuild
-    recomputeStatsAndTargets(coins, chartMode);
-  }, [coins, numCoins, recomputeStatsAndTargets, chartMode]);
+    // stats/targets update after rebuild using CURRENT mode (via ref)
+    recomputeStatsAndTargets(coins, chartModeRef.current);
+  }, [coins, numCoins, recomputeStatsAndTargets]);
 
   // when chartMode or timeframe changes: DO NOT rebuild particles, only update targets/colors
   useEffect(() => {
@@ -899,7 +902,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       ctx2.globalAlpha = 0.92;
       ctx2.lineCap = 'round';
 
-      // body
       ctx2.beginPath();
       ctx2.moveTo(buttX, buttY);
       ctx2.lineTo(tipX, tipY);
@@ -907,7 +909,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       ctx2.lineWidth = thick;
       ctx2.stroke();
 
-      // tip
       const tipLen = Math.min(30, stickLen * 0.12);
       ctx2.beginPath();
       ctx2.moveTo(tipX - ux * tipLen, tipY - uy * tipLen);
@@ -983,7 +984,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         p.mass = Math.max(1, p.radius);
       }
 
-      // GAME pockets
       let pockets: { x: number; y: number; r: number }[] = [];
       if (isGameMode) {
         const worldW = width / k;
@@ -1026,7 +1026,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         drawAimMarker(ctx, toScreenX, toScreenY, isDark);
       }
 
-      // MAP axes
       if (!isGameMode && statsRef.current) {
         const s = statsRef.current;
 
@@ -1130,9 +1129,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         ctx.restore();
       }
 
-      // =======================
-      // PHYSICS / MAPPING
-      // =======================
       if (isGameMode) {
         const subSteps = 3;
         const stepDt = dt / subSteps;
@@ -1305,9 +1301,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         }
       }
 
-      // =======================
-      // DRAW PARTICLES
-      // =======================
       for (const p of particlesRef.current) {
         const screenX = toScreenX(p.x);
         const screenY = toScreenY(p.y);
@@ -1427,7 +1420,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         ctx.restore();
       }
 
-      // Draw cue stick LAST so it stays visible and never "under the ball"
       if (isGameMode) {
         const cueBall = particlesRef.current.find(p => String(p.coin.id).toLowerCase() === 'bitcoin');
         if (cueBall) drawCueStick(ctx, cueBall, now, toScreenX, toScreenY, k, isDark);
@@ -1657,7 +1649,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         </div>
       )}
 
-      {/* DETAIL PANEL */}
       {detailOpen && detailCoin && (
         <div
           className="absolute inset-0 z-[60] flex items-center justify-center bg-black/45"
