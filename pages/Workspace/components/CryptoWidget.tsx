@@ -6,23 +6,24 @@ import WidgetErrorBoundary from '../widgets/WidgetErrorBoundary';
 import { Loader2 } from 'lucide-react';
 
 // Lazy load widgets to ensure the shell loads even if a widget fails to import (e.g. Highcharts issues)
-const RsiWidget = React.lazy(() => import('../widgets/RsiWidget'));
-const MacdWidget = React.lazy(() => import('../widgets/MacdWidget'));
-const FearGreedWidget = React.lazy(() => import('../widgets/FearGreedWidget'));
-const LsrWidget = React.lazy(() => import('../widgets/LsrWidget'));
-const AltcoinSeasonWidget = React.lazy(() => import('../widgets/AltcoinSeasonWidget'));
-const TrumpMeterWidget = React.lazy(() => import('../widgets/TrumpMeterWidget'));
-const EtfFlowWidget = React.lazy(() => import('../widgets/EtfFlowWidget'));
-const GainersLosersWidget = React.lazy(() => import('../widgets/GainersLosersWidget'));
-const CalendarWidget = React.lazy(() => import('../widgets/CalendarWidget'));
-const HeatmapWidget = React.lazy(() => import('../widgets/HeatmapWidget'));
+// Casting to any to avoid IntrinsicAttributes errors during lazy load type inference
+const RsiWidget = React.lazy(() => import('../widgets/RsiWidget')) as unknown as React.ComponentType<any>;
+const MacdWidget = React.lazy(() => import('../widgets/MacdWidget')) as unknown as React.ComponentType<any>;
+const FearGreedWidget = React.lazy(() => import('../widgets/FearGreedWidget')) as unknown as React.ComponentType<any>;
+const LsrWidget = React.lazy(() => import('../widgets/LsrWidget')) as unknown as React.ComponentType<any>;
+const AltcoinSeasonWidget = React.lazy(() => import('../widgets/AltcoinSeasonWidget')) as unknown as React.ComponentType<any>;
+const TrumpMeterWidget = React.lazy(() => import('../widgets/TrumpMeterWidget')) as unknown as React.ComponentType<any>;
+const EtfFlowWidget = React.lazy(() => import('../widgets/EtfFlowWidget')) as unknown as React.ComponentType<any>;
+const GainersLosersWidget = React.lazy(() => import('../widgets/GainersLosersWidget')) as unknown as React.ComponentType<any>;
+const CalendarWidget = React.lazy(() => import('../widgets/CalendarWidget')) as unknown as React.ComponentType<any>;
+const HeatmapWidget = React.lazy(() => import('../widgets/HeatmapWidget')) as unknown as React.ComponentType<any>;
 
-const PriceWidget = React.lazy(() => import('../widgets/PriceWidget'));
-const VolumeWidget = React.lazy(() => import('../widgets/VolumeWidget'));
-const TrendWidget = React.lazy(() => import('../widgets/TrendWidget'));
-const SentimentWidget = React.lazy(() => import('../widgets/SentimentWidget'));
-const NewsWidget = React.lazy(() => import('../widgets/NewsWidget'));
-const OrderBookWidget = React.lazy(() => import('../widgets/OrderBookWidget'));
+const PriceWidget = React.lazy(() => import('../widgets/PriceWidget')) as unknown as React.ComponentType<any>;
+const VolumeWidget = React.lazy(() => import('../widgets/VolumeWidget')) as unknown as React.ComponentType<any>;
+const TrendWidget = React.lazy(() => import('../widgets/TrendWidget')) as unknown as React.ComponentType<any>;
+const SentimentWidget = React.lazy(() => import('../widgets/SentimentWidget')) as unknown as React.ComponentType<any>;
+const NewsWidget = React.lazy(() => import('../widgets/NewsWidget')) as unknown as React.ComponentType<any>;
+const OrderBookWidget = React.lazy(() => import('../widgets/OrderBookWidget')) as unknown as React.ComponentType<any>;
 
 interface Props {
   item: DashboardItem;

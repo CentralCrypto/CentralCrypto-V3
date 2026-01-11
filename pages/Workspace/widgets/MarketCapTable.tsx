@@ -36,13 +36,13 @@ import { fetchTopCoins } from '../services/api';
 import { getTranslations } from '../../../locales';
 
 // ======================
-// CORES PADRONIZADAS (Heatmap / Price Flash Bright - PASTEL FOSCO)
+// CORES PADRONIZADAS (Heatmap / Price Flash Bright - MATTE FOSCO)
 // ======================
-const GREEN = '#77dd77';
-const RED = '#ff6961';
+const GREEN = '#16a34a'; // Emerald 600
+const RED = '#dc2626';   // Red 600
 
-const FLASH_GREEN_BG = 'rgba(119, 221, 119, 0.18)';
-const FLASH_RED_BG = 'rgba(255, 105, 97, 0.18)';
+const FLASH_GREEN_BG = 'rgba(22, 163, 74, 0.18)';
+const FLASH_RED_BG = 'rgba(220, 38, 38, 0.18)';
 
 const formatUSD = (val: number, compact = false) => {
   if (val === undefined || val === null) return '---';
@@ -1247,9 +1247,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     else goBackToCategories();
   };
 
-  const gl = getGainersLosersLabel(language);
-
-  // ✅ Botões: ativos com verde/vermelho PASTEL (FOSCO)
+  // ✅ Botões: MATTE FOSCO (Sem brilho pastel)
   const TopToggleButton = ({
     active,
     variant,
@@ -1266,8 +1264,8 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     title: string;
   }) => {
     const activeClass = variant === 'gainers'
-      ? 'bg-[#77dd77] text-white border-transparent shadow-md' // PASTEL GREEN
-      : 'bg-[#ff6961] text-white border-transparent shadow-md'; // PASTEL RED
+      ? 'bg-emerald-600 text-white border-transparent shadow-sm' // Solid Matte Green
+      : 'bg-red-600 text-white border-transparent shadow-sm';    // Solid Matte Red
 
     return (
       <button
