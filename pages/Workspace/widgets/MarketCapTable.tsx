@@ -40,6 +40,7 @@ import { fetchTopCoins } from '../services/api';
 const GREEN = '#264738';
 const RED = '#4b2c32';
 
+
 // fundos "pisca" (pastel) coerentes com as cores
 const FLASH_GREEN_BG = 'rgba(38, 71, 56, 0.18)';
 const FLASH_RED_BG = 'rgba(75, 44, 50, 0.18)';
