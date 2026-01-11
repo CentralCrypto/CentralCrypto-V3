@@ -1,59 +1,44 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import Highcharts from 'highcharts';
 import TreemapModule from 'highcharts/modules/treemap';
 import ExportingModule from 'highcharts/modules/exporting';
 import AccessibilityModule from 'highcharts/modules/accessibility';
-import ColorAxisModule from 'highcharts/modules/coloraxis';
-
-type ValueMode = 'marketcap' | 'var24h';
+import { X } from 'lucide-react';
+import type { DashboardItem, Language } from '../../../types';
 
 type Coin = {
   id: string;
   symbol?: string;
   name?: string;
   image?: string;
-
   current_price?: number;
   market_cap?: number;
   market_cap_rank?: number;
   fully_diluted_valuation?: number;
   total_volume?: number;
-
   high_24h?: number;
   low_24h?: number;
-
   price_change_24h?: number;
   price_change_percentage_24h?: number;
-  price_change_percentage_24h_in_currency?: number;
-
   market_cap_change_24h?: number;
   market_cap_change_percentage_24h?: number;
-
   circulating_supply?: number;
   total_supply?: number;
-  max_supply?: number;
-
+  max_supply?: number | null;
   ath?: number;
   ath_change_percentage?: number;
   ath_date?: string;
-
   atl?: number;
   atl_change_percentage?: number;
   atl_date?: string;
-
   last_updated?: string;
+  price_change_percentage_24h_in_currency?: number;
 };
 
-type CacheckoLiteWrapper = {
-  updated_at?: string;
-  source?: string;
-  stats?: any;
-  data?: Coin[];
-};
+type ValueMode = 'marketcap' | 'var24h';
 
 const ENDPOINTS = {
-  COINS_LITE: '/cachecko/cachecko_lite.json'
+  COINS_LITE: '/cachecko/cachecko_lite.json',
 };
 
 let HC_INITED = false;
@@ -61,17 +46,13 @@ function initHighchartsOnce() {
   if (HC_INITED) return;
   HC_INITED = true;
 
-  try { (TreemapModule as any)(Highcharts); } catch (e) { console.error(e); }
-  try { (ExportingModule as any)(Highcharts); } catch (e) { console.error(e); }
-  try { (AccessibilityModule as any)(Highcharts); } catch (e) { console.error(e); }
-  try { (ColorAxisModule as any)(Highcharts); } catch (e) { console.error(e); }
+  try { (TreemapModule as any)(Highcharts); } catch {}
+  try { (ExportingModule as any)(Highcharts); } catch {}
+  try { (AccessibilityModule as any)(Highcharts); } catch {}
 
   Highcharts.setOptions({
-    chart: {
-      style: {
-        fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
-      }
-    }
+    chart: { style: { fontFamily: 'Inter, system-ui, sans-serif' } },
+    lang: { thousandsSep: ',' }
   });
 }
 
@@ -79,271 +60,258 @@ function safeNum(v: any) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
-function upper(s?: string) {
-  return (s || '').toUpperCase();
-}
-function clamp(n: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, n));
-}
-function fmtPct(v: number) {
-  const n = safeNum(v);
-  const sign = n > 0 ? '+' : '';
-  return `${sign}${n.toFixed(2)}%`;
-}
-function fmtMoney(v: number) {
-  const n = safeNum(v);
-  const a = Math.abs(n);
-  if (a >= 1e12) return `$${(n / 1e12).toFixed(2)}T`;
-  if (a >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
-  if (a >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
-  if (a >= 1e3) return `$${(n / 1e3).toFixed(2)}K`;
-  return `$${Math.round(n).toLocaleString()}`;
-}
-function fmtNum(v: number) {
-  const n = safeNum(v);
-  const a = Math.abs(n);
-  if (a >= 1e12) return `${(n / 1e12).toFixed(2)}T`;
-  if (a >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
-  if (a >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
-  if (a >= 1e3) return `${(n / 1e3).toFixed(2)}K`;
-  return `${n.toLocaleString()}`;
-}
-function fmtPrice(p: number) {
-  const n = safeNum(p);
-  if (n === 0) return '$0';
-  if (n < 0.01) return `$${n.toFixed(6)}`;
-  if (n < 1) return `$${n.toFixed(4)}`;
-  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
-}
-function colorFor(v: number) {
-  return safeNum(v) >= 0 ? '#2ecc59' : '#f73539';
-}
-function withCb(url: string) {
-  const salt = Math.floor(Date.now() / 60000);
-  return url.includes('?') ? `${url}&_cb=${salt}` : `${url}?_cb=${salt}`;
-}
-async function httpGetJson<T = any>(url: string): Promise<T> {
-  const r = await fetch(withCb(url), { cache: 'no-store' });
-  if (!r.ok) throw new Error(`${url} -> HTTP ${r.status}`);
-  return (await r.json()) as T;
-}
-function normalizeCoins(raw: any): Coin[] {
-  if (!raw) return [];
-  if (Array.isArray(raw)) {
-    const first = raw[0] as CacheckoLiteWrapper | any;
-    if (first && Array.isArray(first.data)) return first.data as Coin[];
-    if (raw.length > 0 && raw[0] && typeof raw[0] === 'object' && 'id' in raw[0]) return raw as Coin[];
-    const anyWithData = raw.find((x: any) => x && Array.isArray(x.data));
-    if (anyWithData) return anyWithData.data as Coin[];
-    return [];
-  }
-  if (raw && Array.isArray(raw.data)) return raw.data as Coin[];
-  return [];
-}
-function dedupById(coins: Coin[]) {
-  const m = new Map<string, Coin>();
-  for (const c of coins) {
-    if (!c?.id) continue;
-    if (!m.has(c.id)) m.set(c.id, c);
-  }
-  return Array.from(m.values());
+
+function fmtCompactMoney(v: number) {
+  const a = Math.abs(v);
+  if (a >= 1e12) return `$${(v / 1e12).toFixed(2)}T`;
+  if (a >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
+  if (a >= 1e6) return `$${(v / 1e6).toFixed(2)}M`;
+  if (a >= 1e3) return `$${(v / 1e3).toFixed(2)}K`;
+  return `$${v.toFixed(2)}`;
 }
 
-export default function HeatmapWidget() {
+function fmtCompactNum(v: number) {
+  const a = Math.abs(v);
+  if (a >= 1e12) return `${(v / 1e12).toFixed(2)}T`;
+  if (a >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
+  if (a >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
+  if (a >= 1e3) return `${(v / 1e3).toFixed(2)}K`;
+  return `${v.toFixed(2)}`;
+}
+
+function fmtPrice(p: number) {
+  if (!Number.isFinite(p)) return '-';
+  if (p >= 1000) return `$${p.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  if (p >= 1) return `$${p.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  if (p >= 0.01) return `$${p.toLocaleString(undefined, { maximumFractionDigits: 4 })}`;
+  return `$${p.toLocaleString(undefined, { maximumFractionDigits: 6 })}`;
+}
+
+function fmtPct(v: number) {
+  if (!Number.isFinite(v)) return '-';
+  return `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
+}
+
+async function httpGetJson(url: string, timeoutMs = 15000, retries = 2) {
+  const salt = Math.floor(Date.now() / 60000);
+  const finalUrl = url.includes('?') ? `${url}&_cb=${salt}` : `${url}?_cb=${salt}`;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const ctrl = new AbortController();
+    const t = window.setTimeout(() => ctrl.abort(), timeoutMs);
+
+    try {
+      const r = await fetch(finalUrl, { cache: 'no-store', signal: ctrl.signal });
+      if (!r.ok) throw new Error(`${finalUrl} -> ${r.status}`);
+      return await r.json();
+    } catch (e) {
+      if (attempt === retries) throw e;
+    } finally {
+      window.clearTimeout(t);
+    }
+  }
+
+  throw new Error('httpGetJson: unreachable');
+}
+
+// cachecko_lite pode vir como:
+// 1) [{ updated_at,..., data:[coins...] }]
+// 2) { data:[coins...] }
+// 3) [coins...]
+function extractCoins(raw: any): Coin[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    // Caso wrapper com .data
+    if (raw.length === 1 && raw[0] && Array.isArray(raw[0].data)) return raw[0].data as Coin[];
+    // Caso array direto de coins
+    if (raw.length > 0 && raw[0] && typeof raw[0] === 'object' && 'id' in raw[0]) return raw as Coin[];
+    // Caso array com item[0].data
+    if (raw[0] && Array.isArray(raw[0]?.data)) return raw[0].data as Coin[];
+    return [];
+  }
+  if (Array.isArray(raw.data)) return raw.data as Coin[];
+  return [];
+}
+
+interface HeatmapWidgetProps {
+  item: DashboardItem;
+  language?: Language;
+}
+
+export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
   const [open, setOpen] = useState(true);
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string>('');
+  const [loading, setLoading] = useState(true);
   const [coins, setCoins] = useState<Coin[]>([]);
   const [valueMode, setValueMode] = useState<ValueMode>('marketcap');
+  const [errMsg, setErrMsg] = useState<string>('');
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<Highcharts.Chart | null>(null);
-  const roRef = useRef<ResizeObserver | null>(null);
 
-  useEffect(() => {
-    initHighchartsOnce();
-  }, []);
+  useEffect(() => { initHighchartsOnce(); }, []);
 
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, [open]);
-
-  const loadData = useCallback(async () => {
+  const load = useCallback(async () => {
     setLoading(true);
-    setErr('');
+    setErrMsg('');
     try {
-      const raw = await httpGetJson<any>(ENDPOINTS.COINS_LITE);
-      const arr = dedupById(normalizeCoins(raw));
-      setCoins(arr);
+      const raw = await httpGetJson(ENDPOINTS.COINS_LITE, 20000, 2);
+      const list = extractCoins(raw);
+      setCoins(list);
     } catch (e: any) {
-      console.error('Heatmap load error:', e);
-      setErr(e?.message || 'Falha ao carregar cachecko_lite.json');
+      console.error('Heatmap load error', e);
+      setErrMsg(e?.message || 'Falha ao carregar dados');
       setCoins([]);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  useEffect(() => { load(); }, [load]);
 
-  const treemapData = useMemo(() => {
-    const list = [...coins].filter(c => c && c.id && (c.symbol || c.name));
-    list.sort((a, b) => safeNum(b.market_cap) - safeNum(a.market_cap));
+  const { points, maxAbsChange } = useMemo(() => {
+    const list = coins
+      .filter(c => c && c.id && c.symbol)
+      .map(c => {
+        const change24 = safeNum(c.price_change_percentage_24h_in_currency ?? c.price_change_percentage_24h);
+        const mc = safeNum(c.market_cap);
+        const price = safeNum(c.current_price);
 
-    return list.map(c => {
-      const sym = upper(c.symbol) || upper(c.name) || c.id;
+        const sizeMarketCap = Math.max(1, mc);
+        const sizeVar = Math.max(0.0001, Math.abs(change24)); // treemap precisa > 0
 
-      const ch24 =
-        safeNum(c.price_change_percentage_24h_in_currency) ||
-        safeNum(c.price_change_percentage_24h);
+        return {
+          id: String(c.id),
+          name: String(c.symbol || '').toUpperCase(),
+          value: valueMode === 'marketcap' ? sizeMarketCap : sizeVar,
+          colorValue: change24,
+          custom: {
+            fullName: c.name || c.id,
+            image: c.image,
+            rank: safeNum(c.market_cap_rank),
+            price,
+            marketCap: mc,
+            fdv: safeNum(c.fully_diluted_valuation),
+            vol: safeNum(c.total_volume),
+            high24: safeNum(c.high_24h),
+            low24: safeNum(c.low_24h),
+            chg24Abs: safeNum(c.price_change_24h),
+            chg24Pct: change24,
+            mcChgAbs: safeNum(c.market_cap_change_24h),
+            mcChgPct: safeNum(c.market_cap_change_percentage_24h),
+            circ: safeNum(c.circulating_supply),
+            supply: safeNum(c.total_supply),
+            maxSupply: c.max_supply ?? null,
+            ath: safeNum(c.ath),
+            athChg: safeNum(c.ath_change_percentage),
+            atl: safeNum(c.atl),
+            atlChg: safeNum(c.atl_change_percentage),
+            updated: c.last_updated || ''
+          }
+        };
+      });
 
-      const size =
-        valueMode === 'marketcap'
-          ? Math.max(1, safeNum(c.market_cap))
-          : Math.max(0.0001, Math.abs(ch24));
-
-      return {
-        id: String(c.id),
-        name: sym,
-        value: size,
-        colorValue: clamp(ch24, -10, 10),
-        custom: {
-          fullName: c.name || c.id,
-          logo: c.image || '',
-          rank: safeNum(c.market_cap_rank),
-
-          price: safeNum(c.current_price),
-          change24h: ch24,
-          priceChange24hAbs: safeNum(c.price_change_24h),
-
-          marketCap: safeNum(c.market_cap),
-          fdv: safeNum(c.fully_diluted_valuation),
-          volume24h: safeNum(c.total_volume),
-
-          high24h: safeNum(c.high_24h),
-          low24h: safeNum(c.low_24h),
-
-          marketCapChange24h: safeNum(c.market_cap_change_24h),
-          marketCapChangePct24h: safeNum(c.market_cap_change_percentage_24h),
-
-          circulating: safeNum(c.circulating_supply),
-          totalSupply: safeNum(c.total_supply),
-          maxSupply: safeNum(c.max_supply),
-
-          ath: safeNum(c.ath),
-          athChangePct: safeNum(c.ath_change_percentage),
-          athDate: c.ath_date || '',
-
-          atl: safeNum(c.atl),
-          atlChangePct: safeNum(c.atl_change_percentage),
-          atlDate: c.atl_date || '',
-
-          lastUpdated: c.last_updated || ''
-        }
-      };
-    });
+    let maxAbs = 10;
+    for (const p of list) maxAbs = Math.max(maxAbs, Math.abs(safeNum((p as any).colorValue)));
+    maxAbs = Math.min(50, Math.ceil(maxAbs)); // clamp
+    return { points: list, maxAbsChange: maxAbs };
   }, [coins, valueMode]);
 
-  const destroyChart = useCallback(() => {
+  // Cria o chart 1x quando o popup estiver aberto e o container existir
+  useEffect(() => {
+    if (!open) return;
+    if (!containerRef.current) return;
+
+    // Se já existe, só reflow
     if (chartRef.current) {
-      chartRef.current.destroy();
-      chartRef.current = null;
+      chartRef.current.reflow();
+      return;
     }
-  }, []);
 
-  const renderChart = useCallback(() => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    const rect = el.getBoundingClientRect();
-    if (rect.width < 50 || rect.height < 50) return;
-
-    destroyChart();
-
-    chartRef.current = Highcharts.chart(el, {
+    chartRef.current = Highcharts.chart(containerRef.current, {
       chart: {
-        backgroundColor: '#252931',
+        backgroundColor: '#111216',
+        margin: [8, 8, 8, 8],
         animation: false,
-        margin: [10, 10, 10, 10]
+        height: '100%'
       },
       title: { text: null },
-      subtitle: { text: null },
       credits: { enabled: false },
       exporting: { enabled: false },
-
+      accessibility: { enabled: true },
       tooltip: {
-        followPointer: true,
-        outside: true,
         useHTML: true,
-        backgroundColor: 'rgba(20,20,25,0.96)',
-        borderColor: 'rgba(255,255,255,0.12)',
+        backgroundColor: 'rgba(15, 16, 20, 0.96)',
+        borderColor: 'rgba(255,255,255,0.08)',
         borderRadius: 14,
+        shadow: true,
         padding: 0,
+        outside: true,
+        followPointer: true,
         formatter: function () {
-          const p: any = (this as any).point;
-          const c = p?.custom || {};
-
-          const row = (label: string, value: string) => `
-            <div style="display:flex; justify-content:space-between; gap:12px; margin-top:6px;">
-              <span style="color:rgba(255,255,255,0.55); font-weight:900;">${label}</span>
-              <span style="color:#fff; font-weight:1100;">${value}</span>
-            </div>
-          `;
+          // @ts-ignore
+          const p = this.point as any;
+          const c = p.custom || {};
+          const isPos = safeNum(c.chg24Pct) >= 0;
+          const accent = isPos ? '#2ecc59' : '#f73539';
 
           return `
-            <div style="min-width:360px; padding:12px; color:#fff; font-family:Inter,system-ui,sans-serif;">
-              <div style="display:flex; align-items:center; gap:10px; padding-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.10);">
-                ${c.logo ? `<img src="${c.logo}" style="width:30px;height:30px;border-radius:50%;" />` : ''}
-                <div style="min-width:0">
-                  <div style="font-weight:1200; font-size:14px; line-height:1.1;">
-                    ${p.name}${c.rank ? ` <span style="color:rgba(255,255,255,0.55); font-weight:900; font-size:12px;">#${c.rank}</span>` : ''}
-                  </div>
-                  <div style="color:rgba(255,255,255,0.60); font-size:11px; font-weight:900; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:300px;">
-                    ${c.fullName}${c.lastUpdated ? ` • ${c.lastUpdated}` : ''}
-                  </div>
+            <div style="min-width: 280px; color: #fff; padding: 12px 12px 10px 12px;">
+              <div style="display:flex; gap:10px; align-items:center; padding-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.08);">
+                ${c.image ? `<img src="${c.image}" style="width:34px; height:34px; border-radius:50%; background:#0b0c10;" />` : ''}
+                <div style="min-width:0;">
+                  <div style="font-weight:900; font-size:14px; letter-spacing:0.3px;">${p.name} <span style="opacity:0.7; font-weight:700; font-size:12px;">#${c.rank || '-'}</span></div>
+                  <div style="opacity:0.75; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:220px;">${c.fullName || ''}</div>
+                </div>
+                <div style="margin-left:auto; font-weight:900; font-size:12px; color:${accent};">${fmtPct(safeNum(c.chg24Pct))}</div>
+              </div>
+
+              <div style="margin-top:10px; display:flex; justify-content:space-between; gap:10px;">
+                <div>
+                  <div style="opacity:0.65; font-size:10px;">Preço</div>
+                  <div style="font-weight:900; font-size:18px;">${fmtPrice(safeNum(c.price))}</div>
+                </div>
+                <div style="text-align:right;">
+                  <div style="opacity:0.65; font-size:10px;">Δ 24h</div>
+                  <div style="font-weight:800; font-size:12px; color:${accent};">${fmtCompactMoney(safeNum(c.chg24Abs))} (${fmtPct(safeNum(c.chg24Pct))})</div>
                 </div>
               </div>
 
-              <div style="margin-top:10px; display:flex; align-items:flex-end; justify-content:space-between; gap:10px;">
-                <div style="font-size:20px; font-weight:1200;">${fmtPrice(c.price)}</div>
-                <div style="font-size:14px; font-weight:1200; color:${colorFor(c.change24h)};">${fmtPct(c.change24h)}</div>
+              <div style="margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                <div style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.06); border-radius:10px; padding:8px;">
+                  <div style="opacity:0.65; font-size:10px;">Market Cap</div>
+                  <div style="font-weight:900; font-size:12px;">${fmtCompactMoney(safeNum(c.marketCap))}</div>
+                  <div style="opacity:0.7; font-size:10px; margin-top:2px;">Δ ${fmtCompactMoney(safeNum(c.mcChgAbs))} (${fmtPct(safeNum(c.mcChgPct))})</div>
+                </div>
+                <div style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.06); border-radius:10px; padding:8px;">
+                  <div style="opacity:0.65; font-size:10px;">Volume 24h</div>
+                  <div style="font-weight:900; font-size:12px;">${fmtCompactMoney(safeNum(c.vol))}</div>
+                  <div style="opacity:0.7; font-size:10px; margin-top:2px;">FDV: ${fmtCompactMoney(safeNum(c.fdv))}</div>
+                </div>
               </div>
 
-              <div style="margin-top:10px;">
-                ${row('Market Cap', fmtMoney(c.marketCap))}
-                ${row('FDV', c.fdv ? fmtMoney(c.fdv) : '—')}
-                ${row('Volume 24h', fmtMoney(c.volume24h))}
-                ${row('MCap Δ 24h', `${fmtMoney(c.marketCapChange24h)} (${fmtPct(c.marketCapChangePct24h)})`)}
+              <div style="margin-top:10px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+                <div style="background:rgba(255,255,255,0.04); border-radius:10px; padding:8px;">
+                  <div style="opacity:0.65; font-size:10px;">Low 24h</div>
+                  <div style="font-weight:800; font-size:11px;">${fmtPrice(safeNum(c.low24))}</div>
+                </div>
+                <div style="background:rgba(255,255,255,0.04); border-radius:10px; padding:8px;">
+                  <div style="opacity:0.65; font-size:10px;">High 24h</div>
+                  <div style="font-weight:800; font-size:11px;">${fmtPrice(safeNum(c.high24))}</div>
+                </div>
+                <div style="background:rgba(255,255,255,0.04); border-radius:10px; padding:8px;">
+                  <div style="opacity:0.65; font-size:10px;">Supply</div>
+                  <div style="font-weight:800; font-size:11px;">${fmtCompactNum(safeNum(c.circ))}</div>
+                </div>
               </div>
 
-              <div style="margin-top:10px; border-top:1px solid rgba(255,255,255,0.10); padding-top:10px;">
-                ${row('High 24h', c.high24h ? fmtPrice(c.high24h) : '—')}
-                ${row('Low 24h', c.low24h ? fmtPrice(c.low24h) : '—')}
-                ${row('Price Δ 24h', c.priceChange24hAbs ? fmtPrice(c.priceChange24hAbs) : '—')}
-              </div>
-
-              <div style="margin-top:10px; border-top:1px solid rgba(255,255,255,0.10); padding-top:10px;">
-                ${row('Circulating', c.circulating ? fmtNum(c.circulating) : '—')}
-                ${row('Total Supply', c.totalSupply ? fmtNum(c.totalSupply) : '—')}
-                ${row('Max Supply', c.maxSupply ? fmtNum(c.maxSupply) : '—')}
-              </div>
-
-              <div style="margin-top:10px; border-top:1px solid rgba(255,255,255,0.10); padding-top:10px;">
-                ${row('ATH', c.ath ? `${fmtPrice(c.ath)} (${fmtPct(c.athChangePct)})` : '—')}
-                ${row('ATH Date', c.athDate || '—')}
-                ${row('ATL', c.atl ? `${fmtPrice(c.atl)} (${fmtPct(c.atlChangePct)})` : '—')}
-                ${row('ATL Date', c.atlDate || '—')}
+              <div style="margin-top:10px; opacity:0.55; font-size:10px;">
+                ATH: ${fmtPrice(safeNum(c.ath))} (${fmtPct(safeNum(c.athChg))}) •
+                ATL: ${fmtPrice(safeNum(c.atl))} (${fmtPct(safeNum(c.atlChg))})
               </div>
             </div>
           `;
         }
       },
-
       colorAxis: {
         min: -10,
         max: 10,
@@ -353,266 +321,166 @@ export default function HeatmapWidget() {
           [1, '#2ecc59']
         ],
         labels: {
-          style: { color: '#fff', fontWeight: '900' },
+          style: { color: '#cfd3dc' },
           format: '{#gt value 0}+{value}{else}{value}{/gt}%'
         }
       },
+      legend: { enabled: false },
+      plotOptions: {
+        series: {
+          animation: false
+        }
+      },
+      series: [{
+        type: 'treemap',
+        name: 'All',
+        layoutAlgorithm: 'squarified',
+        allowDrillToNode: false,
+        animationLimit: 1000,
+        borderColor: '#111216',
+        borderWidth: 1,
+        opacity: 1,
+        // CRÍTICO: evita Highcharts warning #12 com 2000 pontos em objetos
+        turboThreshold: 0,
+        dataLabels: {
+          enabled: true,
+          useHTML: true,
+          allowOverlap: true,
+          style: { textOutline: 'none' },
+          formatter: function () {
+            // @ts-ignore
+            const p = this.point as any;
+            const w = p.shapeArgs?.width || 0;
+            const h = p.shapeArgs?.height || 0;
 
-      series: [
-        {
-          type: 'treemap',
-          layoutAlgorithm: 'squarified',
-          allowDrillToNode: false,
-          animationLimit: 1000,
-          borderColor: '#252931',
-          borderWidth: 1,
-          colorKey: 'colorValue',
-          colorAxis: 0,
-          data: treemapData as any,
+            // thresholds pra não virar “papel picado”
+            const showLogo = w >= 56 && h >= 44 && p.custom?.image;
+            const showSymbol = w >= 44 && h >= 28;
+            const showPrice = w >= 72 && h >= 52;
 
-          dataLabels: {
-            enabled: true,
-            useHTML: true,
-            allowOverlap: true,
-            style: { textOutline: 'none' },
-            formatter: function () {
-              const p: any = (this as any).point;
-              const c = p?.custom || {};
-              const w = p.shapeArgs?.width || 0;
-              const h = p.shapeArgs?.height || 0;
+            if (!showSymbol && !showLogo && !showPrice) return '';
 
-              if (w < 46 || h < 34) return '';
+            const symFont = Math.min(18, Math.max(10, Math.floor(Math.min(w, h) / 4)));
+            const priceFont = Math.max(9, Math.min(12, symFont - 4));
+            const logoSize = Math.min(26, Math.max(14, Math.floor(Math.min(w, h) / 3.2)));
 
-              const area = w * h;
-              const symFont = Math.min(22, Math.max(11, Math.round(7 + area * 0.00025)));
+            const price = safeNum(p.custom?.price);
+            const priceStr = fmtPrice(price);
 
-              const showLogo = !!c.logo && w >= 68 && h >= 58;
-              const logoSize = Math.min(30, Math.max(16, Math.round(symFont + 6)));
+            // se preço for grande e não “caber”, a regra é: não desenha
+            const priceTooLong = priceStr.length > 12 && w < 110;
 
-              const showPrice = w >= 92 && h >= 72;
-              const priceTxt = fmtPrice(c.price);
-
-              return `
-                <div style="pointer-events:none; text-align:center; line-height:1.05;">
-                  ${showLogo ? `<img src="${c.logo}" style="width:${logoSize}px;height:${logoSize}px;border-radius:50%;margin-bottom:4px; box-shadow:0 1px 2px rgba(0,0,0,0.6);" />` : ''}
-                  <div style="color:white; font-weight:1200; font-size:${symFont}px; text-shadow:0 1px 2px rgba(0,0,0,0.75);">
-                    ${p.name}
-                  </div>
-                  ${showPrice ? `
-                    <div style="color:rgba(255,255,255,0.92); font-weight:1100; font-size:${Math.max(10, Math.round(symFont * 0.72))}px; text-shadow:0 1px 2px rgba(0,0,0,0.75); margin-top:2px;">
-                      ${priceTxt}
-                    </div>
-                  ` : ''}
-                </div>
-              `;
-            }
+            return `
+              <div style="pointer-events:none; width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1.05;">
+                ${showLogo ? `<img src="${p.custom.image}" style="width:${logoSize}px; height:${logoSize}px; border-radius:50%; margin-bottom:3px; background:#0b0c10; box-shadow:0 2px 10px rgba(0,0,0,0.35);" />` : ''}
+                ${showSymbol ? `<div style="font-weight:900; font-size:${symFont}px; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,0.65);">${p.name}</div>` : ''}
+                ${showPrice && !priceTooLong ? `<div style="margin-top:2px; font-weight:800; font-size:${priceFont}px; opacity:0.92; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,0.65);">${priceStr}</div>` : ''}
+              </div>
+            `;
           }
-        } as any
-      ]
+        },
+        data: []
+      }] as any
     } as any);
-  }, [destroyChart, treemapData]);
 
-  useEffect(() => {
-    if (!open) return;
-    if (loading) return;
-
-    const raf1 = requestAnimationFrame(() => {
-      renderChart();
-      const raf2 = requestAnimationFrame(() => {
-        renderChart();
-        chartRef.current?.reflow();
-      });
-      return () => cancelAnimationFrame(raf2);
-    });
-
+    // Resize observer pra garantir reflow no fullscreen
     const el = containerRef.current;
-    if (el && !roRef.current) {
-      roRef.current = new ResizeObserver(() => {
-        if (!chartRef.current) return;
-        chartRef.current.reflow();
-      });
-      roRef.current.observe(el);
-    }
+    const ro = new ResizeObserver(() => {
+      if (chartRef.current) chartRef.current.reflow();
+    });
+    if (el) ro.observe(el);
 
     return () => {
-      cancelAnimationFrame(raf1);
-      if (roRef.current && el) roRef.current.unobserve(el);
-      destroyChart();
+      ro.disconnect();
     };
-  }, [open, loading, renderChart, destroyChart]);
+  }, [open]);
 
-  const close = useCallback(() => setOpen(false), []);
+  // Atualiza dados/escala sem destruir chart (mais leve, menos “violation”)
+  useEffect(() => {
+    if (!open) return;
+    if (!chartRef.current) return;
+
+    const ch = chartRef.current;
+
+    const maxAbs = Math.max(10, safeNum(maxAbsChange));
+    const min = -maxAbs;
+    const max = maxAbs;
+
+    // Atualiza colorAxis e dados
+    ch.update({
+      colorAxis: { min, max }
+    } as any, false);
+
+    const s0 = ch.series[0] as any;
+    s0.setData(points as any, false, undefined, false);
+
+    ch.redraw(false);
+  }, [open, points, maxAbsChange]);
+
+  // Limpa chart ao fechar
+  useEffect(() => {
+    if (open) return;
+    if (chartRef.current) {
+      chartRef.current.destroy();
+      chartRef.current = null;
+    }
+  }, [open]);
 
   if (!open) return null;
-  if (typeof document === 'undefined') return null;
 
-  const overlay = (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 2147483647,
-        background: 'rgba(0,0,0,0.78)',
-        backdropFilter: 'blur(8px)'
-      }}
-    >
-      <div style={{ position: 'absolute', inset: 0, padding: 12 }}>
-        <div
-          style={{
-            width: '100%',
-            height: '100%',
-            borderRadius: 18,
-            overflow: 'hidden',
-            border: '1px solid rgba(255,255,255,0.10)',
-            background: '#252931',
-            boxShadow: '0 30px 90px rgba(0,0,0,0.55)',
-            display: 'flex',
-            flexDirection: 'column'
-          }}
-        >
-          <div
-            style={{
-              padding: '10px 12px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 10,
-              borderBottom: '1px solid rgba(255,255,255,0.10)'
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                background: 'rgba(255,255,255,0.07)',
-                border: '1px solid rgba(255,255,255,0.10)',
-                borderRadius: 12,
-                padding: 3,
-                gap: 4
-              }}
-            >
+  return (
+    <div className="fixed inset-0 z-[9999] bg-black/80">
+      <div className="absolute inset-0 flex flex-col bg-[#0f1014]">
+        {/* Header */}
+        <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+          <div className="flex items-center gap-2">
+            <div className="flex bg-white/5 rounded p-0.5">
               <button
                 onClick={() => setValueMode('marketcap')}
-                style={{
-                  cursor: 'pointer',
-                  border: 'none',
-                  borderRadius: 10,
-                  padding: '7px 10px',
-                  fontWeight: 1100,
-                  fontSize: 11,
-                  color: valueMode === 'marketcap' ? '#0b0d10' : 'rgba(255,255,255,0.75)',
-                  background: valueMode === 'marketcap' ? '#dd9933' : 'transparent'
-                }}
+                className={[
+                  'px-3 py-1 text-[11px] font-extrabold rounded transition-colors',
+                  valueMode === 'marketcap' ? 'bg-[#dd9933] text-black' : 'text-gray-300 hover:text-white'
+                ].join(' ')}
               >
                 MarketCap
               </button>
-
               <button
                 onClick={() => setValueMode('var24h')}
-                style={{
-                  cursor: 'pointer',
-                  border: 'none',
-                  borderRadius: 10,
-                  padding: '7px 10px',
-                  fontWeight: 1100,
-                  fontSize: 11,
-                  color: valueMode === 'var24h' ? '#0b0d10' : 'rgba(255,255,255,0.75)',
-                  background: valueMode === 'var24h' ? '#dd9933' : 'transparent'
-                }}
+                className={[
+                  'px-3 py-1 text-[11px] font-extrabold rounded transition-colors',
+                  valueMode === 'var24h' ? 'bg-[#dd9933] text-black' : 'text-gray-300 hover:text-white'
+                ].join(' ')}
               >
                 Var.Preço 24Hs
               </button>
             </div>
 
-            <button
-              onClick={close}
-              style={{
-                cursor: 'pointer',
-                border: '1px solid rgba(255,255,255,0.15)',
-                background: 'rgba(255,255,255,0.06)',
-                color: '#fff',
-                borderRadius: 12,
-                padding: '8px 12px',
-                fontWeight: 1100,
-                fontSize: 12
-              }}
-              aria-label="Fechar"
-              title="Fechar"
-            >
-              ✕
-            </button>
+            <div className="text-[11px] text-gray-400">
+              {loading ? 'Carregando…' : `${coins.length.toLocaleString()} moedas`}
+              {errMsg ? <span className="text-red-400 ml-2">{errMsg}</span> : null}
+            </div>
           </div>
 
-          <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-            <div
-              ref={containerRef}
-              style={{
-                position: 'absolute',
-                inset: 0,
-                width: '100%',
-                height: '100%',
-                background: '#252931'
-              }}
-            />
+          <button
+            onClick={() => setOpen(false)}
+            className="p-2 rounded hover:bg-white/5 text-gray-300 hover:text-white transition-colors"
+            aria-label="Fechar"
+            title="Fechar"
+          >
+            <X size={18} />
+          </button>
+        </div>
 
-            {loading && (
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  background: 'rgba(0,0,0,0.35)',
-                  color: '#fff',
-                  fontWeight: 900
-                }}
-              >
-                Carregando…
-              </div>
-            )}
-
-            {!loading && !!err && (
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  background: 'rgba(0,0,0,0.30)',
-                  color: '#ff6b6b',
-                  fontWeight: 1100,
-                  padding: 20,
-                  textAlign: 'center'
-                }}
-              >
-                {err}
-              </div>
-            )}
-
-            {!loading && !err && treemapData.length === 0 && (
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  background: 'rgba(0,0,0,0.20)',
-                  color: 'rgba(255,255,255,0.85)',
-                  fontWeight: 900,
-                  padding: 20,
-                  textAlign: 'center'
-                }}
-              >
-                Sem moedas para renderizar.
-              </div>
-            )}
-          </div>
+        {/* Chart */}
+        <div className="flex-1 min-h-0 relative">
+          <div ref={containerRef} className="absolute inset-0" />
+          {loading && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="text-gray-300 text-sm">Carregando heatmap…</div>
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
-
-  return createPortal(overlay, document.body);
 }

@@ -5,6 +5,7 @@ import { ApiCoin, Language, WidgetType, UserTier } from '../../../types';
 import { getTranslations } from '../../../locales';
 import CryptoWidget from './CryptoWidget';
 import MarketWindSwarm from './MarketWindSwarm';
+// Corrected import path
 import MarketCapTable from '../widgets/MarketCapTable';
 
 import {
