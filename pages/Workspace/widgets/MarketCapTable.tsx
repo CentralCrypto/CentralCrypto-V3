@@ -1827,8 +1827,6 @@ return <td key={cid} className="p-2" />;
 </div>
 
 </div>
-)}
-</div>
 );
 };
 
