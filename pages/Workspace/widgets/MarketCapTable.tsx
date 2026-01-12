@@ -1368,7 +1368,7 @@ title={title}
 );
 };
 
-// ✅ Reset “voltou o ícone” e realmente faz algo útil
+// ✅ Reset “voltou o ícone” e realmente faz algo útil.
 const handleResetUI = () => {
 setColOrder(DEFAULT_COLS);
 setCatColOrder(CAT_DEFAULT_COLS);
