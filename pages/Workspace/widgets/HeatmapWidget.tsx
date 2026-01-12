@@ -1,19 +1,18 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Highcharts from 'highcharts';
-import HighchartsReact from 'highcharts-react-official';
 import TreemapModule from 'highcharts/modules/treemap';
-import { Maximize2, X } from 'lucide-react';
+import { X } from 'lucide-react';
 
 TreemapModule(Highcharts);
 
 type HeatPoint = {
 id: string;
 name: string;
-value: number; // tamanho
-change24h?: number; // % (ou 1h/7d etc)
+value: number; // tamanho do tile (marketcap OU abs(var), conforme teu modo)
+change24h?: number; // % para cor
 price?: number;
 symbol?: string;
-logo?: string; // url
+logo?: string;
 marketCap?: number;
 volume24h?: number;
 rank?: number;
@@ -23,7 +22,7 @@ category?: string;
 type Props = {
 title?: string;
 data: HeatPoint[];
-onClose?: () => void; // se você quiser fechar a tela/popup do widget pai
+onClose?: () => void;
 };
 
 const fmtPrice = (n?: number) => {
@@ -48,36 +47,12 @@ return `$${v.toFixed(0)}`;
 const fmtPct = (n?: number) => {
 const v = Number(n);
 if (!isFinite(v)) return '-';
-return `${v.toFixed(2)}%`;
+return `${v > 0 ? '+' : ''}${v.toFixed(2)}%`;
 };
 
-// cores: você pode trocar aqui sem mexer no resto
 const POS_BG = '#123a2b';
 const NEG_BG = '#3a1f24';
 const NEU_BG = '#1f2a33';
-
-const tileColorFromPct = (pct?: number) => {
-const v = Number(pct);
-if (!isFinite(v) || v === 0) return '#1d2a35';
-
-const t = Math.min(1, Math.abs(v) / 20); // 20% satura
-// Interpolação simples pra ficar vivo
-if (v > 0) {
-const base = { r: 18, g: 60, b: 43 }; // escuro
-const top = { r: 24, g: 155, b: 81 }; // verde
-const r = Math.round(base.r + (top.r - base.r) * t);
-const g = Math.round(base.g + (top.g - base.g) * t);
-const b = Math.round(base.b + (top.b - base.b) * t);
-return `rgb(${r},${g},${b})`;
-}
-
-const base = { r: 58, g: 31, b: 36 };
-const top = { r: 242, g: 54, b: 69 };
-const r = Math.round(base.r + (top.r - base.r) * t);
-const g = Math.round(base.g + (top.g - base.g) * t);
-const b = Math.round(base.b + (top.b - base.b) * t);
-return `rgb(${r},${g},${b})`;
-};
 
 const priceBadgeBg = (pct?: number) => {
 const v = Number(pct);
@@ -85,53 +60,71 @@ if (!isFinite(v) || v === 0) return NEU_BG;
 return v > 0 ? POS_BG : NEG_BG;
 };
 
-export default function HeatmapTreemap({ title = 'Heatmap', data, onClose }: Props) {
-const chartRef = useRef<HighchartsReact.RefObject>(null);
+export default function HeatmapWidget({ title = '', data, onClose }: Props) {
+const containerRef = useRef<HTMLDivElement>(null);
+const chartRef = useRef<Highcharts.Chart | null>(null);
 
-const [isFullscreen, setIsFullscreen] = useState(false);
-
-// card “tooltip” no clique
 const [selected, setSelected] = useState<HeatPoint | null>(null);
 
+// Normaliza/defende dados (ids únicos, números válidos)
 const points = useMemo(() => {
-return data.map((d) => ({
+const seen = new Set<string>();
+const out: HeatPoint[] = [];
+
+for (const d of (Array.isArray(data) ? data : [])) {
+if (!d || !d.id) continue;
+
+let id = String(d.id);
+if (seen.has(id)) {
+let k = 2;
+while (seen.has(`${id}__${k}`)) k++;
+id = `${id}__${k}`;
+}
+seen.add(id);
+
+out.push({
 ...d,
-color: tileColorFromPct(d.change24h),
-}));
+id,
+value: Math.max(0.000001, Number(d.value) || 0),
+change24h: Number.isFinite(Number(d.change24h)) ? Number(d.change24h) : 0
+});
+}
+
+return out;
 }, [data]);
 
-// fecha card com clique no vazio
-useEffect(() => {
-const onKey = (e: KeyboardEvent) => {
-if (e.key === 'Escape') {
-setSelected(null);
-if (isFullscreen) setIsFullscreen(false);
-}
-};
-window.addEventListener('keydown', onKey);
-return () => window.removeEventListener('keydown', onKey);
-}, [isFullscreen]);
-
-const buildOptions = (fullscreen: boolean): Highcharts.Options => ({
+const options = useMemo<Highcharts.Options>(() => {
+return {
 chart: {
 type: 'treemap',
 backgroundColor: '#0b1118',
-animation: true,
-spacing: [8, 8, 8, 8],
-style: { fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial' },
-height: fullscreen ? (window.innerHeight - 120) : 520
+spacing: [0, 0, 0, 0],
+margin: 0,
+animation: false,
+style: { fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial' }
 },
-title: { text: '' },
+title: { text: null },
 credits: { enabled: false },
 legend: { enabled: false },
-tooltip: {
-enabled: false // ✅ DESLIGA tooltip do hover de vez
+tooltip: { enabled: false }, // tooltip do hover OFF (você quer card no clique)
+colorAxis: {
+min: -50,
+max: 50,
+minColor: '#f73539',
+maxColor: '#2ecc59',
+stops: [
+[0, '#f73539'],
+[0.5, '#414555'],
+[1, '#2ecc59']
+],
+gridLineWidth: 0,
+labels: { enabled: false }
 },
 plotOptions: {
 series: {
-animation: { duration: 650 },
+animation: false,
 states: {
-hover: { enabled: false }, // ✅ SEM hover
+hover: { enabled: false },
 inactive: { enabled: false }
 },
 point: {
@@ -140,16 +133,16 @@ click: function () {
 const p: any = this;
 setSelected({
 id: p.id,
-name: p.name,
+name: p.custom?.fullName || p.name,
 value: p.value,
-change24h: p.change24h,
-price: p.price,
-symbol: p.symbol,
-logo: p.logo,
-marketCap: p.marketCap,
-volume24h: p.volume24h,
-rank: p.rank,
-category: p.category
+change24h: p.colorValue,
+price: p.custom?.price,
+symbol: p.name,
+logo: p.custom?.logo,
+marketCap: p.custom?.marketCap,
+volume24h: p.custom?.volume24h,
+rank: p.custom?.rank,
+category: p.custom?.category
 });
 }
 }
@@ -160,33 +153,31 @@ useHTML: true,
 allowOverlap: true,
 defer: false,
 formatter: function () {
-// ✅ Mostra logo só se couber
 const p: any = this.point;
-const shape = p.shapeArgs;
-const w = shape?.width || 0;
-const h = shape?.height || 0;
+const shape = p.shapeArgs || {};
+const w = Number(shape.width) || 0;
+const h = Number(shape.height) || 0;
 const area = w * h;
 
-const showLogo = !!p.logo && area >= 2600 && w >= 48 && h >= 38; // regra
-const showPct = area >= 1800;
+if (w < 55 || h < 40 || area < 2600) return '';
 
-const pct = Number(p.change24h);
-const pctTxt = isFinite(pct) ? fmtPct(pct) : '-';
-const pctColor = isFinite(pct) ? (pct > 0 ? '#25d07d' : '#ff5a6a') : '#9aa4b2';
+const logo = p.custom?.logo;
+const showLogo = !!logo && w >= 90 && h >= 70;
+
+const pct = Number(p.colorValue);
+const pctTxt = Number.isFinite(pct) ? fmtPct(pct) : '-';
+const pctColor = Number.isFinite(pct) ? (pct > 0 ? '#2ecc59' : '#f73539') : '#9aa4b2';
+
+const sym = String(p.name || '').toUpperCase();
 
 return `
-<div style="
-display:flex;align-items:center;justify-content:center;
-width:100%;height:100%;
-text-align:center;line-height:1.05;
-pointer-events:none;
-">
-<div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
-${showLogo ? `<img src="${p.logo}" style="width:18px;height:18px;border-radius:999px;opacity:.95" />` : ``}
+<div style="pointer-events:none; text-align:center; line-height:1.05;">
+${showLogo ? `<img src="${logo}" style="width:20px;height:20px;border-radius:999px; margin:0 auto 4px auto; opacity:.95; box-shadow:0 2px 6px rgba(0,0,0,.35);" />` : ``}
 <div style="font-weight:900;font-size:12px;color:#f2f6ff;text-shadow:0 1px 2px rgba(0,0,0,.65);">
-${p.symbol ? String(p.symbol).toUpperCase() : p.name}
+${sym}
 </div>
-${showPct ? `<div style="font-weight:900;font-size:11px;color:${pctColor};text-shadow:0 1px 2px rgba(0,0,0,.65);">${pctTxt}</div>` : ``}
+<div style="font-weight:900;font-size:11px;color:${pctColor};text-shadow:0 1px 2px rgba(0,0,0,.65);">
+${pctTxt}
 </div>
 </div>
 `;
@@ -198,79 +189,96 @@ series: [{
 type: 'treemap',
 layoutAlgorithm: 'squarified',
 allowTraversingTree: false,
-turboThreshold: 0,
+turboThreshold: 0, // CRÍTICO com 2000+ pontos
 borderColor: '#0b1118',
 borderWidth: 1,
-colorByPoint: false, // ✅ a cor vem por point.color
-data: points.map((p) => ({
+colorByPoint: false,
+colorAxis: 0 as any,
+colorKey: 'colorValue' as any,
+data: points.map(p => ({
 id: p.id,
-name: p.name,
+name: (p.symbol ? String(p.symbol) : String(p.name)).toUpperCase(),
 value: p.value,
-color: (p as any).color,
-
-change24h: p.change24h,
-price: p.price,
-symbol: p.symbol,
+colorValue: Number(p.change24h) || 0,
+custom: {
+fullName: p.name,
 logo: p.logo,
+price: p.price,
 marketCap: p.marketCap,
 volume24h: p.volume24h,
 rank: p.rank,
 category: p.category
-}))
-}]
-});
+}
+})) as any
+}] as any
+};
+}, [points]);
 
-const optionsNormal = useMemo(() => buildOptions(false), [points]);
-const optionsFull = useMemo(() => buildOptions(true), [points]);
+// cria/atualiza o chart
+useEffect(() => {
+if (!containerRef.current) return;
+
+const el = containerRef.current;
+const rect = el.getBoundingClientRect();
+if (rect.width < 10 || rect.height < 10) return;
+
+if (!chartRef.current) {
+chartRef.current = Highcharts.chart(el, options as any);
+} else {
+chartRef.current.update(options as any, true, false, false);
+}
+}, [options]);
+
+// reflow no resize (evita “vazar pra baixo” e scroll)
+useEffect(() => {
+if (!containerRef.current) return;
+
+const ro = new ResizeObserver(() => {
+if (chartRef.current) chartRef.current.reflow();
+});
+ro.observe(containerRef.current);
+
+return () => ro.disconnect();
+}, []);
+
+useEffect(() => {
+return () => {
+if (chartRef.current) {
+chartRef.current.destroy();
+chartRef.current = null;
+}
+};
+}, []);
 
 return (
-<div className="w-full">
-{/* Header do widget */}
-<div className="flex items-center justify-between gap-3 mb-3">
-<div className="flex items-center gap-2">
-<div className="text-lg font-black text-white">{title}</div>
-</div>
-
-<div className="flex items-center gap-2">
-<button
-onClick={() => setIsFullscreen(true)}
-className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white font-black text-xs"
-title="Tela cheia"
->
-<Maximize2 size={16} />
-Tela cheia
-</button>
-
+<div className="w-full h-full overflow-hidden flex flex-col bg-[#0b1118]">
+{/* Header minimalista (sem “Heatmap” texto se title vazio) */}
+<div className="shrink-0 flex items-center justify-between px-3 py-2 border-b border-white/10">
+<div className="text-white font-black text-sm">{title || ''}</div>
 {onClose ? (
 <button
 onClick={onClose}
 className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white font-black text-xs"
-title="Fechar widget"
+title="Fechar"
 >
 <X size={16} />
 Fechar
 </button>
 ) : null}
 </div>
+
+{/* Área do gráfico (SEM scroll) */}
+<div className="relative flex-1 min-h-0 overflow-hidden">
+<div ref={containerRef} className="absolute inset-0 overflow-hidden" />
 </div>
 
-{/* Treemap normal */}
-<div className="rounded-2xl overflow-hidden border border-white/10 bg-[#0b1118]">
-<HighchartsReact
-highcharts={Highcharts}
-options={optionsNormal}
-ref={chartRef}
-/>
-</div>
-
-{/* Card Tooltip (clique) */}
+{/* Card (clique) */}
 {selected && (
 <div
 className="fixed inset-0 z-[9999] flex items-center justify-center"
 onMouseDown={() => setSelected(null)}
 >
 <div className="absolute inset-0 bg-black/55 backdrop-blur-[2px]" />
-
 <div
 className="relative w-[520px] max-w-[92vw] rounded-2xl border border-white/10 bg-[#0b1118] shadow-2xl"
 onMouseDown={(e) => e.stopPropagation()}
@@ -288,9 +296,9 @@ onMouseDown={(e) => e.stopPropagation()}
 <div className="text-white/60 font-black text-sm">{selected.symbol?.toUpperCase()}</div>
 {selected.rank ? <div className="text-white/60 font-black text-sm">#{selected.rank}</div> : null}
 </div>
-
-<div className="mt-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-white/10"
-style={{ background: priceBadgeBg(selected.change24h) }}  // ✅ FUNDO COLORIDO
+<div
+className="mt-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-white/10"
+style={{ background: priceBadgeBg(selected.change24h) }}
 >
 <div className="text-white/80 font-black text-xs">Preço</div>
 <div className="text-white font-black text-sm">{fmtPrice(selected.price)}</div>
@@ -317,41 +325,10 @@ title="Fechar"
 <div className="text-white/60 font-black text-xs">Volume 24h</div>
 <div className="text-white font-black text-base">{fmtCompact(selected.volume24h)}</div>
 </div>
-
 <div className="rounded-xl border border-white/10 bg-white/5 p-3 col-span-2">
 <div className="text-white/60 font-black text-xs">Categoria</div>
 <div className="text-white font-black text-base">{selected.category || '-'}</div>
 </div>
-</div>
-</div>
-</div>
-)}
-
-{/* Fullscreen Modal */}
-{isFullscreen && (
-<div className="fixed inset-0 z-[9998] bg-black/70 backdrop-blur-[2px]">
-<div className="absolute inset-0" onMouseDown={() => setIsFullscreen(false)} />
-
-<div className="relative w-[96vw] h-[92vh] mx-auto mt-[4vh] rounded-2xl overflow-hidden border border-white/10 bg-[#0b1118] shadow-2xl"
-onMouseDown={(e) => e.stopPropagation()}
->
-<div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-white/10">
-<div className="text-white font-black">{title} (Tela cheia)</div>
-<button
-onClick={() => setIsFullscreen(false)}
-className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white font-black text-xs"
-title="Fechar tela cheia"
->
-<X size={16} />
-Fechar
-</button>
-</div>
-
-<div className="p-3">
-<HighchartsReact
-highcharts={Highcharts}
-options={optionsFull}
-/>
 </div>
 </div>
 </div>
