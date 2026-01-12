@@ -1371,7 +1371,7 @@ title={title}
 );
 };
 
-// ✅ Reset “voltou o ícone” e realmente faz algo útil + giro 360° no clique.
+// ✅ Reset “voltou o ícone” e realmente faz algo útil + giro 360° no clique
 const handleResetUI = () => {
 setResetRot(r => r + 360);
 

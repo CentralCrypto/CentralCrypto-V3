@@ -1,12 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import Highcharts from 'highcharts';
-import TreemapModule from 'highcharts/modules/treemap';
-import ExportingModule from 'highcharts/modules/exporting';
-import AccessibilityModule from 'highcharts/modules/accessibility';
-import { X, Loader2 } from 'lucide-react';
-import type { DashboardItem, Language } from '../../../types';
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import Highcharts from "highcharts";
+import TreemapModule from "highcharts/modules/treemap";
+import ColorAxisModule from "highcharts/modules/coloraxis";
+import AccessibilityModule from "highcharts/modules/accessibility";
 
-type Coin = {
+type CoinLite = {
   id: string;
   symbol?: string;
   name?: string;
@@ -20,6 +18,7 @@ type Coin = {
   low_24h?: number;
   price_change_24h?: number;
   price_change_percentage_24h?: number;
+  price_change_percentage_24h_in_currency?: number;
   market_cap_change_24h?: number;
   market_cap_change_percentage_24h?: number;
   circulating_supply?: number;
@@ -32,486 +31,439 @@ type Coin = {
   atl_change_percentage?: number;
   atl_date?: string;
   last_updated?: string;
-  price_change_percentage_24h_in_currency?: number;
 };
 
-type ValueMode = 'marketcap' | 'var24h';
+type CacheckoLiteEnvelope =
+  | { updated_at?: string; data?: CoinLite[] }
+  | { updated_at?: string; data?: CoinLite[] }[]
+  | CoinLite[];
 
-const ENDPOINTS = {
-  COINS_LITE: '/cachecko/cachecko_lite.json'
-};
+type ValueMode = "marketcap" | "var24h";
 
 let HC_INITED = false;
 function initHighchartsOnce() {
   if (HC_INITED) return;
   HC_INITED = true;
 
-  try { (TreemapModule as any)(Highcharts); } catch {}
-  try { (ExportingModule as any)(Highcharts); } catch {}
-  try { (AccessibilityModule as any)(Highcharts); } catch {}
+  try { (TreemapModule as any)(Highcharts); } catch (e) { console.error(e); }
+  try { (ColorAxisModule as any)(Highcharts); } catch (e) { console.error(e); }
+  try { (AccessibilityModule as any)(Highcharts); } catch (e) {}
 
   Highcharts.setOptions({
-    chart: { style: { fontFamily: 'Inter, system-ui, sans-serif' } },
-    lang: { thousandsSep: ',' }
+    chart: { style: { fontFamily: "Inter, system-ui, sans-serif" } },
+    lang: { thousandsSep: "," }
   });
+}
+
+const ENDPOINTS = {
+  COINS_LITE: "/cachecko/cachecko_lite.json"
+};
+
+async function httpGetJson(url: string, opts?: { timeoutMs?: number; retries?: number }) {
+  const timeoutMs = opts?.timeoutMs ?? 20000;
+  const retries = opts?.retries ?? 2;
+
+  const salt = Math.floor(Date.now() / 60000);
+  const finalUrl = url.includes("?") ? `${url}&_cb=${salt}` : `${url}?_cb=${salt}`;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const r = await fetch(finalUrl, { cache: "no-store", signal: ctrl.signal });
+      if (!r.ok) throw new Error(`${finalUrl} -> ${r.status}`);
+      return await r.json();
+    } catch (e) {
+      if (attempt === retries) throw e;
+    } finally {
+      clearTimeout(t);
+    }
+  }
+  throw new Error("httpGetJson: unreachable");
 }
 
 function safeNum(v: any) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
-
+function upper(s?: string) {
+  return (s || "").toUpperCase();
+}
 function fmtPct(v: number) {
-  if (!Number.isFinite(v)) return '-';
-  return `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
+  const n = safeNum(v);
+  return `${n > 0 ? "+" : ""}${n.toFixed(2)}%`;
+}
+function fmtMoney(v: number) {
+  const n = safeNum(v);
+  const a = Math.abs(n);
+  if (a >= 1e12) return `$${(n / 1e12).toFixed(2)}T`;
+  if (a >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
+  if (a >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
+  if (a >= 1e3) return `$${(n / 1e3).toFixed(2)}K`;
+  return `$${n.toLocaleString()}`;
+}
+function fmtPrice(v: number) {
+  const n = safeNum(v);
+  if (n === 0) return "$0";
+  if (n < 0.01) return `$${n.toFixed(6)}`;
+  if (n < 1) return `$${n.toFixed(4)}`;
+  if (n < 100) return `$${n.toFixed(2)}`;
+  return `$${Math.round(n).toLocaleString()}`;
+}
+function fmtNumber(v: number) {
+  const n = safeNum(v);
+  const a = Math.abs(n);
+  if (a >= 1e12) return `${(n / 1e12).toFixed(2)}T`;
+  if (a >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
+  if (a >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
+  if (a >= 1e3) return `${(n / 1e3).toFixed(2)}K`;
+  return `${n.toLocaleString()}`;
 }
 
-function fmtPrice(p: number) {
-  if (!Number.isFinite(p)) return '-';
-  if (p >= 1000) return `$${p.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-  if (p >= 1) return `$${p.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
-  if (p >= 0.01) return `$${p.toLocaleString(undefined, { maximumFractionDigits: 4 })}`;
-  return `$${p.toLocaleString(undefined, { maximumFractionDigits: 6 })}`;
-}
+export default function HeatmapWidget() {
+  const [isOpen, setIsOpen] = useState(true);
+  const [valueMode, setValueMode] = useState<ValueMode>("marketcap");
+  const [coins, setCoins] = useState<CoinLite[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
+  const [buildingChart, setBuildingChart] = useState(false);
+  const [err, setErr] = useState<string>("");
 
-function fmtCompactMoney(v: number) {
-  const a = Math.abs(v);
-  if (a >= 1e12) return `$${(v / 1e12).toFixed(2)}T`;
-  if (a >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
-  if (a >= 1e6) return `$${(v / 1e6).toFixed(2)}M`;
-  if (a >= 1e3) return `$${(v / 1e3).toFixed(2)}K`;
-  return `$${v.toFixed(2)}`;
-}
-
-function fmtCompactNum(v: number) {
-  const a = Math.abs(v);
-  if (a >= 1e12) return `${(v / 1e12).toFixed(2)}T`;
-  if (a >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
-  if (a >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
-  if (a >= 1e3) return `${(v / 1e3).toFixed(2)}K`;
-  return `${v.toFixed(2)}`;
-}
-
-async function httpGetJson(url: string, timeoutMs = 20000) {
-  const salt = Math.floor(Date.now() / 60000);
-  const finalUrl = url.includes('?') ? `${url}&_cb=${salt}` : `${url}?_cb=${salt}`;
-
-  const ctrl = new AbortController();
-  const t = window.setTimeout(() => ctrl.abort(), timeoutMs);
-
-  try {
-    const r = await fetch(finalUrl, { cache: 'no-store', signal: ctrl.signal });
-    if (!r.ok) throw new Error(`${finalUrl} -> ${r.status}`);
-    return await r.json();
-  } finally {
-    window.clearTimeout(t);
-  }
-}
-
-// cachecko_lite pode vir como:
-// 1) [{ updated_at,..., data:[coins...] }]
-// 2) { data:[coins...] }
-// 3) [coins...]
-function extractCoins(raw: any): Coin[] {
-  if (!raw) return [];
-  if (Array.isArray(raw)) {
-    if (raw.length === 1 && raw[0] && Array.isArray(raw[0].data)) return raw[0].data as Coin[];
-    if (raw.length > 0 && raw[0] && typeof raw[0] === 'object' && 'id' in raw[0]) return raw as Coin[];
-    if (raw[0] && Array.isArray(raw[0]?.data)) return raw[0].data as Coin[];
-    return [];
-  }
-  if (Array.isArray(raw.data)) return raw.data as Coin[];
-  return [];
-}
-
-interface HeatmapWidgetProps {
-  item: DashboardItem;
-  language?: Language;
-}
-
-export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
-  const [open, setOpen] = useState(true);
-  const [loading, setLoading] = useState(true);
-  const [rendering, setRendering] = useState(false);
-  const [coins, setCoins] = useState<Coin[]>([]);
-  const [valueMode, setValueMode] = useState<ValueMode>('marketcap');
-  const [errMsg, setErrMsg] = useState<string>('');
-
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<Highcharts.Chart | null>(null);
 
   useEffect(() => { initHighchartsOnce(); }, []);
 
-  // trava scroll do body enquanto aberto
+  // trava scroll do body quando popup está aberto
   useEffect(() => {
-    if (!open) return;
+    if (!isOpen) return;
     const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [open]);
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [isOpen]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setErrMsg('');
+  const load = async () => {
+    setErr("");
+    setLoadingData(true);
     try {
-      const raw = await httpGetJson(ENDPOINTS.COINS_LITE, 25000);
-      const list = extractCoins(raw);
-      setCoins(list);
+      const raw: CacheckoLiteEnvelope = await httpGetJson(ENDPOINTS.COINS_LITE, { timeoutMs: 20000, retries: 2 });
+
+      let arr: CoinLite[] = [];
+      if (Array.isArray(raw)) {
+        // caso envelope array [{data:[...]}]
+        if (raw.length > 0 && (raw as any)[0]?.data && Array.isArray((raw as any)[0].data)) {
+          arr = (raw as any)[0].data as CoinLite[];
+        } else {
+          // caso já seja array de coins
+          arr = raw as CoinLite[];
+        }
+      } else if ((raw as any)?.data && Array.isArray((raw as any).data)) {
+        arr = (raw as any).data as CoinLite[];
+      }
+
+      setCoins(arr);
     } catch (e: any) {
-      console.error('Heatmap load error', e);
-      setErrMsg(e?.message || 'Falha ao carregar dados');
-      setCoins([]);
+      console.error("Heatmap load error", e);
+      setErr(String(e?.message || e));
     } finally {
-      setLoading(false);
+      setLoadingData(false);
     }
-  }, []);
+  };
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, []);
 
-  const { points, maxAbsChange } = useMemo(() => {
-    const list = coins
-      .filter(c => c && c.id && c.symbol)
-      .map(c => {
-        const change24 = safeNum(c.price_change_percentage_24h_in_currency ?? c.price_change_percentage_24h);
-        const mc = safeNum(c.market_cap);
-        const price = safeNum(c.current_price);
+  const treemapData = useMemo(() => {
+    const list = Array.isArray(coins) ? coins : [];
+    if (list.length === 0) return { points: [] as any[], topIds: new Set<string>() };
 
-        const sizeMarketCap = Math.max(1, mc);
-        const sizeVar = Math.max(0.0001, Math.abs(change24)); // treemap precisa > 0
+    // ordena por marketcap (pra label/ícone nos maiores)
+    const byMcap = [...list]
+      .filter(c => c?.id && c?.symbol)
+      .sort((a, b) => safeNum(b.market_cap) - safeNum(a.market_cap));
 
-        return {
+    const topN = 260; // labels + logo só nos maiores
+    const topIds = new Set(byMcap.slice(0, topN).map(c => String(c.id)));
+
+    // pontos finais (SEM FILTRO: todos os 2000)
+    const points = byMcap.map(c => {
+      const change =
+        safeNum(c.price_change_percentage_24h_in_currency) ||
+        safeNum(c.price_change_percentage_24h);
+
+      const mcap = Math.max(1, safeNum(c.market_cap));
+
+      // tamanho depende do modo
+      const value =
+        valueMode === "marketcap"
+          ? mcap
+          : Math.max(1, Math.abs(change)); // tamanho = abs(var)
+
+      return {
+        id: String(c.id),
+        name: upper(c.symbol),
+        value,
+        // COR depende do colorAxis (precisa do módulo coloraxis!)
+        colorValue: change,
+        custom: {
           id: String(c.id),
-          name: String(c.symbol || '').toUpperCase(),
-          value: valueMode === 'marketcap' ? sizeMarketCap : sizeVar,
-          colorValue: change24, // <-- usado pelo colorAxis
-          custom: {
-            fullName: c.name || c.id,
-            image: c.image,
-            rank: safeNum(c.market_cap_rank),
-            price,
-            marketCap: mc,
-            fdv: safeNum(c.fully_diluted_valuation),
-            vol: safeNum(c.total_volume),
-            high24: safeNum(c.high_24h),
-            low24: safeNum(c.low_24h),
-            chg24Abs: safeNum(c.price_change_24h),
-            chg24Pct: change24,
-            mcChgAbs: safeNum(c.market_cap_change_24h),
-            mcChgPct: safeNum(c.market_cap_change_percentage_24h),
-            circ: safeNum(c.circulating_supply),
-            supply: safeNum(c.total_supply),
-            maxSupply: c.max_supply ?? null,
-            ath: safeNum(c.ath),
-            athChg: safeNum(c.ath_change_percentage),
-            atl: safeNum(c.atl),
-            atlChg: safeNum(c.atl_change_percentage),
-            updated: c.last_updated || ''
-          }
-        };
-      });
+          symbol: upper(c.symbol),
+          name: c.name || "",
+          logo: c.image || "",
+          price: safeNum(c.current_price),
+          rank: safeNum(c.market_cap_rank),
+          change24: change,
+          priceChange24: safeNum(c.price_change_24h),
+          high24: safeNum(c.high_24h),
+          low24: safeNum(c.low_24h),
+          mcap,
+          mcapChange24: safeNum(c.market_cap_change_24h),
+          mcapChangePct24: safeNum(c.market_cap_change_percentage_24h),
+          vol: safeNum(c.total_volume),
+          fdv: safeNum(c.fully_diluted_valuation),
+          circ: safeNum(c.circulating_supply),
+          total: safeNum(c.total_supply),
+          max: c.max_supply ?? null,
+          ath: safeNum(c.ath),
+          athChg: safeNum(c.ath_change_percentage),
+          athDate: c.ath_date || "",
+          atl: safeNum(c.atl),
+          atlChg: safeNum(c.atl_change_percentage),
+          atlDate: c.atl_date || "",
+          last: c.last_updated || ""
+        }
+      };
+    });
 
-    let maxAbs = 10;
-    for (const p of list) maxAbs = Math.max(maxAbs, Math.abs(safeNum((p as any).colorValue)));
-    maxAbs = Math.min(50, Math.ceil(maxAbs));
-    return { points: list, maxAbsChange: maxAbs };
+    return { points, topIds };
   }, [coins, valueMode]);
 
-  // cria o chart 1x
+  // monta chart
   useEffect(() => {
-    if (!open) return;
+    if (!isOpen) return;
     if (!containerRef.current) return;
-    if (chartRef.current) return;
+    if (loadingData) return;
+    if (!treemapData.points || treemapData.points.length === 0) return;
 
-    chartRef.current = Highcharts.chart(containerRef.current, {
-      chart: {
-        backgroundColor: '#111216',
-        margin: [0, 0, 0, 0],
-        animation: false,
-        height: '100%'
-      },
-      title: { text: null },
-      credits: { enabled: false },
-      exporting: { enabled: false },
-      accessibility: { enabled: true },
+    setBuildingChart(true);
 
-      tooltip: {
-        useHTML: true,
-        backgroundColor: 'rgba(15, 16, 20, 0.96)',
-        borderColor: 'rgba(255,255,255,0.08)',
-        borderRadius: 14,
-        shadow: true,
-        padding: 0,
-        outside: true,
-        followPointer: true,
-        formatter: function () {
-          // @ts-ignore
-          const p = this.point as any;
-          const c = p.custom || {};
-          const isPos = safeNum(c.chg24Pct) >= 0;
-          const accent = isPos ? '#2ecc59' : '#f73539';
-
-          return `
-            <div style="min-width: 300px; color: #fff; padding: 12px;">
-              <div style="display:flex; gap:10px; align-items:center; padding-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.08);">
-                ${c.image ? `<img src="${c.image}" style="width:34px; height:34px; border-radius:50%; background:#0b0c10;" />` : ''}
-                <div style="min-width:0;">
-                  <div style="font-weight:900; font-size:14px;">${p.name} <span style="opacity:0.7; font-weight:700; font-size:12px;">#${c.rank || '-'}</span></div>
-                  <div style="opacity:0.75; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:220px;">${c.fullName || ''}</div>
-                </div>
-                <div style="margin-left:auto; font-weight:900; font-size:12px; color:${accent};">${fmtPct(safeNum(c.chg24Pct))}</div>
-              </div>
-
-              <div style="margin-top:10px; display:flex; justify-content:space-between; gap:10px;">
-                <div>
-                  <div style="opacity:0.65; font-size:10px;">Preço</div>
-                  <div style="font-weight:900; font-size:18px;">${fmtPrice(safeNum(c.price))}</div>
-                </div>
-                <div style="text-align:right;">
-                  <div style="opacity:0.65; font-size:10px;">Δ 24h</div>
-                  <div style="font-weight:800; font-size:12px; color:${accent};">${fmtCompactMoney(safeNum(c.chg24Abs))} (${fmtPct(safeNum(c.chg24Pct))})</div>
-                </div>
-              </div>
-
-              <div style="margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                <div style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.06); border-radius:10px; padding:8px;">
-                  <div style="opacity:0.65; font-size:10px;">Market Cap</div>
-                  <div style="font-weight:900; font-size:12px;">${fmtCompactMoney(safeNum(c.marketCap))}</div>
-                  <div style="opacity:0.7; font-size:10px; margin-top:2px;">Δ ${fmtCompactMoney(safeNum(c.mcChgAbs))} (${fmtPct(safeNum(c.mcChgPct))})</div>
-                </div>
-                <div style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.06); border-radius:10px; padding:8px;">
-                  <div style="opacity:0.65; font-size:10px;">Volume 24h</div>
-                  <div style="font-weight:900; font-size:12px;">${fmtCompactMoney(safeNum(c.vol))}</div>
-                  <div style="opacity:0.7; font-size:10px; margin-top:2px;">FDV: ${fmtCompactMoney(safeNum(c.fdv))}</div>
-                </div>
-              </div>
-
-              <div style="margin-top:10px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
-                <div style="background:rgba(255,255,255,0.04); border-radius:10px; padding:8px;">
-                  <div style="opacity:0.65; font-size:10px;">Low 24h</div>
-                  <div style="font-weight:800; font-size:11px;">${fmtPrice(safeNum(c.low24))}</div>
-                </div>
-                <div style="background:rgba(255,255,255,0.04); border-radius:10px; padding:8px;">
-                  <div style="opacity:0.65; font-size:10px;">High 24h</div>
-                  <div style="font-weight:800; font-size:11px;">${fmtPrice(safeNum(c.high24))}</div>
-                </div>
-                <div style="background:rgba(255,255,255,0.04); border-radius:10px; padding:8px;">
-                  <div style="opacity:0.65; font-size:10px;">Circ Supply</div>
-                  <div style="font-weight:800; font-size:11px;">${fmtCompactNum(safeNum(c.circ))}</div>
-                </div>
-              </div>
-
-              <div style="margin-top:10px; opacity:0.55; font-size:10px;">
-                Total Supply: ${fmtCompactNum(safeNum(c.supply))} • Max: ${c.maxSupply ? fmtCompactNum(safeNum(c.maxSupply)) : '—'}
-              </div>
-            </div>
-          `;
-        }
-      },
-
-      // CORRETO: stops fixos aqui
-      colorAxis: [{
-        min: -10,
-        max: 10,
-        stops: [
-          [0, '#4b2c32'],   // vermelho
-          [0.5, '#414555'], // neutro
-          [1, '#264738']    // verde
-        ],
-        labels: {
-          style: { color: '#cfd3dc' },
-          format: '{#gt value 0}+{value}{else}{value}{/gt}%'
-        }
-      }],
-
-      legend: { enabled: false },
-      plotOptions: {
-        series: { animation: false }
-      },
-
-      series: [{
-        type: 'treemap',
-        name: 'All',
-        layoutAlgorithm: 'squarified',
-        allowDrillToNode: false,
-        animationLimit: 1000,
-        borderColor: '#111216',
-        borderWidth: 1,
-        opacity: 1,
-
-        // CRÍTICO: usa colorAxis pelo colorValue
-        colorAxis: 0,
-        colorKey: 'colorValue',
-        colorByPoint: false,
-
-        turboThreshold: 0,
-
-        dataLabels: {
-          enabled: true,
-          useHTML: true,
-          allowOverlap: true,
-          style: { textOutline: 'none' },
-          formatter: function () {
-            // @ts-ignore
-            const p = this.point as any;
-            const w = p.shapeArgs?.width || 0;
-            const h = p.shapeArgs?.height || 0;
-
-            // PERFORMANCE: thresholds mais agressivos pra não enfiar 2000 <img>
-            const showLogo = w >= 90 && h >= 70 && p.custom?.image;
-            const showSymbol = w >= 60 && h >= 38;
-            const showPrice = w >= 110 && h >= 78;
-
-            if (!showLogo && !showSymbol && !showPrice) return '';
-
-            const symFont = Math.min(18, Math.max(10, Math.floor(Math.min(w, h) / 4)));
-            const priceFont = Math.max(9, Math.min(12, symFont - 4));
-            const logoSize = Math.min(28, Math.max(16, Math.floor(Math.min(w, h) / 3.1)));
-
-            const price = safeNum(p.custom?.price);
-            const priceStr = fmtPrice(price);
-            const priceTooLong = priceStr.length > 12 && w < 140;
-
-            return `
-              <div style="pointer-events:none; width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1.05;">
-                ${showLogo ? `<img src="${p.custom.image}" style="width:${logoSize}px; height:${logoSize}px; border-radius:50%; margin-bottom:4px; background:#0b0c10; box-shadow:0 2px 10px rgba(0,0,0,0.35);" />` : ''}
-                ${showSymbol ? `<div style="font-weight:900; font-size:${symFont}px; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,0.65);">${p.name}</div>` : ''}
-                ${showPrice && !priceTooLong ? `<div style="margin-top:2px; font-weight:800; font-size:${priceFont}px; opacity:0.92; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,0.65);">${priceStr}</div>` : ''}
-              </div>
-            `;
-          }
-        },
-
-        data: []
-      }] as any
-    } as any);
-
-    const el = containerRef.current;
-    const ro = new ResizeObserver(() => {
-      if (chartRef.current) chartRef.current.reflow();
-    });
-    if (el) ro.observe(el);
-
-    return () => ro.disconnect();
-  }, [open]);
-
-  // aplica dados + atualiza min/max do colorAxis SEM destruir stops
-  useEffect(() => {
-    if (!open) return;
-    if (!chartRef.current) return;
-
-    const ch = chartRef.current;
-
-    setRendering(true);
-
-    const maxAbs = Math.max(10, safeNum(maxAbsChange));
-    const min = -maxAbs;
-    const max = maxAbs;
-
-    // CRÍTICO: atualiza só min/max preservando stops (senão vira azul)
-    if (ch.colorAxis && ch.colorAxis[0]) {
-      ch.colorAxis[0].update({ min, max }, false);
-    }
-
-    const s0 = ch.series[0] as any;
-    s0.setData(points as any, false, undefined, false);
-
-    ch.redraw(false);
-
-    // deixa o browser respirar e desenhar antes de tirar o overlay
+    // deixa a UI respirar 1 frame antes de travar montando o chart
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        setRendering(false);
-      });
+      try {
+        if (chartRef.current) {
+          chartRef.current.destroy();
+          chartRef.current = null;
+        }
+
+        chartRef.current = Highcharts.chart(containerRef.current as any, {
+          chart: {
+            backgroundColor: "#111216",
+            margin: [0, 0, 0, 0],
+            spacing: [0, 0, 0, 0],
+            height: "100%",
+            animation: false
+          },
+          title: { text: undefined as any },
+          subtitle: { text: undefined as any },
+          credits: { enabled: false },
+          exporting: { enabled: false },
+
+          // >>>>>>>>>>>> AQUI É O QUE TIRA O “TUDO AZUL” <<<<<<<<<<<<
+          colorAxis: {
+            min: -50,
+            max: 50,
+            stops: [
+              [0, "#f73539"],   // vermelho
+              [0.5, "#414555"], // neutro
+              [1, "#2ecc59"]    // verde
+            ],
+            gridLineWidth: 0
+          },
+
+          tooltip: {
+            useHTML: true,
+            outside: false,
+            followPointer: true,
+            backgroundColor: "rgba(20,20,25,0.96)",
+            borderColor: "rgba(255,255,255,0.12)",
+            borderRadius: 12,
+            shadow: true,
+            padding: 0,
+            formatter: function () {
+              // @ts-ignore
+              const p = this.point;
+              const c = p.custom || {};
+              const clr = (v: number) => (safeNum(v) >= 0 ? "#2ecc59" : "#f73539");
+
+              return `
+                <div style="padding:12px; min-width: 260px; color:#fff; font-family:Inter,system-ui,sans-serif">
+                  <div style="display:flex; align-items:center; gap:10px; padding-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.08)">
+                    ${c.logo ? `<img src="${c.logo}" style="width:28px; height:28px; border-radius:50%;" />` : ""}
+                    <div style="min-width:0">
+                      <div style="font-weight:900; font-size:14px; letter-spacing:0.2px">${c.symbol || p.name}</div>
+                      <div style="font-size:11px; color:#9aa0aa; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">
+                        ${c.name || ""}${c.rank ? ` • #${c.rank}` : ""}
+                      </div>
+                    </div>
+                    <div style="margin-left:auto; text-align:right">
+                      <div style="font-weight:900; font-size:14px">${fmtPrice(c.price)}</div>
+                      <div style="font-size:12px; font-weight:800; color:${clr(c.change24)}">${fmtPct(c.change24)}</div>
+                    </div>
+                  </div>
+
+                  <div style="margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:12px">
+                    <div style="background:rgba(255,255,255,0.05); padding:8px; border-radius:10px">
+                      <div style="color:#9aa0aa; font-size:10px">Market Cap</div>
+                      <div style="font-weight:800">${fmtMoney(c.mcap)}</div>
+                      <div style="color:#9aa0aa; font-size:10px; margin-top:4px">Δ 24h</div>
+                      <div style="font-weight:800; color:${clr(c.mcapChangePct24)}">${fmtMoney(c.mcapChange24)} (${fmtPct(c.mcapChangePct24)})</div>
+                    </div>
+
+                    <div style="background:rgba(255,255,255,0.05); padding:8px; border-radius:10px">
+                      <div style="color:#9aa0aa; font-size:10px">Volume 24h</div>
+                      <div style="font-weight:800">${fmtMoney(c.vol)}</div>
+                      <div style="color:#9aa0aa; font-size:10px; margin-top:4px">High / Low 24h</div>
+                      <div style="font-weight:800">${fmtPrice(c.high24)} / ${fmtPrice(c.low24)}</div>
+                    </div>
+
+                    <div style="background:rgba(255,255,255,0.05); padding:8px; border-radius:10px">
+                      <div style="color:#9aa0aa; font-size:10px">Supply</div>
+                      <div style="font-weight:800">Circ: ${fmtNumber(c.circ)}</div>
+                      <div style="font-weight:800">Total: ${fmtNumber(c.total)}${c.max ? ` • Max: ${fmtNumber(c.max)}` : ""}</div>
+                    </div>
+
+                    <div style="background:rgba(255,255,255,0.05); padding:8px; border-radius:10px">
+                      <div style="color:#9aa0aa; font-size:10px">ATH / ATL</div>
+                      <div style="font-weight:800">ATH: ${fmtPrice(c.ath)} (${fmtPct(c.athChg)})</div>
+                      <div style="font-weight:800">ATL: ${fmtPrice(c.atl)} (${fmtPct(c.atlChg)})</div>
+                    </div>
+                  </div>
+
+                  <div style="margin-top:10px; color:#7f8792; font-size:10px">
+                    ${c.last ? `Atualizado: ${String(c.last).replace("T", " ").replace("Z", "")}` : ""}
+                  </div>
+                </div>
+              `;
+            }
+          },
+
+          series: [
+            {
+              type: "treemap",
+              layoutAlgorithm: "squarified",
+              animation: false,
+              borderColor: "#0b0c10",
+              borderWidth: 1,
+              // liga explicitamente ao colorAxis e usa colorValue
+              colorAxis: 0,
+              colorKey: "colorValue",
+              data: treemapData.points as any,
+              dataLabels: {
+                enabled: true,
+                useHTML: true,
+                allowOverlap: true,
+                crop: true,
+                overflow: "justify",
+                formatter: function () {
+                  // @ts-ignore
+                  const p = this.point;
+                  const c = p.custom || {};
+                  const w = p.shapeArgs?.width || 0;
+                  const h = p.shapeArgs?.height || 0;
+
+                  // só desenha label/logo nos maiores (performance + não poluir)
+                  const show = treemapData.topIds.has(String(p.id));
+                  if (!show) return "";
+
+                  // se ficou pequeno, não desenha nada (mas tooltip funciona)
+                  if (w < 70 || h < 55) return "";
+
+                  const logoOk = c.logo && w >= 90 && h >= 75;
+
+                  // fonte baseada na área
+                  const area = w * h;
+                  const font = Math.min(34, Math.max(12, 10 + Math.round(area * 0.00012)));
+                  const sub = Math.max(10, Math.round(font * 0.72));
+                  const logo = Math.min(30, Math.max(16, Math.round(font * 0.9)));
+
+                  return `
+                    <div style="pointer-events:none; text-align:center; line-height:1; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,0.75)">
+                      ${logoOk ? `<img src="${c.logo}" style="width:${logo}px; height:${logo}px; border-radius:50%; margin:0 auto 4px auto" />` : ""}
+                      <div style="font-weight:900; font-size:${font}px">${p.name}</div>
+                      <div style="font-weight:800; font-size:${sub}px; opacity:0.95">${fmtPct(c.change24)}</div>
+                      <div style="font-weight:800; font-size:${Math.max(10, Math.round(sub * 0.9))}px; opacity:0.85">${fmtPrice(c.price)}</div>
+                    </div>
+                  `;
+                }
+              }
+            } as any
+          ]
+        } as any);
+      } finally {
+        setBuildingChart(false);
+      }
     });
-  }, [open, points, maxAbsChange]);
+  }, [isOpen, loadingData, treemapData]);
 
-  useEffect(() => {
-    if (open) return;
-    if (chartRef.current) {
-      chartRef.current.destroy();
-      chartRef.current = null;
-    }
-  }, [open]);
-
-  if (!open) return null;
-
-  const maxAbs = Math.max(10, safeNum(maxAbsChange));
-  const busy = loading || rendering;
+  if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-black/80 overflow-hidden">
-      <div className="absolute inset-0 flex flex-col bg-[#0f1014] overflow-hidden">
+    <div className="fixed inset-0 z-[9999] overflow-hidden bg-black/70">
+      <div className="absolute inset-0 bg-[#111216] overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="flex bg-white/5 rounded p-0.5 shrink-0">
+        <div className="h-[44px] flex items-center justify-between px-3 border-b border-white/10 bg-[#0f1014]">
+          <div className="flex items-center gap-2">
+            <div className="flex bg-white/5 rounded p-0.5">
               <button
-                onClick={() => setValueMode('marketcap')}
-                className={[
-                  'px-3 py-1 text-[11px] font-extrabold rounded transition-colors',
-                  valueMode === 'marketcap' ? 'bg-[#dd9933] text-black' : 'text-gray-300 hover:text-white'
-                ].join(' ')}
+                onClick={() => setValueMode("marketcap")}
+                className={`px-3 py-1 text-[11px] font-bold rounded transition-colors ${
+                  valueMode === "marketcap" ? "bg-[#dd9933] text-black" : "text-gray-300 hover:text-white"
+                }`}
               >
                 MarketCap
               </button>
               <button
-                onClick={() => setValueMode('var24h')}
-                className={[
-                  'px-3 py-1 text-[11px] font-extrabold rounded transition-colors',
-                  valueMode === 'var24h' ? 'bg-[#dd9933] text-black' : 'text-gray-300 hover:text-white'
-                ].join(' ')}
+                onClick={() => setValueMode("var24h")}
+                className={`px-3 py-1 text-[11px] font-bold rounded transition-colors ${
+                  valueMode === "var24h" ? "bg-[#dd9933] text-black" : "text-gray-300 hover:text-white"
+                }`}
               >
                 Var.Preço 24Hs
               </button>
             </div>
 
-            {/* Escala */}
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="text-[10px] text-gray-400 whitespace-nowrap">-{maxAbs}%</div>
+            {/* escala visual (só UI) */}
+            <div className="ml-2 flex items-center gap-2 text-[11px] text-gray-300 select-none">
+              <span>-50%</span>
               <div
-                className="h-2 w-[180px] rounded overflow-hidden border border-white/10 shrink-0"
-                style={{
-                  background: 'linear-gradient(90deg, #4b2c32 0%, #414555 50%, #264738 100%)'
-                }}
-                title="Cor por Var.Preço 24Hs"
+                className="h-[6px] w-[220px] rounded"
+                style={{ background: "linear-gradient(90deg, #f73539 0%, #414555 50%, #2ecc59 100%)" }}
               />
-              <div className="text-[10px] text-gray-400 whitespace-nowrap">+{maxAbs}%</div>
-
-              <div className="text-[11px] text-gray-400 ml-2 truncate">
-                {busy ? 'Renderizando…' : `${coins.length.toLocaleString()} moedas`}
-                {errMsg ? <span className="text-red-400 ml-2">{errMsg}</span> : null}
-              </div>
+              <span>+50%</span>
+              <span className="ml-2 text-gray-500">{coins.length.toLocaleString()} moedas</span>
             </div>
           </div>
 
           <button
-            onClick={() => setOpen(false)}
-            className="p-2 rounded hover:bg-white/5 text-gray-300 hover:text-white transition-colors shrink-0"
+            onClick={() => setIsOpen(false)}
+            className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 text-gray-200 flex items-center justify-center"
             aria-label="Fechar"
             title="Fechar"
           >
-            <X size={18} />
+            ✕
           </button>
         </div>
 
-        {/* Chart wrapper com altura explícita (ZERO scroll) */}
-        <div
-          className="relative overflow-hidden"
-          style={{
-            height: 'calc(100vh - 44px)',
-            width: '100%'
-          }}
-        >
+        {/* Chart */}
+        <div className="absolute left-0 right-0 bottom-0 top-[44px] overflow-hidden">
           <div ref={containerRef} className="absolute inset-0" />
 
-          {/* Overlay de buffer */}
-          {busy && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-20">
-              <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#0f1014] border border-white/10 text-gray-200">
-                <Loader2 className="animate-spin" size={18} />
-                <span className="text-sm font-semibold">Carregando heatmap…</span>
+          {(loadingData || buildingChart) && (
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/40">
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-10 h-10 rounded-full border-2 border-white/20 border-t-[#dd9933] animate-spin" />
+                <div className="text-[12px] text-gray-200 font-semibold">
+                  {loadingData ? "Carregando dados..." : "Renderizando heatmap..."}
+                </div>
+                {err ? <div className="text-[11px] text-red-300 max-w-[70vw] break-words">{err}</div> : null}
               </div>
             </div>
           )}

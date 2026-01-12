@@ -17,7 +17,9 @@ import {
   ExternalLink,
   Calendar,
   Clock,
-  BarChart2
+  BarChart2,
+  Newspaper,
+  Link as LinkIcon
 } from 'lucide-react';
 import { fetchTopCoins } from '../services/api';
 
@@ -40,6 +42,7 @@ interface Particle {
   fallPocket?: { x: number; y: number; r: number } | null;
   fallFromX?: number;
   fallFromY?: number;
+  isPocketed?: boolean;
 
   // tween map transition
   tweenActive?: boolean;
@@ -138,7 +141,6 @@ const WATERMARK_REMOTE = '';
 // ========================
 const MAGAZINE_API_BASE = '/magazine/wp-json/wp/v2';
 const MAGAZINE_POSTS_ENDPOINT = `${MAGAZINE_API_BASE}/posts?per_page=6&_embed=1&orderby=date&order=desc`;
-const MAGAZINE_FALLBACK_LINK_BASE = '/magazine';
 
 type MagazinePost = {
   id: number;
@@ -172,7 +174,7 @@ const pickFeatured = (p: MagazinePost): string | null => {
 };
 
 // ========================
-// SOCIAL ICONS (inline SVG, no CDN)
+// SOCIAL ICONS (inline SVG)
 // ========================
 const SocialIcon = ({ type }: { type: string }) => {
   const cls = "w-5 h-5";
@@ -233,7 +235,7 @@ const normalizeUrl = (u: string) => {
   return `https://${s.replace(/^\/+/, '')}`;
 };
 
-// ✅ redes sociais do SEU SITE (não da moeda)
+// redes sociais DO SITE
 const SITE_SOCIALS: SocialLink[] = [
   { type: 'website', label: 'Site', url: 'https://centralcrypto.com.br' },
   { type: 'x', label: 'X', url: 'https://x.com/centralcrypto' },
@@ -249,8 +251,8 @@ const SITE_SOCIALS: SocialLink[] = [
 const GAME_BALL_RADIUS = 24;
 const GAME_CUE_RADIUS = 30;
 const GAME_WALL_PAD = 14;
-const POCKET_R = 34; // raio da caçapa
-const POCKET_INNER_R = 18; // “boca” visual
+const POCKET_R = 34;
+const POCKET_INNER_R = 18;
 
 const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -281,7 +283,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   const [floatStrengthRaw, setFloatStrengthRaw] = useState(0.5);
   const [trailLength, setTrailLength] = useState(25);
 
-  const [cuePowerRaw, setCuePowerRaw] = useState(0.7);
+  const [cuePowerRaw, setCuePowerRaw] = useState(0.75);
 
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
 
@@ -296,21 +298,23 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   const [magIndex, setMagIndex] = useState(0);
   const magTimerRef = useRef<number>(0);
 
-  // Transform
+  // Transform (map only)
   const transformRef = useRef({ k: 1, x: 0, y: 0 });
   const isPanningRef = useRef(false);
   const panStartRef = useRef({ clientX: 0, clientY: 0, x: 0, y: 0 });
   const draggedParticleRef = useRef<Particle | null>(null);
-  const lastMousePosRef = useRef<{ x: number; y: number } | null>(null);
 
-  // aiming
+  // ✅ aiming travado de verdade: guarda um PONTO fixo de mira
   const aimingRef = useRef<{
     active: boolean;
     holdStart: number;
-    targetX: number;
-    targetY: number;
     pull: number;
-  }>({ active: false, holdStart: 0, targetX: 0, targetY: 0, pull: 0 });
+    aimWorldX: number;
+    aimWorldY: number;
+    lockedNx: number;
+    lockedNy: number;
+    lockedAngle: number;
+  }>({ active: false, holdStart: 0, pull: 0, aimWorldX: 0, aimWorldY: 0, lockedNx: 1, lockedNy: 0, lockedAngle: 0 });
 
   const cueHideUntilRef = useRef<number>(0);
 
@@ -324,7 +328,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     logMinY: number, logMaxY: number
   } | null>(null);
 
-  // game pockets cached
   const pocketsRef = useRef<{ x: number; y: number; r: number }[]>([]);
 
   // refs mirroring states
@@ -340,6 +343,9 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   const trailLengthRef = useRef<number>(trailLength);
   const cuePowerRef = useRef<number>(cuePowerRaw);
   const searchTermRef = useRef<string>(searchTerm);
+
+  // ✅ lock ids during game; no reshuffle / no relayout
+  const gameLockedIdsRef = useRef<string[] | null>(null);
 
   useEffect(() => { hoveredParticleRef.current = hoveredParticle; }, [hoveredParticle]);
   useEffect(() => { selectedParticleRef.current = selectedParticle; }, [selectedParticle]);
@@ -405,6 +411,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
   const loadData = useCallback(async () => {
     if (particlesRef.current.length === 0) setStatus('loading');
+
     try {
       const data = await fetchTopCoins({ force: true });
       if (data && data.length > 0) {
@@ -510,27 +517,22 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     }
   }, [getCoinPerfPct, numCoins, sizeMetricPerf]);
 
-  const getPlotGeometry = useCallback(() => {
-    const canvas = canvasRef.current;
+  const getPlotGeometry = useCallback((worldWidth: number, worldHeight: number) => {
     const s = statsRef.current;
-    if (!canvas || !s) return null;
-
-    const dpr = dprRef.current || 1;
-    const width = canvas.width / dpr;
-    const height = canvas.height / dpr;
+    if (!s) return null;
 
     const margin = { top: 18, right: 18, bottom: 92, left: 86 };
-    const chartW = Math.max(50, width - margin.left - margin.right);
-    const chartH = Math.max(50, height - margin.top - margin.bottom);
+    const chartW = Math.max(50, worldWidth - margin.left - margin.right);
+    const chartH = Math.max(50, worldHeight - margin.top - margin.bottom);
 
     const originX = margin.left;
     const originY = margin.top + chartH;
 
-    return { width, height, margin, chartW, chartH, originX, originY, s };
+    return { worldWidth, worldHeight, margin, chartW, chartH, originX, originY, s };
   }, []);
 
-  const projectCoinToMapXY = useCallback((coin: ApiCoin, mode: ChartMode) => {
-    const g = getPlotGeometry();
+  const projectCoinToMapXY = useCallback((coin: ApiCoin, mode: ChartMode, worldW: number, worldH: number) => {
+    const g = getPlotGeometry(worldW, worldH);
     if (!g) return { x: 0, y: 0 };
 
     const { originX, originY, margin, chartW, chartH, s } = g;
@@ -561,53 +563,39 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     return { x: projectX(xVal), y: projectY(yVal) };
   }, [getCoinPerfPct, getPlotGeometry]);
 
-  const beginMapTransition = useCallback((mode: ChartMode) => {
+  const beginMapTransition = useCallback((mode: ChartMode, worldW: number, worldH: number) => {
     if (!statsRef.current) return;
     const now = performance.now();
 
     const dur = 780;
     for (const p of particlesRef.current) {
-      if (p.isFalling) continue;
+      if (p.isFalling || p.isPocketed) continue;
       p.tweenActive = true;
       p.tweenStart = now;
       p.tweenDur = dur + (Math.sin(p.phase) * 80);
       p.tweenFromX = p.x;
       p.tweenFromY = p.y;
 
-      const to = projectCoinToMapXY(p.coin, mode);
+      const to = projectCoinToMapXY(p.coin, mode, worldW, worldH);
       p.tweenToX = to.x;
       p.tweenToY = to.y;
     }
   }, [projectCoinToMapXY]);
 
-  const buildPockets = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const dpr = dprRef.current || 1;
-    const width = canvas.width / dpr;
-    const height = canvas.height / dpr;
-
-    // 6 caçapas (4 cantos + 2 meio)
+  const buildPockets = useCallback((worldW: number, worldH: number) => {
     const pad = GAME_WALL_PAD;
     pocketsRef.current = [
       { x: pad, y: pad, r: POCKET_R },
-      { x: width / 2, y: pad, r: POCKET_R },
-      { x: width - pad, y: pad, r: POCKET_R },
-      { x: pad, y: height - pad, r: POCKET_R },
-      { x: width / 2, y: height - pad, r: POCKET_R },
-      { x: width - pad, y: height - pad, r: POCKET_R }
+      { x: worldW / 2, y: pad, r: POCKET_R },
+      { x: worldW - pad, y: pad, r: POCKET_R },
+      { x: pad, y: worldH - pad, r: POCKET_R },
+      { x: worldW / 2, y: worldH - pad, r: POCKET_R },
+      { x: worldW - pad, y: worldH - pad, r: POCKET_R }
     ];
   }, []);
 
-  const setupGameLayout = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const dpr = dprRef.current || 1;
-    const width = canvas.width / dpr;
-    const height = canvas.height / dpr;
-
-    buildPockets();
+  const setupGameLayout = useCallback((worldW: number, worldH: number) => {
+    buildPockets(worldW, worldH);
 
     const cue = particlesRef.current.find(p => String(p.coin.id).toLowerCase() === 'bitcoin');
 
@@ -620,8 +608,8 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       p.targetRadius = isBTC ? GAME_CUE_RADIUS : GAME_BALL_RADIUS;
       p.radius = p.targetRadius;
 
-      // ✅ deixa mais “leve” (antes parecia caminhão)
-      p.mass = Math.max(1, p.targetRadius * 0.7);
+      // ✅ mais “leve” (menos massa) pra não parecer caminhão
+      p.mass = Math.max(1, p.targetRadius * 0.55);
 
       p.vx = 0; p.vy = 0;
       p.trail = [];
@@ -629,17 +617,22 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       p.isFalling = false;
       p.fallT = 0;
       p.fallPocket = null;
+      p.fallFromX = undefined;
+      p.fallFromY = undefined;
+
+      // ✅ reset pocketed só ao ENTRAR no game
+      p.isPocketed = false;
 
       p.tweenActive = false;
     }
 
     if (cue) {
-      cue.x = width * 0.78;
-      cue.y = height * 0.5;
+      cue.x = worldW * 0.78;
+      cue.y = worldH * 0.5;
     }
 
-    const rackApexX = width * 0.22;
-    const rackApexY = height * 0.50;
+    const rackApexX = worldW * 0.22;
+    const rackApexY = worldH * 0.50;
     const spacing = GAME_BALL_RADIUS * 2.08;
 
     const N = others.length;
@@ -661,15 +654,38 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     }
 
     const minX = GAME_WALL_PAD + GAME_BALL_RADIUS;
-    const maxX = width - GAME_WALL_PAD - GAME_BALL_RADIUS;
+    const maxX = worldW - GAME_WALL_PAD - GAME_BALL_RADIUS;
     const minY = GAME_WALL_PAD + GAME_BALL_RADIUS;
-    const maxY = height - GAME_WALL_PAD - GAME_BALL_RADIUS;
+    const maxY = worldH - GAME_WALL_PAD - GAME_BALL_RADIUS;
 
     for (const p of particlesRef.current) {
       p.x = clamp(p.x, minX, maxX);
       p.y = clamp(p.y, minY, maxY);
     }
   }, [buildPockets]);
+
+  // ✅ update only coin fields during game (no rebuild, no relayout)
+  const syncCoinDataOnly = useCallback((coinsList: ApiCoin[]) => {
+    const ids = gameLockedIdsRef.current;
+    const base = ids && ids.length > 0 ? ids : coinsList.slice(0, numCoins).map(c => c.id);
+
+    const coinMap = new Map<string, ApiCoin>();
+    for (const c of coinsList) coinMap.set(c.id, c);
+
+    for (const p of particlesRef.current) {
+      const updated = coinMap.get(p.id);
+      if (updated) p.coin = updated;
+    }
+
+    for (const id of base) {
+      const c = coinMap.get(id);
+      if (c?.image && !imageCache.current.has(c.image)) {
+        const img = new Image();
+        img.src = c.image;
+        imageCache.current.set(c.image, img);
+      }
+    }
+  }, [numCoins]);
 
   // init + resize
   useEffect(() => {
@@ -693,8 +709,10 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       canvas.style.width = `${cssW}px`;
       canvas.style.height = `${cssH}px`;
 
-      // ✅ recalcula pockets quando resize no game
-      if (isGameModeRef.current) buildPockets();
+      // ✅ NO GAME, resize só recalcula pockets. NÃO relayout.
+      if (isGameModeRef.current) {
+        buildPockets(cssW, cssH);
+      }
     };
 
     resizeCanvas();
@@ -725,6 +743,14 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
   // build particles when coins/numCoins changes
   useEffect(() => {
+    if (coins.length === 0) return;
+
+    // ✅ if game: do NOT rebuild/reshuffle. Only sync coin fields.
+    if (isGameModeRef.current) {
+      syncCoinDataOnly(coins);
+      return;
+    }
+
     const topCoins = coins.slice(0, numCoins);
     if (topCoins.length === 0) return;
 
@@ -765,29 +791,37 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         isFalling: false,
         fallT: 0,
         fallPocket: null,
-
+        isPocketed: false,
         tweenActive: false
       };
     });
 
     particlesRef.current = newParticles;
 
+    const worldW = stageRef.current?.clientWidth || 1000;
+    const worldH = stageRef.current?.clientHeight || 800;
+
     recomputeStatsAndTargets(coins, chartModeRef.current);
-    if (!isGameModeRef.current) beginMapTransition(chartModeRef.current);
-    if (isGameModeRef.current) setupGameLayout();
-  }, [coins, numCoins, recomputeStatsAndTargets, beginMapTransition, setupGameLayout]);
+    beginMapTransition(chartModeRef.current, worldW, worldH);
+  }, [coins, numCoins, recomputeStatsAndTargets, beginMapTransition, syncCoinDataOnly]);
 
   // mode/timeframe changes: update stats + tween
   useEffect(() => {
     if (coins.length === 0) return;
     if (isGameMode) return;
 
+    const worldW = stageRef.current?.clientWidth || 1000;
+    const worldH = stageRef.current?.clientHeight || 800;
+
     recomputeStatsAndTargets(coins, chartMode);
-    beginMapTransition(chartMode);
+    beginMapTransition(chartMode, worldW, worldH);
   }, [chartMode, timeframe, coins, isGameMode, recomputeStatsAndTargets, beginMapTransition]);
 
   // enter/exit game
   useEffect(() => {
+    const worldW = stageRef.current?.clientWidth || 1000;
+    const worldH = stageRef.current?.clientHeight || 800;
+
     if (isGameMode) {
       resetZoom();
       setDetailOpen(false);
@@ -799,7 +833,34 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
       cueHideUntilRef.current = 0;
 
-      setupGameLayout();
+      // ✅ lock current ids so refresh won't reshuffle
+      gameLockedIdsRef.current = coins.slice(0, numCoins).map(c => c.id);
+
+      if (particlesRef.current.length === 0) {
+        const topCoins = coins.slice(0, numCoins);
+        particlesRef.current = topCoins.map((coin) => ({
+          id: coin.id,
+          x: Math.random() * worldW,
+          y: Math.random() * worldH,
+          vx: 0, vy: 0,
+          radius: 0,
+          targetRadius: 24,
+          color: '#dd9933',
+          coin,
+          trail: [],
+          phase: Math.random() * Math.PI * 2,
+          isFixed: false,
+          mass: 24,
+          isFalling: false,
+          fallT: 0,
+          fallPocket: null,
+          isPocketed: false,
+          tweenActive: false
+        }));
+      }
+
+      // ✅ setup ONLY once on entering game
+      setupGameLayout(worldW, worldH);
     } else {
       resetZoom();
       setDetailOpen(false);
@@ -809,6 +870,8 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       aimingRef.current.active = false;
       aimingRef.current.pull = 0;
 
+      gameLockedIdsRef.current = null;
+
       if (draggedParticleRef.current) {
         draggedParticleRef.current.isFixed = false;
         draggedParticleRef.current = null;
@@ -816,10 +879,10 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
       if (coins.length > 0) {
         recomputeStatsAndTargets(coins, chartModeRef.current);
-        beginMapTransition(chartModeRef.current);
+        beginMapTransition(chartModeRef.current, worldW, worldH);
       }
     }
-  }, [isGameMode, coins, resetZoom, setupGameLayout, recomputeStatsAndTargets, beginMapTransition]);
+  }, [isGameMode, coins, numCoins, resetZoom, setupGameLayout, recomputeStatsAndTargets, beginMapTransition]);
 
   // =========================
   // Magazine fetch + carousel timer
@@ -887,15 +950,12 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     const worldMouseX = wpos.x;
     const worldMouseY = wpos.y;
 
-    lastMousePosRef.current = { x: worldMouseX, y: worldMouseY };
-
+    // ✅ aiming: direção NÃO muda, só carrega força
     if (isGameModeRef.current && aimingRef.current.active) {
       const now = performance.now();
       const held = now - aimingRef.current.holdStart;
-      const maxPull = 200;
-      aimingRef.current.pull = clamp((held / 700) * maxPull, 0, maxPull);
-      aimingRef.current.targetX = worldMouseX;
-      aimingRef.current.targetY = worldMouseY;
+      const maxPull = 220;
+      aimingRef.current.pull = clamp((held / 650) * maxPull, 0, maxPull);
       return;
     }
 
@@ -923,7 +983,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     let found: Particle | null = null;
     for (let i = particlesRef.current.length - 1; i >= 0; i--) {
       const p = particlesRef.current[i];
-      if (p.isFalling) continue;
+      if (p.isFalling || p.isPocketed) continue;
 
       const sx = p.x * k + x;
       const sy = p.y * k + y;
@@ -954,15 +1014,25 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       if (e.button !== 0) return;
 
       const cue = particlesRef.current.find(pp => String(pp.coin.id).toLowerCase() === 'bitcoin');
-      if (!cue || cue.isFalling) return;
+      if (!cue || cue.isFalling || cue.isPocketed) return;
 
       const w = screenToWorld(e.clientX, e.clientY);
 
+      // ✅ trava ponto de mira + direção a partir desse ponto
+      const dx = w.x - cue.x;
+      const dy = w.y - cue.y;
+      const dist = Math.hypot(dx, dy) || 0.0001;
+      const nx = dx / dist;
+      const ny = dy / dist;
+
       aimingRef.current.active = true;
       aimingRef.current.holdStart = performance.now();
-      aimingRef.current.targetX = w.x;
-      aimingRef.current.targetY = w.y;
       aimingRef.current.pull = 0;
+      aimingRef.current.aimWorldX = w.x;
+      aimingRef.current.aimWorldY = w.y;
+      aimingRef.current.lockedNx = nx;
+      aimingRef.current.lockedNy = ny;
+      aimingRef.current.lockedAngle = Math.atan2(ny, nx);
 
       setSelectedParticle(cue);
       return;
@@ -985,23 +1055,16 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   const handleMouseUp = () => {
     if (isGameModeRef.current && aimingRef.current.active) {
       const cue = particlesRef.current.find(pp => String(pp.coin.id).toLowerCase() === 'bitcoin');
-      if (cue && !cue.isFalling) {
-        const tx = aimingRef.current.targetX;
-        const ty = aimingRef.current.targetY;
-
-        const dx = tx - cue.x;
-        const dy = ty - cue.y;
-        const dist = Math.hypot(dx, dy) || 0.0001;
-
-        const nx = dx / dist;
-        const ny = dy / dist;
+      if (cue && !cue.isFalling && !cue.isPocketed) {
+        const nx = aimingRef.current.lockedNx;
+        const ny = aimingRef.current.lockedNy;
 
         const pull = aimingRef.current.pull;
-        const pullNorm = clamp(pull / 200, 0, 1);
+        const pullNorm = clamp(pull / 220, 0, 1);
 
-        // ✅ potência REAL (antes tava fraca)
-        const basePower = 6200;
-        const power = basePower * pullNorm * (0.55 + cuePowerRef.current * 1.6);
+        // ✅ força mais forte + mais “solta”
+        const basePower = 19500;
+        const power = basePower * pullNorm * (0.55 + cuePowerRef.current * 1.95);
 
         cue.vx += nx * (power / Math.max(1, cue.mass));
         cue.vy += ny * (power / Math.max(1, cue.mass));
@@ -1050,11 +1113,12 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       return (
         <>
           <div><span className="font-black">Modo Game (Bilhar)</span></div>
-          <div>• A bola branca é o BTC.</div>
-          <div>• Clique e segure para puxar (mais força).</div>
+          <div>• Clique para travar direção.</div>
+          <div>• Segure para carregar força.</div>
+          <div>• Enquanto segura, direção fica travada.</div>
           <div>• Solte para tacar.</div>
-          <div>• Após tacar, o taco some por 5s.</div>
-          <div>• Caçapa: círculo entra no círculo.</div>
+          <div>• Taco some por 5s após tacada.</div>
+          <div>• Bola encaçapada sai da sessão.</div>
         </>
       );
     }
@@ -1067,6 +1131,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
           <div>• Y: Volume 24h (log)</div>
           <div>• Tamanho: |%var| × log(volume)</div>
           <div>• Cor: verde/vermelho</div>
+          <div>• Zoom afeta escala e mapa.</div>
         </>
       );
     }
@@ -1078,6 +1143,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         <div>• Y: Volume 24h (log)</div>
         <div>• Tamanho: Market Cap</div>
         <div>• Cor: verde/vermelho</div>
+        <div>• Zoom afeta escala e mapa.</div>
       </>
     );
   }, [chartMode, timeframe, isGameMode]);
@@ -1106,7 +1172,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     return { p1h, p24, p7d };
   }, [detailCoin]);
 
-  // ✅ detalhes em lista (2 colunas) dentro de UM box
   const detailListRows = useMemo(() => {
     if (!detailCoin) return [];
     const c: any = detailCoin;
@@ -1142,7 +1207,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   };
 
   // =======================
-  // Helpers: Axis & Grid
+  // Axis & Grid (DRAW IN WORLD, THEN ZOOM TRANSFORM APPLIES)
   // =======================
   const niceStep = (min: number, max: number, ticks: number) => {
     const range = max - min;
@@ -1157,16 +1222,15 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     return nice * pow;
   };
 
-  const drawAxisAndGrid = (ctx: CanvasRenderingContext2D, now: number) => {
-    const g = getPlotGeometry();
+  const drawAxisAndGridWorld = (ctx: CanvasRenderingContext2D, worldW: number, worldH: number) => {
+    const g = getPlotGeometry(worldW, worldH);
     if (!g) return;
     if (isGameModeRef.current) return;
 
-    const { width, height, margin, chartW, chartH, originX, originY, s } = g;
+    const { margin, chartW, chartH, originX, originY, s } = g;
     const dark = isDarkRef.current;
     const mode = chartModeRef.current;
 
-    // background overlay (subtle plot area)
     ctx.save();
     ctx.fillStyle = dark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)';
     ctx.fillRect(originX, margin.top, chartW, chartH);
@@ -1176,7 +1240,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     const axisColor = dark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)';
     const textColor = dark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.65)';
 
-    // X ticks
     const xTicks = 6;
     let xVals: number[] = [];
 
@@ -1187,19 +1250,16 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       const start = Math.floor(minX / step) * step;
       for (let v = start; v <= maxX + step * 0.5; v += step) xVals.push(v);
     } else {
-      // log ticks for MC: 10^n
       const minL = Math.floor(s.logMinX);
       const maxL = Math.ceil(s.logMaxX);
       for (let p = minL; p <= maxL; p++) xVals.push(Math.pow(10, p));
     }
 
-    // Y ticks log volume
     const yVals: number[] = [];
     const minLY = Math.floor(s.logMinY);
     const maxLY = Math.ceil(s.logMaxY);
     for (let p = minLY; p <= maxLY; p++) yVals.push(Math.pow(10, p));
 
-    // Project
     const projX = (v: number) => {
       if (mode === 'valuation') {
         const norm = (Math.log10(Math.max(1, v)) - s.logMinX) / (s.logMaxX - s.logMinX || 1);
@@ -1214,7 +1274,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       return margin.top + (1 - norm) * chartH;
     };
 
-    // grid lines X
     ctx.save();
     ctx.strokeStyle = gridColor;
     ctx.lineWidth = 1;
@@ -1228,7 +1287,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       ctx.stroke();
     }
 
-    // grid lines Y
     for (const yv of yVals) {
       const y = projY(yv);
       if (!isFinite(y)) continue;
@@ -1239,7 +1297,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     }
     ctx.restore();
 
-    // axes
     ctx.save();
     ctx.strokeStyle = axisColor;
     ctx.lineWidth = 1.5;
@@ -1250,7 +1307,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     ctx.stroke();
     ctx.restore();
 
-    // labels & ticks
     ctx.save();
     ctx.fillStyle = textColor;
     ctx.font = `900 12px Inter`;
@@ -1268,7 +1324,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     ctx.fillText('Volume 24h (log)', 0, 0);
     ctx.restore();
 
-    // x tick text
     ctx.font = `800 11px Inter`;
     ctx.textBaseline = 'top';
     for (const xv of xVals) {
@@ -1289,7 +1344,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       ctx.fillText(txt, x, originY + 10);
     }
 
-    // y tick text
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
     for (const yv of yVals) {
@@ -1310,7 +1364,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
     ctx.restore();
 
-    // zero line for performance
     if (mode === 'performance') {
       const x0 = projX(0);
       ctx.save();
@@ -1329,14 +1382,13 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   // GAME PHYSICS
   // =======================
   const resolveCollisions = (particles: Particle[]) => {
-    // elastic-ish collisions
     for (let i = 0; i < particles.length; i++) {
       const a = particles[i];
-      if (a.isFalling) continue;
+      if (a.isFalling || a.isPocketed) continue;
 
       for (let j = i + 1; j < particles.length; j++) {
         const b = particles[j];
-        if (b.isFalling) continue;
+        if (b.isFalling || b.isPocketed) continue;
 
         const dx = b.x - a.x;
         const dy = b.y - a.y;
@@ -1348,13 +1400,11 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
           const ny = dy / dist;
           const overlap = (minDist - dist);
 
-          // separate
           a.x -= nx * overlap * 0.5;
           a.y -= ny * overlap * 0.5;
           b.x += nx * overlap * 0.5;
           b.y += ny * overlap * 0.5;
 
-          // velocity exchange along normal
           const dvx = b.vx - a.vx;
           const dvy = b.vy - a.vy;
           const relVel = dvx * nx + dvy * ny;
@@ -1379,7 +1429,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   };
 
   const checkPockets = (p: Particle) => {
-    if (p.isFalling) return;
+    if (p.isFalling || p.isPocketed) return;
     const pockets = pocketsRef.current;
 
     for (const pocket of pockets) {
@@ -1387,7 +1437,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       const dy = p.y - pocket.y;
       const dist = Math.hypot(dx, dy);
 
-      // ✅ critério: círculo da bola entra no círculo da caçapa
       if (dist <= pocket.r) {
         p.isFalling = true;
         p.fallT = 0;
@@ -1418,8 +1467,8 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       lastTime = now;
 
       const dpr = dprRef.current || 1;
-      const width = canvas.width / dpr;
-      const height = canvas.height / dpr;
+      const worldW = canvas.width / dpr;
+      const worldH = canvas.height / dpr;
 
       ctx.setTransform(1, 0, 0, 1, 0, 0);
 
@@ -1430,16 +1479,15 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.scale(dpr, dpr);
 
-      // watermark
       const img = watermarkRef.current;
       if (img && img.complete && img.naturalWidth > 0) {
-        const maxW = width * 0.78;
-        const maxH = height * 0.78;
+        const maxW = worldW * 0.78;
+        const maxH = worldH * 0.78;
         const scale = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight);
         const w = img.naturalWidth * scale;
         const h = img.naturalHeight * scale;
-        const x = (width - w) / 2;
-        const y = (height - h) / 2;
+        const x = (worldW - w) / 2;
+        const y = (worldH - h) / 2;
 
         ctx.save();
         ctx.globalAlpha = dark ? 0.055 : 0.035;
@@ -1449,35 +1497,43 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         ctx.restore();
       }
 
-      // ✅ ESCALA / GRID / EIXOS (voltou)
-      drawAxisAndGrid(ctx, now);
-
+      // ✅ Map transform applied to both axis/grid and particles
       const { k, x: panX, y: panY } = transformRef.current;
+
+      if (!game) {
+        ctx.save();
+        ctx.translate(panX, panY);
+        ctx.scale(k, k);
+        drawAxisAndGridWorld(ctx, worldW, worldH);
+        ctx.restore();
+      }
+
       const toScreenX = (val: number) => val * k + panX;
       const toScreenY = (val: number) => val * k + panY;
 
       const particles = particlesRef.current;
 
-      // radius smoothing
       for (const p of particles) {
+        if (p.isPocketed) continue;
         const viewRadius = p.targetRadius * Math.pow(k, 0.25);
         p.radius += (viewRadius - p.radius) * 0.15;
-        p.mass = Math.max(1, p.radius * (game ? 0.7 : 1));
+        p.mass = Math.max(1, p.radius * (game ? 0.55 : 1));
       }
 
-      // GAME: update physics
       if (game) {
-        const friction = 0.985; // menos “pesado”
-        const speedStop = 6;
+        // ✅ menos “pesado”: mais deslizamento e menor cutoff
+        const friction = 0.9952;
+        const speedStop = 1.6;
 
         const minX = GAME_WALL_PAD + GAME_BALL_RADIUS;
-        const maxX = width - GAME_WALL_PAD - GAME_BALL_RADIUS;
+        const maxX = worldW - GAME_WALL_PAD - GAME_BALL_RADIUS;
         const minY = GAME_WALL_PAD + GAME_BALL_RADIUS;
-        const maxY = height - GAME_WALL_PAD - GAME_BALL_RADIUS;
+        const maxY = worldH - GAME_WALL_PAD - GAME_BALL_RADIUS;
 
         for (const p of particles) {
+          if (p.isPocketed) continue;
+
           if (p.isFalling) {
-            // fall animation
             p.fallT = (p.fallT || 0) + dt;
             const t = clamp((p.fallT || 0) / 0.45, 0, 1);
             const e = easeInOutCubic(t);
@@ -1487,6 +1543,13 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
               p.x = p.fallFromX + (pocket.x - p.fallFromX) * e;
               p.y = p.fallFromY + (pocket.y - p.fallFromY) * e;
               p.radius = p.targetRadius * (1 - e);
+            }
+
+            // ✅ não reseta o jogo: só remove a bola
+            if (t >= 1) {
+              p.isFalling = false;
+              p.isPocketed = true;
+              p.vx = 0; p.vy = 0;
             }
 
             continue;
@@ -1501,7 +1564,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
           const sp = Math.hypot(p.vx, p.vy);
           if (sp < speedStop) { p.vx = 0; p.vy = 0; }
 
-          // bounce walls
           if (p.x < minX) { p.x = minX; p.vx *= -0.9; }
           if (p.x > maxX) { p.x = maxX; p.vx *= -0.9; }
           if (p.y < minY) { p.y = minY; p.vy *= -0.9; }
@@ -1509,20 +1571,20 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         }
 
         resolveCollisions(particles);
-
-        // pockets check after collisions
         for (const p of particles) checkPockets(p);
       }
 
-      // MAP motion with tween
       if (!game) {
-        const s2 = statsRef.current;
         const mode = chartModeRef.current;
+        const s2 = statsRef.current;
+
         if (s2) {
           const mappedFloatMaxAmp = 5.2 * 1.3;
           const mappedFloatAmp = floatStrengthRef.current * mappedFloatMaxAmp;
 
           for (const p of particles) {
+            if (p.isPocketed) continue;
+
             if (p.tweenActive && p.tweenStart != null && p.tweenDur != null) {
               const tt = clamp((now - p.tweenStart) / p.tweenDur, 0, 1);
               const e = easeInOutCubic(tt);
@@ -1548,7 +1610,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
               continue;
             }
 
-            const to = projectCoinToMapXY(p.coin, mode);
+            const to = projectCoinToMapXY(p.coin, mode, worldW, worldH);
             const floatFreq = 0.0002 * (1 + floatStrengthRef.current);
 
             const floatX = mappedFloatAmp > 0 ? Math.sin(now * floatFreq + p.phase) * mappedFloatAmp : 0;
@@ -1563,16 +1625,14 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         }
       }
 
-      // Draw game table overlay: pockets + borders + cue stick
+      // Draw game table overlay: pockets + borders
       if (game) {
-        // table border
         ctx.save();
         ctx.strokeStyle = dark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.12)';
         ctx.lineWidth = 6;
-        ctx.strokeRect(GAME_WALL_PAD, GAME_WALL_PAD, width - GAME_WALL_PAD * 2, height - GAME_WALL_PAD * 2);
+        ctx.strokeRect(GAME_WALL_PAD, GAME_WALL_PAD, worldW - GAME_WALL_PAD * 2, worldH - GAME_WALL_PAD * 2);
         ctx.restore();
 
-        // pockets
         for (const pk of pocketsRef.current) {
           ctx.save();
           ctx.fillStyle = dark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.35)';
@@ -1586,85 +1646,31 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
           ctx.fill();
           ctx.restore();
         }
-
-        // cue stick (only if aiming and not hidden)
-        const hide = now < cueHideUntilRef.current;
-        if (!hide && aimingRef.current.active) {
-          const cue = particlesRef.current.find(pp => String(pp.coin.id).toLowerCase() === 'bitcoin');
-          if (cue && !cue.isFalling) {
-            const tx = aimingRef.current.targetX;
-            const ty = aimingRef.current.targetY;
-
-            // stick direction opposite to shot
-            const dx = tx - cue.x;
-            const dy = ty - cue.y;
-            const dist = Math.hypot(dx, dy) || 0.0001;
-            const nx = dx / dist;
-            const ny = dy / dist;
-
-            const pull = aimingRef.current.pull;
-            const stickLen = 260;
-            const back = cue.radius + 18 + pull;
-
-            const x1 = cue.x - nx * back;
-            const y1 = cue.y - ny * back;
-            const x2 = cue.x - nx * (back + stickLen);
-            const y2 = cue.y - ny * (back + stickLen);
-
-            ctx.save();
-            ctx.lineCap = 'round';
-
-            // outer dark
-            ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-            ctx.lineWidth = 10;
-            ctx.beginPath();
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(x2, y2);
-            ctx.stroke();
-
-            // wood
-            ctx.strokeStyle = dark ? 'rgba(255,220,160,0.85)' : 'rgba(160,110,40,0.85)';
-            ctx.lineWidth = 7;
-            ctx.beginPath();
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(x2, y2);
-            ctx.stroke();
-
-            // tip
-            ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-            ctx.lineWidth = 4;
-            ctx.beginPath();
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(x1 - nx * 18, y1 - ny * 18);
-            ctx.stroke();
-
-            ctx.restore();
-          }
-        }
       }
 
-      // draw particles
       const st = searchTermRef.current;
       const tl = trailLengthRef.current;
 
+      // Draw particles
       for (const p of particlesRef.current) {
-        const screenX = toScreenX(p.x);
-        const screenY = toScreenY(p.y);
+        if (p.isPocketed) continue;
 
-        if (screenX + p.radius < 0 || screenX - p.radius > width || screenY + p.radius < 0 || screenY - p.radius > height) continue;
+        const screenX = game ? p.x : toScreenX(p.x);
+        const screenY = game ? p.y : toScreenY(p.y);
+
+        if (screenX + p.radius < 0 || screenX - p.radius > worldW || screenY + p.radius < 0 || screenY - p.radius > worldH) continue;
 
         let alpha = 1.0;
 
         const isHovered = hoveredParticleRef.current?.id === p.id;
         const isSelected = selectedParticleRef.current?.id === p.id;
 
-        const isDimmed = st
+        const isDimmed = !game && st
           && !p.coin.name.toLowerCase().includes(st.toLowerCase())
           && !p.coin.symbol.toLowerCase().includes(st.toLowerCase());
 
         if (isDimmed) alpha *= 0.12;
 
-        // trails only in map
         if (!game && tl > 0 && alpha > 0.05) {
           const last = p.trail[p.trail.length - 1];
           const ddx = last ? screenX - last.x : 10;
@@ -1738,6 +1744,54 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         ctx.restore();
       }
 
+      // ✅ cue stick ALWAYS ABOVE balls (draw after)
+      if (game) {
+        const hide = now < cueHideUntilRef.current;
+
+        if (!hide && aimingRef.current.active) {
+          const cue = particlesRef.current.find(pp => String(pp.coin.id).toLowerCase() === 'bitcoin');
+          if (cue && !cue.isFalling && !cue.isPocketed) {
+            const nx = aimingRef.current.lockedNx;
+            const ny = aimingRef.current.lockedNy;
+
+            const pull = aimingRef.current.pull;
+            const stickLen = 270;
+            const back = cue.radius + 18 + pull;
+
+            const x1 = cue.x - nx * back;
+            const y1 = cue.y - ny * back;
+            const x2 = cue.x - nx * (back + stickLen);
+            const y2 = cue.y - ny * (back + stickLen);
+
+            ctx.save();
+            ctx.lineCap = 'round';
+
+            ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+            ctx.lineWidth = 10;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+
+            ctx.strokeStyle = dark ? 'rgba(255,220,160,0.88)' : 'rgba(160,110,40,0.88)';
+            ctx.lineWidth = 7;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+
+            ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x1 - nx * 18, y1 - ny * 18);
+            ctx.stroke();
+
+            ctx.restore();
+          }
+        }
+      }
+
       reqIdRef.current = requestAnimationFrame(loop);
     };
 
@@ -1756,13 +1810,38 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   }, [detailCoin]);
 
   // =======================
-  // RENDER
+  // UI
+  // =======================
+  const cardContainerClass =
+    "fixed right-4 top-[88px] z-40 w-[440px] max-w-[92vw] " +
+    "bg-white/95 dark:bg-black/85 border border-gray-200 dark:border-white/10 " +
+    "rounded-2xl shadow-2xl backdrop-blur-md overflow-hidden";
+
+  const cardInnerClass = "p-4";
+
+  const StatRow = ({ k, v }: { k: string; v: string }) => (
+    <div className="flex items-center justify-between gap-3 py-1">
+      <div className="text-xs font-black text-gray-500 dark:text-gray-400">{k}</div>
+      <div className="text-xs font-black text-gray-900 dark:text-gray-100 text-right">{v}</div>
+    </div>
+  );
+
+  const MiniChip = ({ label, value, color }: { label: string; value: string; color?: string }) => (
+    <div className="flex items-center gap-2 px-2.5 py-1 rounded-full border border-gray-200 dark:border-white/10 bg-gray-100/60 dark:bg-white/5">
+      <span className="text-[10px] font-black text-gray-500 dark:text-gray-400">{label}</span>
+      <span className="text-xs font-black" style={{ color: color || (isDark ? '#fff' : '#111') }}>{value}</span>
+    </div>
+  );
+
+  // =======================
+  // Render
   // =======================
   return (
     <div
       ref={containerRef}
       className="fixed inset-0 z-[2000] bg-white dark:bg-[#0b0f14] text-gray-900 dark:text-white flex flex-col overflow-hidden touch-none select-none overscroll-none h-[100dvh]"
     >
+      {/* HEADER */}
       <div className="flex justify-between items-start p-4 z-20 bg-white/80 dark:bg-black/50 backdrop-blur-sm border-b border-gray-200 dark:border-white/10 shrink-0">
         <div className="flex items-center gap-4 flex-wrap">
           <Coins size={28} className="text-[#dd9933]" />
@@ -1806,7 +1885,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
               </div>
             </div>
 
-            {/* ✅ numCoins no HEADER, antes da busca */}
             <div className="flex items-center bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10">
               <div className="flex items-center gap-2 px-2 py-1">
                 <span className="text-xs font-black text-gray-500 dark:text-gray-400">#</span>
@@ -1888,7 +1966,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         </div>
       </div>
 
-      {/* SETTINGS (sem numCoins aqui) */}
+      {/* SETTINGS */}
       {settingsOpen && (
         <div
           className="absolute top-24 right-4 bg-white/90 dark:bg-black/80 p-4 rounded-lg border border-gray-200 dark:border-white/10 backdrop-blur-md w-80 z-30 shadow-xl"
@@ -1973,143 +2051,90 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         </div>
       )}
 
-      {/* DETAIL MODAL (compacto e magazine embaixo) */}
+      {/* DETAIL CARD (compact, no scroll) */}
       {detailOpen && detailCoin && (
-        <div
-          className="absolute inset-0 z-[60] flex items-center justify-center bg-black/55"
-          onMouseDown={() => closeDetail()}
-        >
-          <div
-            className="w-[94vw] max-w-[920px] max-h-[88vh] overflow-auto rounded-2xl border border-gray-200 dark:border-white/10 bg-white/95 dark:bg-black/80 backdrop-blur-md shadow-2xl p-5"
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <img src={detailHeader?.image} alt={detailHeader?.name} className="w-12 h-12 rounded-2xl" />
-                <div>
-                  <div className="text-xl font-black leading-tight">{detailHeader?.name}</div>
-                  <div className="mt-1 flex items-center gap-2 text-xs font-bold text-gray-500 dark:text-gray-400">
-                    <span className="px-2 py-1 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5">
-                      {detailHeader?.symbol}
-                    </span>
-                    <span className="px-2 py-1 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5">
-                      Rank #{detailHeader?.rank}
-                    </span>
-                    <a
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10"
-                      href={(detailCoin as any)?.link || '#'}
-                      target="_blank"
-                      rel="noreferrer"
-                      title="Abrir fonte"
-                    >
-                      <ExternalLink size={14} />
-                      <span>Fonte</span>
-                    </a>
-                  </div>
-                </div>
+        <div className={cardContainerClass}>
+          <div className="flex items-start justify-between gap-3 p-4 border-b border-gray-200 dark:border-white/10">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl overflow-hidden border border-gray-200 dark:border-white/10 bg-gray-100 dark:bg-white/5 shrink-0">
+                {detailHeader?.image ? (
+                  <img src={detailHeader.image} alt={detailHeader.name} className="w-full h-full object-cover" />
+                ) : null}
               </div>
-
-              <button
-                onClick={() => closeDetail()}
-                className="p-2 rounded-xl bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 border border-gray-200 dark:border-white/10"
-                title="Fechar"
-              >
-                <CloseIcon size={18} />
-              </button>
-            </div>
-
-            {/* Variações (chips compactos) */}
-            <div className="mt-4 rounded-2xl p-4 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10">
-              <div className="flex items-center justify-between">
+              <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <BarChart2 size={16} className="text-[#dd9933]" />
-                  <div className="text-sm font-black">Variações</div>
+                  <div className="text-sm font-black truncate">{detailHeader?.name}</div>
+                  <div className="text-[11px] font-black text-gray-500 dark:text-gray-400 shrink-0">{detailHeader?.symbol}</div>
+                  <div className="text-[11px] font-black text-gray-500 dark:text-gray-400 shrink-0">#{detailHeader?.rank}</div>
                 </div>
-                <div className="text-xs font-bold text-gray-500 dark:text-gray-400 flex items-center gap-2">
-                  <Clock size={14} />
-                  <span>1h / 24h / 7d</span>
-                </div>
-              </div>
-
-              <div className="mt-3 flex flex-wrap gap-2">
-                <div className="px-3 py-2 rounded-xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30">
-                  <div className="text-[11px] font-black text-gray-500 dark:text-gray-400">1h</div>
-                  <div className="text-sm font-black" style={{ color: pctColor(changes?.p1h as any) }}>{fmtPct(changes?.p1h as any)}</div>
-                </div>
-
-                <div className="px-3 py-2 rounded-xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30">
-                  <div className="text-[11px] font-black text-gray-500 dark:text-gray-400">24h</div>
-                  <div className="text-sm font-black" style={{ color: pctColor(changes?.p24 as any) }}>{fmtPct(changes?.p24 as any)}</div>
-                </div>
-
-                <div className="px-3 py-2 rounded-xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30">
-                  <div className="text-[11px] font-black text-gray-500 dark:text-gray-400">7d</div>
-                  <div className="text-sm font-black" style={{ color: pctColor(changes?.p7d as any) }}>{fmtPct(changes?.p7d as any)}</div>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  <MiniChip label="1h" value={changes ? fmtPct(changes.p1h ?? 0) : '-'} color={pctColor(changes?.p1h ?? 0)} />
+                  <MiniChip label="24h" value={changes ? fmtPct(changes.p24 ?? 0) : '-'} color={pctColor(changes?.p24 ?? 0)} />
+                  <MiniChip label="7d" value={changes ? fmtPct(changes.p7d ?? 0) : '-'} color={pctColor(changes?.p7d ?? 0)} />
                 </div>
               </div>
             </div>
 
-            {/* Detalhes (lista em 2 colunas, sem “dados do endpoint”) */}
-            <div className="mt-4 rounded-2xl border border-gray-200 dark:border-white/10 overflow-hidden">
-              <div className="px-4 py-3 bg-gray-100/70 dark:bg-white/5 border-b border-gray-200 dark:border-white/10 flex items-center justify-between">
-                <div className="text-sm font-black">Detalhes</div>
-              </div>
+            <button
+              onClick={closeDetail}
+              className="p-2 rounded-lg border border-gray-200 dark:border-white/10 hover:bg-red-500/10 text-gray-600 dark:text-gray-400 hover:text-red-500 transition-colors"
+              title="Fechar"
+            >
+              <CloseIcon size={18} />
+            </button>
+          </div>
 
-              <div className="p-4 bg-white/70 dark:bg-black/30">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                  {detailListRows.map((r) => (
-                    <div key={r.k} className="flex items-center justify-between gap-3 rounded-xl px-3 py-2 border border-gray-200 dark:border-white/10 bg-white/60 dark:bg-white/5">
-                      <div className="text-[11px] font-black text-gray-500 dark:text-gray-400">{r.k}</div>
-                      <div className="text-xs font-black text-gray-900 dark:text-gray-100 text-right">{r.v}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+          <div className={cardInnerClass}>
+            {/* DETAILS as "solta" list in 2 cols */}
+            <div className="grid grid-cols-2 gap-x-4">
+              {detailListRows.slice(0, 10).map((r) => (
+                <StatRow key={r.k} k={r.k} v={r.v} />
+              ))}
             </div>
 
-            {/* ✅ Redes sociais do site */}
-            <div className="mt-4 rounded-2xl p-4 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10">
-              <div className="text-sm font-black mb-3">Redes sociais</div>
-              <div className="flex flex-wrap gap-2">
+            {/* remaining rows in single line to avoid scroll */}
+            {detailListRows.length > 10 && (
+              <div className="mt-2 grid grid-cols-2 gap-x-4">
+                {detailListRows.slice(10, 12).map((r) => (
+                  <StatRow key={r.k} k={r.k} v={r.v} />
+                ))}
+              </div>
+            )}
+
+            {/* Socials (site) inline */}
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-xs font-black text-gray-500 dark:text-gray-400">
+                <LinkIcon size={14} />
+                CentralCrypto
+              </div>
+              <div className="flex items-center gap-2">
                 {SITE_SOCIALS.map((s) => (
                   <a
-                    key={`${s.type}:${s.url}`}
+                    key={s.type}
                     href={normalizeUrl(s.url)}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
+                    className="p-2 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-100/60 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"
                     title={s.label}
                   >
-                    <span className="text-gray-700 dark:text-gray-200">
-                      <SocialIcon type={s.type} />
-                    </span>
-                    <span className="text-xs font-black">{s.label}</span>
+                    <SocialIcon type={s.type} />
                   </a>
                 ))}
               </div>
             </div>
 
-            {/* ✅ MAGAZINE sempre embaixo */}
-            <div className="mt-4 rounded-2xl border border-gray-200 dark:border-white/10 overflow-hidden bg-gray-50 dark:bg-white/5">
-              <div className="px-4 py-3 border-b border-gray-200 dark:border-white/10 flex items-center justify-between">
-                <div className="text-sm font-black">Magazine</div>
+            {/* MAGAZINE always below */}
+            <div className="mt-4">
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <div className="flex items-center gap-2 text-xs font-black text-gray-500 dark:text-gray-400">
+                  <Newspaper size={14} />
+                  Magazine (últimas 6)
+                </div>
 
                 <div className="flex items-center gap-2">
-                  <a
-                    href={MAGAZINE_FALLBACK_LINK_BASE}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="px-2 py-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30 hover:bg-gray-100 dark:hover:bg-white/10 text-xs font-black inline-flex items-center gap-1"
-                    title="Abrir Magazine"
-                  >
-                    <ExternalLink size={14} />
-                    <span>Abrir</span>
-                  </a>
-
                   <button
                     onClick={goMagPrev}
-                    className="p-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30 hover:bg-gray-100 dark:hover:bg-white/10"
+                    className="p-1.5 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-100/60 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"
                     title="Anterior"
                     disabled={magPageCount <= 1}
                   >
@@ -2117,7 +2142,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
                   </button>
                   <button
                     onClick={goMagNext}
-                    className="p-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30 hover:bg-gray-100 dark:hover:bg-white/10"
+                    className="p-1.5 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-100/60 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"
                     title="Próximo"
                     disabled={magPageCount <= 1}
                   >
@@ -2126,118 +2151,55 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
                 </div>
               </div>
 
-              <div className="p-4">
-                {magLoading && (
-                  <div className="text-sm font-bold text-gray-500 dark:text-gray-400">
-                    Carregando últimas do Magazine...
-                  </div>
-                )}
+              {magLoading && (
+                <div className="text-xs font-bold text-gray-500 dark:text-gray-400 py-2">Carregando…</div>
+              )}
 
-                {!magLoading && magError && (
-                  <div className="text-sm font-bold text-red-600 dark:text-red-400">
-                    Falha ao carregar: {magError}
-                  </div>
-                )}
+              {magError && (
+                <div className="text-xs font-bold text-red-500 py-2">{magError}</div>
+              )}
 
-                {!magLoading && !magError && magVisible.length === 0 && (
-                  <div className="text-sm font-bold text-gray-500 dark:text-gray-400">
-                    Sem posts disponíveis.
-                  </div>
-                )}
-
-                {!magLoading && !magError && magVisible.length > 0 && (
-                  <div className="space-y-3">
-                    {magVisible.map((p) => {
-                      const img = pickFeatured(p);
-                      const title = safeTitle(p?.title?.rendered || '');
-                      const excerpt = stripHtml(p?.excerpt?.rendered || '').slice(0, 120);
-                      const dt = p?.date ? new Date(p.date) : null;
-
-                      return (
-                        <a
-                          key={p.id}
-                          href={p.link}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="group block rounded-2xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors overflow-hidden"
-                          title={title}
-                        >
-                          <div className="flex gap-3 p-3">
-                            <div className="w-20 h-14 rounded-xl overflow-hidden border border-gray-200 dark:border-white/10 bg-gray-200/60 dark:bg-white/5 shrink-0">
-                              {img ? (
-                                <img src={img} alt="" className="w-full h-full object-cover" />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center text-xs font-black text-gray-500 dark:text-gray-400">
-                                  NEWS
-                                </div>
-                              )}
-                            </div>
-
-                            <div className="flex-1 min-w-0">
-                              <div className="text-sm font-black text-gray-900 dark:text-gray-100 line-clamp-2">
-                                {title}
-                              </div>
-                              <div className="mt-1 text-xs font-bold text-gray-500 dark:text-gray-400 line-clamp-2">
-                                {excerpt || 'Abrir matéria'}
-                              </div>
-
-                              {dt && (
-                                <div className="mt-2 text-[11px] font-black text-gray-400 dark:text-gray-500 flex items-center gap-2">
-                                  <Calendar size={12} />
-                                  <span>{dt.toLocaleDateString()}</span>
-                                </div>
-                              )}
-                            </div>
+              {!magLoading && !magError && (
+                <div className="grid grid-cols-3 gap-2">
+                  {magVisible.map((p) => {
+                    const img = pickFeatured(p);
+                    const title = safeTitle(p.title?.rendered || '');
+                    const date = p.date ? new Date(p.date).toLocaleDateString() : '';
+                    return (
+                      <a
+                        key={p.id}
+                        href={p.link || `${MAGAZINE_FALLBACK_LINK_BASE}/?p=${p.id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="group rounded-xl border border-gray-200 dark:border-white/10 bg-gray-100/60 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 transition-colors overflow-hidden"
+                        title={title}
+                      >
+                        <div className="h-14 bg-gray-200 dark:bg-white/10">
+                          {img ? <img src={img} alt={title} className="w-full h-full object-cover" /> : null}
+                        </div>
+                        <div className="p-2">
+                          <div className="text-[10px] font-black text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                            <Calendar size={12} />
+                            {date}
                           </div>
-                        </a>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* previews */}
-                {magPosts.length > 0 && (
-                  <div className="mt-4 pt-3 border-t border-gray-200 dark:border-white/10">
-                    <div className="text-[11px] font-black text-gray-500 dark:text-gray-400 mb-2">
-                      Últimas 6 (previews)
-                    </div>
-                    <div className="grid grid-cols-6 gap-2">
-                      {magPosts.slice(0, 6).map((p, idx) => {
-                        const img = pickFeatured(p);
-                        const active = (magIndex === 0 && idx < 3) || (magIndex === 1 && idx >= 3);
-                        return (
-                          <button
-                            key={p.id}
-                            onClick={() => setMagIndex(idx < 3 ? 0 : 1)}
-                            className={`h-10 rounded-lg overflow-hidden border transition-colors ${
-                              active ? 'border-[#dd9933]' : 'border-gray-200 dark:border-white/10'
-                            } bg-gray-200/60 dark:bg-white/5 hover:opacity-90`}
-                            title={safeTitle(p?.title?.rendered || '')}
-                          >
-                            {img ? (
-                              <img src={img} alt="" className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-[10px] font-black text-gray-500 dark:text-gray-400">
-                                {idx + 1}
-                              </div>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="mt-4 text-xs font-bold text-gray-500 dark:text-gray-400">
-              Clique fora para fechar.
+                          <div className="text-[11px] font-black text-gray-900 dark:text-gray-100 mt-1 line-clamp-2">
+                            {title}
+                          </div>
+                          <div className="mt-1 flex items-center gap-1 text-[10px] font-black text-[#dd9933]">
+                            Abrir <ExternalLink size={12} />
+                          </div>
+                        </div>
+                      </a>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* STAGE */}
+      {/* CANVAS STAGE */}
       <div ref={stageRef} className="flex-1 w-full relative cursor-crosshair overflow-hidden">
         <canvas
           ref={canvasRef}
