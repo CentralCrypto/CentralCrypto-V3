@@ -37,7 +37,7 @@ import { getTranslations } from '../../../locales';
 // ======================
 // CORES PADRONIZADAS (FIXAS)
 // ======================
-const GREEN = '#122A21';
+const GREEN = '#548F3F';
 const RED = '#ff6961';
 
 const FLASH_GREEN_BG = 'rgba(38, 71, 56, 0.22)';
@@ -1347,8 +1347,8 @@ title: string;
 }) => {
 const activeStyle =
 variant === 'gainers'
-? { backgroundColor: GREEN, color: '#ffffff', borderColor: 'transparent' }
-: { backgroundColor: RED, color: '#ffffff', borderColor: 'transparent' };
+? { backgroundColor: #122A21, color: '#ffffff', borderColor: 'transparent' }
+: { backgroundColor: #C33B40: '#ffffff', borderColor: 'transparent' };
 
 return (
 <button
