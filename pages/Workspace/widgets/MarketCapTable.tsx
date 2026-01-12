@@ -37,8 +37,8 @@ import { getTranslations } from '../../../locales';
 // ======================
 // CORES PADRONIZADAS (FIXAS)
 // ======================
-const GREEN = '#264738';
-const RED = '#4b2c32';
+const GREEN = '#77dd77';
+const RED = '#ff6961';
 
 const FLASH_GREEN_BG = 'rgba(38, 71, 56, 0.22)';
 const FLASH_RED_BG = 'rgba(75, 44, 50, 0.22)';
