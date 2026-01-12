@@ -816,7 +816,7 @@ if (viewMode === 'coins') connectWs();
 };
 }, [closeWs, clearTimers, scheduleFlush, viewMode]);
 
-// ✅ liga/desliga WS Binance (price + 24h%) + reconnect
+// ✅ liga/desliga WS Binance (price + 24h% via (c-o)/o)
 useEffect(() => {
 if (viewMode !== 'coins') {
 clearTimers();
@@ -1347,8 +1347,8 @@ title: string;
 }) => {
 const activeStyle =
 variant === 'gainers'
-? { backgroundColor: #122A21, color: '#ffffff', borderColor: 'transparent' }
-: { backgroundColor: #C33B40, color: '#ffffff', borderColor: 'transparent' };
+? { backgroundColor: '#122A21', color: '#ffffff', borderColor: 'transparent' }
+: { backgroundColor: '#C33B40', color: '#ffffff', borderColor: 'transparent' };
 
 return (
 <button
