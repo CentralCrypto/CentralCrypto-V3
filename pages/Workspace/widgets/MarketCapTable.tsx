@@ -1,34 +1,50 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, {
+useCallback,
+useEffect,
+useMemo,
+useRef,
+useState
+} from 'react';
+
 import {
+ChevronDown,
 ChevronLeft,
 ChevronRight,
 ChevronsUpDown,
 ExternalLink,
 GripVertical,
 Loader2,
+RefreshCw,
+RotateCcw,
 Search,
 Star,
 TrendingDown,
-TrendingUp,
-RefreshCw,
-RotateCcw,
-ChevronDown
+TrendingUp
 } from 'lucide-react';
+
 import {
 DndContext,
-closestCenter,
 PointerSensor,
+closestCenter,
 useSensor,
 useSensors
 } from '@dnd-kit/core';
+
 import {
 SortableContext,
 arrayMove,
 horizontalListSortingStrategy,
 useSortable
 } from '@dnd-kit/sortable';
+
 import { CSS } from '@dnd-kit/utilities';
-import { Area, AreaChart, ResponsiveContainer, YAxis } from 'recharts';
+
+import {
+Area,
+AreaChart,
+ResponsiveContainer,
+YAxis
+} from 'recharts';
 
 import { ApiCoin, Language } from '../../../types';
 import { fetchTopCoins } from '../services/api';
@@ -37,11 +53,15 @@ import { getTranslations } from '../../../locales';
 // ======================
 // CORES PADRONIZADAS (FIXAS)
 // ======================
-const GREEN = '#548F3F';
-const RED = '#ff6961';
+const GREEN = '#264738';
+const RED = '#4b2c32';
+const AMBER = '#dd9933';
 
-const FLASH_GREEN_BG = 'rgba(38, 71, 56, 0.22)';
-const FLASH_RED_BG = 'rgba(75, 44, 50, 0.22)';
+// Flash ring/glow (só no número)
+const FLASH_GREEN_RING = 'rgba(38, 71, 56, 0.85)';
+const FLASH_RED_RING = 'rgba(75, 44, 50, 0.85)';
+const FLASH_GREEN_GLOW = 'rgba(38, 71, 56, 0.35)';
+const FLASH_RED_GLOW = 'rgba(75, 44, 50, 0.35)';
 
 const formatUSD = (val: number, compact = false) => {
 if (val === undefined || val === null) return '---';
@@ -54,14 +74,15 @@ if (abs >= 1e9) return `$${(val / 1e9).toFixed(2)}B`;
 if (abs >= 1e6) return `$${(val / 1e6).toFixed(2)}M`;
 if (abs >= 1e3) return `$${(val / 1e3).toFixed(2)}K`;
 }
+
 return `$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
 const formatCompactNumber = (val: number) => {
 if (val === undefined || val === null) return '---';
 if (!isFinite(val)) return '---';
-const abs = Math.abs(val);
 
+const abs = Math.abs(val);
 if (abs >= 1e9) return `${(val / 1e9).toFixed(2)}Bi`;
 if (abs >= 1e6) return `${(val / 1e6).toFixed(2)}Mi`;
 if (abs >= 1e3) return `${(val / 1e3).toFixed(2)}K`;
@@ -74,13 +95,14 @@ const s = v >= 0 ? '+' : '';
 return `${s}${v.toFixed(2)}%`;
 };
 
-// sparkline 7d (168 pts) => estimativas
 const pctFromSpark = (prices?: number[], pointsBack: number = 1) => {
 const arr = Array.isArray(prices) ? prices.filter(n => typeof n === 'number' && isFinite(n)) : [];
 if (arr.length < 2) return NaN;
+
 const last = arr[arr.length - 1];
 const idx = Math.max(0, arr.length - 1 - Math.max(1, pointsBack));
 const prev = arr[idx];
+
 if (!isFinite(prev) || prev === 0) return NaN;
 return ((last - prev) / prev) * 100;
 };
@@ -88,22 +110,18 @@ return ((last - prev) / prev) * 100;
 const pct7dFromSpark = (prices?: number[]) => {
 const arr = Array.isArray(prices) ? prices.filter(n => typeof n === 'number' && isFinite(n)) : [];
 if (arr.length < 2) return NaN;
+
 const first = arr[0];
 const last = arr[arr.length - 1];
 if (!isFinite(first) || first === 0) return NaN;
+
 return ((last - first) / first) * 100;
 };
 
 type BinanceMiniTicker = {
-e?: string;
-E?: number;
 s: string;
 c: string;
 o?: string;
-h?: string;
-l?: string;
-v?: string;
-q?: string;
 };
 
 const normalizeBinanceSymbol = (coin: ApiCoin) => {
@@ -123,10 +141,8 @@ const t = getTranslations(language).workspace.marketCapTable;
 const [coins, setCoins] = useState<ApiCoin[]>([]);
 const [loading, setLoading] = useState(true);
 
-// view swap: coins <-> categories
 const [viewMode, setViewMode] = useState<'coins' | 'categories'>('coins');
 
-// search/sort/pagination
 const [searchTerm, setSearchTerm] = useState('');
 const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({
 key: 'market_cap_rank',
@@ -136,22 +152,17 @@ direction: 'asc',
 const [pageSize, setPageSize] = useState<number>(100);
 const [page, setPage] = useState(0);
 
-// buy dropdown
 const [buyOpen, setBuyOpen] = useState(false);
 const buyRef = useRef<HTMLDivElement | null>(null);
 
-// favorites
 const [favorites, setFavorites] = useState<Record<string, boolean>>({});
 const [favOnly, setFavOnly] = useState(false);
 
-// Category context (MASTER -> SUB -> categoryIds)
 const [activeMasterId, setActiveMasterId] = useState<string | null>(null);
 const [activeSubId, setActiveSubId] = useState<string>('__all__');
 
-// Fallback single category
 const [activeCategoryId, setActiveCategoryId] = useState<string>('__all__');
 
-// categories datasets
 const [catLoading, setCatLoading] = useState(false);
 const [catWarn, setCatWarn] = useState<string>('');
 const [catWarnDismissed, setCatWarnDismissed] = useState(false);
@@ -161,10 +172,8 @@ const [catList, setCatList] = useState<any[]>([]);
 const [catMarket, setCatMarket] = useState<any[]>([]);
 const [catCoinMap, setCatCoinMap] = useState<Record<string, string[]> | null>(null);
 
-// top buttons
 const [topMode, setTopMode] = useState<'none' | 'gainers' | 'losers'>('none');
 
-// Column reorder - coins
 const DEFAULT_COLS: string[] = [
 'rank',
 'asset',
@@ -179,7 +188,6 @@ const DEFAULT_COLS: string[] = [
 ];
 const [colOrder, setColOrder] = useState<string[]>(DEFAULT_COLS);
 
-// Column reorder - categories
 const CAT_DEFAULT_COLS: string[] = [
 'category',
 'gainers',
@@ -194,7 +202,6 @@ const CAT_DEFAULT_COLS: string[] = [
 ];
 const [catColOrder, setCatColOrder] = useState<string[]>(CAT_DEFAULT_COLS);
 
-// category sort config
 const [catSortConfig, setCatSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({
 key: 'marketCap',
 direction: 'desc',
@@ -204,7 +211,9 @@ const sensors = useSensors(
 useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
 );
 
-// ✅ Binance MiniTicker live (price + 24h% via (c-o)/o)
+// ======================
+// BINANCE WS (live price + 24h%)
+// ======================
 const [binanceLive, setBinanceLive] = useState<Record<string, { price: number; ch24: number }>>({});
 const wsRef = useRef<WebSocket | null>(null);
 const watchSymbolsRef = useRef<Set<string>>(new Set());
@@ -213,10 +222,23 @@ const pendingRef = useRef<Record<string, { price: number; ch24: number }>>({});
 const reconnectTimerRef = useRef<number | null>(null);
 const reconnectAttemptRef = useRef<number>(0);
 
-// ✅ Price flash (pisca vermelho/verde quando muda)
-const [priceFlash, setPriceFlash] = useState<Record<string, 'up' | 'down' | null>>({});
-const prevPriceRef = useRef<Record<string, number>>({});
-const flashTimersRef = useRef<Record<string, number>>({});
+const clearTimers = useCallback(() => {
+if (flushTimerRef.current) {
+window.clearTimeout(flushTimerRef.current);
+flushTimerRef.current = null;
+}
+if (reconnectTimerRef.current) {
+window.clearTimeout(reconnectTimerRef.current);
+reconnectTimerRef.current = null;
+}
+}, []);
+
+const closeWs = useCallback(() => {
+if (wsRef.current) {
+try { wsRef.current.close(); } catch {}
+wsRef.current = null;
+}
+}, []);
 
 const flushPending = useCallback(() => {
 const payload = pendingRef.current;
@@ -238,18 +260,127 @@ flushPending();
 }, 250);
 }, [flushPending]);
 
-const clearTimers = useCallback(() => {
-if (flushTimerRef.current) {
-window.clearTimeout(flushTimerRef.current);
-flushTimerRef.current = null;
+const connectWs = useCallback(() => {
+closeWs();
+clearTimers();
+
+const ws = new WebSocket('wss://stream.binance.com:9443/ws/!miniTicker@arr');
+wsRef.current = ws;
+
+ws.onopen = () => {
+reconnectAttemptRef.current = 0;
+};
+
+ws.onmessage = (ev) => {
+try {
+const data = JSON.parse(ev.data);
+const arr: BinanceMiniTicker[] = Array.isArray(data) ? data : [data];
+const watch = watchSymbolsRef.current;
+
+for (const tick of arr) {
+if (!tick?.s || !watch.has(tick.s)) continue;
+
+const price = Number(tick.c);
+const open = Number(tick.o);
+const ch24 = (isFinite(open) && open > 0 && isFinite(price)) ? ((price - open) / open) * 100 : NaN;
+
+if (!isFinite(price) || !isFinite(ch24)) continue;
+
+pendingRef.current[tick.s] = { price, ch24 };
 }
-if (reconnectTimerRef.current) {
-window.clearTimeout(reconnectTimerRef.current);
+
+scheduleFlush();
+} catch {}
+};
+
+ws.onclose = () => {
+wsRef.current = null;
+
+if (viewMode !== 'coins') return;
+
+const attempt = Math.min(6, reconnectAttemptRef.current + 1);
+reconnectAttemptRef.current = attempt;
+
+const delay = Math.min(10000, 1200 * attempt);
+reconnectTimerRef.current = window.setTimeout(() => {
 reconnectTimerRef.current = null;
+if (viewMode === 'coins') connectWs();
+}, delay);
+};
+}, [closeWs, clearTimers, scheduleFlush, viewMode]);
+
+useEffect(() => {
+if (viewMode !== 'coins') {
+clearTimers();
+closeWs();
+return;
 }
+
+if (!wsRef.current) connectWs();
+
+return () => {
+clearTimers();
+closeWs();
+};
+}, [viewMode, connectWs, closeWs, clearTimers]);
+
+// ======================
+// PRICE FLASH (só ao redor do número)
+// ======================
+const [priceFlash, setPriceFlash] = useState<Record<string, 'up' | 'down' | null>>({});
+const prevPriceRef = useRef<Record<string, number>>({});
+const flashTimersRef = useRef<Record<string, number>>({});
+
+useEffect(() => {
+if (viewMode !== 'coins') return;
+
+const watch = watchSymbolsRef.current;
+if (!watch || watch.size === 0) return;
+
+for (const sym of Array.from(watch)) {
+const live = binanceLive[sym];
+if (!live || !isFinite(live.price)) continue;
+
+const prev = prevPriceRef.current[sym];
+const now = live.price;
+
+if (isFinite(prev) && prev !== now) {
+const dir: 'up' | 'down' = now > prev ? 'up' : 'down';
+
+setPriceFlash(p => ({ ...p, [sym]: dir }));
+
+if (flashTimersRef.current[sym]) window.clearTimeout(flashTimersRef.current[sym]);
+flashTimersRef.current[sym] = window.setTimeout(() => {
+setPriceFlash(p => {
+const next = { ...p };
+next[sym] = null;
+return next;
+});
+}, 520);
+}
+
+prevPriceRef.current[sym] = now;
+}
+}, [binanceLive, viewMode]);
+
+useEffect(() => {
+return () => {
+for (const k of Object.keys(flashTimersRef.current)) window.clearTimeout(flashTimersRef.current[k]);
+flashTimersRef.current = {};
+};
 }, []);
 
-// ✅ Scroll-to-top helper (corrige abrir “lá embaixo”)
+// ======================
+// UI: reset spin “processando”
+// ======================
+const [uiBusy, setUiBusy] = useState(false);
+
+useEffect(() => {
+// gira o reset enquanto estiver carregando algo “real”
+if (loading || catLoading) setUiBusy(true);
+else setUiBusy(false);
+}, [loading, catLoading]);
+
 const scrollToTop = useCallback(() => {
 const el = scrollContainerRef?.current;
 if (el) el.scrollTo({ top: 0, behavior: 'auto' });
@@ -274,8 +405,20 @@ setLoading(false);
 }
 }, []);
 
-// ✅ Fix do loop infinito (pisca/pisca + spinner)
+useEffect(() => { loadCoins(); }, [loadCoins]);
+
+useEffect(() => {
+const onDocClick = (e: MouseEvent) => {
+const node = e.target as Node;
+if (buyRef.current && !buyRef.current.contains(node)) setBuyOpen(false);
+};
+document.addEventListener('mousedown', onDocClick);
+return () => document.removeEventListener('mousedown', onDocClick);
+}, []);
+
+// ✅ Fix do loop infinito
 const catInFlightRef = useRef(false);
+
 const loadCategoriesLocal = useCallback(async () => {
 if (catInFlightRef.current) return;
 catInFlightRef.current = true;
@@ -299,22 +442,20 @@ setCatMarket(Array.isArray(marketJson) ? marketJson : []);
 const mapJson = await fetchJsonSafe(`${base}/category_coins_map.json`).catch(() => null);
 
 if (mapJson && typeof mapJson === 'object') {
-const categories = (mapJson as any).categories && typeof (mapJson as any).categories === 'object'
+const categories =
+(mapJson as any).categories && typeof (mapJson as any).categories === 'object'
 ? (mapJson as any).categories
 : mapJson;
 
-if (categories && typeof categories === 'object') {
-setCatCoinMap(categories as Record<string, string[]>);
-} else {
-setCatCoinMap(null);
-}
+if (categories && typeof categories === 'object') setCatCoinMap(categories as Record<string, string[]>);
+else setCatCoinMap(null);
 } else {
 setCatCoinMap(null);
 if (!catWarnDismissed) {
 setCatWarn('Dados de categoria sem mapping local (category_coins_map.json ausente). Gainers/Losers e filtro por moedas dependem desse mapping.');
 }
 }
-} catch (e: any) {
+} catch (e) {
 console.error('Categories load error', e);
 setCatWarn('Falha ao carregar categorias locais em /cachecko/categories/.');
 } finally {
@@ -323,49 +464,20 @@ catInFlightRef.current = false;
 }
 }, [catWarnDismissed]);
 
-useEffect(() => { loadCoins(); }, [loadCoins]);
-
-useEffect(() => {
-const onDocClick = (e: MouseEvent) => {
-const t = e.target as Node;
-if (buyRef.current && !buyRef.current.contains(t)) setBuyOpen(false);
-};
-document.addEventListener('mousedown', onDocClick);
-return () => document.removeEventListener('mousedown', onDocClick);
-}, []);
-
-// ✅ Carrega categorias apenas quando entra no modo categories
 useEffect(() => {
 if (viewMode === 'categories') loadCategoriesLocal();
 }, [viewMode, loadCategoriesLocal]);
 
-// ✅ Sempre que trocar “view” ou “nível”, sobe pro topo
 useEffect(() => {
 scrollToTop();
-}, [viewMode, activeMasterId, activeSubId, activeCategoryId, scrollToTop]);
+}, [viewMode, scrollToTop]);
 
 const refresh = useCallback(() => {
 if (viewMode === 'categories') loadCategoriesLocal();
 else loadCoins();
 }, [viewMode, loadCategoriesLocal, loadCoins]);
 
-const handleSort = (key: string) => {
-let direction: 'asc' | 'desc' = 'desc';
-if (sortConfig.key === key && sortConfig.direction === 'desc') direction = 'asc';
-setSortConfig({ key, direction });
-setTopMode('none');
-setPage(0);
-scrollToTop();
-};
-
-const handleCatSort = (key: string) => {
-let direction: 'asc' | 'desc' = 'desc';
-if (catSortConfig.key === key && catSortConfig.direction === 'desc') direction = 'asc';
-setCatSortConfig({ key, direction });
-scrollToTop();
-};
-
-// ---------- Taxonomy parsing (masters + subs) ----------
+// ---------- Taxonomy parsing ----------
 const parsedTaxonomy = useMemo(() => {
 const raw = taxonomy;
 let masters: any[] = [];
@@ -410,9 +522,9 @@ categoryIds: Array.isArray(c.categoryIds) ? c.categoryIds.map(String) : Array.is
 return [{ id: '__all__', name: 'Todas', categoryIds: [] as string[] }, ...subs];
 }, [selectedMaster]);
 
-// category name resolver
 const categoryNameById = useMemo(() => {
 const map = new Map<string, string>();
+
 for (const c of catList) {
 const id = String((c as any).category_id ?? (c as any).id ?? '').trim();
 const nm = String((c as any).name ?? '').trim();
@@ -423,12 +535,14 @@ const id = String((c as any).category_id ?? (c as any).id ?? (c as any).category
 const nm = String((c as any).name ?? '').trim();
 if (id && nm) map.set(id, nm);
 }
+
 return map;
 }, [catList, catMarket]);
 
-// ✅ Nome “humano” da categoria atual pro cabeçalho
+// ✅ label solto em amber (não parece botão)
 const activeCategoryLabel = useMemo(() => {
 if (viewMode !== 'coins') return '';
+
 if (activeMasterId && selectedMaster) {
 const masterName = String(selectedMaster.name || '').trim();
 if (activeSubId && activeSubId !== '__all__') {
@@ -438,18 +552,26 @@ return subName ? `${masterName} / ${subName}` : masterName;
 }
 return masterName;
 }
+
 if (activeCategoryId && activeCategoryId !== '__all__') {
 return categoryNameById.get(activeCategoryId) || activeCategoryId;
 }
-return '';
-}, [viewMode, activeMasterId, selectedMaster, activeSubId, subOptions, activeCategoryId, categoryNameById]);
 
-// ---------- Coin map -> sets ----------
+return '';
+}, [
+viewMode,
+activeMasterId,
+selectedMaster,
+activeSubId,
+subOptions,
+activeCategoryId,
+categoryNameById
+]);
+
+// ---------- Coin map sets ----------
 const coinById = useMemo(() => {
 const m = new Map<string, ApiCoin>();
-for (const c of coins) {
-if (c?.id) m.set(String(c.id), c);
-}
+for (const c of coins) if (c?.id) m.set(String(c.id), c);
 return m;
 }, [coins]);
 
@@ -493,6 +615,7 @@ const wSum = weights.reduce((a, b) => a + b, 0) || 0;
 const useWeighted = wSum > 0;
 
 const series: { i: number; v: number }[] = [];
+
 for (let i = 0; i < N; i++) {
 let acc = 0;
 let accW = 0;
@@ -514,6 +637,7 @@ accW += w;
 if (accW <= 0) return null;
 series.push({ i, v: acc / accW });
 }
+
 return series;
 };
 
@@ -544,6 +668,7 @@ const marketCap = members.reduce((s, c) => s + (Number(c.market_cap || 0) || 0),
 const volume24h = members.reduce((s, c) => s + (Number(c.total_volume || 0) || 0), 0);
 
 const wSum = members.reduce((s, c) => s + (Number(c.market_cap || 0) || 0), 0);
+
 const wAvg = (getter: (c: ApiCoin) => number) => {
 if (wSum > 0) {
 let acc = 0;
@@ -585,7 +710,7 @@ members
 };
 }, [membersFromCategoryIds]);
 
-// --------- category rows (MASTERS ONLY) ----------
+// --------- master rows ---------
 const masterRows = useMemo(() => {
 const q = (searchTerm || '').toLowerCase().trim();
 
@@ -618,6 +743,7 @@ catIds: uniqueCatIds,
 .filter(r => Number(r.coinsCount || 0) > 0);
 
 const dir = catSortConfig.direction === 'asc' ? 1 : -1;
+
 rows.sort((a: any, b: any) => {
 const av = a[catSortConfig.key];
 const bv = b[catSortConfig.key];
@@ -629,6 +755,7 @@ return r * dir;
 
 const an = isFinite(av) ? Number(av) : 0;
 const bn = isFinite(bv) ? Number(bv) : 0;
+
 if (an < bn) return -1 * dir;
 if (an > bn) return 1 * dir;
 return 0;
@@ -637,7 +764,7 @@ return 0;
 return rows;
 }, [parsedTaxonomy, searchTerm, computeStatsFromCatIds, catSortConfig]);
 
-// --------- COINS table filtering ----------
+// --------- active filter ---------
 const activeFilter = useMemo(() => {
 if (activeMasterId && selectedMaster) {
 if (activeSubId && activeSubId !== '__all__') {
@@ -659,9 +786,7 @@ const unique = Array.from(new Set(catIds)).filter(Boolean);
 return { mode: 'master-all', catIds: unique };
 }
 
-if (activeCategoryId !== '__all__') {
-return { mode: 'single', catIds: [activeCategoryId] };
-}
+if (activeCategoryId !== '__all__') return { mode: 'single', catIds: [activeCategoryId] };
 
 return { mode: 'none', catIds: [] as string[] };
 }, [activeMasterId, selectedMaster, activeSubId, subOptions, activeCategoryId]);
@@ -688,19 +813,15 @@ items = items.filter(c => c.name?.toLowerCase().includes(q) || c.symbol?.toLower
 
 if (favOnly) {
 items = items.filter(c => !!favorites[c.id]);
-// ✅ UNIVERSAL FAVORITES: quando favOnly=true, NÃO aplica filtro de categoria
 } else {
-if (allowedCoinIdsSet) {
-items = items.filter(c => allowedCoinIdsSet.has(String(c.id)));
-}
+if (allowedCoinIdsSet) items = items.filter(c => allowedCoinIdsSet.has(String(c.id)));
 }
 
 const getVal = (c: ApiCoin, key: string) => {
 const prices = c.sparkline_in_7d?.price;
 if (key === 'change_1h_est') return pctFromSpark(prices, 1);
 if (key === 'change_7d_est') return pct7dFromSpark(prices);
-// @ts-ignore
-return c[key];
+return (c as any)[key];
 };
 
 items.sort((a: any, b: any) => {
@@ -734,22 +855,17 @@ const start = safePage * pageSize;
 return filteredSortedCoins.slice(start, start + pageSize);
 }, [filteredSortedCoins, safePage, pageSize]);
 
-useEffect(() => { setPage(0); }, [
-searchTerm,
-favOnly,
-pageSize,
-activeMasterId,
-activeSubId,
-activeCategoryId,
-viewMode
-]);
+useEffect(() => {
+setPage(0);
+}, [searchTerm, favOnly, pageSize, activeMasterId, activeSubId, activeCategoryId, viewMode]);
 
-// ✅ atualiza watch-list pro WS (o que está na página atual, inclusive quando filtrou por categoria)
+// ✅ WS watchlist: só símbolos da página atual
 useEffect(() => {
 if (viewMode !== 'coins') {
 watchSymbolsRef.current = new Set();
 return;
 }
+
 const set = new Set<string>();
 for (const c of pageCoins) {
 const s = normalizeBinanceSymbol(c);
@@ -757,123 +873,6 @@ if (s) set.add(s);
 }
 watchSymbolsRef.current = set;
 }, [pageCoins, viewMode]);
-
-const closeWs = useCallback(() => {
-if (wsRef.current) {
-try { wsRef.current.close(); } catch {}
-wsRef.current = null;
-}
-}, []);
-
-const connectWs = useCallback(() => {
-closeWs();
-clearTimers();
-
-const ws = new WebSocket('wss://stream.binance.com:9443/ws/!miniTicker@arr');
-wsRef.current = ws;
-
-ws.onopen = () => {
-reconnectAttemptRef.current = 0;
-};
-
-ws.onmessage = (ev) => {
-try {
-const data = JSON.parse(ev.data);
-const arr: BinanceMiniTicker[] = Array.isArray(data) ? data : [data];
-const watch = watchSymbolsRef.current;
-
-for (const tick of arr) {
-if (!tick?.s || !watch.has(tick.s)) continue;
-
-const price = Number(tick.c);
-const open = Number(tick.o);
-const ch24 = (isFinite(open) && open > 0 && isFinite(price)) ? ((price - open) / open) * 100 : NaN;
-
-if (!isFinite(price) || !isFinite(ch24)) continue;
-
-pendingRef.current[tick.s] = { price, ch24 };
-}
-
-scheduleFlush();
-} catch {}
-};
-
-ws.onerror = () => {};
-
-ws.onclose = () => {
-wsRef.current = null;
-
-if (viewMode !== 'coins') return;
-
-const attempt = Math.min(6, reconnectAttemptRef.current + 1);
-reconnectAttemptRef.current = attempt;
-
-const delay = Math.min(10000, 1200 * attempt);
-reconnectTimerRef.current = window.setTimeout(() => {
-reconnectTimerRef.current = null;
-if (viewMode === 'coins') connectWs();
-}, delay);
-};
-}, [closeWs, clearTimers, scheduleFlush, viewMode]);
-
-// ✅ liga/desliga WS Binance (price + 24h% via (c-o)/o)
-useEffect(() => {
-if (viewMode !== 'coins') {
-clearTimers();
-closeWs();
-return;
-}
-
-if (!wsRef.current) connectWs();
-
-return () => {
-clearTimers();
-closeWs();
-};
-}, [viewMode, connectWs, closeWs, clearTimers]);
-
-// ✅ aplica flash quando o live price muda (piscada curta)
-useEffect(() => {
-if (viewMode !== 'coins') return;
-
-const watch = watchSymbolsRef.current;
-if (!watch || watch.size === 0) return;
-
-for (const sym of Array.from(watch)) {
-const live = binanceLive[sym];
-if (!live || !isFinite(live.price)) continue;
-
-const prev = prevPriceRef.current[sym];
-const now = live.price;
-
-if (isFinite(prev) && prev !== now) {
-const dir: 'up' | 'down' = now > prev ? 'up' : 'down';
-
-setPriceFlash(p => ({ ...p, [sym]: dir }));
-
-if (flashTimersRef.current[sym]) window.clearTimeout(flashTimersRef.current[sym]);
-flashTimersRef.current[sym] = window.setTimeout(() => {
-setPriceFlash(p => {
-const next = { ...p };
-next[sym] = null;
-return next;
-});
-}, 520);
-}
-
-prevPriceRef.current[sym] = now;
-}
-}, [binanceLive, viewMode]);
-
-// ✅ cleanup dos timers de flash
-useEffect(() => {
-return () => {
-for (const k of Object.keys(flashTimersRef.current)) {
-window.clearTimeout(flashTimersRef.current[k]);
-}
-flashTimersRef.current = {};
-};
-}, []);
 
 const Paginator = ({ compact = false }: { compact?: boolean }) => {
 const start = safePage * pageSize + 1;
@@ -922,7 +921,7 @@ title={t.next}
 );
 };
 
-// ✅ Larguras por % (coins)
+// widths
 const COIN_COL_WIDTH: Record<string, string> = {
 fav: '3%',
 rank: '4%',
@@ -935,6 +934,19 @@ mcap: '10%',
 vol24h: '9%',
 supply: '7%',
 spark7d: '21%',
+};
+
+const CAT_COL_WIDTH: Record<string, string> = {
+category: '28%',
+gainers: '10%',
+losers: '10%',
+ch1h: '6%',
+ch24h: '6%',
+ch7d: '6%',
+mcap: '10%',
+vol24h: '10%',
+coins: '6%',
+spark7d: '18%',
 };
 
 const COLS: Record<string, { id: string; label: React.ReactNode; sortKey?: string; }> = {
@@ -950,35 +962,11 @@ supply: { id: 'supply', label: (<span className="leading-[1.05]">{t.supply}<br /
 spark7d: { id: 'spark7d', label: t.chart, sortKey: undefined },
 };
 
-// ✅ widths reais por coluna (categories) pra spark não ficar anão
-const CAT_COL_WIDTH: Record<string, string> = {
-category: '28%',
-gainers: '10%',
-losers: '10%',
-ch1h: '6%',
-ch24h: '6%',
-ch7d: '6%',
-mcap: '10%',
-vol24h: '10%',
-coins: '6%',
-spark7d: '18%', // vai ficar maior e “preencher”
-};
-
-const CAT_COLS: Record<string, { id: string; label: string; sortKey?: string; }> = {
-category: { id: 'category', label: t.categories, sortKey: 'displayName' },
-gainers: { id: 'gainers', label: t.gainers, sortKey: undefined },
-losers: { id: 'losers', label: t.losers, sortKey: undefined },
-ch1h: { id: 'ch1h', label: '1h', sortKey: 'ch1h' },
-ch24h: { id: 'ch24h', label: '24h', sortKey: 'ch24h' },
-ch7d: { id: 'ch7d', label: '7d', sortKey: 'ch7d' },
-mcap: { id: 'mcap', label: 'Market Cap', sortKey: 'marketCap' },
-vol24h: { id: 'vol24h', label: '24h Volume', sortKey: 'volume24h' },
-coins: { id: 'coins', label: '# Coins', sortKey: 'coinsCount' },
-spark7d: { id: 'spark7d', label: t.chart, sortKey: undefined },
-};
-
 const SortIcon = ({ active }: { active: boolean }) => (
-<ChevronsUpDown size={12} className={`text-gray-400 group-hover:text-[#dd9933] ${active ? 'text-[#dd9933]' : ''}`} />
+<ChevronsUpDown
+size={12}
+className={`text-gray-400 group-hover:text-[#dd9933] ${active ? 'text-[#dd9933]' : ''}`}
+/>
 );
 
 const SortableThGeneric = ({
@@ -997,6 +985,7 @@ onSort: (k: string) => void;
 className?: string;
 }) => {
 const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: colId });
+
 const style: React.CSSProperties = {
 transform: CSS.Transform.toString(transform),
 transition,
@@ -1042,7 +1031,6 @@ disabled={!sortKey}
 );
 };
 
-// ✅ FIX drag coins
 const onDragEnd = (event: any) => {
 const { active, over } = event;
 if (!over) return;
@@ -1106,15 +1094,32 @@ return (
 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onCatDragEnd}>
 <SortableContext items={catColOrder} strategy={horizontalListSortingStrategy}>
 {catColOrder.map((cid) => {
-const c = CAT_COLS[cid];
+const c = { id: cid, label: cid, sortKey: undefined as any };
+
+if (cid === 'category') { c.label = t.categories; c.sortKey = 'displayName'; }
+if (cid === 'ch1h') { c.label = '1h'; c.sortKey = 'ch1h'; }
+if (cid === 'ch24h') { c.label = '24h'; c.sortKey = 'ch24h'; }
+if (cid === 'ch7d') { c.label = '7d'; c.sortKey = 'ch7d'; }
+if (cid === 'mcap') { c.label = 'Market Cap'; c.sortKey = 'marketCap'; }
+if (cid === 'vol24h') { c.label = '24h Volume'; c.sortKey = 'volume24h'; }
+if (cid === 'coins') { c.label = '# Coins'; c.sortKey = 'coinsCount'; }
+if (cid === 'gainers') c.label = t.gainers;
+if (cid === 'losers') c.label = t.losers;
+if (cid === 'spark7d') c.label = String(t.chart);
+
 return (
 <SortableThGeneric
-key={c.id}
-colId={c.id}
+key={cid}
+colId={cid}
 label={c.label}
 sortKey={c.sortKey}
 activeKey={catSortConfig.key}
-onSort={handleCatSort}
+onSort={(k) => {
+let direction: 'asc' | 'desc' = 'desc';
+if (catSortConfig.key === k && catSortConfig.direction === 'desc') direction = 'asc';
+setCatSortConfig({ key: k, direction });
+scrollToTop();
+}}
 />
 );
 })}
@@ -1151,11 +1156,9 @@ title="Ver moedas desta categoria"
 if (cid === 'category') {
 return (
 <td key={cid} className="p-2">
-<div className="flex flex-col min-w-0">
 <span className="text-[14px] font-black text-gray-900 dark:text-white truncate">
 {r.displayName}
 </span>
-</div>
 </td>
 );
 }
@@ -1281,14 +1284,6 @@ return <td key={cid} className="p-2" />;
 </tr>
 );
 })}
-
-{masterRows.length === 0 && (
-<tr>
-<td colSpan={catColOrder.length} className="p-8 text-center text-sm font-bold text-gray-500 dark:text-slate-400">
-Nenhuma categoria encontrada.
-</td>
-</tr>
-)}
 </tbody>
 </table>
 )}
@@ -1307,27 +1302,42 @@ direction: mode === 'gainers' ? 'desc' : 'asc',
 scrollToTop();
 };
 
-const goBackToCategories = () => {
+const handleResetUI = async () => {
+// gira “sentindo” mesmo quando é só reset local
+setUiBusy(true);
+
+setColOrder(DEFAULT_COLS);
+setCatColOrder(CAT_DEFAULT_COLS);
+setSortConfig({ key: 'market_cap_rank', direction: 'asc' });
+setCatSortConfig({ key: 'marketCap', direction: 'desc' });
+setTopMode('none');
+setSearchTerm('');
+setFavOnly(false);
+setPage(0);
+scrollToTop();
+
+// se você quer que reset também faça refresh real, descomenta:
+// refresh();
+
+window.setTimeout(() => setUiBusy(false), 400);
+};
+
+const canShowBack = viewMode === 'categories' || (viewMode === 'coins' && !!activeMasterId);
+
+const handleBack = () => {
+if (viewMode === 'categories') {
+setViewMode('coins');
+setSearchTerm('');
+scrollToTop();
+return;
+}
+
 setActiveMasterId(null);
 setActiveSubId('__all__');
 setActiveCategoryId('__all__');
 setViewMode('categories');
 setTopMode('none');
 scrollToTop();
-};
-
-const goBackToCoins = () => {
-setViewMode('coins');
-setSearchTerm('');
-scrollToTop();
-};
-
-const canShowBack =
-viewMode === 'categories' || (viewMode === 'coins' && !!activeMasterId);
-
-const handleBack = () => {
-if (viewMode === 'categories') goBackToCoins();
-else goBackToCategories();
 };
 
 const TopToggleButton = ({
@@ -1347,8 +1357,8 @@ title: string;
 }) => {
 const activeStyle =
 variant === 'gainers'
-? { backgroundColor: '#122A21', color: '#ffffff', borderColor: 'transparent' }
-: { backgroundColor: '#C33B40', color: '#ffffff', borderColor: 'transparent' };
+? { backgroundColor: GREEN, color: '#ffffff', borderColor: 'transparent' }
+: { backgroundColor: RED, color: '#ffffff', borderColor: 'transparent' };
 
 return (
 <button
@@ -1368,27 +1378,15 @@ title={title}
 );
 };
 
-// ✅ Reset “voltou o ícone” e realmente faz algo útil.
-const handleResetUI = () => {
-setColOrder(DEFAULT_COLS);
-setCatColOrder(CAT_DEFAULT_COLS);
-setSortConfig({ key: 'market_cap_rank', direction: 'asc' });
-setCatSortConfig({ key: 'marketCap', direction: 'desc' });
-setTopMode('none');
-setSearchTerm('');
-setFavOnly(false);
-setPage(0);
-scrollToTop();
-};
-
 return (
 <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-100 dark:border-slate-800 shadow-xl overflow-hidden flex flex-col">
-{/* Header */}
+{/* HEADER */}
 <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col gap-3 bg-gray-50/50 dark:bg-black/20 shrink-0">
 <div className="flex flex-col lg:flex-row justify-between items-center gap-3">
+
 {/* LEFT GROUP */}
 <div className="flex items-center gap-2 w-full lg:w-auto">
-{/* BACK ICON BUTTON */}
+
 {canShowBack && (
 <button
 type="button"
@@ -1400,7 +1398,6 @@ title="Voltar"
 </button>
 )}
 
-{/* FAVORITES ICON BUTTON */}
 <button
 type="button"
 onClick={() => { setFavOnly(v => !v); setPage(0); scrollToTop(); }}
@@ -1418,7 +1415,6 @@ fill={favOnly ? '#000000' : 'transparent'}
 />
 </button>
 
-{/* SEARCH INPUT */}
 <div className="relative w-full lg:w-[420px]">
 <Search size={18} className="absolute left-3 top-2.5 text-gray-500" />
 <input
@@ -1430,15 +1426,10 @@ className="w-full bg-white dark:bg-[#2f3032] rounded-lg py-2.5 pl-11 pr-4 text-[
 />
 </div>
 
-{/* Subcategorias */}
 {viewMode === 'coins' && activeMasterId && subOptions.length > 1 && (
 <select
 value={activeSubId}
-onChange={(e) => {
-setActiveSubId(e.target.value);
-setPage(0);
-scrollToTop();
-}}
+onChange={(e) => { setActiveSubId(e.target.value); setPage(0); scrollToTop(); }}
 className="appearance-none bg-white text-gray-900 dark:!bg-[#2f3032] dark:text-slate-200 dark:[color-scheme:dark]
 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-black
 hover:bg-gray-100 dark:hover:bg-white/5 outline-none"
@@ -1450,7 +1441,6 @@ title="Subcategorias"
 </select>
 )}
 
-{/* Categorias */}
 {viewMode === 'coins' && !activeMasterId && (
 <button
 type="button"
@@ -1462,7 +1452,6 @@ title="Abrir categorias"
 </button>
 )}
 
-{/* Gainers/Losers só na tabela principal */}
 {viewMode === 'coins' && !activeMasterId && (
 <>
 <TopToggleButton
@@ -1485,7 +1474,6 @@ title="Ordenar por Losers (24h%)"
 </>
 )}
 
-{/* BUY dropdown */}
 <div className="relative" ref={buyRef}>
 <button
 onClick={() => setBuyOpen(v => !v)}
@@ -1510,14 +1498,15 @@ Bybit
 )}
 </div>
 
-{/* ✅ Nome da categoria no cabeçalho (depois do BUY) */}
+{/* ✅ Categoria como TEXTO solto em amber */}
 {activeCategoryLabel ? (
-<div className="ml-2 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032]">
-<span className="text-sm font-black text-gray-700 dark:text-slate-200 whitespace-nowrap">
+<div className="ml-1">
+<span className="text-sm font-black tracking-wide" style={{ color: AMBER }}>
 {activeCategoryLabel}
 </span>
 </div>
 ) : null}
+
 </div>
 
 {/* RIGHT GROUP */}
@@ -1544,13 +1533,12 @@ title="Quantidade por página"
 
 <Paginator compact />
 
-{/* ✅ Reset voltou */}
 <button
 onClick={handleResetUI}
 className="p-2.5 hover:bg-gray-200 dark:hover:bg-slate-700 rounded-lg text-gray-500 transition-colors"
 title="Reset UI"
 >
-<RotateCcw size={22} />
+<RotateCcw size={22} className={uiBusy ? 'animate-spin' : ''} />
 </button>
 
 <button
@@ -1585,6 +1573,7 @@ OK
 ) : (
 <div className="custom-scrollbar overflow-x-auto overflow-y-hidden">
 <div className="overflow-visible">
+
 {loading && coins.length === 0 ? (
 <div className="flex flex-col items-center justify-center py-16 text-gray-500">
 <Loader2 className="animate-spin mb-2" size={32} />
@@ -1618,7 +1607,14 @@ colId={c.id}
 label={c.label}
 sortKey={c.sortKey}
 activeKey={sortConfig.key}
-onSort={(k) => { handleSort(k); }}
+onSort={(k) => {
+let direction: 'asc' | 'desc' = 'desc';
+if (sortConfig.key === k && sortConfig.direction === 'desc') direction = 'asc';
+setSortConfig({ key: k, direction });
+setTopMode('none');
+setPage(0);
+scrollToTop();
+}}
 />
 );
 })}
@@ -1650,6 +1646,12 @@ const sparkData = Array.isArray(prices) ? prices.map((v, i) => ({ i, v })) : [];
 const isFav = !!favorites[coin.id];
 
 const flash = binSym ? priceFlash[binSym] : null;
+const flashStyle: React.CSSProperties =
+flash === 'up'
+? { boxShadow: `0 0 0 2px ${FLASH_GREEN_RING}, 0 0 16px ${FLASH_GREEN_GLOW}` }
+: flash === 'down'
+? { boxShadow: `0 0 0 2px ${FLASH_RED_RING}, 0 0 16px ${FLASH_RED_GLOW}` }
+: {};
 
 return (
 <tr key={coin.id} className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors group h-[56px]">
@@ -1660,11 +1662,7 @@ onClick={() => setFavorites(prev => ({ ...prev, [coin.id]: !prev[coin.id] }))}
 className="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"
 title={isFav ? 'Remover dos favoritos' : 'Favoritar'}
 >
-<Star
-size={18}
-color="#dd9933"
-fill={isFav ? '#dd9933' : 'transparent'}
-/>
+<Star size={18} color="#dd9933" fill={isFav ? '#dd9933' : 'transparent'} />
 </button>
 </td>
 
@@ -1702,16 +1700,13 @@ onError={(e) => { e.currentTarget.style.display = 'none'; }}
 
 if (cid === 'price') {
 return (
-<td
-key={cid}
-className="p-2 text-right font-mono text-[15px] font-black text-gray-900 dark:text-slate-200 transition-colors"
-style={flash === 'up'
-? { backgroundColor: FLASH_GREEN_BG }
-: flash === 'down'
-? { backgroundColor: FLASH_RED_BG }
-: undefined}
+<td key={cid} className="p-2 text-right font-mono text-[15px] font-black text-gray-900 dark:text-slate-200">
+<span
+className="inline-block px-2 py-1 rounded-md transition-shadow"
+style={flashStyle}
 >
 {formatUSD(livePrice)}
+</span>
 </td>
 );
 }
@@ -1820,14 +1815,6 @@ return <td key={cid} className="p-2" />;
 </tr>
 );
 })}
-
-{pageCoins.length === 0 && (
-<tr>
-<td colSpan={1 + colOrder.length} className="p-8 text-center text-sm font-bold text-gray-500 dark:text-slate-400">
-{t.noResults}
-</td>
-</tr>
-)}
 </tbody>
 </table>
 )}
@@ -1838,6 +1825,9 @@ return <td key={cid} className="p-2" />;
 <div className="p-3 border-t border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-black/20 shrink-0">
 <Paginator />
 </div>
+
+</div>
+)}
 </div>
 );
 };
