@@ -121,11 +121,8 @@ async function httpGetJson(url: string, timeoutMs = 15000, retries = 2) {
 function extractCoins(raw: any): Coin[] {
   if (!raw) return [];
   if (Array.isArray(raw)) {
-    // Caso wrapper com .data
     if (raw.length === 1 && raw[0] && Array.isArray(raw[0].data)) return raw[0].data as Coin[];
-    // Caso array direto de coins
     if (raw.length > 0 && raw[0] && typeof raw[0] === 'object' && 'id' in raw[0]) return raw as Coin[];
-    // Caso array com item[0].data
     if (raw[0] && Array.isArray(raw[0]?.data)) return raw[0].data as Coin[];
     return [];
   }
@@ -149,6 +146,16 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
   const chartRef = useRef<Highcharts.Chart | null>(null);
 
   useEffect(() => { initHighchartsOnce(); }, []);
+
+  // trava scroll do body enquanto o popup estiver aberto
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -183,6 +190,7 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
           id: String(c.id),
           name: String(c.symbol || '').toUpperCase(),
           value: valueMode === 'marketcap' ? sizeMarketCap : sizeVar,
+          // IMPORTANTÍSSIMO: esse é o valor que vai pro colorAxis
           colorValue: change24,
           custom: {
             fullName: c.name || c.id,
@@ -212,16 +220,15 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
 
     let maxAbs = 10;
     for (const p of list) maxAbs = Math.max(maxAbs, Math.abs(safeNum((p as any).colorValue)));
-    maxAbs = Math.min(50, Math.ceil(maxAbs)); // clamp
+    maxAbs = Math.min(50, Math.ceil(maxAbs));
     return { points: list, maxAbsChange: maxAbs };
   }, [coins, valueMode]);
 
-  // Cria o chart 1x quando o popup estiver aberto e o container existir
+  // Cria o chart 1x
   useEffect(() => {
     if (!open) return;
     if (!containerRef.current) return;
 
-    // Se já existe, só reflow
     if (chartRef.current) {
       chartRef.current.reflow();
       return;
@@ -238,6 +245,7 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
       credits: { enabled: false },
       exporting: { enabled: false },
       accessibility: { enabled: true },
+
       tooltip: {
         useHTML: true,
         backgroundColor: 'rgba(15, 16, 20, 0.96)',
@@ -312,25 +320,27 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
           `;
         }
       },
+
+      // ESCALA DE CORES (vermelho -> cinza -> verde)
       colorAxis: {
         min: -10,
         max: 10,
         stops: [
-          [0, '#f73539'],
-          [0.5, '#414555'],
-          [1, '#2ecc59']
+          [0, '#4b2c32'],   // vermelho (teu)
+          [0.5, '#414555'], // neutro
+          [1, '#264738']    // verde (teu)
         ],
         labels: {
           style: { color: '#cfd3dc' },
           format: '{#gt value 0}+{value}{else}{value}{/gt}%'
         }
       },
+
       legend: { enabled: false },
       plotOptions: {
-        series: {
-          animation: false
-        }
+        series: { animation: false }
       },
+
       series: [{
         type: 'treemap',
         name: 'All',
@@ -340,8 +350,15 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
         borderColor: '#111216',
         borderWidth: 1,
         opacity: 1,
-        // CRÍTICO: evita Highcharts warning #12 com 2000 pontos em objetos
+
+        // CRÍTICO: garante que o treemap use colorAxis pelo colorValue
+        colorAxis: 0,
+        colorKey: 'colorValue',
+        colorByPoint: false,
+
+        // CRÍTICO: evita warning #12 com 2000 pontos (objetos)
         turboThreshold: 0,
+
         dataLabels: {
           enabled: true,
           useHTML: true,
@@ -353,7 +370,6 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
             const w = p.shapeArgs?.width || 0;
             const h = p.shapeArgs?.height || 0;
 
-            // thresholds pra não virar “papel picado”
             const showLogo = w >= 56 && h >= 44 && p.custom?.image;
             const showSymbol = w >= 44 && h >= 28;
             const showPrice = w >= 72 && h >= 52;
@@ -366,8 +382,6 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
 
             const price = safeNum(p.custom?.price);
             const priceStr = fmtPrice(price);
-
-            // se preço for grande e não “caber”, a regra é: não desenha
             const priceTooLong = priceStr.length > 12 && w < 110;
 
             return `
@@ -379,23 +393,21 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
             `;
           }
         },
+
         data: []
       }] as any
     } as any);
 
-    // Resize observer pra garantir reflow no fullscreen
     const el = containerRef.current;
     const ro = new ResizeObserver(() => {
       if (chartRef.current) chartRef.current.reflow();
     });
     if (el) ro.observe(el);
 
-    return () => {
-      ro.disconnect();
-    };
+    return () => ro.disconnect();
   }, [open]);
 
-  // Atualiza dados/escala sem destruir chart (mais leve, menos “violation”)
+  // Atualiza dados + min/max do colorAxis dinamicamente
   useEffect(() => {
     if (!open) return;
     if (!chartRef.current) return;
@@ -406,10 +418,7 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
     const min = -maxAbs;
     const max = maxAbs;
 
-    // Atualiza colorAxis e dados
-    ch.update({
-      colorAxis: { min, max }
-    } as any, false);
+    ch.update({ colorAxis: { min, max } } as any, false);
 
     const s0 = ch.series[0] as any;
     s0.setData(points as any, false, undefined, false);
@@ -417,7 +426,6 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
     ch.redraw(false);
   }, [open, points, maxAbsChange]);
 
-  // Limpa chart ao fechar
   useEffect(() => {
     if (open) return;
     if (chartRef.current) {
@@ -428,13 +436,15 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
 
   if (!open) return null;
 
+  const maxAbs = Math.max(10, safeNum(maxAbsChange));
+
   return (
-    <div className="fixed inset-0 z-[9999] bg-black/80">
-      <div className="absolute inset-0 flex flex-col bg-[#0f1014]">
+    <div className="fixed inset-0 z-[9999] bg-black/80 overflow-hidden">
+      <div className="absolute inset-0 flex flex-col bg-[#0f1014] overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
-          <div className="flex items-center gap-2">
-            <div className="flex bg-white/5 rounded p-0.5">
+        <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex bg-white/5 rounded p-0.5 shrink-0">
               <button
                 onClick={() => setValueMode('marketcap')}
                 className={[
@@ -455,15 +465,32 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
               </button>
             </div>
 
-            <div className="text-[11px] text-gray-400">
-              {loading ? 'Carregando…' : `${coins.length.toLocaleString()} moedas`}
-              {errMsg ? <span className="text-red-400 ml-2">{errMsg}</span> : null}
+            {/* Escala de cores no header (sem rodapé) */}
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="text-[10px] text-gray-400 whitespace-nowrap">
+                -{maxAbs}%
+              </div>
+              <div
+                className="h-2 w-[180px] rounded overflow-hidden border border-white/10 shrink-0"
+                style={{
+                  background: 'linear-gradient(90deg, #4b2c32 0%, #414555 50%, #264738 100%)'
+                }}
+                title="Escala de cor por Var.24Hs"
+              />
+              <div className="text-[10px] text-gray-400 whitespace-nowrap">
+                +{maxAbs}%
+              </div>
+
+              <div className="text-[11px] text-gray-400 ml-2 truncate">
+                {loading ? 'Carregando…' : `${coins.length.toLocaleString()} moedas`}
+                {errMsg ? <span className="text-red-400 ml-2">{errMsg}</span> : null}
+              </div>
             </div>
           </div>
 
           <button
             onClick={() => setOpen(false)}
-            className="p-2 rounded hover:bg-white/5 text-gray-300 hover:text-white transition-colors"
+            className="p-2 rounded hover:bg-white/5 text-gray-300 hover:text-white transition-colors shrink-0"
             aria-label="Fechar"
             title="Fechar"
           >
@@ -472,7 +499,7 @@ export default function HeatmapWidget({ item, language }: HeatmapWidgetProps) {
         </div>
 
         {/* Chart */}
-        <div className="flex-1 min-h-0 relative">
+        <div className="flex-1 min-h-0 relative overflow-hidden">
           <div ref={containerRef} className="absolute inset-0" />
           {loading && (
             <div className="absolute inset-0 flex items-center justify-center">
