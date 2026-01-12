@@ -40,8 +40,8 @@ import { getTranslations } from '../../../locales';
 const GREEN = '#548F3F';
 const RED = '#ff6961';
 
-const FLASH_GREEN_BG = '#548F3F';
-const FLASH_RED_BG = '#ff6961';
+const FLASH_GREEN_BG = '#122A21';
+const FLASH_RED_BG = '#C33B4080';
 
 const formatUSD = (val: number, compact = false) => {
 if (val === undefined || val === null) return '---';
@@ -1351,7 +1351,7 @@ title: string;
 const activeStyle =
 variant === 'gainers'
 ? { backgroundColor: '#122A21', color: '#ffffff', borderColor: 'transparent' }
-: { backgroundColor: '#C33B40', color: '#ffffff', borderColor: 'transparent' };
+: { backgroundColor: '#C33B4080', color: '#ffffff', borderColor: 'transparent' };
 
 return (
 <button
