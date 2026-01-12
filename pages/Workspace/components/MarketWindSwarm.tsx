@@ -77,7 +77,7 @@ const formatCompact = (v?: number) => {
 const formatPrice = (v?: number) => {
   const n = Number(v);
   if (!isFinite(n)) return '-';
-  if (n < 0.01) return `$${n.toPrecision(3)}`;
+  if (Math.abs(n) < 0.01) return `$${n.toPrecision(3)}`;
   return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
@@ -206,17 +206,17 @@ const SocialIcon = ({ type }: { type: string }) => {
       </svg>
     );
   }
-  if (type === 'reddit') {
+  if (type === 'instagram') {
     return (
       <svg className={cls} viewBox="0 0 24 24" fill="none">
-        <path fill="currentColor" d="M14.7 3.8c.1 0 .2 0 .3.1l2.8 2.1c.2-.1.5-.2.8-.2 1 0 1.8.8 1.8 1.8S19.6 9.4 18.6 9.4c-.5 0-1-.2-1.3-.6-1.3.9-3 1.5-4.9 1.6l-.7-3.4 2-.2c.2-.9.8-1.5 1.6-1.6ZM8.2 10.1c-2 0-3.6 1.6-3.6 3.6 0 2.3 2.8 4.1 7.4 4.1s7.4-1.8 7.4-4.1c0-2-1.6-3.6-3.6-3.6-.9 0-1.7.3-2.4.9-1-.6-2.1-.9-3.4-.9s-2.4.3-3.4.9c-.7-.6-1.5-.9-2.4-.9Zm2 4.4c-.5 0-.9-.4-.9-.9s.4-.9.9-.9.9.4.9.9-.4.9-.9.9Zm4.6 0c-.5 0-.9-.4-.9-.9s.4-.9.9-.9.9.4.9.9-.4.9-.9.9Zm-5 1.7c.7.6 1.8 1 3.2 1s2.5-.4 3.2-1c.2-.2.6-.2.8 0 .2.2.2.6 0 .8-1 1-2.4 1.5-4 1.5s-3-.5-4-1.5c-.2-.2-.2-.6 0-.8.2-.2.6-.2.8 0Z"/>
+        <path fill="currentColor" d="M7.5 2h9A5.5 5.5 0 0 1 22 7.5v9A5.5 5.5 0 0 1 16.5 22h-9A5.5 5.5 0 0 1 2 16.5v-9A5.5 5.5 0 0 1 7.5 2Zm0 2A3.5 3.5 0 0 0 4 7.5v9A3.5 3.5 0 0 0 7.5 20h9a3.5 3.5 0 0 0 3.5-3.5v-9A3.5 3.5 0 0 0 16.5 4h-9Zm10.3 1.8a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8ZM12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10Zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/>
       </svg>
     );
   }
-  if (type === 'discord') {
+  if (type === 'youtube') {
     return (
       <svg className={cls} viewBox="0 0 24 24" fill="none">
-        <path fill="currentColor" d="M19.5 6.3a14.8 14.8 0 0 0-3.6-1.1l-.5 1.1a13.6 13.6 0 0 0-3.8 0l-.5-1.1c-1.2.2-2.4.6-3.6 1.1C5.4 9 5 11.6 5.1 14.2c1.5 1.1 2.9 1.8 4.4 2.2l.7-1.2c-.8-.3-1.5-.6-2.2-1.1l.5-.4c1.3.6 2.7.9 4.1.9s2.8-.3 4.1-.9l.5.4c-.7.5-1.4.8-2.2 1.1l.7 1.2c1.5-.4 2.9-1.1 4.4-2.2.2-2.9-.3-5.5-1.9-7.9ZM9.6 13.5c-.6 0-1.1-.6-1.1-1.3s.5-1.3 1.1-1.3c.6 0 1.1.6 1.1 1.3s-.5 1.3-1.1 1.3Zm4.8 0c-.6 0-1.1-.6-1.1-1.3s.5-1.3 1.1-1.3c.6 0 1.1.6 1.1 1.3s-.5 1.3-1.1 1.3Z"/>
+        <path fill="currentColor" d="M21.6 7.2a3 3 0 0 0-2.1-2.1C17.8 4.7 12 4.7 12 4.7s-5.8 0-7.5.4A3 3 0 0 0 2.4 7.2 31 31 0 0 0 2 12a31 31 0 0 0 .4 4.8 3 3 0 0 0 2.1 2.1c1.7.4 7.5.4 7.5.4s5.8 0 7.5-.4a3 3 0 0 0 2.1-2.1A31 31 0 0 0 22 12a31 31 0 0 0-.4-4.8ZM10 15.3V8.7L16 12l-6 3.3Z"/>
       </svg>
     );
   }
@@ -233,67 +233,24 @@ const normalizeUrl = (u: string) => {
   return `https://${s.replace(/^\/+/, '')}`;
 };
 
-const buildSocialLinksFromCoin = (coin: any): SocialLink[] => {
-  const out: SocialLink[] = [];
-
-  const links = coin?.links || coin?.link || null;
-
-  // website (try common fields)
-  const homepage =
-    (Array.isArray(links?.homepage) && links.homepage.find((x: any) => String(x || '').trim())) ||
-    links?.homepage ||
-    coin?.homepage ||
-    coin?.website ||
-    null;
-
-  if (homepage) out.push({ type: 'website', label: 'Website', url: normalizeUrl(homepage) });
-
-  // X / Twitter
-  const twitter =
-    links?.twitter_screen_name ||
-    coin?.twitter_screen_name ||
-    null;
-  if (twitter) out.push({ type: 'x', label: 'X', url: normalizeUrl(`https://x.com/${twitter}`) });
-
-  // Telegram
-  const telegram =
-    links?.telegram_channel_identifier ||
-    coin?.telegram_channel_identifier ||
-    null;
-  if (telegram) out.push({ type: 'telegram', label: 'Telegram', url: normalizeUrl(`https://t.me/${telegram}`) });
-
-  // Discord
-  const discord =
-    links?.chat_url?.find?.((x: any) => String(x || '').includes('discord.gg')) ||
-    links?.discord_url ||
-    coin?.discord_url ||
-    null;
-  if (discord) out.push({ type: 'discord', label: 'Discord', url: normalizeUrl(discord) });
-
-  // Reddit
-  const reddit = links?.subreddit_url || coin?.subreddit_url || null;
-  if (reddit) out.push({ type: 'reddit', label: 'Reddit', url: normalizeUrl(reddit) });
-
-  // GitHub
-  const gh = links?.repos_url?.github?.[0] || links?.github || coin?.github || null;
-  if (gh) out.push({ type: 'github', label: 'GitHub', url: normalizeUrl(gh) });
-
-  // dedupe
-  const seen = new Set<string>();
-  return out.filter(x => {
-    const key = `${x.type}:${x.url}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-};
+// ✅ redes sociais do SEU SITE (não da moeda)
+const SITE_SOCIALS: SocialLink[] = [
+  { type: 'website', label: 'Site', url: 'https://centralcrypto.com.br' },
+  { type: 'x', label: 'X', url: 'https://x.com/centralcrypto' },
+  { type: 'telegram', label: 'Telegram', url: 'https://t.me/centralcryptotr' },
+  { type: 'instagram', label: 'Instagram', url: 'https://instagram.com/centralcrypto' },
+  { type: 'youtube', label: 'YouTube', url: 'https://www.youtube.com/@LigaCrypto' },
+  { type: 'github', label: 'GitHub', url: 'https://github.com/' }
+];
 
 // ========================
 // GAME CONFIG
 // ========================
-const GAME_BALL_RADIUS = 26;
-const GAME_CUE_RADIUS = 34;
+const GAME_BALL_RADIUS = 24;
+const GAME_CUE_RADIUS = 30;
 const GAME_WALL_PAD = 14;
+const POCKET_R = 34; // raio da caçapa
+const POCKET_INNER_R = 18; // “boca” visual
 
 const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -324,7 +281,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   const [floatStrengthRaw, setFloatStrengthRaw] = useState(0.5);
   const [trailLength, setTrailLength] = useState(25);
 
-  const [cuePowerRaw, setCuePowerRaw] = useState(0.5);
+  const [cuePowerRaw, setCuePowerRaw] = useState(0.7);
 
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
 
@@ -336,7 +293,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   const [magPosts, setMagPosts] = useState<MagazinePost[]>([]);
   const [magLoading, setMagLoading] = useState(false);
   const [magError, setMagError] = useState<string | null>(null);
-  const [magIndex, setMagIndex] = useState(0); // page index 0..1 for 6 posts showing 3 at a time
+  const [magIndex, setMagIndex] = useState(0);
   const magTimerRef = useRef<number>(0);
 
   // Transform
@@ -366,6 +323,9 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     logMinX: number, logMaxX: number,
     logMinY: number, logMaxY: number
   } | null>(null);
+
+  // game pockets cached
+  const pocketsRef = useRef<{ x: number; y: number; r: number }[]>([]);
 
   // refs mirroring states
   const hoveredParticleRef = useRef<Particle | null>(null);
@@ -550,10 +510,10 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     }
   }, [getCoinPerfPct, numCoins, sizeMetricPerf]);
 
-  const projectCoinToMapXY = useCallback((coin: ApiCoin, mode: ChartMode) => {
-    const s = statsRef.current;
+  const getPlotGeometry = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!s || !canvas) return { x: 0, y: 0 };
+    const s = statsRef.current;
+    if (!canvas || !s) return null;
 
     const dpr = dprRef.current || 1;
     const width = canvas.width / dpr;
@@ -565,6 +525,15 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
     const originX = margin.left;
     const originY = margin.top + chartH;
+
+    return { width, height, margin, chartW, chartH, originX, originY, s };
+  }, []);
+
+  const projectCoinToMapXY = useCallback((coin: ApiCoin, mode: ChartMode) => {
+    const g = getPlotGeometry();
+    if (!g) return { x: 0, y: 0 };
+
+    const { originX, originY, margin, chartW, chartH, s } = g;
 
     const projectX = (v: number) => {
       let norm = 0;
@@ -590,7 +559,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     else xVal = Math.max(1, Number(coin.market_cap) || 1);
 
     return { x: projectX(xVal), y: projectY(yVal) };
-  }, [getCoinPerfPct]);
+  }, [getCoinPerfPct, getPlotGeometry]);
 
   const beginMapTransition = useCallback((mode: ChartMode) => {
     if (!statsRef.current) return;
@@ -611,6 +580,25 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     }
   }, [projectCoinToMapXY]);
 
+  const buildPockets = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dpr = dprRef.current || 1;
+    const width = canvas.width / dpr;
+    const height = canvas.height / dpr;
+
+    // 6 caçapas (4 cantos + 2 meio)
+    const pad = GAME_WALL_PAD;
+    pocketsRef.current = [
+      { x: pad, y: pad, r: POCKET_R },
+      { x: width / 2, y: pad, r: POCKET_R },
+      { x: width - pad, y: pad, r: POCKET_R },
+      { x: pad, y: height - pad, r: POCKET_R },
+      { x: width / 2, y: height - pad, r: POCKET_R },
+      { x: width - pad, y: height - pad, r: POCKET_R }
+    ];
+  }, []);
+
   const setupGameLayout = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -619,8 +607,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     const width = canvas.width / dpr;
     const height = canvas.height / dpr;
 
-    const w = width;
-    const h = height;
+    buildPockets();
 
     const cue = particlesRef.current.find(p => String(p.coin.id).toLowerCase() === 'bitcoin');
 
@@ -632,7 +619,10 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       const isBTC = String(p.coin.id).toLowerCase() === 'bitcoin';
       p.targetRadius = isBTC ? GAME_CUE_RADIUS : GAME_BALL_RADIUS;
       p.radius = p.targetRadius;
-      p.mass = Math.max(1, p.targetRadius);
+
+      // ✅ deixa mais “leve” (antes parecia caminhão)
+      p.mass = Math.max(1, p.targetRadius * 0.7);
+
       p.vx = 0; p.vy = 0;
       p.trail = [];
       p.isFixed = false;
@@ -644,13 +634,12 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     }
 
     if (cue) {
-      cue.x = w * 0.78;
-      cue.y = h * 0.5;
+      cue.x = width * 0.78;
+      cue.y = height * 0.5;
     }
 
-    const rackApexX = w * 0.20;
-    const rackApexY = h * 0.50;
-
+    const rackApexX = width * 0.22;
+    const rackApexY = height * 0.50;
     const spacing = GAME_BALL_RADIUS * 2.08;
 
     const N = others.length;
@@ -672,15 +661,15 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     }
 
     const minX = GAME_WALL_PAD + GAME_BALL_RADIUS;
-    const maxX = w - GAME_WALL_PAD - GAME_BALL_RADIUS;
+    const maxX = width - GAME_WALL_PAD - GAME_BALL_RADIUS;
     const minY = GAME_WALL_PAD + GAME_BALL_RADIUS;
-    const maxY = h - GAME_WALL_PAD - GAME_BALL_RADIUS;
+    const maxY = height - GAME_WALL_PAD - GAME_BALL_RADIUS;
 
     for (const p of particlesRef.current) {
       p.x = clamp(p.x, minX, maxX);
       p.y = clamp(p.y, minY, maxY);
     }
-  }, []);
+  }, [buildPockets]);
 
   // init + resize
   useEffect(() => {
@@ -703,6 +692,9 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       canvas.height = Math.max(1, Math.floor(cssH * ratio));
       canvas.style.width = `${cssW}px`;
       canvas.style.height = `${cssH}px`;
+
+      // ✅ recalcula pockets quando resize no game
+      if (isGameModeRef.current) buildPockets();
     };
 
     resizeCanvas();
@@ -721,9 +713,9 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       observer.disconnect();
       window.removeEventListener('resize', resizeCanvas);
     };
-  }, [loadData]);
+  }, [loadData, buildPockets]);
 
-  // global mouseup (shot)
+  // global mouseup
   useEffect(() => {
     const up = () => handleMouseUp();
     window.addEventListener('mouseup', up);
@@ -782,9 +774,10 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
     recomputeStatsAndTargets(coins, chartModeRef.current);
     if (!isGameModeRef.current) beginMapTransition(chartModeRef.current);
-  }, [coins, numCoins, recomputeStatsAndTargets, beginMapTransition]);
+    if (isGameModeRef.current) setupGameLayout();
+  }, [coins, numCoins, recomputeStatsAndTargets, beginMapTransition, setupGameLayout]);
 
-  // mode/timeframe changes: update stats + tween (no rebuild)
+  // mode/timeframe changes: update stats + tween
   useEffect(() => {
     if (coins.length === 0) return;
     if (isGameMode) return;
@@ -829,7 +822,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   }, [isGameMode, coins, resetZoom, setupGameLayout, recomputeStatsAndTargets, beginMapTransition]);
 
   // =========================
-  // Magazine fetch + carousel timer (only when detail opens)
+  // Magazine fetch + carousel timer
   // =========================
   const fetchMagazine = useCallback(async () => {
     setMagLoading(true);
@@ -899,8 +892,10 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     if (isGameModeRef.current && aimingRef.current.active) {
       const now = performance.now();
       const held = now - aimingRef.current.holdStart;
-      const maxPull = 190;
-      aimingRef.current.pull = clamp((held / 900) * maxPull, 0, maxPull);
+      const maxPull = 200;
+      aimingRef.current.pull = clamp((held / 700) * maxPull, 0, maxPull);
+      aimingRef.current.targetX = worldMouseX;
+      aimingRef.current.targetY = worldMouseY;
       return;
     }
 
@@ -1002,10 +997,11 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         const ny = dy / dist;
 
         const pull = aimingRef.current.pull;
-        const pullNorm = clamp(pull / 190, 0, 1);
+        const pullNorm = clamp(pull / 200, 0, 1);
 
-        const basePower = 2800;
-        const power = basePower * pullNorm * (0.35 + cuePowerRef.current * 1.65);
+        // ✅ potência REAL (antes tava fraca)
+        const basePower = 6200;
+        const power = basePower * pullNorm * (0.55 + cuePowerRef.current * 1.6);
 
         cue.vx += nx * (power / Math.max(1, cue.mass));
         cue.vy += ny * (power / Math.max(1, cue.mass));
@@ -1055,10 +1051,10 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         <>
           <div><span className="font-black">Modo Game (Bilhar)</span></div>
           <div>• A bola branca é o BTC.</div>
-          <div>• Clique no alvo.</div>
-          <div>• Segure para puxar (mais força).</div>
+          <div>• Clique e segure para puxar (mais força).</div>
           <div>• Solte para tacar.</div>
           <div>• Após tacar, o taco some por 5s.</div>
+          <div>• Caçapa: círculo entra no círculo.</div>
         </>
       );
     }
@@ -1067,10 +1063,10 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       return (
         <>
           <div><span className="font-black">Modo Variação</span></div>
-          <div>• X: Variação de preço {timeframe} (%)</div>
+          <div>• X: Variação {timeframe} (%)</div>
           <div>• Y: Volume 24h (log)</div>
-          <div>• Tamanho: |%var {timeframe}| × log(volume)</div>
-          <div>• Cor: verde/vermelho pela variação</div>
+          <div>• Tamanho: |%var| × log(volume)</div>
+          <div>• Cor: verde/vermelho</div>
         </>
       );
     }
@@ -1081,22 +1077,12 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         <div>• X: Market Cap (log)</div>
         <div>• Y: Volume 24h (log)</div>
         <div>• Tamanho: Market Cap</div>
-        <div>• Cor: verde/vermelho pela variação</div>
+        <div>• Cor: verde/vermelho</div>
       </>
     );
   }, [chartMode, timeframe, isGameMode]);
 
   // Detail computed fields
-  const detailPerf = useMemo(() => {
-    if (!detailCoin) return null;
-    return computeSparkChange(detailCoin, timeframe);
-  }, [detailCoin, timeframe]);
-
-  const detailColor = useMemo(() => {
-    if (!detailPerf) return '#dd9933';
-    return detailPerf.pct >= 0 ? '#089981' : '#f23645';
-  }, [detailPerf]);
-
   const changes = useMemo(() => {
     if (!detailCoin) return null;
     const c: any = detailCoin;
@@ -1117,28 +1103,19 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       c.price_change_percentage_7d ??
       null;
 
-    const athChange = c.ath_change_percentage ?? null;
-    const atlChange = c.atl_change_percentage ?? null;
-
-    return { p1h, p24, p7d, athChange, atlChange };
+    return { p1h, p24, p7d };
   }, [detailCoin]);
 
-  const socialLinks = useMemo(() => {
-    if (!detailCoin) return [];
-    return buildSocialLinksFromCoin(detailCoin);
-  }, [detailCoin]);
-
-  // Extra info rows: show more fields if present
-  const extraRows = useMemo(() => {
+  // ✅ detalhes em lista (2 colunas) dentro de UM box
+  const detailListRows = useMemo(() => {
     if (!detailCoin) return [];
     const c: any = detailCoin;
 
-    const rows: { k: string; v: React.ReactNode }[] = [];
-
+    const rows: { k: string; v: string }[] = [];
     const add = (k: string, v: any, fmt?: (x: any) => string) => {
       if (v === null || v === undefined) return;
       const s = fmt ? fmt(v) : String(v);
-      if (s === 'undefined' || s === 'null' || s.trim() === '') return;
+      if (!s || s === 'undefined' || s === 'null') return;
       rows.push({ k, v: s });
     };
 
@@ -1146,20 +1123,283 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     add('Rank', c.market_cap_rank ?? null);
     add('Preço', c.current_price ?? null, formatPrice);
     add('Market Cap', c.market_cap ?? null, formatCompact);
-    add('Fully Diluted Valuation', c.fully_diluted_valuation ?? null, formatCompact);
+    add('FDV', c.fully_diluted_valuation ?? null, formatCompact);
     add('Volume 24h', c.total_volume ?? null, formatCompact);
-    add('Volume/MC', (c.total_volume && c.market_cap) ? (Number(c.total_volume) / Math.max(1, Number(c.market_cap))) : null, (x) => Number(x).toFixed(3));
-    add('Circulating Supply', c.circulating_supply ?? null, (x) => Number(x).toLocaleString());
+    add('Circ. Supply', c.circulating_supply ?? null, (x) => Number(x).toLocaleString());
     add('Total Supply', c.total_supply ?? null, (x) => Number(x).toLocaleString());
     add('Max Supply', c.max_supply ?? null, (x) => Number(x).toLocaleString());
     add('ATH', c.ath ?? null, formatPrice);
-    add('ATH Date', c.ath_date ?? null, (x) => new Date(x).toLocaleString());
     add('ATL', c.atl ?? null, formatPrice);
-    add('ATL Date', c.atl_date ?? null, (x) => new Date(x).toLocaleString());
-    add('Last Updated', c.last_updated ?? null, (x) => new Date(x).toLocaleString());
+    add('Updated', c.last_updated ?? null, (x) => new Date(x).toLocaleString());
 
     return rows;
   }, [detailCoin]);
+
+  const closeDetail = () => {
+    setDetailOpen(false);
+    setDetailCoin(null);
+    setSelectedParticle(null);
+  };
+
+  // =======================
+  // Helpers: Axis & Grid
+  // =======================
+  const niceStep = (min: number, max: number, ticks: number) => {
+    const range = max - min;
+    if (!isFinite(range) || range <= 0) return 1;
+    const rough = range / Math.max(1, ticks);
+    const pow = Math.pow(10, Math.floor(Math.log10(rough)));
+    const scaled = rough / pow;
+    let nice = 1;
+    if (scaled >= 5) nice = 5;
+    else if (scaled >= 2) nice = 2;
+    else nice = 1;
+    return nice * pow;
+  };
+
+  const drawAxisAndGrid = (ctx: CanvasRenderingContext2D, now: number) => {
+    const g = getPlotGeometry();
+    if (!g) return;
+    if (isGameModeRef.current) return;
+
+    const { width, height, margin, chartW, chartH, originX, originY, s } = g;
+    const dark = isDarkRef.current;
+    const mode = chartModeRef.current;
+
+    // background overlay (subtle plot area)
+    ctx.save();
+    ctx.fillStyle = dark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)';
+    ctx.fillRect(originX, margin.top, chartW, chartH);
+    ctx.restore();
+
+    const gridColor = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
+    const axisColor = dark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)';
+    const textColor = dark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.65)';
+
+    // X ticks
+    const xTicks = 6;
+    let xVals: number[] = [];
+
+    if (mode === 'performance') {
+      const minX = s.minX;
+      const maxX = s.maxX;
+      const step = niceStep(minX, maxX, xTicks);
+      const start = Math.floor(minX / step) * step;
+      for (let v = start; v <= maxX + step * 0.5; v += step) xVals.push(v);
+    } else {
+      // log ticks for MC: 10^n
+      const minL = Math.floor(s.logMinX);
+      const maxL = Math.ceil(s.logMaxX);
+      for (let p = minL; p <= maxL; p++) xVals.push(Math.pow(10, p));
+    }
+
+    // Y ticks log volume
+    const yVals: number[] = [];
+    const minLY = Math.floor(s.logMinY);
+    const maxLY = Math.ceil(s.logMaxY);
+    for (let p = minLY; p <= maxLY; p++) yVals.push(Math.pow(10, p));
+
+    // Project
+    const projX = (v: number) => {
+      if (mode === 'valuation') {
+        const norm = (Math.log10(Math.max(1, v)) - s.logMinX) / (s.logMaxX - s.logMinX || 1);
+        return originX + norm * chartW;
+      }
+      const norm = (v - s.minX) / (s.maxX - s.minX || 1);
+      return originX + norm * chartW;
+    };
+
+    const projY = (v: number) => {
+      const norm = (Math.log10(Math.max(1, v)) - s.logMinY) / (s.logMaxY - s.logMinY || 1);
+      return margin.top + (1 - norm) * chartH;
+    };
+
+    // grid lines X
+    ctx.save();
+    ctx.strokeStyle = gridColor;
+    ctx.lineWidth = 1;
+
+    for (const xv of xVals) {
+      const x = projX(xv);
+      if (!isFinite(x)) continue;
+      ctx.beginPath();
+      ctx.moveTo(x, margin.top);
+      ctx.lineTo(x, margin.top + chartH);
+      ctx.stroke();
+    }
+
+    // grid lines Y
+    for (const yv of yVals) {
+      const y = projY(yv);
+      if (!isFinite(y)) continue;
+      ctx.beginPath();
+      ctx.moveTo(originX, y);
+      ctx.lineTo(originX + chartW, y);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // axes
+    ctx.save();
+    ctx.strokeStyle = axisColor;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(originX, margin.top);
+    ctx.lineTo(originX, originY);
+    ctx.lineTo(originX + chartW, originY);
+    ctx.stroke();
+    ctx.restore();
+
+    // labels & ticks
+    ctx.save();
+    ctx.fillStyle = textColor;
+    ctx.font = `900 12px Inter`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+
+    const xLabel = mode === 'performance' ? `Variação ${timeframeRef.current} (%)` : `Market Cap (log)`;
+    ctx.fillText(xLabel, originX + chartW / 2, originY + 54);
+
+    ctx.save();
+    ctx.translate(originX - 60, margin.top + chartH / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText('Volume 24h (log)', 0, 0);
+    ctx.restore();
+
+    // x tick text
+    ctx.font = `800 11px Inter`;
+    ctx.textBaseline = 'top';
+    for (const xv of xVals) {
+      const x = projX(xv);
+      if (!isFinite(x)) continue;
+
+      ctx.beginPath();
+      ctx.strokeStyle = axisColor;
+      ctx.lineWidth = 1;
+      ctx.moveTo(x, originY);
+      ctx.lineTo(x, originY + 6);
+      ctx.stroke();
+
+      let txt = '';
+      if (mode === 'performance') txt = `${xv.toFixed(0)}%`;
+      else txt = formatCompact(xv).replace('$', '');
+      ctx.fillStyle = textColor;
+      ctx.fillText(txt, x, originY + 10);
+    }
+
+    // y tick text
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    for (const yv of yVals) {
+      const y = projY(yv);
+      if (!isFinite(y)) continue;
+
+      ctx.beginPath();
+      ctx.strokeStyle = axisColor;
+      ctx.lineWidth = 1;
+      ctx.moveTo(originX - 6, y);
+      ctx.lineTo(originX, y);
+      ctx.stroke();
+
+      const txt = formatCompact(yv).replace('$', '');
+      ctx.fillStyle = textColor;
+      ctx.fillText(txt, originX - 10, y);
+    }
+
+    ctx.restore();
+
+    // zero line for performance
+    if (mode === 'performance') {
+      const x0 = projX(0);
+      ctx.save();
+      ctx.strokeStyle = dark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.18)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 6]);
+      ctx.beginPath();
+      ctx.moveTo(x0, margin.top);
+      ctx.lineTo(x0, margin.top + chartH);
+      ctx.stroke();
+      ctx.restore();
+    }
+  };
+
+  // =======================
+  // GAME PHYSICS
+  // =======================
+  const resolveCollisions = (particles: Particle[]) => {
+    // elastic-ish collisions
+    for (let i = 0; i < particles.length; i++) {
+      const a = particles[i];
+      if (a.isFalling) continue;
+
+      for (let j = i + 1; j < particles.length; j++) {
+        const b = particles[j];
+        if (b.isFalling) continue;
+
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const dist = Math.hypot(dx, dy);
+        const minDist = a.radius + b.radius;
+
+        if (dist > 0 && dist < minDist) {
+          const nx = dx / dist;
+          const ny = dy / dist;
+          const overlap = (minDist - dist);
+
+          // separate
+          a.x -= nx * overlap * 0.5;
+          a.y -= ny * overlap * 0.5;
+          b.x += nx * overlap * 0.5;
+          b.y += ny * overlap * 0.5;
+
+          // velocity exchange along normal
+          const dvx = b.vx - a.vx;
+          const dvy = b.vy - a.vy;
+          const relVel = dvx * nx + dvy * ny;
+
+          if (relVel < 0) {
+            const restitution = 0.92;
+            const invMa = 1 / Math.max(1, a.mass);
+            const invMb = 1 / Math.max(1, b.mass);
+
+            const impulse = -(1 + restitution) * relVel / (invMa + invMb);
+            const ix = impulse * nx;
+            const iy = impulse * ny;
+
+            a.vx -= ix * invMa;
+            a.vy -= iy * invMa;
+            b.vx += ix * invMb;
+            b.vy += iy * invMb;
+          }
+        }
+      }
+    }
+  };
+
+  const checkPockets = (p: Particle) => {
+    if (p.isFalling) return;
+    const pockets = pocketsRef.current;
+
+    for (const pocket of pockets) {
+      const dx = p.x - pocket.x;
+      const dy = p.y - pocket.y;
+      const dist = Math.hypot(dx, dy);
+
+      // ✅ critério: círculo da bola entra no círculo da caçapa
+      if (dist <= pocket.r) {
+        p.isFalling = true;
+        p.fallT = 0;
+        p.fallPocket = pocket;
+        p.fallFromX = p.x;
+        p.fallFromY = p.y;
+        p.vx = 0;
+        p.vy = 0;
+        return;
+      }
+    }
+  };
 
   // =======================
   // RAF LOOP
@@ -1186,7 +1426,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       const dark = isDarkRef.current;
       const game = isGameModeRef.current;
 
-      ctx.fillStyle = game ? (dark ? '#08110c' : '#e8f3ea') : (dark ? '#0b0f14' : '#ffffff');
+      ctx.fillStyle = game ? (dark ? '#07120c' : '#e8f3ea') : (dark ? '#0b0f14' : '#ffffff');
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.scale(dpr, dpr);
 
@@ -1209,6 +1449,9 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         ctx.restore();
       }
 
+      // ✅ ESCALA / GRID / EIXOS (voltou)
+      drawAxisAndGrid(ctx, now);
+
       const { k, x: panX, y: panY } = transformRef.current;
       const toScreenX = (val: number) => val * k + panX;
       const toScreenY = (val: number) => val * k + panY;
@@ -1219,7 +1462,56 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       for (const p of particles) {
         const viewRadius = p.targetRadius * Math.pow(k, 0.25);
         p.radius += (viewRadius - p.radius) * 0.15;
-        p.mass = Math.max(1, p.radius);
+        p.mass = Math.max(1, p.radius * (game ? 0.7 : 1));
+      }
+
+      // GAME: update physics
+      if (game) {
+        const friction = 0.985; // menos “pesado”
+        const speedStop = 6;
+
+        const minX = GAME_WALL_PAD + GAME_BALL_RADIUS;
+        const maxX = width - GAME_WALL_PAD - GAME_BALL_RADIUS;
+        const minY = GAME_WALL_PAD + GAME_BALL_RADIUS;
+        const maxY = height - GAME_WALL_PAD - GAME_BALL_RADIUS;
+
+        for (const p of particles) {
+          if (p.isFalling) {
+            // fall animation
+            p.fallT = (p.fallT || 0) + dt;
+            const t = clamp((p.fallT || 0) / 0.45, 0, 1);
+            const e = easeInOutCubic(t);
+
+            const pocket = p.fallPocket;
+            if (pocket && p.fallFromX != null && p.fallFromY != null) {
+              p.x = p.fallFromX + (pocket.x - p.fallFromX) * e;
+              p.y = p.fallFromY + (pocket.y - p.fallFromY) * e;
+              p.radius = p.targetRadius * (1 - e);
+            }
+
+            continue;
+          }
+
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+
+          p.vx *= friction;
+          p.vy *= friction;
+
+          const sp = Math.hypot(p.vx, p.vy);
+          if (sp < speedStop) { p.vx = 0; p.vy = 0; }
+
+          // bounce walls
+          if (p.x < minX) { p.x = minX; p.vx *= -0.9; }
+          if (p.x > maxX) { p.x = maxX; p.vx *= -0.9; }
+          if (p.y < minY) { p.y = minY; p.vy *= -0.9; }
+          if (p.y > maxY) { p.y = maxY; p.vy *= -0.9; }
+        }
+
+        resolveCollisions(particles);
+
+        // pockets check after collisions
+        for (const p of particles) checkPockets(p);
       }
 
       // MAP motion with tween
@@ -1271,6 +1563,86 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         }
       }
 
+      // Draw game table overlay: pockets + borders + cue stick
+      if (game) {
+        // table border
+        ctx.save();
+        ctx.strokeStyle = dark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.12)';
+        ctx.lineWidth = 6;
+        ctx.strokeRect(GAME_WALL_PAD, GAME_WALL_PAD, width - GAME_WALL_PAD * 2, height - GAME_WALL_PAD * 2);
+        ctx.restore();
+
+        // pockets
+        for (const pk of pocketsRef.current) {
+          ctx.save();
+          ctx.fillStyle = dark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.35)';
+          ctx.beginPath();
+          ctx.arc(pk.x, pk.y, pk.r, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = dark ? 'rgba(0,0,0,0.85)' : 'rgba(0,0,0,0.55)';
+          ctx.beginPath();
+          ctx.arc(pk.x, pk.y, POCKET_INNER_R, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+
+        // cue stick (only if aiming and not hidden)
+        const hide = now < cueHideUntilRef.current;
+        if (!hide && aimingRef.current.active) {
+          const cue = particlesRef.current.find(pp => String(pp.coin.id).toLowerCase() === 'bitcoin');
+          if (cue && !cue.isFalling) {
+            const tx = aimingRef.current.targetX;
+            const ty = aimingRef.current.targetY;
+
+            // stick direction opposite to shot
+            const dx = tx - cue.x;
+            const dy = ty - cue.y;
+            const dist = Math.hypot(dx, dy) || 0.0001;
+            const nx = dx / dist;
+            const ny = dy / dist;
+
+            const pull = aimingRef.current.pull;
+            const stickLen = 260;
+            const back = cue.radius + 18 + pull;
+
+            const x1 = cue.x - nx * back;
+            const y1 = cue.y - ny * back;
+            const x2 = cue.x - nx * (back + stickLen);
+            const y2 = cue.y - ny * (back + stickLen);
+
+            ctx.save();
+            ctx.lineCap = 'round';
+
+            // outer dark
+            ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+            ctx.lineWidth = 10;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+
+            // wood
+            ctx.strokeStyle = dark ? 'rgba(255,220,160,0.85)' : 'rgba(160,110,40,0.85)';
+            ctx.lineWidth = 7;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+
+            // tip
+            ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x1 - nx * 18, y1 - ny * 18);
+            ctx.stroke();
+
+            ctx.restore();
+          }
+        }
+      }
+
       // draw particles
       const st = searchTermRef.current;
       const tl = trailLengthRef.current;
@@ -1292,7 +1664,8 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
         if (isDimmed) alpha *= 0.12;
 
-        if (tl > 0 && alpha > 0.05) {
+        // trails only in map
+        if (!game && tl > 0 && alpha > 0.05) {
           const last = p.trail[p.trail.length - 1];
           const ddx = last ? screenX - last.x : 10;
           const ddy = last ? screenY - last.y : 10;
@@ -1313,7 +1686,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
             ctx.strokeStyle = grad;
             ctx.globalAlpha = alpha;
-            ctx.lineWidth = Math.min(p.radius * 0.4, 4);
+            ctx.lineWidth = Math.min(p.radius * 0.35, 4);
             ctx.stroke();
             ctx.globalAlpha = 1.0;
           }
@@ -1345,7 +1718,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
         if (p.radius > 12) {
           ctx.fillStyle = '#fff';
-          ctx.font = `bold ${Math.max(11, p.radius * 0.42)}px Inter`;
+          ctx.font = `bold ${Math.max(10, p.radius * 0.42)}px Inter`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.shadowColor = 'rgba(0,0,0,0.8)';
@@ -1370,11 +1743,8 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
     reqIdRef.current = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(reqIdRef.current);
-  }, [projectCoinToMapXY]);
+  }, [projectCoinToMapXY, getPlotGeometry]);
 
-  // =======================
-  // UI: click close, etc.
-  // =======================
   const detailHeader = useMemo(() => {
     if (!detailCoin) return null;
     return {
@@ -1385,12 +1755,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
     };
   }, [detailCoin]);
 
-  const closeDetail = () => {
-    setDetailOpen(false);
-    setDetailCoin(null);
-    setSelectedParticle(null);
-  };
-
   // =======================
   // RENDER
   // =======================
@@ -1400,14 +1764,16 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
       className="fixed inset-0 z-[2000] bg-white dark:bg-[#0b0f14] text-gray-900 dark:text-white flex flex-col overflow-hidden touch-none select-none overscroll-none h-[100dvh]"
     >
       <div className="flex justify-between items-start p-4 z-20 bg-white/80 dark:bg-black/50 backdrop-blur-sm border-b border-gray-200 dark:border-white/10 shrink-0">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 flex-wrap">
           <Coins size={28} className="text-[#dd9933]" />
           <div>
             <h3 className="text-xl font-black uppercase tracking-wider">Crypto Bubbles</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 font-bold">{status === 'demo' ? 'MODO DEMO' : isGameMode ? 'MODO GAME' : 'MODO MAPA'}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 font-bold">
+              {status === 'demo' ? 'MODO DEMO' : isGameMode ? 'MODO GAME' : 'MODO MAPA'}
+            </p>
           </div>
 
-          <div className="w-px h-8 bg-gray-200 dark:bg-white/10 mx-4"></div>
+          <div className="w-px h-8 bg-gray-200 dark:bg-white/10 mx-2"></div>
 
           <div className="flex items-center gap-2">
             <div className="flex bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10">
@@ -1417,18 +1783,15 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
               >
                 Market Cap
               </button>
-            </div>
-
-            <div className="flex items-center bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10">
               <button
                 onClick={() => setChartMode('performance')}
                 className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'performance' ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500 dark:text-gray-300'}`}
               >
-                Variação:
+                Variação
               </button>
+            </div>
 
-              <div className="w-px h-5 bg-gray-200 dark:bg-white/10 mx-1"></div>
-
+            <div className="flex items-center bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10">
               <div className="flex items-center gap-2 px-2 py-1">
                 <Wind size={14} className="text-gray-400" />
                 <select
@@ -1439,6 +1802,20 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
                   <option value="1h">1h</option>
                   <option value="24h">24h</option>
                   <option value="7d">7d</option>
+                </select>
+              </div>
+            </div>
+
+            {/* ✅ numCoins no HEADER, antes da busca */}
+            <div className="flex items-center bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10">
+              <div className="flex items-center gap-2 px-2 py-1">
+                <span className="text-xs font-black text-gray-500 dark:text-gray-400">#</span>
+                <select
+                  value={numCoins}
+                  onChange={e => setNumCoins(parseInt(e.target.value))}
+                  className="bg-white dark:bg-[#2f3032] text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs font-black border border-gray-200 dark:border-white/10 outline-none"
+                >
+                  {[50, 100, 150, 200, 250].map(n => <option key={n} value={n}>{n}</option>)}
                 </select>
               </div>
             </div>
@@ -1511,7 +1888,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         </div>
       </div>
 
-      {/* SETTINGS */}
+      {/* SETTINGS (sem numCoins aqui) */}
       {settingsOpen && (
         <div
           className="absolute top-24 right-4 bg-white/90 dark:bg-black/80 p-4 rounded-lg border border-gray-200 dark:border-white/10 backdrop-blur-md w-80 z-30 shadow-xl"
@@ -1531,22 +1908,6 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
             >
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isGameMode ? 'translate-x-6' : 'translate-x-1'}`} />
             </button>
-          </div>
-
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Coins size={14} />
-              <span className="text-xs font-black uppercase tracking-wider"># Moedas</span>
-            </div>
-
-            <select
-              value={numCoins}
-              onChange={e => setNumCoins(parseInt(e.target.value))}
-              className="bg-white dark:bg-[#2f3032] text-gray-900 dark:text-gray-100 px-2 py-1.5 rounded text-xs border border-gray-200 dark:border-white/10 outline-none"
-              onWheel={(e) => e.stopPropagation()}
-            >
-              {[50, 100, 150, 200, 250].map(n => <option key={n} value={n}>{n} moedas</option>)}
-            </select>
           </div>
 
           <div className="mt-4 space-y-4">
@@ -1612,22 +1973,22 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
         </div>
       )}
 
-      {/* DETAIL MODAL (DECENTE) */}
+      {/* DETAIL MODAL (compacto e magazine embaixo) */}
       {detailOpen && detailCoin && (
         <div
           className="absolute inset-0 z-[60] flex items-center justify-center bg-black/55"
           onMouseDown={() => closeDetail()}
         >
           <div
-            className="w-[94vw] max-w-[980px] rounded-2xl border border-gray-200 dark:border-white/10 bg-white/95 dark:bg-black/80 backdrop-blur-md shadow-2xl p-5"
+            className="w-[94vw] max-w-[920px] max-h-[88vh] overflow-auto rounded-2xl border border-gray-200 dark:border-white/10 bg-white/95 dark:bg-black/80 backdrop-blur-md shadow-2xl p-5"
             onMouseDown={(e) => e.stopPropagation()}
           >
             {/* Header */}
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-center gap-4">
-                <img src={detailHeader?.image} alt={detailHeader?.name} className="w-14 h-14 rounded-2xl" />
+                <img src={detailHeader?.image} alt={detailHeader?.name} className="w-12 h-12 rounded-2xl" />
                 <div>
-                  <div className="text-2xl font-black leading-tight">{detailHeader?.name}</div>
+                  <div className="text-xl font-black leading-tight">{detailHeader?.name}</div>
                   <div className="mt-1 flex items-center gap-2 text-xs font-bold text-gray-500 dark:text-gray-400">
                     <span className="px-2 py-1 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5">
                       {detailHeader?.symbol}
@@ -1637,7 +1998,7 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
                     </span>
                     <a
                       className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10"
-                      href={(detailCoin as any)?.link || (detailCoin as any)?.links?.homepage?.[0] || '#'}
+                      href={(detailCoin as any)?.link || '#'}
                       target="_blank"
                       rel="noreferrer"
                       title="Abrir fonte"
@@ -1658,278 +2019,214 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
               </button>
             </div>
 
-            {/* Main grid */}
-            <div className="mt-5 grid grid-cols-12 gap-4">
-              {/* Left: Metrics */}
-              <div className="col-span-12 lg:col-span-7">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <div className="rounded-2xl p-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10">
-                    <div className="text-xs font-black text-gray-500 dark:text-gray-400">Preço</div>
-                    <div className="text-lg font-black mt-1">{formatPrice((detailCoin as any).current_price)}</div>
-                  </div>
+            {/* Variações (chips compactos) */}
+            <div className="mt-4 rounded-2xl p-4 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <BarChart2 size={16} className="text-[#dd9933]" />
+                  <div className="text-sm font-black">Variações</div>
+                </div>
+                <div className="text-xs font-bold text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                  <Clock size={14} />
+                  <span>1h / 24h / 7d</span>
+                </div>
+              </div>
 
-                  <div className="rounded-2xl p-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10">
-                    <div className="text-xs font-black text-gray-500 dark:text-gray-400">Market Cap</div>
-                    <div className="text-lg font-black mt-1">{formatCompact((detailCoin as any).market_cap)}</div>
-                  </div>
-
-                  <div className="rounded-2xl p-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10">
-                    <div className="text-xs font-black text-gray-500 dark:text-gray-400">Volume 24h</div>
-                    <div className="text-lg font-black mt-1">{formatCompact((detailCoin as any).total_volume)}</div>
-                  </div>
-
-                  <div className="rounded-2xl p-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10">
-                    <div className="text-xs font-black text-gray-500 dark:text-gray-400">FDV</div>
-                    <div className="text-lg font-black mt-1">{formatCompact((detailCoin as any).fully_diluted_valuation)}</div>
-                  </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <div className="px-3 py-2 rounded-xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30">
+                  <div className="text-[11px] font-black text-gray-500 dark:text-gray-400">1h</div>
+                  <div className="text-sm font-black" style={{ color: pctColor(changes?.p1h as any) }}>{fmtPct(changes?.p1h as any)}</div>
                 </div>
 
-                {/* Variations row */}
-                <div className="mt-4 rounded-2xl p-4 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <BarChart2 size={16} className="text-[#dd9933]" />
-                      <div className="text-sm font-black">Variações</div>
-                    </div>
-
-                    <div className="text-xs font-bold text-gray-500 dark:text-gray-400 flex items-center gap-2">
-                      <Clock size={14} />
-                      <span>1h / 24h / 7d</span>
-                    </div>
-                  </div>
-
-                  <div className="mt-3 grid grid-cols-3 gap-3">
-                    <div className="rounded-xl p-3 border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30">
-                      <div className="text-xs font-black text-gray-500 dark:text-gray-400">1h</div>
-                      <div className="text-xl font-black mt-1" style={{ color: pctColor(changes?.p1h as any) }}>
-                        {fmtPct(changes?.p1h as any)}
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl p-3 border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30">
-                      <div className="text-xs font-black text-gray-500 dark:text-gray-400">24h</div>
-                      <div className="text-xl font-black mt-1" style={{ color: pctColor(changes?.p24 as any) }}>
-                        {fmtPct(changes?.p24 as any)}
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl p-3 border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30">
-                      <div className="text-xs font-black text-gray-500 dark:text-gray-400">7d</div>
-                      <div className="text-xl font-black mt-1" style={{ color: pctColor(changes?.p7d as any) }}>
-                        {fmtPct(changes?.p7d as any)}
-                      </div>
-                    </div>
-                  </div>
-
-                  {(changes?.athChange != null || changes?.atlChange != null) && (
-                    <div className="mt-3 grid grid-cols-2 gap-3">
-                      <div className="rounded-xl p-3 border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30">
-                        <div className="text-xs font-black text-gray-500 dark:text-gray-400">ATH change</div>
-                        <div className="text-base font-black mt-1" style={{ color: pctColor(changes?.athChange as any) }}>
-                          {fmtPct(changes?.athChange as any)}
-                        </div>
-                      </div>
-                      <div className="rounded-xl p-3 border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30">
-                        <div className="text-xs font-black text-gray-500 dark:text-gray-400">ATL change</div>
-                        <div className="text-base font-black mt-1" style={{ color: pctColor(changes?.atlChange as any) }}>
-                          {fmtPct(changes?.atlChange as any)}
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                <div className="px-3 py-2 rounded-xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30">
+                  <div className="text-[11px] font-black text-gray-500 dark:text-gray-400">24h</div>
+                  <div className="text-sm font-black" style={{ color: pctColor(changes?.p24 as any) }}>{fmtPct(changes?.p24 as any)}</div>
                 </div>
 
-                {/* Extra details table */}
-                <div className="mt-4 rounded-2xl border border-gray-200 dark:border-white/10 overflow-hidden">
-                  <div className="px-4 py-3 bg-gray-100/70 dark:bg-white/5 border-b border-gray-200 dark:border-white/10 flex items-center justify-between">
-                    <div className="text-sm font-black">Detalhes</div>
-                    <div className="text-xs font-bold text-gray-500 dark:text-gray-400 flex items-center gap-2">
-                      <Calendar size={14} />
-                      <span>dados do endpoint</span>
-                    </div>
-                  </div>
-
-                  <div className="p-4 bg-white/70 dark:bg-black/30">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                      {extraRows.map((r) => (
-                        <div key={r.k} className="flex items-center justify-between gap-3 rounded-xl p-3 border border-gray-200 dark:border-white/10 bg-white/60 dark:bg-white/5">
-                          <div className="text-xs font-black text-gray-500 dark:text-gray-400">{r.k}</div>
-                          <div className="text-sm font-black text-gray-900 dark:text-gray-100 text-right">{r.v}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                <div className="px-3 py-2 rounded-xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30">
+                  <div className="text-[11px] font-black text-gray-500 dark:text-gray-400">7d</div>
+                  <div className="text-sm font-black" style={{ color: pctColor(changes?.p7d as any) }}>{fmtPct(changes?.p7d as any)}</div>
                 </div>
+              </div>
+            </div>
 
-                {/* Social */}
-                {socialLinks.length > 0 && (
-                  <div className="mt-4 rounded-2xl p-4 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10">
-                    <div className="text-sm font-black mb-3">Redes sociais</div>
-                    <div className="flex flex-wrap gap-2">
-                      {socialLinks.map((s) => (
+            {/* Detalhes (lista em 2 colunas, sem “dados do endpoint”) */}
+            <div className="mt-4 rounded-2xl border border-gray-200 dark:border-white/10 overflow-hidden">
+              <div className="px-4 py-3 bg-gray-100/70 dark:bg-white/5 border-b border-gray-200 dark:border-white/10 flex items-center justify-between">
+                <div className="text-sm font-black">Detalhes</div>
+              </div>
+
+              <div className="p-4 bg-white/70 dark:bg-black/30">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                  {detailListRows.map((r) => (
+                    <div key={r.k} className="flex items-center justify-between gap-3 rounded-xl px-3 py-2 border border-gray-200 dark:border-white/10 bg-white/60 dark:bg-white/5">
+                      <div className="text-[11px] font-black text-gray-500 dark:text-gray-400">{r.k}</div>
+                      <div className="text-xs font-black text-gray-900 dark:text-gray-100 text-right">{r.v}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* ✅ Redes sociais do site */}
+            <div className="mt-4 rounded-2xl p-4 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10">
+              <div className="text-sm font-black mb-3">Redes sociais</div>
+              <div className="flex flex-wrap gap-2">
+                {SITE_SOCIALS.map((s) => (
+                  <a
+                    key={`${s.type}:${s.url}`}
+                    href={normalizeUrl(s.url)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
+                    title={s.label}
+                  >
+                    <span className="text-gray-700 dark:text-gray-200">
+                      <SocialIcon type={s.type} />
+                    </span>
+                    <span className="text-xs font-black">{s.label}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+
+            {/* ✅ MAGAZINE sempre embaixo */}
+            <div className="mt-4 rounded-2xl border border-gray-200 dark:border-white/10 overflow-hidden bg-gray-50 dark:bg-white/5">
+              <div className="px-4 py-3 border-b border-gray-200 dark:border-white/10 flex items-center justify-between">
+                <div className="text-sm font-black">Magazine</div>
+
+                <div className="flex items-center gap-2">
+                  <a
+                    href={MAGAZINE_FALLBACK_LINK_BASE}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-2 py-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30 hover:bg-gray-100 dark:hover:bg-white/10 text-xs font-black inline-flex items-center gap-1"
+                    title="Abrir Magazine"
+                  >
+                    <ExternalLink size={14} />
+                    <span>Abrir</span>
+                  </a>
+
+                  <button
+                    onClick={goMagPrev}
+                    className="p-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30 hover:bg-gray-100 dark:hover:bg-white/10"
+                    title="Anterior"
+                    disabled={magPageCount <= 1}
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <button
+                    onClick={goMagNext}
+                    className="p-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30 hover:bg-gray-100 dark:hover:bg-white/10"
+                    title="Próximo"
+                    disabled={magPageCount <= 1}
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-4">
+                {magLoading && (
+                  <div className="text-sm font-bold text-gray-500 dark:text-gray-400">
+                    Carregando últimas do Magazine...
+                  </div>
+                )}
+
+                {!magLoading && magError && (
+                  <div className="text-sm font-bold text-red-600 dark:text-red-400">
+                    Falha ao carregar: {magError}
+                  </div>
+                )}
+
+                {!magLoading && !magError && magVisible.length === 0 && (
+                  <div className="text-sm font-bold text-gray-500 dark:text-gray-400">
+                    Sem posts disponíveis.
+                  </div>
+                )}
+
+                {!magLoading && !magError && magVisible.length > 0 && (
+                  <div className="space-y-3">
+                    {magVisible.map((p) => {
+                      const img = pickFeatured(p);
+                      const title = safeTitle(p?.title?.rendered || '');
+                      const excerpt = stripHtml(p?.excerpt?.rendered || '').slice(0, 120);
+                      const dt = p?.date ? new Date(p.date) : null;
+
+                      return (
                         <a
-                          key={`${s.type}:${s.url}`}
-                          href={s.url}
+                          key={p.id}
+                          href={p.link}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
-                          title={s.label}
+                          className="group block rounded-2xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors overflow-hidden"
+                          title={title}
                         >
-                          <span className="text-gray-700 dark:text-gray-200">
-                            <SocialIcon type={s.type} />
-                          </span>
-                          <span className="text-xs font-black">{s.label}</span>
+                          <div className="flex gap-3 p-3">
+                            <div className="w-20 h-14 rounded-xl overflow-hidden border border-gray-200 dark:border-white/10 bg-gray-200/60 dark:bg-white/5 shrink-0">
+                              {img ? (
+                                <img src={img} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-xs font-black text-gray-500 dark:text-gray-400">
+                                  NEWS
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-black text-gray-900 dark:text-gray-100 line-clamp-2">
+                                {title}
+                              </div>
+                              <div className="mt-1 text-xs font-bold text-gray-500 dark:text-gray-400 line-clamp-2">
+                                {excerpt || 'Abrir matéria'}
+                              </div>
+
+                              {dt && (
+                                <div className="mt-2 text-[11px] font-black text-gray-400 dark:text-gray-500 flex items-center gap-2">
+                                  <Calendar size={12} />
+                                  <span>{dt.toLocaleDateString()}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </a>
-                      ))}
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* previews */}
+                {magPosts.length > 0 && (
+                  <div className="mt-4 pt-3 border-t border-gray-200 dark:border-white/10">
+                    <div className="text-[11px] font-black text-gray-500 dark:text-gray-400 mb-2">
+                      Últimas 6 (previews)
+                    </div>
+                    <div className="grid grid-cols-6 gap-2">
+                      {magPosts.slice(0, 6).map((p, idx) => {
+                        const img = pickFeatured(p);
+                        const active = (magIndex === 0 && idx < 3) || (magIndex === 1 && idx >= 3);
+                        return (
+                          <button
+                            key={p.id}
+                            onClick={() => setMagIndex(idx < 3 ? 0 : 1)}
+                            className={`h-10 rounded-lg overflow-hidden border transition-colors ${
+                              active ? 'border-[#dd9933]' : 'border-gray-200 dark:border-white/10'
+                            } bg-gray-200/60 dark:bg-white/5 hover:opacity-90`}
+                            title={safeTitle(p?.title?.rendered || '')}
+                          >
+                            {img ? (
+                              <img src={img} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-[10px] font-black text-gray-500 dark:text-gray-400">
+                                {idx + 1}
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
-              </div>
-
-              {/* Right: Magazine carousel */}
-              <div className="col-span-12 lg:col-span-5">
-                <div className="rounded-2xl border border-gray-200 dark:border-white/10 overflow-hidden bg-gray-50 dark:bg-white/5">
-                  <div className="px-4 py-3 border-b border-gray-200 dark:border-white/10 flex items-center justify-between">
-                    <div className="text-sm font-black">Magazine</div>
-
-                    <div className="flex items-center gap-2">
-                      <a
-                        href={MAGAZINE_FALLBACK_LINK_BASE}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="px-2 py-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30 hover:bg-gray-100 dark:hover:bg-white/10 text-xs font-black inline-flex items-center gap-1"
-                        title="Abrir Magazine"
-                      >
-                        <ExternalLink size={14} />
-                        <span>Abrir</span>
-                      </a>
-
-                      <button
-                        onClick={goMagPrev}
-                        className="p-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30 hover:bg-gray-100 dark:hover:bg-white/10"
-                        title="Anterior"
-                        disabled={magPageCount <= 1}
-                      >
-                        <ChevronLeft size={16} />
-                      </button>
-                      <button
-                        onClick={goMagNext}
-                        className="p-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30 hover:bg-gray-100 dark:hover:bg-white/10"
-                        title="Próximo"
-                        disabled={magPageCount <= 1}
-                      >
-                        <ChevronRight size={16} />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="p-4">
-                    {magLoading && (
-                      <div className="text-sm font-bold text-gray-500 dark:text-gray-400">
-                        Carregando últimas do Magazine...
-                      </div>
-                    )}
-
-                    {!magLoading && magError && (
-                      <div className="text-sm font-bold text-red-600 dark:text-red-400">
-                        Falha ao carregar: {magError}
-                      </div>
-                    )}
-
-                    {!magLoading && !magError && magVisible.length === 0 && (
-                      <div className="text-sm font-bold text-gray-500 dark:text-gray-400">
-                        Sem posts disponíveis.
-                      </div>
-                    )}
-
-                    {!magLoading && !magError && magVisible.length > 0 && (
-                      <div className="space-y-3">
-                        {magVisible.map((p) => {
-                          const img = pickFeatured(p);
-                          const title = safeTitle(p?.title?.rendered || '');
-                          const excerpt = stripHtml(p?.excerpt?.rendered || '').slice(0, 120);
-                          const dt = p?.date ? new Date(p.date) : null;
-
-                          return (
-                            <a
-                              key={p.id}
-                              href={p.link}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="group block rounded-2xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors overflow-hidden"
-                              title={title}
-                            >
-                              <div className="flex gap-3 p-3">
-                                <div className="w-20 h-16 rounded-xl overflow-hidden border border-gray-200 dark:border-white/10 bg-gray-200/60 dark:bg-white/5 shrink-0">
-                                  {img ? (
-                                    <img src={img} alt="" className="w-full h-full object-cover" />
-                                  ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-xs font-black text-gray-500 dark:text-gray-400">
-                                      NEWS
-                                    </div>
-                                  )}
-                                </div>
-
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-sm font-black text-gray-900 dark:text-gray-100 line-clamp-2">
-                                    {title}
-                                  </div>
-                                  <div className="mt-1 text-xs font-bold text-gray-500 dark:text-gray-400 line-clamp-2">
-                                    {excerpt || 'Abrir matéria'}
-                                  </div>
-
-                                  {dt && (
-                                    <div className="mt-2 text-[11px] font-black text-gray-400 dark:text-gray-500 flex items-center gap-2">
-                                      <Calendar size={12} />
-                                      <span>{dt.toLocaleDateString()}</span>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </a>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* Previews footer (6 thumbs) */}
-                    {magPosts.length > 0 && (
-                      <div className="mt-4 pt-3 border-t border-gray-200 dark:border-white/10">
-                        <div className="text-[11px] font-black text-gray-500 dark:text-gray-400 mb-2">
-                          Últimas 6 (previews)
-                        </div>
-                        <div className="grid grid-cols-6 gap-2">
-                          {magPosts.slice(0, 6).map((p, idx) => {
-                            const img = pickFeatured(p);
-                            const active = (magIndex === 0 && idx < 3) || (magIndex === 1 && idx >= 3);
-                            return (
-                              <button
-                                key={p.id}
-                                onClick={() => setMagIndex(idx < 3 ? 0 : 1)}
-                                className={`h-10 rounded-lg overflow-hidden border transition-colors ${
-                                  active ? 'border-[#dd9933]' : 'border-gray-200 dark:border-white/10'
-                                } bg-gray-200/60 dark:bg-white/5 hover:opacity-90`}
-                                title={safeTitle(p?.title?.rendered || '')}
-                              >
-                                {img ? (
-                                  <img src={img} alt="" className="w-full h-full object-cover" />
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center text-[10px] font-black text-gray-500 dark:text-gray-400">
-                                    {idx + 1}
-                                  </div>
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="mt-3 text-[11px] font-bold text-gray-500 dark:text-gray-400">
-                  Dica: o carrossel troca automático a cada ~6.5s, em blocos de 3.
-                </div>
               </div>
             </div>
 

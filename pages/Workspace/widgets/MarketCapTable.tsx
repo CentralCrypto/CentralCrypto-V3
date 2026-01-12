@@ -218,6 +218,9 @@ const [priceFlash, setPriceFlash] = useState<Record<string, 'up' | 'down' | null
 const prevPriceRef = useRef<Record<string, number>>({});
 const flashTimersRef = useRef<Record<string, number>>({});
 
+// ✅ Reset icon spin (1x por clique)
+const [resetRot, setResetRot] = useState(0);
+
 const flushPending = useCallback(() => {
 const payload = pendingRef.current;
 pendingRef.current = {};
@@ -1368,8 +1371,10 @@ title={title}
 );
 };
 
-// ✅ Reset “voltou o ícone” e realmente faz algo útil.
+// ✅ Reset “voltou o ícone” e realmente faz algo útil + giro 360° no clique.
 const handleResetUI = () => {
+setResetRot(r => r + 360);
+
 setColOrder(DEFAULT_COLS);
 setCatColOrder(CAT_DEFAULT_COLS);
 setSortConfig({ key: 'market_cap_rank', direction: 'asc' });
@@ -1510,13 +1515,11 @@ Bybit
 )}
 </div>
 
-{/* ✅ Nome da categoria no cabeçalho (depois do BUY) */}
+{/* ✅ Header da categoria: texto solto (sem cara de botão) */}
 {activeCategoryLabel ? (
-<div className="ml-2 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032]">
-<span className="text-sm font-black text-gray-700 dark:text-slate-200 whitespace-nowrap">
+<span className="ml-2 text-sm font-black text-[#dd9933] whitespace-nowrap">
 {activeCategoryLabel}
 </span>
-</div>
 ) : null}
 </div>
 
@@ -1544,13 +1547,21 @@ title="Quantidade por página"
 
 <Paginator compact />
 
-{/* ✅ Reset voltou */}
+{/* ✅ Reset com 1 giro */}
 <button
 onClick={handleResetUI}
 className="p-2.5 hover:bg-gray-200 dark:hover:bg-slate-700 rounded-lg text-gray-500 transition-colors"
 title="Reset UI"
 >
+<span
+className="inline-flex"
+style={{
+transform: `rotate(${resetRot}deg)`,
+transition: 'transform 520ms ease'
+}}
+>
 <RotateCcw size={22} />
+</span>
 </button>
 
 <button
@@ -1701,17 +1712,25 @@ onError={(e) => { e.currentTarget.style.display = 'none'; }}
 }
 
 if (cid === 'price') {
+const flashBg =
+flash === 'up'
+? FLASH_GREEN_BG
+: flash === 'down'
+? FLASH_RED_BG
+: 'transparent';
+
 return (
 <td
 key={cid}
 className="p-2 text-right font-mono text-[15px] font-black text-gray-900 dark:text-slate-200 transition-colors"
-style={flash === 'up'
-? { backgroundColor: FLASH_GREEN_BG }
-: flash === 'down'
-? { backgroundColor: FLASH_RED_BG }
-: undefined}
+>
+{/* ✅ PISCA NO BACKGROUND DO TEXTO (não na borda / não no td inteiro) */}
+<span
+className="inline-block rounded-md px-2 py-1"
+style={flash ? { backgroundColor: flashBg } : undefined}
 >
 {formatUSD(livePrice)}
+</span>
 </td>
 );
 }
