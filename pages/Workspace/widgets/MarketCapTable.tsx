@@ -1348,7 +1348,7 @@ title: string;
 const activeStyle =
 variant === 'gainers'
 ? { backgroundColor: #122A21, color: '#ffffff', borderColor: 'transparent' }
-: { backgroundColor: #C33B40: '#ffffff', borderColor: 'transparent' };
+: { backgroundColor: #C33B40, color: '#ffffff', borderColor: 'transparent' };
 
 return (
 <button
