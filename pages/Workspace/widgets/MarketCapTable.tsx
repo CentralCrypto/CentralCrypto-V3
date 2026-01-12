@@ -40,8 +40,8 @@ import { getTranslations } from '../../../locales';
 const GREEN = '#548F3F';
 const RED = '#ff6961';
 
-const FLASH_GREEN_BG = 'rgba(38, 71, 56, 0.22)';
-const FLASH_RED_BG = 'rgba(75, 44, 50, 0.22)';
+const FLASH_GREEN_BG = '#548F3F';
+const FLASH_RED_BG = '#ff6961';
 
 const formatUSD = (val: number, compact = false) => {
 if (val === undefined || val === null) return '---';
