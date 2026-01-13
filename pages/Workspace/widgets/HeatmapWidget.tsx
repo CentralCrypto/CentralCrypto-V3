@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { ResponsiveContainer, Treemap, Tooltip } from 'recharts';
 import { createPortal } from 'react-dom';
-import { Loader2, Maximize2, X, RefreshCw, AlertTriangle, BarChart2, PieChart, Minimize2 } from 'lucide-react';
+import { Loader2, Maximize2, RefreshCw, AlertTriangle, BarChart2, PieChart, Minimize2 } from 'lucide-react';
 import { fetchWithFallback } from '../services/api';
 import { DashboardItem } from '../../../types';
 
@@ -13,14 +13,16 @@ interface Props {
   language?: string;
 }
 
-// Escala de Cores solicitada (Degradê com mais valores)
+// Escala de cores expandida (Degradê rico)
 const getColorForChange = (change: number) => {
+    if (change >= 15) return '#052e16'; // Very Dark Green
     if (change >= 7) return '#14532d'; // Green 900
     if (change >= 5) return '#15803d'; // Green 700
     if (change >= 3) return '#16a34a'; // Green 600
     if (change >= 2) return '#22c55e'; // Green 500
     if (change > 0)  return '#4ade80'; // Green 400
     
+    if (change <= -15) return '#450a0a'; // Very Dark Red
     if (change <= -7) return '#7f1d1d'; // Red 900
     if (change <= -5) return '#991b1b'; // Red 800
     if (change <= -3) return '#dc2626'; // Red 600
@@ -37,15 +39,17 @@ const formatUSD = (val: number) => {
     return `$${val.toLocaleString()}`;
 };
 
-// Componente customizado para desenhar cada bloco do Treemap
+// Componente visual de cada bloco do Treemap
 const CustomTreemapContent = (props: any) => {
   const { x, y, width, height, name, change } = props;
   
-  if (!width || !height || width < 0 || height < 0) return null;
+  if (!width || !height || width < 5 || height < 5) return null;
 
   const color = getColorForChange(change);
-  const fontSize = Math.min(width / 4, height / 4, 18);
-  const showText = width > 35 && height > 25;
+  // Fonte responsiva baseada no tamanho do bloco
+  const fontSizeSymbol = Math.min(width / 3, height / 3, 24);
+  const fontSizePct = Math.min(width / 5, height / 5, 14);
+  const showText = width > 40 && height > 35;
 
   return (
     <g>
@@ -56,9 +60,9 @@ const CustomTreemapContent = (props: any) => {
         height={height}
         style={{
           fill: color,
-          stroke: '#1a1c1e', // Borda escura para contraste
+          stroke: '#1a1c1e', // Borda escura para separar blocos
           strokeWidth: 2,
-          rx: 4, // Leve arredondamento
+          rx: 4, 
           ry: 4,
         }}
       />
@@ -66,21 +70,21 @@ const CustomTreemapContent = (props: any) => {
         <>
           <text
             x={x + width / 2}
-            y={y + height / 2 - fontSize * 0.3}
+            y={y + height / 2 - fontSizeSymbol * 0.2}
             textAnchor="middle"
             fill="#fff"
             fontWeight="900"
-            fontSize={fontSize}
-            style={{ pointerEvents: 'none', textShadow: '0px 1px 3px rgba(0,0,0,0.8)' }}
+            fontSize={fontSizeSymbol}
+            style={{ pointerEvents: 'none', textShadow: '0px 2px 4px rgba(0,0,0,0.6)' }}
           >
             {name}
           </text>
           <text
             x={x + width / 2}
-            y={y + height / 2 + fontSize * 0.9}
+            y={y + height / 2 + fontSizeSymbol * 0.8}
             textAnchor="middle"
-            fill="rgba(255,255,255,0.9)"
-            fontSize={fontSize * 0.75}
+            fill="rgba(255,255,255,0.95)"
+            fontSize={fontSizePct}
             fontWeight="700"
             style={{ pointerEvents: 'none', textShadow: '0px 1px 2px rgba(0,0,0,0.8)' }}
           >
@@ -96,26 +100,30 @@ const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
     return (
-      <div className="bg-[#1a1c1e] border border-gray-700 p-3 rounded-lg shadow-2xl text-xs z-[9999] min-w-[180px]">
-        <div className="font-black text-base mb-2 text-white flex justify-between items-center">
-            <span>{data.fullName}</span>
-            <span className="text-gray-400 text-xs font-mono">#{data.rank}</span>
-        </div>
-        <div className="flex flex-col gap-1.5">
-            <div className="flex justify-between gap-4 border-b border-gray-800 pb-1">
-                <span className="text-gray-400">Preço:</span>
-                <span className="font-mono font-bold text-white">${data.price < 1 ? data.price.toFixed(6) : data.price?.toLocaleString()}</span>
+      <div className="bg-[#1a1c1e] border border-gray-700 p-4 rounded-xl shadow-2xl text-xs z-[9999] min-w-[200px]">
+        <div className="flex justify-between items-start mb-2">
+            <div className="flex flex-col">
+                <span className="font-black text-lg text-white">{data.name}</span>
+                <span className="text-gray-400 text-[10px] uppercase font-bold">{data.fullName}</span>
             </div>
-            <div className="flex justify-between gap-4">
-                <span className="text-gray-400">Market Cap:</span>
+            <span className="bg-gray-800 text-gray-300 px-2 py-1 rounded text-[10px] font-bold">Rank #{data.rank}</span>
+        </div>
+        
+        <div className="space-y-2 border-t border-gray-800 pt-2">
+            <div className="flex justify-between gap-6">
+                <span className="text-gray-400 font-medium">Preço Atual</span>
+                <span className="font-mono font-bold text-white">${data.price < 1 ? data.price.toFixed(6) : data.price.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between gap-6">
+                <span className="text-gray-400 font-medium">Market Cap</span>
                 <span className="font-mono font-bold text-blue-400">{formatUSD(data.mcap)}</span>
             </div>
-            <div className="flex justify-between gap-4">
-                <span className="text-gray-400">Volume 24h:</span>
+            <div className="flex justify-between gap-6">
+                <span className="text-gray-400 font-medium">Volume 24h</span>
                 <span className="font-mono font-bold text-yellow-500">{formatUSD(data.vol)}</span>
             </div>
-            <div className="flex justify-between gap-4 mt-1 pt-1 border-t border-gray-800">
-                <span className="text-gray-400 font-bold">Var. 24h:</span>
+            <div className="flex justify-between gap-6 pt-2 border-t border-gray-800 mt-1">
+                <span className="text-gray-400 font-bold uppercase">Variação 24h</span>
                 <span className={`font-mono font-black text-sm ${data.change >= 0 ? 'text-green-500' : 'text-red-500'}`}>
                     {data.change > 0 ? '+' : ''}{data.change?.toFixed(2)}%
                 </span>
@@ -131,7 +139,11 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
   const [rawData, setRawData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [metric, setMetric] = useState<'mcap' | 'vol'>('mcap');
+  
+  // 'mcap' = Tamanho por Capitalização
+  // 'change' = Tamanho por Volatilidade (Absoluta de variação)
+  const [metric, setMetric] = useState<'mcap' | 'change'>('mcap');
+  
   const [isFullscreen, setIsFullscreen] = useState(item?.isMaximized || false);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -141,7 +153,6 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
       setLoading(true);
       setError('');
       try {
-        // Endpoint Lite solicitado
         const response = await fetchWithFallback('/cachecko/cachecko_lite.json');
         
         let list: any[] = [];
@@ -154,11 +165,11 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
         if (list.length > 0) {
           setRawData(list);
         } else {
-          setError('Sem dados.');
+          setError('Sem dados disponíveis.');
         }
       } catch (e) {
         console.error(e);
-        setError('Erro API.');
+        setError('Erro ao carregar dados.');
       } finally {
         setLoading(false);
       }
@@ -172,7 +183,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
 
     const leaves = rawData
       .map((coin: any, index: number) => {
-        // Mapeamento Lite (s, n, p, p24, mc, v) com fallback para Full (symbol, name, ...)
+        // Fallback robusto de propriedades
         const symbol = String(coin.s || coin.symbol || '').toUpperCase();
         const name = String(coin.n || coin.name || symbol);
         const price = Number(coin.p || coin.current_price || 0);
@@ -180,9 +191,18 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
         const mcap = Number(coin.mc || coin.market_cap || 0);
         const vol = Number(coin.v || coin.total_volume || 0);
 
-        const sizeValue = metric === 'mcap' ? mcap : vol;
+        if (!symbol || (!mcap && !vol)) return null;
 
-        if (!symbol || sizeValue <= 0) return null;
+        // Definição do tamanho do bloco
+        let sizeValue = 0;
+        if (metric === 'mcap') {
+            sizeValue = mcap;
+        } else {
+            // "Var. Price 24h" -> Tamanho baseado na intensidade da mudança (positiva ou negativa)
+            // Usamos Math.abs(change) para que grandes quedas também sejam grandes blocos
+            // Adicionamos um fator base para moedas estáveis não sumirem completamente
+            sizeValue = Math.pow(Math.abs(change) + 1, 3) * (Math.log10(mcap || 1000)); 
+        }
 
         return {
             name: symbol,
@@ -195,9 +215,9 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
             rank: index + 1
         };
       })
-      .filter((p): p is any => p !== null)
-      .sort((a, b) => b.size - a.size)
-      .slice(0, 50); // Top 50
+      .filter((p): p is any => p !== null && p.size > 0)
+      .sort((a, b) => b.size - a.size) // Ordenar do maior para o menor
+      .slice(0, 50); // Top 50 para melhor performance visual
 
     return [{ name: 'Market', children: leaves }];
   }, [rawData, metric]);
@@ -220,15 +240,17 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
                     <div className="flex bg-black/40 p-0.5 rounded-lg border border-gray-700">
                         <button 
                             onClick={() => setMetric('mcap')} 
-                            className={`px-3 py-1 text-[10px] font-bold uppercase rounded flex items-center gap-1 transition-all ${metric === 'mcap' ? 'bg-[#dd9933] text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                            className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded flex items-center gap-1.5 transition-all ${metric === 'mcap' ? 'bg-[#dd9933] text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                            title="Tamanho proporcional ao Market Cap"
                         >
-                            <PieChart size={12} /> MarketCap
+                            <PieChart size={14} /> MarketCap
                         </button>
                         <button 
-                            onClick={() => setMetric('vol')} 
-                            className={`px-3 py-1 text-[10px] font-bold uppercase rounded flex items-center gap-1 transition-all ${metric === 'vol' ? 'bg-[#dd9933] text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                            onClick={() => setMetric('change')} 
+                            className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded flex items-center gap-1.5 transition-all ${metric === 'change' ? 'bg-[#dd9933] text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                            title="Tamanho proporcional à Variação de Preço (Volatilidade)"
                         >
-                            <BarChart2 size={12} /> Volume
+                            <BarChart2 size={14} /> Var. Price 24h
                         </button>
                     </div>
                 )}
@@ -253,20 +275,20 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
         </div>
 
         {/* Legenda de Escala Melhorada */}
-        <div className="bg-[#121416] border-b border-gray-800 px-4 py-1.5 flex items-center justify-between shrink-0 overflow-x-auto no-scrollbar">
-            <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest mr-4 whitespace-nowrap">Var. Price 24h</span>
-            <div className="flex items-center gap-1 flex-1 min-w-[200px]">
-                <div className="flex-1 h-2 rounded-sm bg-[#7f1d1d]" title="-7% ou pior"></div>
-                <div className="flex-1 h-2 rounded-sm bg-[#dc2626]" title="-5%"></div>
-                <div className="flex-1 h-2 rounded-sm bg-[#ef4444]" title="-3%"></div>
-                <div className="flex-1 h-2 rounded-sm bg-[#f87171]" title="-2%"></div>
-                <div className="flex-1 h-2 rounded-sm bg-[#334155]" title="0%"></div>
-                <div className="flex-1 h-2 rounded-sm bg-[#4ade80]" title="+2%"></div>
-                <div className="flex-1 h-2 rounded-sm bg-[#22c55e]" title="+3%"></div>
-                <div className="flex-1 h-2 rounded-sm bg-[#16a34a]" title="+5%"></div>
-                <div className="flex-1 h-2 rounded-sm bg-[#14532d]" title="+7% ou melhor"></div>
+        <div className="bg-[#121416] border-b border-gray-800 px-4 py-2 flex items-center justify-between shrink-0 overflow-x-auto no-scrollbar">
+            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mr-4 whitespace-nowrap">Escala (Var. Price 24h)</span>
+            <div className="flex items-center gap-1 flex-1 min-w-[200px] h-3">
+                <div className="flex-1 h-full rounded-sm bg-[#7f1d1d]" title="-7% ou pior"></div>
+                <div className="flex-1 h-full rounded-sm bg-[#dc2626]" title="-5%"></div>
+                <div className="flex-1 h-full rounded-sm bg-[#ef4444]" title="-3%"></div>
+                <div className="flex-1 h-full rounded-sm bg-[#f87171]" title="-2%"></div>
+                <div className="flex-1 h-full rounded-sm bg-[#334155]" title="0%"></div>
+                <div className="flex-1 h-full rounded-sm bg-[#4ade80]" title="+2%"></div>
+                <div className="flex-1 h-full rounded-sm bg-[#22c55e]" title="+3%"></div>
+                <div className="flex-1 h-full rounded-sm bg-[#16a34a]" title="+5%"></div>
+                <div className="flex-1 h-full rounded-sm bg-[#14532d]" title="+7% ou melhor"></div>
             </div>
-            <div className="flex text-[8px] font-mono font-bold text-gray-500 gap-8 ml-4">
+            <div className="flex text-[9px] font-mono font-bold text-gray-500 gap-10 ml-4">
                 <span>-7%</span>
                 <span>0%</span>
                 <span>+7%</span>
@@ -274,17 +296,20 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
         </div>
 
         {/* Área do Gráfico */}
-        <div className="flex-1 w-full min-h-0 bg-[#1a1c1e] relative">
+        {/* Forçando altura mínima e relativa para garantir renderização do Recharts */}
+        <div className="flex-1 w-full relative min-h-[400px] bg-[#1a1c1e]">
             {loading && treeData.length === 0 ? (
                 <div className="absolute inset-0 flex items-center justify-center z-20">
-                    <div className="flex flex-col items-center gap-2">
-                        <Loader2 className="animate-spin text-[#dd9933]" size={32} />
-                        <span className="text-[10px] uppercase text-gray-500 tracking-widest">Carregando Mercado...</span>
+                    <div className="flex flex-col items-center gap-3">
+                        <Loader2 className="animate-spin text-[#dd9933]" size={40} />
+                        <span className="text-xs font-bold uppercase text-gray-500 tracking-widest animate-pulse">Carregando Mapa...</span>
                     </div>
                 </div>
             ) : error ? (
-                <div className="absolute inset-0 flex items-center justify-center z-20 text-red-500 gap-2">
-                    <AlertTriangle size={24} /> <span>{error}</span>
+                <div className="absolute inset-0 flex flex-col items-center justify-center z-20 text-red-500 gap-3 p-4 text-center">
+                    <AlertTriangle size={32} /> 
+                    <span className="font-bold">{error}</span>
+                    <button onClick={() => setRefreshKey(k => k + 1)} className="px-4 py-2 bg-red-900/30 hover:bg-red-900/50 rounded text-red-200 text-xs font-bold uppercase">Tentar Novamente</button>
                 </div>
             ) : (
                 <ResponsiveContainer width="100%" height="100%">
@@ -294,10 +319,10 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
                         stroke="#1a1c1e"
                         fill="#1a1c1e"
                         content={<CustomTreemapContent />}
-                        animationDuration={800}
-                        aspectRatio={4/3}
+                        animationDuration={600}
+                        aspectRatio={16/9} // Melhor proporção para telas wide
                     >
-                        <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#dd9933', strokeWidth: 2 }} />
+                        <Tooltip content={<CustomTooltip />} cursor={false} allowEscapeViewBox={{ x: true, y: true }} />
                     </Treemap>
                 </ResponsiveContainer>
             )}
@@ -315,7 +340,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
   }
 
   return (
-    <div className="w-full h-full overflow-hidden rounded-xl border border-gray-800 shadow-xl bg-[#1a1c1e]">
+    <div className="w-full h-full overflow-hidden rounded-xl border border-gray-800 shadow-xl bg-[#1a1c1e] flex flex-col">
         {WidgetContent}
     </div>
   );
