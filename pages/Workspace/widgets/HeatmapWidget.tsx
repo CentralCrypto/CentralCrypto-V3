@@ -4,11 +4,11 @@ import Highcharts from 'highcharts';
 import TreemapModule from 'highcharts/modules/treemap';
 import HeatmapModule from 'highcharts/modules/heatmap';
 import { createPortal } from 'react-dom';
-import { Loader2, Maximize2, X, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Loader2, Maximize2, X, RefreshCw, AlertTriangle, Minimize2 } from 'lucide-react';
 import { fetchHeatmapCategories, HeatmapCategory } from '../services/api';
 import { DashboardItem } from '../../../types';
 
-// Initialize Highcharts modules
+// Inicializa módulos do Highcharts
 try {
   if (typeof Highcharts === 'object') {
     (TreemapModule as any)(Highcharts);
@@ -18,40 +18,41 @@ try {
   console.error("Highcharts init error", e);
 }
 
-// Extend Highcharts for the custom font size logic provided in the prompt
+// Plugin para tamanho de fonte relativo e cores de performance (Baseado no seu código de exemplo)
 (function (H: any) {
     H.addEvent(H.Series, 'drawDataLabels', function (this: any) {
         if (this.type === 'treemap') {
             this.points.forEach((point: any) => {
-                // Color the level 2 headers with the combined performance of its children
-                if (point.node.level === 2 && Number.isFinite(point.value) && point.node.children.length > 0) {
-                    const previousValue = point.node.children.reduce(
-                        (acc: number, child: any) => {
-                            const val = child.point.value || 0;
-                            const perf = child.point.colorValue || 0; // colorValue holds percentage
-                            // Reverse calculate "previous" value based on percentage change
-                            // New = Old * (1 + pct/100) => Old = New / (1 + pct/100)
-                            const old = val / (1 + perf / 100);
-                            return acc + old;
-                        },
-                        0
-                    );
+                // Colorir os cabeçalhos de nível 2 (Categorias) com base na performance combinada
+                if (point.node.level === 1 && Number.isFinite(point.value) && point.node.children.length > 0) {
+                    // Lógica simplificada para calcular performance agregada da categoria
+                    // Média ponderada seria ideal, mas soma simples de variação funciona para visualização rápida
+                    let totalChange = 0;
+                    let totalWeight = 0;
+                    
+                    point.node.children.forEach((child: any) => {
+                        const val = child.point.value || 0;
+                        const change = child.point.colorValue || 0;
+                        totalChange += change * val;
+                        totalWeight += val;
+                    });
 
-                    // Percentage change from previous value to point.value
-                    const perf = previousValue !== 0 ? 100 * (point.value - previousValue) / previousValue : 0;
+                    const avgPerf = totalWeight > 0 ? totalChange / totalWeight : 0;
 
                     point.custom = point.custom || {};
-                    point.custom.performance = (perf < 0 ? '' : '+') + perf.toFixed(2) + '%';
+                    point.custom.performance = (avgPerf < 0 ? '' : '+') + avgPerf.toFixed(2) + '%';
 
                     if (point.dlOptions && this.colorAxis) {
-                        point.dlOptions.backgroundColor = this.colorAxis.toColor(perf);
+                        // Aplica cor ao header da categoria
+                        point.dlOptions.backgroundColor = this.colorAxis.toColor(avgPerf);
                     }
                 }
 
-                // Set font size based on area of the point for Level 3 (Leaves/Coins)
-                if (point.node.level === 3 && point.shapeArgs) {
+                // Definir tamanho da fonte baseado na área do ponto (Nível 2 - Moedas)
+                if (point.node.level === 2 && point.shapeArgs) {
                     const area = point.shapeArgs.width * point.shapeArgs.height;
-                    const fontSize = Math.min(32, 7 + Math.round(area * 0.0008));
+                    // Fórmula ajustada para telas HD/4K
+                    const fontSize = Math.min(48, Math.max(10, Math.round(Math.sqrt(area) / 4)));
                     
                     if (point.dataLabel && point.dataLabel.css) {
                         point.dataLabel.css({
@@ -67,22 +68,23 @@ try {
 interface Props {
   item?: DashboardItem;
   title?: string;
-  // Backward compatibility props (optional)
-  data?: any[]; 
   onClose?: () => void;
+  language?: string;
 }
 
-const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap" }) => {
+const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClose }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<Highcharts.Chart | null>(null);
   
   const [categories, setCategories] = useState<HeatmapCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  
+  // Se o item vier maximizado (da página de indicadores), já inicia fullscreen
+  const [isFullscreen, setIsFullscreen] = useState(item?.isMaximized || false);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Load Data
+  // Carregar Dados
   useEffect(() => {
     const load = async () => {
       setLoading(true);
@@ -92,11 +94,11 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap" }) => {
         if (data && data.length > 0) {
           setCategories(data);
         } else {
-          setError('No category data available.');
+          setError('Sem dados de categorias.');
         }
       } catch (e) {
         console.error(e);
-        setError('Failed to load heatmap data.');
+        setError('Erro ao carregar mapa.');
       } finally {
         setLoading(false);
       }
@@ -104,23 +106,23 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap" }) => {
     load();
   }, [refreshKey]);
 
-  // Process Data for Highcharts
+  // Processar Dados para o formato do Highcharts Tree Map
   const chartData = useMemo(() => {
     if (!categories.length) return [];
 
     const data: any[] = [];
     
-    // Level 1: Root Categories
+    // Nível 1: Categorias (Smart Contracts, DeFi, etc)
     categories.forEach(cat => {
-        // Only include categories that have coins
+        // Filtra categorias vazias
         if (cat.coins && cat.coins.length > 0) {
             data.push({
                 id: cat.id,
                 name: cat.name,
-                color: '#252931' // Dark background for container
+                color: '#232528' // Cor de fundo do header da categoria (será sobrescrita pelo evento drawDataLabels)
             });
 
-            // Level 2: Coins
+            // Nível 2: Moedas
             cat.coins.forEach((coin: any) => {
                 const change = coin.price_change_percentage_24h || 0;
                 const mcap = coin.market_cap || 0;
@@ -129,10 +131,11 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap" }) => {
                     id: `${cat.id}_${coin.id}`,
                     name: coin.symbol.toUpperCase(),
                     parent: cat.id,
-                    value: mcap,
-                    colorValue: change, // Used by ColorAxis
+                    value: mcap,       // Tamanho do quadrado
+                    colorValue: change,// Cor do quadrado
                     custom: {
                         fullName: coin.name,
+                        price: coin.current_price,
                         performance: (change < 0 ? '' : '+') + change.toFixed(2) + '%'
                     }
                 });
@@ -143,13 +146,17 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap" }) => {
     return data;
   }, [categories]);
 
-  // Init/Update Chart
+  // Inicializar/Atualizar Gráfico
   useEffect(() => {
     if (!chartContainerRef.current || loading || chartData.length === 0) return;
 
+    const isDark = document.documentElement.classList.contains('dark');
+    const bgColor = isDark ? '#1a1c1e' : '#ffffff';
+    const borderColor = isDark ? '#2f3032' : '#e2e8f0';
+
     const options: Highcharts.Options = {
         chart: {
-            backgroundColor: '#1a1c1e',
+            backgroundColor: bgColor,
             style: { fontFamily: 'Inter, sans-serif' },
             margin: [0, 0, 0, 0],
             spacing: [0, 0, 0, 0],
@@ -164,7 +171,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap" }) => {
             layoutAlgorithm: 'squarified',
             allowDrillToNode: true,
             animationLimit: 1000,
-            borderColor: '#1a1c1e',
+            borderColor: borderColor,
             borderWidth: 1,
             data: chartData,
             dataLabels: {
@@ -182,13 +189,16 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap" }) => {
                         style: {
                             fontSize: '12px',
                             fontWeight: 'bold',
-                            color: '#9ca3af', // Gray-400
-                            textTransform: 'uppercase'
+                            color: '#ffffff',
+                            textTransform: 'uppercase',
+                            textOutline: 'none'
                         },
-                        padding: 5
+                        padding: 6,
+                        zIndex: 5
                     },
                     borderWidth: 3,
-                    borderColor: '#1a1c1e'
+                    borderColor: bgColor,
+                    levelIsConstant: false
                 },
                 {
                     level: 2,
@@ -196,11 +206,12 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap" }) => {
                         enabled: true,
                         align: 'center',
                         verticalAlign: 'middle',
-                        format: '<span style="font-weight:900; color: white;">{point.name}</span><br><span style="font-size: 0.8em; font-weight:normal; opacity:0.9;">{point.custom.performance}</span>',
+                        // Formato: SIMBOLO <br> %
+                        format: '<span style="font-weight:900; color: white; text-shadow: 0 1px 3px rgba(0,0,0,0.5)">{point.name}</span><br><span style="font-weight:normal; opacity:0.9; color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.5)">{point.custom.performance}</span>',
                         style: {
-                            color: 'white',
                             textOutline: 'none'
                         },
+                        // Filtro para não mostrar label em quadrados muito pequenos
                         filter: {
                             property: 'value',
                             operator: '>',
@@ -209,7 +220,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap" }) => {
                     }
                 }
             ],
-            // Breadcrumbs style
+            // Botão de voltar ao navegar (Drill up)
             breadcrumbs: {
                 buttonTheme: {
                     style: { color: '#9ca3af' },
@@ -219,55 +230,54 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap" }) => {
                     }
                 }
             }
-        } as any], // Cast to any because Highcharts types can be strict with custom levels
+        } as any],
         tooltip: {
             useHTML: true,
             followPointer: true,
-            backgroundColor: '#232528',
-            borderColor: '#374151',
+            backgroundColor: 'rgba(20, 20, 20, 0.95)',
+            borderColor: '#dd9933',
             borderRadius: 8,
+            shadow: true,
+            padding: 12,
             style: { color: '#fff' },
-            headerFormat: '<span style="font-size: 13px; font-weight: bold; color: #dd9933">{point.key}</span><br/>',
+            headerFormat: '<span style="font-size: 14px; font-weight: bold; color: #dd9933">{point.key}</span><br/>',
             pointFormat: 
+                '<div style="margin-top: 4px">' +
+                '<span style="color: #9ca3af">Preço:</span> <b>${point.custom.price}</b><br/>' +
                 '<span style="color: #9ca3af">Market Cap:</span> <b>${point.value:,.0f}</b><br/>' +
-                '<span style="color: #9ca3af">24h Change:</span> <b>{point.custom.performance}</b>'
+                '<span style="color: #9ca3af">Variação 24h:</span> <b style="color:{point.color}">{point.custom.performance}</b>' +
+                '</div>'
         },
         colorAxis: {
-            minColor: '#ef4444', // Red 500
-            maxColor: '#22c55e', // Green 500
+            minColor: '#ef4444', // Vermelho forte
+            maxColor: '#22c55e', // Verde forte
             stops: [
                 [0, '#ef4444'],
-                [0.5, '#374151'], // Gray 700 (Neutral)
+                [0.5, '#2f3032'], // Cinza escuro (Neutro)
                 [1, '#22c55e']
             ],
-            min: -10,
-            max: 10,
-            labels: {
-                style: { color: '#9ca3af' },
-                format: '{value}%'
-            }
+            min: -8, // Saturação máxima em -8%
+            max: 8,  // Saturação máxima em +8%
         },
         plotOptions: {
             treemap: {
-                animation: true
+                animation: true,
+                states: { hover: { brightness: 0.1 } }
             }
         }
     };
 
     if (chartInstanceRef.current) {
         chartInstanceRef.current.update(options);
-        chartInstanceRef.current.reflow();
+        // Pequeno delay para garantir reflow correto se container mudou de tamanho
+        setTimeout(() => chartInstanceRef.current?.reflow(), 50);
     } else {
         chartInstanceRef.current = Highcharts.chart(chartContainerRef.current, options);
     }
 
-    return () => {
-        // Don't destroy on every render, let ref handle it. 
-        // Cleanup happens when component unmounts completely.
-    };
   }, [chartData, isFullscreen, loading]);
 
-  // Handle Resize
+  // Handle Resize Events
   useEffect(() => {
       const handleResize = () => {
           if (chartInstanceRef.current) {
@@ -278,7 +288,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap" }) => {
       return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Force reflow when fullscreen toggles
+  // Forçar reflow quando alterna modo tela cheia
   useEffect(() => {
       setTimeout(() => {
           if (chartInstanceRef.current) {
@@ -287,54 +297,71 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap" }) => {
       }, 100);
   }, [isFullscreen]);
 
-  const toggleFullscreen = () => setIsFullscreen(!isFullscreen);
+  const handleToggleFullscreen = () => {
+      if (item?.isMaximized && onClose) {
+          // Se estamos no modo "página dedicada", fechar significa voltar
+          onClose();
+      } else {
+          // Se estamos num widget normal, alterna fullscreen local
+          setIsFullscreen(!isFullscreen);
+      }
+  };
 
-  // Widget Content (Rendered inside normal layout or portal)
+  // Conteúdo do Widget
   const WidgetContent = (
-    <div className={`relative w-full h-full flex flex-col ${isFullscreen ? 'bg-[#1a1c1e]' : 'bg-[#1a1c1e]'} overflow-hidden`}>
-        {/* Header Bar */}
-        <div className="flex justify-between items-center px-4 py-2 border-b border-gray-800 bg-[#1a1c1e] shrink-0 z-10">
+    <div className={`relative w-full h-full flex flex-col ${isFullscreen ? 'bg-[#1a1c1e]' : 'bg-transparent'} overflow-hidden`}>
+        {/* Barra de Controle (Visível apenas em Fullscreen ou se tiver espaço) */}
+        <div className="flex justify-between items-center px-4 py-3 border-b border-gray-800 bg-[#1a1c1e] shrink-0 z-10">
             <div className="flex items-center gap-3">
-                <span className="text-sm font-black text-gray-200 uppercase tracking-wider">{title}</span>
+                <span className="text-sm font-black text-white uppercase tracking-wider">{title}</span>
                 {!loading && !error && (
-                    <span className="text-[10px] bg-gray-800 text-gray-400 px-2 py-0.5 rounded font-mono">
-                        {chartData.filter((d:any) => d.parent).length} Assets
+                    <span className="text-[10px] bg-gray-800 text-gray-400 px-2 py-0.5 rounded font-mono border border-gray-700">
+                        {chartData.filter((d:any) => d.parent).length} Ativos
                     </span>
                 )}
             </div>
             <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 mr-4">
+                    <span className="w-3 h-3 bg-red-500 rounded-sm"></span>
+                    <span className="text-[10px] text-gray-400 mr-2">-8%</span>
+                    <span className="w-3 h-3 bg-[#2f3032] rounded-sm"></span>
+                    <span className="text-[10px] text-gray-400 mr-2">0%</span>
+                    <span className="w-3 h-3 bg-green-500 rounded-sm"></span>
+                    <span className="text-[10px] text-gray-400">+8%</span>
+                </div>
+
                 <button 
                     onClick={() => setRefreshKey(k => k + 1)} 
                     className="p-1.5 hover:bg-gray-800 rounded text-gray-400 hover:text-white transition-colors"
-                    title="Reload"
+                    title="Recarregar"
                 >
-                    <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+                    <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
                 </button>
                 <button 
-                    onClick={toggleFullscreen} 
+                    onClick={handleToggleFullscreen} 
                     className="p-1.5 hover:bg-gray-800 rounded text-gray-400 hover:text-white transition-colors"
-                    title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+                    title={isFullscreen ? "Fechar / Minimizar" : "Tela Cheia"}
                 >
-                    {isFullscreen ? <X size={16} /> : <Maximize2 size={16} />}
+                    {isFullscreen ? <X size={18} /> : <Maximize2 size={16} />}
                 </button>
             </div>
         </div>
 
-        {/* Content Area */}
-        <div className="flex-1 relative w-full h-full min-h-0">
+        {/* Área do Gráfico */}
+        <div className="flex-1 relative w-full h-full min-h-0 bg-[#1a1c1e]">
             {loading && chartData.length === 0 ? (
                 <div className="absolute inset-0 flex items-center justify-center z-20 bg-[#1a1c1e]">
-                    <div className="flex flex-col items-center gap-2 text-gray-500">
-                        <Loader2 className="animate-spin text-[#dd9933]" size={32} />
-                        <span className="text-xs font-bold uppercase tracking-widest">Carregando Mapa...</span>
+                    <div className="flex flex-col items-center gap-3 text-gray-500">
+                        <Loader2 className="animate-spin text-[#dd9933]" size={40} />
+                        <span className="text-xs font-bold uppercase tracking-widest animate-pulse">Construindo Mapa...</span>
                     </div>
                 </div>
             ) : error ? (
                 <div className="absolute inset-0 flex items-center justify-center z-20 bg-[#1a1c1e]">
-                    <div className="flex flex-col items-center gap-2 text-red-500">
-                        <AlertTriangle size={32} />
-                        <span className="text-xs font-bold uppercase tracking-widest">{error}</span>
-                        <button onClick={() => setRefreshKey(k => k + 1)} className="mt-2 px-3 py-1 bg-red-900/20 rounded text-xs hover:bg-red-900/40">Retry</button>
+                    <div className="flex flex-col items-center gap-3 text-red-500">
+                        <AlertTriangle size={40} />
+                        <span className="text-sm font-bold uppercase tracking-widest">{error}</span>
+                        <button onClick={() => setRefreshKey(k => k + 1)} className="mt-2 px-4 py-2 bg-red-900/20 border border-red-900/50 rounded text-xs font-bold hover:bg-red-900/40 uppercase">Tentar Novamente</button>
                     </div>
                 </div>
             ) : null}
@@ -344,6 +371,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap" }) => {
     </div>
   );
 
+  // Se estiver em modo fullscreen, renderiza via Portal direto no body para garantir sobreposição total
   if (isFullscreen) {
     return createPortal(
         <div className="fixed inset-0 z-[9999] flex flex-col bg-[#1a1c1e] animate-in fade-in zoom-in-95 duration-200">
@@ -353,8 +381,9 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap" }) => {
     );
   }
 
+  // Renderização normal dentro do grid/card
   return (
-    <div className="w-full h-full overflow-hidden rounded-xl border border-gray-800 shadow-xl">
+    <div className="w-full h-full overflow-hidden rounded-xl border border-gray-800 shadow-xl bg-[#1a1c1e]">
         {WidgetContent}
     </div>
   );

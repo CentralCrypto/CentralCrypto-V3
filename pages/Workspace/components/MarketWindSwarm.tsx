@@ -90,37 +90,6 @@ inferredMinutesPerPoint: minutesPerPoint
 const WATERMARK_LOCAL = '/logo2-transp.png';
 const WATERMARK_REMOTE = '';
 
-const drawWatermark = (
-ctx: CanvasRenderingContext2D,
-width: number,
-height: number,
-img: HTMLImageElement | null,
-isDark: boolean,
-isGameMode: boolean
-) => {
-if (!img || !img.complete || img.naturalWidth <= 0 || img.naturalHeight <= 0) return;
-
-const maxW = width * 0.78;
-const maxH = height * 0.78;
-const scale = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight);
-
-const w = img.naturalWidth * scale;
-const h = img.naturalHeight * scale;
-
-const x = (width - w) / 2;
-const y = (height - h) / 2;
-
-const alphaBase = isDark ? 0.055 : 0.035;
-const alpha = isGameMode ? alphaBase * 0.85 : alphaBase;
-
-ctx.save();
-ctx.globalAlpha = alpha;
-ctx.imageSmoothingEnabled = true;
-ctx.imageSmoothingQuality = 'high';
-ctx.drawImage(img, x, y, w, h);
-ctx.restore();
-};
-
 // ========================
 // GAME CONFIG
 // ========================
@@ -128,9 +97,7 @@ const GAME_BALL_RADIUS = 26;
 const GAME_CUE_RADIUS = 34;
 const GAME_WALL_PAD = 14;
 
-// ========================
-// AIMING (2-CLICK) STATE
-// ========================
+// AIMING (2-CLICK)
 type AimPhase = 'idle' | 'aiming' | 'powering_ready' | 'powering';
 
 const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
@@ -160,25 +127,29 @@ const [settingsOpen, setSettingsOpen] = useState(false);
 const [legendTipOpen, setLegendTipOpen] = useState(false);
 
 const [isGameMode, setIsGameMode] = useState(false);
-
-// ✅ Modo Livre agora só no Settings
 const [isFreeMode, setIsFreeMode] = useState(false);
 
+// MAP count (quando não for game)
 const [numCoins, setNumCoins] = useState(50);
+
+// GAME count (bolas alvo: 10/20/30). BTC é a branca.
+const [gameBallsCount, setGameBallsCount] = useState(20);
 
 // default 100%
 const [floatStrengthRaw, setFloatStrengthRaw] = useState(1.0);
 const [trailLength, setTrailLength] = useState(25);
 
 // força base (só aparece no game)
-const [cuePowerRaw, setCuePowerRaw] = useState(0.6);
+const [cuePowerRaw, setCuePowerRaw] = useState(0.7);
 
 const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
 
-// Detail panel
 const [detailOpen, setDetailOpen] = useState(false);
 const [detailCoin, setDetailCoin] = useState<ApiCoin | null>(null);
 const [detailAnimKey, setDetailAnimKey] = useState(0);
+
+// contador de encaçapadas (só game)
+const [pottedCount, setPottedCount] = useState(0);
 
 // Transform
 const transformRef = useRef({ k: 1, x: 0, y: 0 });
@@ -187,7 +158,6 @@ const panStartRef = useRef({ clientX: 0, clientY: 0, x: 0, y: 0 });
 const draggedParticleRef = useRef<Particle | null>(null);
 const lastMousePosRef = useRef<{ x: number; y: number } | null>(null);
 
-// ✅ Reset “força” redraw imediato
 const invalidateRef = useRef(0);
 const invalidate = useCallback(() => { invalidateRef.current++; }, []);
 
@@ -218,6 +188,10 @@ maxPull: 220
 });
 
 const cueHideUntilRef = useRef<number>(0);
+
+// “thrust” curto do taco ao bater
+const cueThrustRef = useRef<{ t0: number; active: boolean }>({ t0: 0, active: false });
+
 const watermarkRef = useRef<HTMLImageElement | null>(null);
 
 const statsRef = useRef<{
@@ -237,6 +211,34 @@ selectedParticleRef.current = selectedParticle;
 
 const detailOpenRef = useRef(detailOpen);
 detailOpenRef.current = detailOpen;
+
+// WebAudio “se der”
+const audioRef = useRef<AudioContext | null>(null);
+const playBeep = useCallback((type: 'hit' | 'pocket') => {
+try {
+if (!audioRef.current) audioRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+const ctx = audioRef.current;
+if (!ctx) return;
+
+const now = ctx.currentTime;
+const osc = ctx.createOscillator();
+const gain = ctx.createGain();
+
+osc.type = 'sine';
+osc.frequency.value = type === 'hit' ? 180 : 520;
+
+gain.gain.setValueAtTime(0.0001, now);
+gain.gain.exponentialRampToValueAtTime(type === 'hit' ? 0.08 : 0.06, now + 0.01);
+gain.gain.exponentialRampToValueAtTime(0.0001, now + (type === 'hit' ? 0.09 : 0.12));
+
+osc.connect(gain);
+gain.connect(ctx.destination);
+
+osc.start(now);
+osc.stop(now + (type === 'hit' ? 0.10 : 0.13));
+} catch {
+}
+}, []);
 
 // lock scroll
 useEffect(() => {
@@ -301,7 +303,6 @@ if (particlesRef.current.length === 0) setStatus('error');
 }
 }, []);
 
-// ✅ Reset agora funciona sempre (pan/zoom)
 const resetZoom = useCallback(() => {
 transformRef.current = { k: 1, x: 0, y: 0 };
 invalidate();
@@ -334,7 +335,6 @@ const volFactor = Math.log10(vol + 1);
 return absPct * volFactor;
 }, [getCoinAbsPct]);
 
-// LOG + top proporcional
 const computeTargetRadius = useCallback((
 coin: any,
 mode: ChartMode,
@@ -361,7 +361,7 @@ const tTop = clamp(Math.sqrt(mc / Math.max(1, maxMc)), 0, 1);
 const wTop = rank <= topN ? (1 - (rank - 1) / (topN - 1)) : 0;
 const t = clamp((tLog * (1 - 0.55 * wTop)) + (tTop * (0.55 * wTop)), 0, 1);
 
-return 22 + t * 95; // 22..117
+return 22 + t * 95;
 }
 
 const t = clamp((metric - minR) / (maxR - minR || 1), 0, 1);
@@ -369,7 +369,20 @@ return 15 + t * 70;
 }, [sizeMetricPerf]);
 
 const recomputeStatsAndTargets = useCallback((coinsList: ApiCoin[], mode: ChartMode) => {
-const topCoins = coinsList.slice(0, numCoins);
+let topCoins: ApiCoin[] = [];
+
+if (isGameMode) {
+const btc = coinsList.find(c => String(c.id).toLowerCase() === 'bitcoin');
+const others = coinsList.filter(c => String(c.id).toLowerCase() !== 'bitcoin');
+const need = Math.min(50, Math.max(10, gameBallsCount)) ; // bolas alvo (10/20/30), max 50
+topCoins = [
+...(btc ? [btc] : []),
+...others.slice(0, need)
+];
+} else {
+topCoins = coinsList.slice(0, numCoins);
+}
+
 if (topCoins.length === 0) return;
 
 const xData: number[] = [];
@@ -428,7 +441,7 @@ p.mass = Math.max(1, p.targetRadius);
 
 p.color = isBTC ? '#ffffff' : baseColor;
 }
-}, [getCoinPerfPct, numCoins, sizeMetricPerf, isGameMode, computeTargetRadius]);
+}, [getCoinPerfPct, numCoins, sizeMetricPerf, isGameMode, computeTargetRadius, gameBallsCount]);
 
 const setupGameLayout = useCallback(() => {
 const canvas = canvasRef.current;
@@ -554,7 +567,6 @@ p.y = projectY(yVal);
 }
 }, [getCoinPerfPct]);
 
-// init + resize
 useEffect(() => {
 loadData();
 const interval = setInterval(loadData, 60000);
@@ -595,7 +607,6 @@ window.removeEventListener('resize', resizeCanvas);
 };
 }, [loadData]);
 
-// global mouseup (shot)
 useEffect(() => {
 const up = () => handleMouseUp();
 window.addEventListener('mouseup', up);
@@ -603,12 +614,64 @@ return () => window.removeEventListener('mouseup', up);
 // eslint-disable-next-line react-hooks/exhaustive-deps
 }, []);
 
-// BUILD PARTICLES ONLY on coins/numCoins
 useEffect(() => {
-const topCoins = coins.slice(0, numCoins);
-if (topCoins.length === 0) return;
+// ✅ regra de exclusão
+if (isGameMode) setIsFreeMode(false);
+}, [isGameMode]);
 
-for (const c of topCoins) {
+// enter/exit game
+useEffect(() => {
+if (isGameMode) {
+resetZoom();
+setSettingsOpen(false);
+setLegendTipOpen(false);
+setHoveredParticle(null);
+setSelectedParticle(null);
+
+aimingRef.current.phase = 'idle';
+aimingRef.current.pull = 0;
+cueHideUntilRef.current = 0;
+
+setPottedCount(0); // zera placar ao entrar
+setupGameLayout();
+} else {
+resetZoom();
+setSettingsOpen(false);
+setLegendTipOpen(false);
+
+aimingRef.current.phase = 'idle';
+aimingRef.current.pull = 0;
+
+if (draggedParticleRef.current) {
+draggedParticleRef.current.isFixed = false;
+draggedParticleRef.current = null;
+}
+
+snapBackToMap();
+}
+}, [isGameMode, resetZoom, setupGameLayout, snapBackToMap]);
+
+const buildParticleSet = useCallback(() => {
+if (coins.length === 0) return;
+
+let pick: ApiCoin[] = [];
+
+if (isGameMode) {
+const btc = coins.find(c => String(c.id).toLowerCase() === 'bitcoin');
+const others = coins.filter(c => String(c.id).toLowerCase() !== 'bitcoin');
+
+const wantTargets = Math.min(50, Math.max(10, gameBallsCount));
+pick = [
+...(btc ? [btc] : []),
+...others.slice(0, wantTargets)
+];
+} else {
+pick = coins.slice(0, numCoins);
+}
+
+if (pick.length === 0) return;
+
+for (const c of pick) {
 if (c?.image && !imageCache.current.has(c.image)) {
 const img = new Image();
 img.src = c.image;
@@ -620,13 +683,9 @@ const existingMap = new Map<string, Particle>(particlesRef.current.map(p => [p.i
 const w = stageRef.current?.clientWidth || 1000;
 const h = stageRef.current?.clientHeight || 800;
 
-const newParticles: Particle[] = topCoins.map(coin => {
+const newParticles: Particle[] = pick.map(coin => {
 const existing = existingMap.get(coin.id);
-
-if (existing) {
-existing.coin = coin;
-return existing;
-}
+if (existing) { existing.coin = coin; return existing; }
 
 return {
 id: coin.id,
@@ -649,76 +708,66 @@ fallPocket: null
 });
 
 particlesRef.current = newParticles;
-
-// targets/colors
 recomputeStatsAndTargets(coins, chartModeRef.current);
-}, [coins, numCoins, recomputeStatsAndTargets]);
+}, [coins, numCoins, recomputeStatsAndTargets, isGameMode, gameBallsCount]);
 
-// update targets/colors when mode/timeframe changes (no rebuild)
+useEffect(() => {
+buildParticleSet();
+}, [buildParticleSet]);
+
 useEffect(() => {
 if (coins.length === 0) return;
 recomputeStatsAndTargets(coins, chartMode);
 }, [chartMode, timeframe, coins, recomputeStatsAndTargets]);
 
-// ✅ Regras de exclusão: game ganha de livre
-useEffect(() => {
-if (isGameMode) {
-setIsFreeMode(false);
+const hitTestParticle = useCallback((clientX: number, clientY: number) => {
+const canvasEl = canvasRef.current;
+if (!canvasEl) return null;
+
+const rect = canvasEl.getBoundingClientRect();
+const mouseX = clientX - rect.left;
+const mouseY = clientY - rect.top;
+
+const { k, x, y } = transformRef.current;
+
+for (let i = particlesRef.current.length - 1; i >= 0; i--) {
+const p = particlesRef.current[i];
+if (p.isFalling) continue;
+
+const sx = p.x * k + x;
+const sy = p.y * k + y;
+const sr = p.radius;
+
+const dx = sx - mouseX;
+const dy = sy - mouseY;
+
+if (dx * dx + dy * dy < (sr + 5) * (sr + 5)) return p;
 }
-}, [isGameMode]);
+return null;
+}, []);
 
-// enter/exit game
-useEffect(() => {
-if (isGameMode) {
-resetZoom();
-setDetailOpen(false);
-setSelectedParticle(null);
-setHoveredParticle(null);
-
-aimingRef.current.phase = 'idle';
-aimingRef.current.pull = 0;
-
-cueHideUntilRef.current = 0;
-
-setupGameLayout();
-} else {
-resetZoom();
-setDetailOpen(false);
-setSettingsOpen(false);
-setLegendTipOpen(false);
-
-aimingRef.current.phase = 'idle';
-aimingRef.current.pull = 0;
-
-if (draggedParticleRef.current) {
-draggedParticleRef.current.isFixed = false;
-draggedParticleRef.current = null;
-}
-
-snapBackToMap();
-}
-}, [isGameMode, resetZoom, setupGameLayout, snapBackToMap]);
+const openDetailForParticle = useCallback((p: Particle) => {
+setSelectedParticle(p);
+setDetailCoin(p.coin);
+setDetailAnimKey(v => v + 1);
+setDetailOpen(true);
+}, []);
 
 const handleMouseMove = (e: React.MouseEvent) => {
-const canvas = canvasRef.current; if (!canvas) return;
-
 const wpos = screenToWorld(e.clientX, e.clientY);
-const worldMouseX = wpos.x;
-const worldMouseY = wpos.y;
-
-lastMousePosRef.current = { x: worldMouseX, y: worldMouseY };
+lastMousePosRef.current = { x: wpos.x, y: wpos.y };
 
 if (isGameMode) {
 const a = aimingRef.current;
 
 if (a.phase === 'aiming') {
-a.targetX = worldMouseX;
-a.targetY = worldMouseY;
+a.targetX = wpos.x;
+a.targetY = wpos.y;
 
 const cue = particlesRef.current.find(pp => String(pp.coin.id).toLowerCase() === 'bitcoin');
 if (cue && !cue.isFalling) {
-const dx = worldMouseX - cue.x;
-const dy = worldMouseY - cue.y;
+const dx = wpos.x - cue.x;
+const dy = wpos.y - cue.y;
 const dist = Math.hypot(dx, dy) || 0.0001;
 a.dirX = dx / dist;
 a.dirY = dy / dist;
@@ -729,21 +778,21 @@ return;
 }
 
 if (a.phase === 'powering') {
-const mx = worldMouseX - a.powerStartX;
-const my = worldMouseY - a.powerStartY;
+const mx = wpos.x - a.powerStartX;
+const my = wpos.y - a.powerStartY;
 
 const proj = mx * a.dirX + my * a.dirY;
 a.pull = clamp(-proj, 0, a.maxPull);
 return;
 }
 
-if (a.phase === 'powering_ready') return;
+return;
 }
 
 if (draggedParticleRef.current) {
 const p = draggedParticleRef.current;
-p.x = worldMouseX;
-p.y = worldMouseY;
+p.x = wpos.x;
+p.y = wpos.y;
 return;
 }
 
@@ -756,46 +805,30 @@ invalidate();
 return;
 }
 
-const canvasEl = canvasRef.current;
-if (!canvasEl) return;
-const rect = canvasEl.getBoundingClientRect();
-const mouseX = e.clientX - rect.left;
-const mouseY = e.clientY - rect.top;
-
-const { k, x, y } = transformRef.current;
-
-let found: Particle | null = null;
-for (let i = particlesRef.current.length - 1; i >= 0; i--) {
-const p = particlesRef.current[i];
-if (p.isFalling) continue;
-
-const sx = p.x * k + x;
-const sy = p.y * k + y;
-const sr = p.radius;
-
-const dx = sx - mouseX;
-const dy = sy - mouseY;
-
-if (dx * dx + dy * dy < (sr + 5) * (sr + 5)) {
-found = p;
-break;
-}
-}
-
+const found = hitTestParticle(e.clientX, e.clientY);
 setHoveredParticle(found);
 };
 
-const openDetailFor = (p: Particle) => {
-setSelectedParticle(p);
-setDetailCoin(p.coin);
-setDetailAnimKey(v => v + 1);
-setDetailOpen(true);
-};
-
 const handleMouseDown = (e: React.MouseEvent) => {
-if (detailOpenRef.current) return;
+// clicar no “vazio” fecha card
+if (detailOpenRef.current) {
+const found = hitTestParticle(e.clientX, e.clientY);
+if (!found) {
+setDetailOpen(false);
+setSelectedParticle(null);
+}
+return;
+}
+
+const found = hitTestParticle(e.clientX, e.clientY);
 
 if (isGameMode) {
+// ✅ card funciona no game: se clicou em bola (qualquer uma) abre card
+if (found) {
+openDetailForParticle(found);
+return;
+}
+
 if (e.button !== 0) return;
 
 const cue = particlesRef.current.find(pp => String(pp.coin.id).toLowerCase() === 'bitcoin');
@@ -833,16 +866,14 @@ return;
 return;
 }
 
-if (hoveredParticleRef.current) {
-openDetailFor(hoveredParticleRef.current);
+// MAP / FREE
+if (found) {
+openDetailForParticle(found);
 return;
 }
 
-// clique em vazio fecha card (quando aberto já é bloqueado, então aqui é pro caso “não abriu ainda”)
-if (!hoveredParticleRef.current) {
 setDetailOpen(false);
 setSelectedParticle(null);
-}
 
 if (!isFreeMode) {
 isPanningRef.current = true;
@@ -867,6 +898,7 @@ return;
 }
 
 if (a.phase === 'aiming') {
+// ✅ mira fica fixa após 1º clique
 a.phase = 'powering_ready';
 a.pull = 0;
 return;
@@ -875,27 +907,33 @@ return;
 if (a.phase === 'powering') {
 const pullNorm = clamp(a.pull / a.maxPull, 0, 1);
 
-const basePower = 6800;
-const power = basePower * (0.20 + cuePowerRaw * 1.90) * pullNorm;
+// ✅ bolas mais leves + tacada mais forte
+const basePower = 9800; // era 6800
+const power = basePower * (0.25 + cuePowerRaw * 1.85) * pullNorm;
 
 cue.vx += a.dirX * (power / Math.max(1, cue.mass));
 cue.vy += a.dirY * (power / Math.max(1, cue.mass));
 
 cueHideUntilRef.current = performance.now() + 5000;
 
+// thrust curto do taco
+cueThrustRef.current = { t0: performance.now(), active: true };
+
+// som hit
+playBeep('hit');
+
 a.phase = 'idle';
 a.pull = 0;
 return;
 }
 
-if (a.phase === 'powering_ready') return;
+return;
 }
 
 if (draggedParticleRef.current) {
 draggedParticleRef.current.isFixed = false;
 draggedParticleRef.current = null;
 }
-
 isPanningRef.current = false;
 };
 
@@ -930,8 +968,9 @@ if (isGameMode) {
 return (
 <>
 <div><span className="font-black">Modo Game (Bilhar)</span></div>
-<div>• 1º clique (segura): gira o taco.</div>
-<div>• Soltou: direção travada.</div>
+<div>• Clique numa bola: abre detalhes.</div>
+<div>• 1º clique (segura): gira o taco (mira pulse).</div>
+<div>• Soltou: direção fixa (mira fica).</div>
 <div>• 2º clique (segura): ajusta força (mouse frente/atrás).</div>
 <div>• Soltou no 2º clique: tacada.</div>
 <div>• Após tacar, o taco some por 5s.</div>
@@ -944,7 +983,7 @@ return (
 <>
 <div><span className="font-black">Modo Livre</span></div>
 <div>• Bolhas flutuam soltas.</div>
-<div>• Batem e se repelem (colisão).</div>
+<div>• Batem e se repelem.</div>
 <div>• MarketCap/Variação mudam só o tamanho.</div>
 </>
 );
@@ -954,10 +993,9 @@ if (chartMode === 'performance') {
 return (
 <>
 <div><span className="font-black">Modo Variação</span></div>
-<div>• X: Variação de preço {timeframe} (%)</div>
+<div>• X: Variação {timeframe} (%)</div>
 <div>• Y: Volume 24h (log)</div>
-<div>• Tamanho: |%var {timeframe}| × log(volume)</div>
-<div>• Cor: verde/vermelho pela variação</div>
+<div>• Tamanho: |%var| × log(volume)</div>
 </>
 );
 }
@@ -967,8 +1005,7 @@ return (
 <div><span className="font-black">Modo Market Cap</span></div>
 <div>• X: Market Cap (log)</div>
 <div>• Y: Volume 24h (log)</div>
-<div>• Tamanho: Market Cap (escala log com topo mais proporcional)</div>
-<div>• Cor: verde/vermelho pela variação</div>
+<div>• Tamanho: Market Cap (log + topo mais proporcional)</div>
 </>
 );
 }, [chartMode, timeframe, isGameMode, isFreeMode]);
@@ -991,133 +1028,40 @@ const canvas = canvasRef.current;
 const ctx = canvas?.getContext('2d', { alpha: false });
 if (!ctx || !canvas) return;
 
+const drawWatermark = (
+ctx2: CanvasRenderingContext2D,
+width: number,
+height: number,
+img: HTMLImageElement | null,
+isDarkTheme: boolean,
+isGame: boolean
+) => {
+if (!img || !img.complete || img.naturalWidth <= 0 || img.naturalHeight <= 0) return;
+
+const maxW = width * 0.78;
+const maxH = height * 0.78;
+const scale = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight);
+
+const w = img.naturalWidth * scale;
+const h = img.naturalHeight * scale;
+
+const x = (width - w) / 2;
+const y = (height - h) / 2;
+
+const alphaBase = isDarkTheme ? 0.055 : 0.035;
+const alpha = isGame ? alphaBase * 0.85 : alphaBase;
+
+ctx2.save();
+ctx2.globalAlpha = alpha;
+ctx2.imageSmoothingEnabled = true;
+ctx2.imageSmoothingQuality = 'high';
+ctx2.drawImage(img, x, y, w, h);
+ctx2.restore();
+};
+
 let lastTime = performance.now();
 
-const drawCueStick = (
-ctx2: CanvasRenderingContext2D,
-cueBall: Particle,
-now: number,
-toScreenX: (v: number) => number,
-toScreenY: (v: number) => number,
-k: number,
-isDarkTheme: boolean
-) => {
-if (now < cueHideUntilRef.current) return;
-
-const cx = toScreenX(cueBall.x);
-const cy = toScreenY(cueBall.y);
-
-const a = aimingRef.current;
-
-let ux = 1;
-let uy = 0;
-
-if (a.phase === 'aiming') {
-const dx = toScreenX(a.targetX) - cx;
-const dy = toScreenY(a.targetY) - cy;
-const dist = Math.hypot(dx, dy) || 0.0001;
-ux = dx / dist;
-uy = dy / dist;
-} else if (a.phase === 'powering_ready' || a.phase === 'powering') {
-ux = a.dirX;
-uy = a.dirY;
-} else {
-if (lastMousePosRef.current) {
-const tx = toScreenX(lastMousePosRef.current.x);
-const ty = toScreenY(lastMousePosRef.current.y);
-const dx = tx - cx;
-const dy = ty - cy;
-const dist = Math.hypot(dx, dy) || 0.0001;
-ux = dx / dist;
-uy = dy / dist;
-} else {
-const dx = Math.cos(now * 0.0006);
-const dy = Math.sin(now * 0.0006);
-const dist = Math.hypot(dx, dy) || 0.0001;
-ux = dx / dist;
-uy = dy / dist;
-}
-}
-
-const contactGap = 12;
-
-const pull =
-(a.phase === 'powering' || a.phase === 'powering_ready')
-? a.pull
-: (10 + Math.sin(now * 0.0022) * 6);
-
-const tipX = cx - ux * (cueBall.radius + contactGap + pull);
-const tipY = cy - uy * (cueBall.radius + contactGap + pull);
-
-const stickLen = Math.max(260, cueBall.radius * 7.5);
-const buttX = tipX - ux * stickLen;
-const buttY = tipY - uy * stickLen;
-
-const thick = Math.max(8, cueBall.radius * 0.40);
-const tipThick = Math.max(5, thick * 0.55);
-
-ctx2.save();
-ctx2.globalAlpha = 0.92;
-ctx2.lineCap = 'round';
-
-ctx2.beginPath();
-ctx2.moveTo(buttX, buttY);
-ctx2.lineTo(tipX, tipY);
-ctx2.strokeStyle = isDarkTheme ? 'rgba(210,170,120,0.78)' : 'rgba(120,85,45,0.72)';
-ctx2.lineWidth = thick;
-ctx2.stroke();
-
-const tipLen = Math.min(30, stickLen * 0.12);
-ctx2.beginPath();
-ctx2.moveTo(tipX - ux * tipLen, tipY - uy * tipLen);
-ctx2.lineTo(tipX, tipY);
-ctx2.strokeStyle = isDarkTheme ? 'rgba(255,255,255,0.62)' : 'rgba(255,255,255,0.78)';
-ctx2.lineWidth = tipThick;
-ctx2.stroke();
-
-ctx2.restore();
-};
-
-const drawAimMarker = (
-ctx2: CanvasRenderingContext2D,
-toScreenX: (v: number) => number,
-toScreenY: (v: number) => number,
-isDarkTheme: boolean
-) => {
-const a = aimingRef.current;
-if (a.phase !== 'aiming') return;
-
-const sx = toScreenX(a.targetX);
-const sy = toScreenY(a.targetY);
-
-ctx2.save();
-ctx2.globalAlpha = 0.9;
-ctx2.strokeStyle = isDarkTheme ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.75)';
-ctx2.lineWidth = 2;
-
-ctx2.beginPath();
-ctx2.arc(sx, sy, 10, 0, Math.PI * 2);
-ctx2.stroke();
-
-ctx2.beginPath();
-ctx2.moveTo(sx - 16, sy);
-ctx2.lineTo(sx + 16, sy);
-ctx2.stroke();
-
-ctx2.beginPath();
-ctx2.moveTo(sx, sy - 16);
-ctx2.lineTo(sx, sy + 16);
-ctx2.stroke();
-
-ctx2.restore();
-};
-
-// ✅ colisão elástica (Newton)
-const resolveCollisions = (
-list: Particle[],
-restitution: number,
-stepDt: number
-) => {
+const resolveCollisions = (list: Particle[], restitution: number) => {
 for (let i = 0; i < list.length; i++) {
 const p1 = list[i];
 if (p1.isFalling) continue;
@@ -1163,6 +1107,134 @@ if (!p2.isFixed) { p2.vx += impulseX / p2.mass; p2.vy += impulseY / p2.mass; }
 }
 };
 
+const drawAimMarker = (
+ctx2: CanvasRenderingContext2D,
+toScreenX: (v: number) => number,
+toScreenY: (v: number) => number,
+isDarkTheme: boolean,
+now: number
+) => {
+const a = aimingRef.current;
+// ✅ mira aparece e fica fixa após 1º clique
+if (!(a.phase === 'aiming' || a.phase === 'powering_ready' || a.phase === 'powering')) return;
+
+const sx = toScreenX(a.targetX);
+const sy = toScreenY(a.targetY);
+
+// pulse zoom in/out
+const pulse = 1 + 0.08 * Math.sin(now * 0.008);
+
+ctx2.save();
+ctx2.globalAlpha = 0.92;
+ctx2.strokeStyle = isDarkTheme ? 'rgba(255,255,255,0.78)' : 'rgba(0,0,0,0.75)';
+ctx2.lineWidth = 2;
+
+ctx2.beginPath();
+ctx2.arc(sx, sy, 10 * pulse, 0, Math.PI * 2);
+ctx2.stroke();
+
+ctx2.beginPath();
+ctx2.moveTo(sx - 16 * pulse, sy);
+ctx2.lineTo(sx + 16 * pulse, sy);
+ctx2.stroke();
+
+ctx2.beginPath();
+ctx2.moveTo(sx, sy - 16 * pulse);
+ctx2.lineTo(sx, sy + 16 * pulse);
+ctx2.stroke();
+
+ctx2.restore();
+};
+
+const drawCueStick = (
+ctx2: CanvasRenderingContext2D,
+cueBall: Particle,
+now: number,
+toScreenX: (v: number) => number,
+toScreenY: (v: number) => number,
+k: number,
+isDarkTheme: boolean
+) => {
+if (now < cueHideUntilRef.current) return;
+
+const cx = toScreenX(cueBall.x);
+const cy = toScreenY(cueBall.y);
+
+const a = aimingRef.current;
+
+let ux = 1;
+let uy = 0;
+
+if (a.phase === 'aiming') {
+const dx = toScreenX(a.targetX) - cx;
+const dy = toScreenY(a.targetY) - cy;
+const dist = Math.hypot(dx, dy) || 0.0001;
+ux = dx / dist;
+uy = dy / dist;
+} else if (a.phase === 'powering_ready' || a.phase === 'powering') {
+ux = a.dirX;
+uy = a.dirY;
+} else if (lastMousePosRef.current) {
+const tx = toScreenX(lastMousePosRef.current.x);
+const ty = toScreenY(lastMousePosRef.current.y);
+const dx = tx - cx;
+const dy = ty - cy;
+const dist = Math.hypot(dx, dy) || 0.0001;
+ux = dx / dist;
+uy = dy / dist;
+} else {
+ux = 1; uy = 0;
+}
+
+// ✅ animação idle do taco (pequena)
+const idleWiggle = 6 + 4 * Math.sin(now * 0.004);
+
+// pull real no 2º clique
+const pull = (a.phase === 'powering' || a.phase === 'powering_ready')
+? a.pull
+: idleWiggle;
+
+// thrust curto após bater
+let thrust = 0;
+if (cueThrustRef.current.active) {
+const t = (now - cueThrustRef.current.t0) / 120;
+if (t >= 1) cueThrustRef.current.active = false;
+else thrust = 10 * Math.sin(Math.PI * t);
+}
+
+const contactGap = 12;
+const tipX = cx - ux * (cueBall.radius + contactGap + pull - thrust);
+const tipY = cy - uy * (cueBall.radius + contactGap + pull - thrust);
+
+const stickLen = Math.max(260, cueBall.radius * 7.5);
+const buttX = tipX - ux * stickLen;
+const buttY = tipY - uy * stickLen;
+
+const thick = Math.max(8, cueBall.radius * 0.40);
+const tipThick = Math.max(5, thick * 0.55);
+
+ctx2.save();
+ctx2.globalAlpha = 0.92;
+ctx2.lineCap = 'round';
+
+ctx2.beginPath();
+ctx2.moveTo(buttX, buttY);
+ctx2.lineTo(tipX, tipY);
+ctx2.strokeStyle = isDarkTheme ? 'rgba(210,170,120,0.78)' : 'rgba(120,85,45,0.72)';
+ctx2.lineWidth = thick;
+ctx2.stroke();
+
+const tipLen = Math.min(30, stickLen * 0.12);
+ctx2.beginPath();
+ctx2.moveTo(tipX - ux * tipLen, tipY - uy * tipLen);
+ctx2.lineTo(tipX, tipY);
+ctx2.strokeStyle = isDarkTheme ? 'rgba(255,255,255,0.62)' : 'rgba(255,255,255,0.78)';
+ctx2.lineWidth = tipThick;
+ctx2.stroke();
+
+ctx2.restore();
+};
+
 const loop = () => {
 const now = performance.now();
 const dtRaw = (now - lastTime) / 1000;
@@ -1189,15 +1261,14 @@ const toScreenY = (val: number) => val * k + panY;
 
 const particles: Particle[] = particlesRef.current;
 
-// radius easing
 for (const p of particles) {
 const viewRadius = p.targetRadius * Math.pow(k, 0.25);
 p.radius += (viewRadius - p.radius) * 0.15;
 p.mass = Math.max(1, p.radius);
 }
 
-// GAME pockets
 let pockets: { x: number; y: number; r: number }[] = [];
+
 if (isGameMode) {
 const worldW = width / k;
 const worldH = height / k;
@@ -1236,111 +1307,7 @@ ctx.stroke();
 }
 ctx.restore();
 
-drawAimMarker(ctx, toScreenX, toScreenY, isDark);
-}
-
-// MAP axes (only when map mode and not free)
-if (!isGameMode && !isFreeMode && statsRef.current) {
-const s = statsRef.current;
-
-const margin = { top: 18, right: 18, bottom: 92, left: 86 };
-const chartW = Math.max(50, width - margin.left - margin.right);
-const chartH = Math.max(50, height - margin.top - margin.bottom);
-
-const originX = margin.left;
-const originY = margin.top + chartH;
-
-const xSteps = 6;
-
-ctx.save();
-ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)';
-ctx.lineWidth = 1;
-
-ctx.font = 'bold 12px Inter';
-ctx.fillStyle = isDark ? 'rgba(255,255,255,0.78)' : 'rgba(0,0,0,0.72)';
-ctx.textBaseline = 'middle';
-
-const projectX = (v: number) => {
-let norm = 0;
-if (chartMode === 'valuation') {
-if (v <= 0) return originX;
-norm = (Math.log10(v) - s.logMinX) / (s.logMaxX - s.logMinX || 1);
-} else {
-norm = (v - s.minX) / (s.maxX - s.minX || 1);
-}
-return originX + norm * chartW;
-};
-
-const projectY = (v: number) => {
-if (v <= 0) return originY;
-const norm = (Math.log10(v) - s.logMinY) / (s.logMaxY - s.logMinY || 1);
-return margin.top + (1 - norm) * chartH;
-};
-
-for (let i = 0; i <= xSteps; i++) {
-const percent = i / xSteps;
-
-let val = 0;
-if (chartMode === 'valuation') val = Math.pow(10, s.logMinX + percent * (s.logMaxX - s.logMinX));
-else val = s.minX + percent * (s.maxX - s.minX);
-
-const worldX = projectX(val);
-const screenX = toScreenX(worldX);
-
-ctx.beginPath();
-ctx.moveTo(screenX, toScreenY(margin.top));
-ctx.lineTo(screenX, toScreenY(originY));
-ctx.stroke();
-
-ctx.textAlign = 'center';
-const label = (chartMode === 'performance') ? `${val.toFixed(1)}%` : formatCompact(val);
-const tickY = clamp(toScreenY(originY) + 18, 12, height - 14);
-ctx.fillText(label, screenX, tickY);
-}
-
-const ySteps = 5;
-for (let i = 0; i <= ySteps; i++) {
-const percent = i / ySteps;
-const val = Math.pow(10, s.logMinY + percent * (s.logMaxY - s.logMinY));
-const worldY = projectY(val);
-const screenY = toScreenY(worldY);
-
-ctx.beginPath();
-ctx.moveTo(toScreenX(originX), screenY);
-ctx.lineTo(toScreenX(originX + chartW), screenY);
-ctx.stroke();
-
-ctx.textAlign = 'right';
-ctx.fillText(formatCompact(val), toScreenX(originX) - 10, screenY);
-}
-
-ctx.beginPath();
-ctx.moveTo(toScreenX(originX), toScreenY(originY));
-ctx.lineTo(toScreenX(originX + chartW), toScreenY(originY));
-ctx.stroke();
-
-ctx.beginPath();
-ctx.moveTo(toScreenX(originX), toScreenY(margin.top));
-ctx.lineTo(toScreenX(originX), toScreenY(originY));
-ctx.stroke();
-
-ctx.font = 'bold 14px Inter';
-ctx.textAlign = 'center';
-ctx.fillStyle = isDark ? '#dd9933' : '#333';
-
-const xLabel = chartMode === 'performance'
-? `Variação de preço ${timeframe} (%)`
-: 'Market Cap (Log)';
-const xLabelY = clamp(toScreenY(originY) + 56, 20, height - 10);
-ctx.fillText(xLabel, width / 2, xLabelY);
-
-ctx.save();
-ctx.translate(18, height / 2);
-ctx.rotate(-Math.PI / 2);
-ctx.fillText('Volume 24h (Log)', 0, 0);
-ctx.restore();
-
-ctx.restore();
+drawAimMarker(ctx, toScreenX, toScreenY, isDark, now);
 }
 
 // =======================
@@ -1353,8 +1320,9 @@ const stepDt = dt / subSteps;
 const worldW = width / k;
 const worldH = height / k;
 
-const dampingPerFrame = 0.985;
-const stopEps = 0.8;
+// ✅ menos atrito = bolas “leves”
+const dampingPerFrame = 0.993;
+const stopEps = 0.25;
 
 for (let step = 0; step < subSteps; step++) {
 const drag = Math.pow(dampingPerFrame, stepDt * 60);
@@ -1378,7 +1346,7 @@ if (p.y < p.radius + GAME_WALL_PAD) { p.y = p.radius + GAME_WALL_PAD; p.vy *= -1
 else if (p.y > worldH - p.radius - GAME_WALL_PAD) { p.y = worldH - p.radius - GAME_WALL_PAD; p.vy *= -1; }
 }
 
-resolveCollisions(particles, 0.96, stepDt);
+resolveCollisions(particles, 0.965);
 
 for (const p of particles) {
 if (p.isFalling) continue;
@@ -1394,6 +1362,12 @@ p.vy = 0;
 p.fallPocket = pk;
 p.fallFromX = p.x;
 p.fallFromY = p.y;
+
+// ✅ conta só bolas alvo (não a branca)
+if (String(p.coin.id).toLowerCase() !== 'bitcoin') {
+setPottedCount(v => v + 1);
+playBeep('pocket');
+}
 break;
 }
 }
@@ -1420,7 +1394,6 @@ particlesRef.current = particlesRef.current.filter(pp => pp !== p);
 }
 }
 } else if (isFreeMode) {
-// ✅ MODO LIVRE COM COLISÃO / NEWTON
 const subSteps = 2;
 const stepDt = dt / subSteps;
 
@@ -1463,10 +1436,9 @@ if (p.y < p.radius + GAME_WALL_PAD) { p.y = p.radius + GAME_WALL_PAD; p.vy *= -1
 else if (p.y > worldH - p.radius - GAME_WALL_PAD) { p.y = worldH - p.radius - GAME_WALL_PAD; p.vy *= -1; }
 }
 
-resolveCollisions(particles, 0.88, stepDt);
+resolveCollisions(particles, 0.90);
 }
 } else {
-// map positioning
 if (!statsRef.current) {
 reqIdRef.current = requestAnimationFrame(loop);
 return;
@@ -1649,22 +1621,20 @@ const cueBall = particlesRef.current.find(p => String(p.coin.id).toLowerCase() =
 if (cueBall) drawCueStick(ctx, cueBall, now, toScreenX, toScreenY, k, isDark);
 }
 
+void invalidateRef.current;
 reqIdRef.current = requestAnimationFrame(loop);
 };
 
-// tocar invalidateRef pra não “otimizar” nada fora
-void invalidateRef.current;
-
 reqIdRef.current = requestAnimationFrame(loop);
 return () => cancelAnimationFrame(reqIdRef.current);
-}, [isDark, chartMode, isGameMode, isFreeMode, timeframe, floatStrengthRaw, trailLength, searchTerm, getCoinPerfPct, cuePowerRaw]);
+}, [isDark, chartMode, isGameMode, isFreeMode, timeframe, floatStrengthRaw, trailLength, searchTerm, getCoinPerfPct, cuePowerRaw, playBeep]);
 
-// UI helpers
 const setMapMode = (mode: ChartMode) => {
 setIsFreeMode(false);
 setChartMode(mode);
 };
 
+// ======== UI =========
 return (
 <div
 ref={containerRef}
@@ -1687,6 +1657,14 @@ className="fixed inset-0 z-[2000] bg-white dark:bg-[#0b0f14] text-gray-900 dark:
 </p>
 </div>
 
+{/* placar no game */}
+{isGameMode && (
+<div className="ml-4 px-3 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-100 dark:bg-black/40">
+<div className="text-xs font-black text-gray-500 dark:text-gray-400">Encaçapadas</div>
+<div className="text-sm font-black">{pottedCount}/{gameBallsCount}</div>
+</div>
+)}
+
 <div className="w-px h-8 bg-gray-200 dark:bg-white/10 mx-4"></div>
 
 <div className="flex items-center gap-2">
@@ -1694,6 +1672,7 @@ className="fixed inset-0 z-[2000] bg-white dark:bg-[#0b0f14] text-gray-900 dark:
 <button
 onClick={() => setMapMode('valuation')}
 className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'valuation' && !isFreeMode ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500 dark:text-gray-300'}`}
+disabled={isGameMode}
 >
 Market Cap
 </button>
@@ -1703,6 +1682,7 @@ Market Cap
 <button
 onClick={() => setMapMode('performance')}
 className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'performance' && !isFreeMode ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500 dark:text-gray-300'}`}
+disabled={isGameMode}
 >
 Variação:
 </button>
@@ -1715,7 +1695,7 @@ Variação:
 value={timeframe}
 onChange={(e) => setTimeframe(e.target.value as Timeframe)}
 className="bg-white dark:bg-[#2f3032] text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs font-black border border-gray-200 dark:border-white/10 outline-none"
-disabled={chartMode !== 'performance' || isFreeMode}
+disabled={chartMode !== 'performance' || isFreeMode || isGameMode}
 >
 <option value="1h">1h</option>
 <option value="24h">24h</option>
@@ -1724,8 +1704,18 @@ disabled={chartMode !== 'performance' || isFreeMode}
 </div>
 </div>
 
+{/* dropdown de quantidade muda no modo game */}
 <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/50 p-2 rounded-lg border border-gray-200 dark:border-white/10">
 <span className="text-xs font-black text-gray-500 dark:text-gray-400">#</span>
+{isGameMode ? (
+<select
+value={gameBallsCount}
+onChange={e => setGameBallsCount(parseInt(e.target.value))}
+className="bg-white dark:bg-[#2f3032] text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs font-black border border-gray-200 dark:border-white/10 outline-none"
+>
+{[10, 20, 30].map(n => <option key={n} value={n}>{n}</option>)}
+</select>
+) : (
 <select
 value={numCoins}
 onChange={e => setNumCoins(parseInt(e.target.value))}
@@ -1733,6 +1723,7 @@ className="bg-white dark:bg-[#2f3032] text-gray-900 dark:text-gray-100 px-2 py-1
 >
 {[50, 100, 150, 200, 250].map(n => <option key={n} value={n}>{n}</option>)}
 </select>
+)}
 </div>
 
 <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/50 p-2 rounded-lg border border-gray-200 dark:border-white/10">
@@ -1809,7 +1800,6 @@ className="absolute top-24 right-4 bg-white/90 dark:bg-black/80 p-4 rounded-lg b
 onWheel={(e) => e.stopPropagation()}
 onMouseDown={(e) => e.stopPropagation()}
 >
-{/* Game toggle */}
 <div className="flex items-center justify-between gap-3">
 <div className="flex items-center gap-2">
 <Atom size={14} />
@@ -1825,7 +1815,6 @@ title="Modo Game"
 </button>
 </div>
 
-{/* ✅ Free toggle abaixo do game e some quando game ativo */}
 {!isGameMode && (
 <div className="flex items-center justify-between gap-3 mt-3">
 <div className="flex items-center gap-2">
@@ -1907,11 +1896,11 @@ className="w-full accent-[#dd9933] mt-2"
 </div>
 )}
 
-{/* ✅ CARD BONITÃO CENTRAL COM ANIMAÇÃO */}
+{/* ✅ CARD BONITÃO (funciona no game também) */}
 {detailOpen && detailCoin && (
 <div
 className="absolute inset-0 z-[60] flex items-center justify-center bg-black/45"
-onMouseDown={() => setDetailOpen(false)}
+onMouseDown={() => { setDetailOpen(false); setSelectedParticle(null); }}
 >
 <div
 key={detailAnimKey}
@@ -1931,7 +1920,7 @@ onMouseDown={(e) => e.stopPropagation()}
 </div>
 
 <button
-onClick={() => setDetailOpen(false)}
+onClick={() => { setDetailOpen(false); setSelectedParticle(null); }}
 className="p-2 rounded-lg bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 border border-gray-200 dark:border-white/10"
 title="Fechar"
 >
