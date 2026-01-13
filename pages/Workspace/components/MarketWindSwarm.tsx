@@ -144,8 +144,8 @@ const SITE_SOCIALS: { id: string; label: string; href: string }[] = [
 // ========================
 // AUDIO (coloque os arquivos na mesma pasta do widget)
 // ========================
-const SFX_CUE_HIT = '/widgets/sfx-cue-hit.wav';
-const SFX_POCKET = '/widgets/sfx-pocket.wav';
+const SFX_CUE_HIT = '/widgets/bolas.MP3';
+const SFX_POCKET = '/widgets/cacapa.MP3';
 
 const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1150,4 +1150,1042 @@ const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 
       ctx2.save();
       ctx2.globalAlpha = 0.9;
-      ctx2.strokeSty
+      ctx2.strokeStyle = isDarkTheme ? 'rgba(255,255,255,0.80)' : 'rgba(0,0,0,0.78)';
+      ctx2.lineWidth = 2;
+
+      ctx2.beginPath();
+      ctx2.arc(sx, sy, 12 * pulse, 0, Math.PI * 2);
+      ctx2.stroke();
+
+      ctx2.beginPath();
+      ctx2.moveTo(sx - 18 * pulse, sy);
+      ctx2.lineTo(sx + 18 * pulse, sy);
+      ctx2.stroke();
+
+      ctx2.beginPath();
+      ctx2.moveTo(sx, sy - 18 * pulse);
+      ctx2.lineTo(sx, sy + 18 * pulse);
+      ctx2.stroke();
+
+      ctx2.restore();
+    };
+
+    const drawGameCounter = (ctx2: CanvasRenderingContext2D, w: number) => {
+      ctx2.save();
+      ctx2.font = 'bold 13px Inter';
+      ctx2.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx2.textAlign = 'left';
+      ctx2.textBaseline = 'top';
+      ctx2.fillText(`Encaçapadas: ${pottedCountRef.current}/${totalBallsRef.current}`, 18, 14);
+      ctx2.restore();
+    };
+
+    const loop = () => {
+      const now = performance.now();
+      const dtRaw = (now - lastTime) / 1000;
+      const dt = Math.min(dtRaw, 1 / 30);
+      lastTime = now;
+
+      const dpr = dprRef.current || 1;
+      const width = canvas.width / dpr;
+      const height = canvas.height / dpr;
+
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+      if (isGameMode) ctx.fillStyle = isDark ? '#08110c' : '#e8f3ea';
+      else ctx.fillStyle = isDark ? '#0b0f14' : '#ffffff';
+
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.scale(dpr, dpr);
+
+      drawWatermark(ctx, width, height, watermarkRef.current, isDark, isGameMode);
+
+      const { k, x: panX, y: panY } = transformRef.current;
+      const toScreenX = (val: number) => val * k + panX;
+      const toScreenY = (val: number) => val * k + panY;
+
+      const particles: Particle[] = particlesRef.current;
+
+      for (const p of particles) {
+        const viewRadius = p.targetRadius * Math.pow(k, 0.25);
+        p.radius += (viewRadius - p.radius) * 0.15;
+        p.mass = Math.max(1, p.radius);
+      }
+
+      // GAME pockets
+      let pockets: { x: number; y: number; r: number }[] = [];
+      if (isGameMode) {
+        const worldW = width / k;
+        const worldH = height / k;
+        const pr = Math.max(26, Math.min(40, Math.min(worldW, worldH) * 0.04));
+
+        pockets = [
+          { x: pr, y: pr, r: pr },
+          { x: worldW / 2, y: pr, r: pr },
+          { x: worldW - pr, y: pr, r: pr },
+          { x: pr, y: worldH - pr, r: pr },
+          { x: worldW / 2, y: worldH - pr, r: pr },
+          { x: worldW - pr, y: worldH - pr, r: pr }
+        ];
+
+        ctx.save();
+        ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.10)';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(8, 8, width - 16, height - 16);
+        ctx.restore();
+
+        ctx.save();
+        for (const pk of pockets) {
+          const sx = toScreenX(pk.x);
+          const sy = toScreenY(pk.y);
+
+          ctx.beginPath();
+          ctx.arc(sx, sy, pk.r * k, 0, Math.PI * 2);
+          ctx.fillStyle = isDark ? 'rgba(0,0,0,0.72)' : 'rgba(0,0,0,0.18)';
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.arc(sx, sy, pk.r * k, 0, Math.PI * 2);
+          ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        drawLockedAimMarker(ctx, toScreenX, toScreenY, now, isDark);
+        drawGameCounter(ctx, width);
+      }
+
+      // MAP axes (disabled in free mode)
+      if (!isGameMode && !isFreeMode && statsRef.current) {
+        const s = statsRef.current;
+
+        const margin = { top: 18, right: 18, bottom: 92, left: 86 };
+        const chartW = Math.max(50, width - margin.left - margin.right);
+        const chartH = Math.max(50, height - margin.top - margin.bottom);
+
+        const originX = margin.left;
+        const originY = margin.top + chartH;
+
+        const xSteps = 6;
+
+        ctx.save();
+        ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)';
+        ctx.lineWidth = 1;
+
+        ctx.font = 'bold 12px Inter';
+        ctx.fillStyle = isDark ? 'rgba(255,255,255,0.78)' : 'rgba(0,0,0,0.72)';
+        ctx.textBaseline = 'middle';
+
+        const projectX = (v: number) => {
+          let norm = 0;
+          if (chartMode === 'valuation') {
+            if (v <= 0) return originX;
+            norm = (Math.log10(v) - s.logMinX) / (s.logMaxX - s.logMinX || 1);
+          } else {
+            norm = (v - s.minX) / (s.maxX - s.minX || 1);
+          }
+          return originX + norm * chartW;
+        };
+
+        const projectY = (v: number) => {
+          if (v <= 0) return originY;
+          const norm = (Math.log10(v) - s.logMinY) / (s.logMaxY - s.logMinY || 1);
+          return margin.top + (1 - norm) * chartH;
+        };
+
+        for (let i = 0; i <= xSteps; i++) {
+          const percent = i / xSteps;
+
+          let val = 0;
+          if (chartMode === 'valuation') val = Math.pow(10, s.logMinX + percent * (s.logMaxX - s.logMinX));
+          else val = s.minX + percent * (s.maxX - s.minX);
+
+          const worldX = projectX(val);
+          const screenX = toScreenX(worldX);
+
+          ctx.beginPath();
+          ctx.moveTo(screenX, toScreenY(margin.top));
+          ctx.lineTo(screenX, toScreenY(originY));
+          ctx.stroke();
+
+          ctx.textAlign = 'center';
+          const label = (chartMode === 'performance') ? `${val.toFixed(1)}%` : formatCompact(val);
+          const tickY = clamp(toScreenY(originY) + 18, 12, height - 14);
+          ctx.fillText(label, screenX, tickY);
+        }
+
+        const ySteps = 5;
+        for (let i = 0; i <= ySteps; i++) {
+          const percent = i / ySteps;
+          const val = Math.pow(10, s.logMinY + percent * (s.logMaxY - s.logMinY));
+          const worldY = projectY(val);
+          const screenY = toScreenY(worldY);
+
+          ctx.beginPath();
+          ctx.moveTo(toScreenX(originX), screenY);
+          ctx.lineTo(toScreenX(originX + chartW), screenY);
+          ctx.stroke();
+
+          ctx.textAlign = 'right';
+          ctx.fillText(formatCompact(val), toScreenX(originX) - 10, screenY);
+        }
+
+        ctx.beginPath();
+        ctx.moveTo(toScreenX(originX), toScreenY(originY));
+        ctx.lineTo(toScreenX(originX + chartW), toScreenY(originY));
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(toScreenX(originX), toScreenY(margin.top));
+        ctx.lineTo(toScreenX(originX), toScreenY(originY));
+        ctx.stroke();
+
+        ctx.font = 'bold 14px Inter';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = isDark ? '#dd9933' : '#333';
+
+        const xLabel = chartMode === 'performance'
+          ? `Variação de preço ${timeframe} (%)`
+          : 'Market Cap (Log)';
+        const xLabelY = clamp(toScreenY(originY) + 56, 20, height - 10);
+        ctx.fillText(xLabel, width / 2, xLabelY);
+
+        ctx.save();
+        ctx.translate(18, height / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText('Volume 24h (Log)', 0, 0);
+        ctx.restore();
+
+        ctx.restore();
+      }
+
+      // =======================
+      // PHYSICS / MAPPING
+      // =======================
+      if (isGameMode) {
+        const subSteps = 3;
+        const stepDt = dt / subSteps;
+
+        const worldW = width / k;
+        const worldH = height / k;
+
+        // MUCH less rolling resistance
+        const dampingPerFrame = 0.9996;
+        const stopEps = 0.25;
+
+        for (let step = 0; step < subSteps; step++) {
+          const drag = Math.pow(dampingPerFrame, stepDt * 60);
+
+          for (const p of particles) {
+            if (p.isFalling) continue;
+            if (p.isFixed) continue;
+
+            p.vx *= drag;
+            p.vy *= drag;
+
+            if (Math.hypot(p.vx, p.vy) < stopEps) { p.vx = 0; p.vy = 0; }
+
+            p.x += p.vx * stepDt;
+            p.y += p.vy * stepDt;
+
+            // bounce walls (energy stays)
+            if (p.x < p.radius + GAME_WALL_PAD) { p.x = p.radius + GAME_WALL_PAD; p.vx *= -0.98; }
+            else if (p.x > worldW - p.radius - GAME_WALL_PAD) { p.x = worldW - p.radius - GAME_WALL_PAD; p.vx *= -0.98; }
+
+            if (p.y < p.radius + GAME_WALL_PAD) { p.y = p.radius + GAME_WALL_PAD; p.vy *= -0.98; }
+            else if (p.y > worldH - p.radius - GAME_WALL_PAD) { p.y = worldH - p.radius - GAME_WALL_PAD; p.vy *= -0.98; }
+          }
+
+          // collisions
+          for (let i = 0; i < particles.length; i++) {
+            const p1 = particles[i];
+            if (p1.isFalling) continue;
+
+            for (let j = i + 1; j < particles.length; j++) {
+              const p2 = particles[j];
+              if (p2.isFalling) continue;
+
+              const dx = p2.x - p1.x;
+              const dy = p2.y - p1.y;
+              const minDist = p1.radius + p2.radius;
+
+              const distSq = dx * dx + dy * dy;
+              if (distSq >= minDist * minDist) continue;
+
+              const dist = Math.sqrt(distSq) || 0.001;
+              const nx = dx / dist;
+              const ny = dy / dist;
+
+              const overlap = minDist - dist;
+              const totalMass = (p1.mass + p2.mass) || 1;
+
+              const move1 = (p2.mass / totalMass);
+              const move2 = (p1.mass / totalMass);
+
+              if (!p1.isFixed) { p1.x -= nx * overlap * move1; p1.y -= ny * overlap * move1; }
+              if (!p2.isFixed) { p2.x += nx * overlap * move2; p2.y += ny * overlap * move2; }
+
+              const rvx = p2.vx - p1.vx;
+              const rvy = p2.vy - p1.vy;
+              const velAlongNormal = rvx * nx + rvy * ny;
+              if (velAlongNormal > 0) continue;
+
+              const restitution = 0.985;
+              let impulse = -(1 + restitution) * velAlongNormal;
+              impulse /= (1 / p1.mass + 1 / p2.mass);
+
+              const impulseX = impulse * nx;
+              const impulseY = impulse * ny;
+
+              if (!p1.isFixed) { p1.vx -= impulseX / p1.mass; p1.vy -= impulseY / p1.mass; }
+              if (!p2.isFixed) { p2.vx += impulseX / p2.mass; p2.vy += impulseY / p2.mass; }
+            }
+          }
+
+          // pocket detection + fall
+          for (const p of particles) {
+            if (p.isFalling) continue;
+            if (p.isFixed) continue;
+
+            for (const pk of pockets) {
+              // fraction-of-second rule: if circles overlap at all => pocketed
+              const dist = Math.hypot(p.x - pk.x, p.y - pk.y);
+              if (dist < (pk.r + p.radius)) {
+                p.isFalling = true;
+                p.fallT = 0;
+                p.vx = 0;
+                p.vy = 0;
+                p.fallPocket = pk;
+                p.fallFromX = p.x;
+                p.fallFromY = p.y;
+                break;
+              }
+            }
+          }
+
+          for (const p of particles) {
+            if (!p.isFalling) continue;
+            p.fallT = (p.fallT || 0) + stepDt;
+
+            const t = clamp((p.fallT || 0) / 0.35, 0, 1);
+            const ease = 1 - Math.pow(1 - t, 3);
+
+            const pk = p.fallPocket;
+            if (pk) {
+              const fx = p.fallFromX ?? p.x;
+              const fy = p.fallFromY ?? p.y;
+              p.x = fx + (pk.x - fx) * ease;
+              p.y = fy + (pk.y - fy) * ease;
+            }
+
+            if (t >= 1) {
+              // permanently remove this session
+              pottedIdsRef.current.add(p.id);
+              if (String(p.coin.id).toLowerCase() !== 'bitcoin') {
+                pottedCountRef.current += 1;
+                playPocket();
+              }
+              particlesRef.current = particlesRef.current.filter(pp => pp !== p);
+            }
+          }
+        }
+      } else if (isFreeMode) {
+        const worldW = width / k;
+        const worldH = height / k;
+
+        const drag = Math.pow(0.992, dt * 60);
+        const bounce = 0.94;
+
+        // gentle drift
+        const drift = 140 * floatStrengthRaw;
+
+        for (const p of particlesRef.current) {
+          const ax = Math.sin(now * 0.0008 + p.phase) * drift;
+          const ay = Math.cos(now * 0.0007 + p.phase) * drift;
+
+          p.vx = (p.vx + ax * dt) * drag;
+          p.vy = (p.vy + ay * dt) * drag;
+
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+
+          if (p.x < p.radius) { p.x = p.radius; p.vx *= -bounce; }
+          if (p.x > worldW - p.radius) { p.x = worldW - p.radius; p.vx *= -bounce; }
+          if (p.y < p.radius) { p.y = p.radius; p.vy *= -bounce; }
+          if (p.y > worldH - p.radius) { p.y = worldH - p.radius; p.vy *= -bounce; }
+        }
+
+        // collisions (Newton 2: impulse & separation)
+        const parts = particlesRef.current;
+        for (let i = 0; i < parts.length; i++) {
+          for (let j = i + 1; j < parts.length; j++) {
+            const p1 = parts[i];
+            const p2 = parts[j];
+
+            const dx = p2.x - p1.x;
+            const dy = p2.y - p1.y;
+            const minDist = p1.radius + p2.radius;
+
+            const distSq = dx * dx + dy * dy;
+            if (distSq >= minDist * minDist) continue;
+
+            const dist = Math.sqrt(distSq) || 0.001;
+            const nx = dx / dist;
+            const ny = dy / dist;
+
+            const overlap = minDist - dist;
+            const totalMass = (p1.mass + p2.mass) || 1;
+
+            const move1 = (p2.mass / totalMass);
+            const move2 = (p1.mass / totalMass);
+
+            p1.x -= nx * overlap * move1;
+            p1.y -= ny * overlap * move1;
+            p2.x += nx * overlap * move2;
+            p2.y += ny * overlap * move2;
+
+            const rvx = p2.vx - p1.vx;
+            const rvy = p2.vy - p1.vy;
+            const velAlongNormal = rvx * nx + rvy * ny;
+            if (velAlongNormal > 0) continue;
+
+            const restitution = 0.92;
+            let impulse = -(1 + restitution) * velAlongNormal;
+            impulse /= (1 / p1.mass + 1 / p2.mass);
+
+            const ix = impulse * nx;
+            const iy = impulse * ny;
+
+            p1.vx -= ix / p1.mass;
+            p1.vy -= iy / p1.mass;
+            p2.vx += ix / p2.mass;
+            p2.vy += iy / p2.mass;
+          }
+        }
+      } else {
+        if (!statsRef.current) {
+          reqIdRef.current = requestAnimationFrame(loop);
+          return;
+        }
+        const s = statsRef.current;
+
+        const dpr2 = dprRef.current || 1;
+        const width2 = canvas.width / dpr2;
+        const height2 = canvas.height / dpr2;
+
+        const margin = { top: 18, right: 18, bottom: 92, left: 86 };
+        const chartW = Math.max(50, width2 - margin.left - margin.right);
+        const chartH = Math.max(50, height2 - margin.top - margin.bottom);
+
+        const originX = margin.left;
+        const originY = margin.top + chartH;
+
+        const mappedFloatMaxAmp = 5.2 * 1.3;
+        const mappedFloatAmp = floatStrengthRaw * mappedFloatMaxAmp;
+
+        const projectX = (v: number) => {
+          let norm = 0;
+          if (chartMode === 'valuation') {
+            if (v <= 0) return originX;
+            norm = (Math.log10(v) - s.logMinX) / (s.logMaxX - s.logMinX || 1);
+          } else {
+            norm = (v - s.minX) / (s.maxX - s.minX || 1);
+          }
+          return originX + norm * chartW;
+        };
+
+        const projectY = (v: number) => {
+          if (v <= 0) return originY;
+          const norm = (Math.log10(v) - s.logMinY) / (s.logMaxY - s.logMinY || 1);
+          return margin.top + (1 - norm) * chartH;
+        };
+
+        for (const p of particlesRef.current) {
+          let xVal = 0;
+          const yVal = p.coin.total_volume || 1;
+
+          if (chartMode === 'performance') xVal = getCoinPerfPct(p.coin) || 0;
+          else xVal = p.coin.market_cap || 1;
+
+          const tx = projectX(xVal);
+          const ty = projectY(yVal);
+
+          const floatFreq = 0.0002 * (1 + floatStrengthRaw);
+          const floatX = mappedFloatAmp > 0 ? Math.sin(now * floatFreq + p.phase) * mappedFloatAmp : 0;
+          const floatY = mappedFloatAmp > 0 ? Math.cos(now * (floatFreq * 1.3) + p.phase) * mappedFloatAmp : 0;
+
+          const targetX = tx + floatX;
+          const targetY = ty + floatY;
+
+          p.x += (targetX - p.x) * 0.05;
+          p.y += (targetY - p.y) * 0.05;
+        }
+      }
+
+      // =======================
+      // DRAW PARTICLES
+      // =======================
+      for (const p of particlesRef.current) {
+        const screenX = toScreenX(p.x);
+        const screenY = toScreenY(p.y);
+
+        if (screenX + p.radius < 0 || screenX - p.radius > width || screenY + p.radius < 0 || screenY - p.radius > height) continue;
+
+        let drawRadius = p.radius;
+        let alpha = 1.0;
+
+        if (p.isFalling) {
+          const t = clamp((p.fallT || 0) / 0.35, 0, 1);
+          drawRadius = p.radius * (1 - t);
+          alpha = 1 - t;
+        }
+
+        const isHovered = hoveredParticleRef.current?.id === p.id;
+        const isSelected = selectedParticleRef.current?.id === p.id;
+
+        const isDimmed = searchTerm
+          && !p.coin.name.toLowerCase().includes(searchTerm.toLowerCase())
+          && !p.coin.symbol.toLowerCase().includes(searchTerm.toLowerCase());
+
+        if (isDimmed) alpha *= 0.12;
+
+        if (trailLength > 0 && alpha > 0.05) {
+          const last = p.trail[p.trail.length - 1];
+          const ddx = last ? screenX - last.x : 10;
+          const ddy = last ? screenY - last.y : 10;
+
+          if (!last || (ddx * ddx + ddy * ddy > 4)) p.trail.push({ x: screenX, y: screenY, age: 1.0 });
+
+          for (let tIdx = 0; tIdx < p.trail.length; tIdx++) p.trail[tIdx].age -= 0.02;
+          p.trail = p.trail.filter(t => t.age > 0);
+
+          if (p.trail.length > 1) {
+            const grad = ctx.createLinearGradient(p.trail[0].x, p.trail[0].y, screenX, screenY);
+            grad.addColorStop(0, 'rgba(0,0,0,0)');
+            grad.addColorStop(1, p.color);
+
+            ctx.beginPath();
+            ctx.moveTo(p.trail[0].x, p.trail[0].y);
+            for (let i = 1; i < p.trail.length; i++) ctx.lineTo(p.trail[i].x, p.trail[i].y);
+
+            ctx.strokeStyle = grad;
+            ctx.globalAlpha = alpha;
+            ctx.lineWidth = Math.min(drawRadius * 0.4, 4);
+            ctx.stroke();
+            ctx.globalAlpha = 1.0;
+          }
+        } else {
+          p.trail = [];
+        }
+
+        if (drawRadius <= 0.5) continue;
+
+        const isBTC = String(p.coin.id).toLowerCase() === 'bitcoin';
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+
+        if (isBTC && isGameMode) {
+          ctx.beginPath();
+          ctx.arc(screenX, screenY, drawRadius, 0, Math.PI * 2);
+          ctx.fillStyle = '#ffffff';
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.arc(screenX, screenY, drawRadius, 0, Math.PI * 2);
+          ctx.strokeStyle = isDark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.35)';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          const img = imageCache.current.get(p.coin.image);
+          if (img?.complete) {
+            const logoSize = drawRadius * 1.2;
+            ctx.drawImage(img, screenX - logoSize / 2, screenY - logoSize / 2, logoSize, logoSize);
+          }
+        } else {
+          ctx.beginPath();
+          ctx.arc(screenX, screenY, drawRadius, 0, Math.PI * 2);
+
+          const img = imageCache.current.get(p.coin.image);
+          if (img?.complete) {
+            ctx.save();
+            ctx.clip();
+            ctx.drawImage(img, screenX - drawRadius, screenY - drawRadius, drawRadius * 2, drawRadius * 2);
+            ctx.restore();
+
+            ctx.strokeStyle = p.color;
+            ctx.lineWidth = isSelected ? 4 : 2;
+            ctx.stroke();
+          } else {
+            ctx.fillStyle = p.color;
+            ctx.fill();
+          }
+
+          // symbol in map/free mode
+          if (!isGameMode && drawRadius > 12) {
+            ctx.fillStyle = '#fff';
+            ctx.font = `bold ${Math.max(11, drawRadius * 0.42)}px Inter`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.shadowColor = 'rgba(0,0,0,0.8)';
+            ctx.shadowBlur = 4;
+            ctx.fillText(p.coin.symbol.toUpperCase(), screenX, screenY);
+            ctx.shadowBlur = 0;
+          }
+        }
+
+        if (isHovered || isSelected) {
+          ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(screenX, screenY, drawRadius + 4, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        ctx.restore();
+      }
+
+      // Draw cue stick LAST
+      if (isGameMode) {
+        const cueBall = particlesRef.current.find(p => String(p.coin.id).toLowerCase() === 'bitcoin');
+        if (cueBall) drawCueStick(ctx, cueBall, now, toScreenX, toScreenY, k, isDark);
+      }
+
+      reqIdRef.current = requestAnimationFrame(loop);
+    };
+
+    reqIdRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(reqIdRef.current);
+  }, [isDark, chartMode, isGameMode, isFreeMode, timeframe, floatStrengthRaw, trailLength, searchTerm, getCoinPerfPct, cuePowerRaw, playCue, playPocket]);
+
+  // CLICK behavior for card: activate on click, not hover
+  const handleCanvasClick = (e: React.MouseEvent) => {
+    if (detailOpenRef.current) return;
+
+    // if clicked on a particle => open card
+    if (hoveredParticleRef.current) {
+      openDetailFor(hoveredParticleRef.current);
+    } else {
+      setDetailOpen(false);
+      setSelectedParticle(null);
+    }
+  };
+
+  // UI: num coins dropdown in header (and game constrains options)
+  const headerNumOptions = useMemo(() => {
+    if (isGameMode) return [10, 20, 30];
+    return [50, 100, 150, 200, 250];
+  }, [isGameMode]);
+
+  useEffect(() => {
+    if (isGameMode) {
+      // force max 50 and allow 10/20/30
+      if (![10, 20, 30].includes(numCoins)) setNumCoins(30);
+    } else {
+      if (![50, 100, 150, 200, 250].includes(numCoins)) setNumCoins(50);
+    }
+  }, [isGameMode]); // intentionally not depending on numCoins to avoid loops
+
+  return (
+    <div
+      ref={containerRef}
+      className="fixed inset-0 z-[2000] bg-white dark:bg-[#0b0f14] text-gray-900 dark:text-white flex flex-col overflow-hidden touch-none select-none overscroll-none h-[100dvh]"
+    >
+      <div className="flex justify-between items-start p-4 z-20 bg-white/80 dark:bg-black/50 backdrop-blur-sm border-b border-gray-200 dark:border-white/10 shrink-0">
+        <div className="flex items-center gap-4">
+          <Coins size={28} className="text-[#dd9933]" />
+          <div>
+            <h3 className="text-xl font-black uppercase tracking-wider">Crypto Bubbles</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 font-bold">
+              {status === 'demo' ? 'MODO DEMO' : isGameMode ? 'MODO GAME' : isFreeMode ? 'MODO LIVRE' : 'MODO MAPA'}
+            </p>
+          </div>
+
+          <div className="w-px h-8 bg-gray-200 dark:bg-white/10 mx-4"></div>
+
+          <div className="flex items-center gap-2">
+            <div className="flex bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10">
+              <button
+                onClick={() => setChartMode('valuation')}
+                className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'valuation' ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500 dark:text-gray-300'}`}
+              >
+                Market Cap
+              </button>
+            </div>
+
+            <div className="flex items-center bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10">
+              <button
+                onClick={() => setChartMode('performance')}
+                className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'performance' ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500 dark:text-gray-300'}`}
+              >
+                Variação:
+              </button>
+
+              <div className="w-px h-5 bg-gray-200 dark:bg-white/10 mx-1"></div>
+
+              <div className="flex items-center gap-2 px-2 py-1">
+                <Wind size={14} className="text-gray-400" />
+                <select
+                  value={timeframe}
+                  onChange={(e) => setTimeframe(e.target.value as Timeframe)}
+                  className="bg-white dark:bg-[#2f3032] text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs font-black border border-gray-200 dark:border-white/10 outline-none"
+                  disabled={isGameMode || isFreeMode}
+                >
+                  <option value="1h">1h</option>
+                  <option value="24h">24h</option>
+                  <option value="7d">7d</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/50 p-2 rounded-lg border border-gray-200 dark:border-white/10">
+              <span className="text-xs font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">#</span>
+              <select
+                value={numCoins}
+                onChange={e => setNumCoins(parseInt(e.target.value))}
+                className="bg-white dark:bg-[#2f3032] text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs font-black border border-gray-200 dark:border-white/10 outline-none"
+                title="# moedas"
+              >
+                {headerNumOptions.map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/50 p-2 rounded-lg border border-gray-200 dark:border-white/10">
+              <Search size={16} className="text-gray-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar ativo..."
+                className="bg-transparent outline-none text-sm w-48 text-gray-900 dark:text-white"
+              />
+              {searchTerm && (
+                <button onClick={() => { setSearchTerm(''); setSelectedParticle(null); }}>
+                  <XCircle size={16} className="text-gray-500 hover:text-white" />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 relative">
+          <button
+            onClick={(e) => { e.stopPropagation(); resetZoom(); }}
+            className="p-3 bg-[#dd9933]/10 hover:bg-[#dd9933]/20 text-[#dd9933] rounded-lg border border-[#dd9933]/30 transition-colors"
+            title="Reset Zoom"
+          >
+            <Maximize size={20} />
+          </button>
+
+          <div className="relative">
+            <button
+              onMouseEnter={() => setLegendTipOpen(true)}
+              onMouseLeave={() => setLegendTipOpen(false)}
+              className="p-3 rounded-lg border transition-colors backdrop-blur-sm bg-gray-100 dark:bg-black/50 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10"
+              title="Legenda / Instruções"
+            >
+              <Info size={20} />
+            </button>
+
+            {legendTipOpen && (
+              <div
+                className="absolute right-0 mt-2 w-80 bg-white/95 dark:bg-black/85 border border-gray-200 dark:border-white/10 rounded-xl p-3 shadow-xl backdrop-blur-md text-sm"
+                onMouseEnter={() => setLegendTipOpen(true)}
+                onMouseLeave={() => setLegendTipOpen(false)}
+              >
+                <div className="space-y-1 text-gray-800 dark:text-gray-100">
+                  {legendText}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <button
+            onClick={() => setSettingsOpen(v => !v)}
+            className={`p-3 rounded-lg border transition-colors backdrop-blur-sm ${settingsOpen ? 'bg-[#dd9933] text-black border-[#dd9933]' : 'bg-gray-100 dark:bg-black/50 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10'}`}
+            title="Settings"
+          >
+            <Settings size={20} />
+          </button>
+
+          <button
+            onClick={() => onClose()}
+            className="p-3 bg-gray-100 dark:bg-black/50 rounded-lg border border-gray-200 dark:border-white/10 hover:bg-red-500/10 text-gray-600 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+            title="Close"
+          >
+            <CloseIcon size={20} />
+          </button>
+        </div>
+      </div>
+
+      {settingsOpen && (
+        <div
+          className="absolute top-24 right-4 bg-white/90 dark:bg-black/80 p-4 rounded-lg border border-gray-200 dark:border-white/10 backdrop-blur-md w-80 z-30 shadow-xl"
+          onWheel={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Atom size={14} />
+              <span className="text-xs font-black uppercase tracking-wider">Modo Game</span>
+
+              <div className="relative group">
+                <Info size={14} className="text-gray-400" />
+                <div className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity absolute right-0 mt-2 w-72 bg-white/95 dark:bg-black/90 border border-gray-200 dark:border-white/10 rounded-xl p-3 shadow-xl text-xs text-gray-800 dark:text-gray-100">
+                  <div className="font-black mb-1">Como jogar (2 cliques)</div>
+                  <div>1) Clique e segure: gira a mira. Solta: trava.</div>
+                  <div>2) Clique e segure: puxa/empurra (força). Solta: tacada.</div>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setIsGameMode(!isGameMode)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isGameMode ? 'bg-[#dd9933]' : 'bg-gray-200 dark:bg-[#2f3032]'}`}
+              title="Modo Game"
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isGameMode ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+          </div>
+
+          {!isGameMode && (
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Wind size={14} />
+                <span className="text-xs font-black uppercase tracking-wider">Modo Livre</span>
+              </div>
+
+              <button
+                onClick={() => setIsFreeMode(v => !v)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isFreeMode ? 'bg-[#dd9933]' : 'bg-gray-200 dark:bg-[#2f3032]'}`}
+                title="Modo Livre"
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isFreeMode ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+            </div>
+          )}
+
+          <div className="mt-4 space-y-4">
+            <div className={isGameMode ? 'opacity-50' : ''}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Wind size={14} />
+                  <span className="text-xs font-black uppercase tracking-wider">Flutuação</span>
+                </div>
+                <span className="text-xs font-bold text-gray-500 dark:text-gray-400">{Math.round(floatStrengthRaw * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={floatStrengthRaw}
+                onChange={e => setFloatStrengthRaw(parseFloat(e.target.value))}
+                className="w-full accent-[#dd9933] mt-2"
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Droplets size={14} />
+                  <span className="text-xs font-black uppercase tracking-wider">Rastro (Trail)</span>
+                </div>
+                <span className="text-xs font-bold text-gray-500 dark:text-gray-400">{trailLength}</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="50"
+                step="1"
+                value={trailLength}
+                onChange={e => setTrailLength(parseInt(e.target.value))}
+                className="w-full accent-[#dd9933] mt-2"
+              />
+            </div>
+
+            {/* Force slider hidden unless game mode */}
+            {isGameMode && (
+              <div>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Atom size={14} />
+                    <span className="text-xs font-black uppercase tracking-wider">Força (global)</span>
+                  </div>
+                  <span className="text-xs font-bold text-gray-500 dark:text-gray-400">{Math.round(cuePowerRaw * 100)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={cuePowerRaw}
+                  onChange={e => setCuePowerRaw(parseFloat(e.target.value))}
+                  className="w-full accent-[#dd9933] mt-2"
+                />
+              </div>
+            )}
+
+            <div className="pt-2 border-t border-gray-200 dark:border-white/10 text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-2">
+              <Volume2 size={14} />
+              <span>SFX: {SFX_CUE_HIT} / {SFX_POCKET}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DETAIL CARD (center + animation) */}
+      {detailOpen && detailCoin && (
+        <div
+          className="absolute inset-0 z-[60] flex items-center justify-center bg-black/45"
+          onMouseDown={() => { setDetailOpen(false); setSelectedParticle(null); }}
+        >
+          <div
+            key={detailSeq}
+            className="w-[92vw] max-w-[680px] rounded-2xl border border-gray-200 dark:border-white/10 bg-white/95 dark:bg-black/80 backdrop-blur-md shadow-2xl p-5 origin-top"
+            style={{
+              animation: 'cbDropIn 260ms ease-out'
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <style>{`
+              @keyframes cbDropIn {
+                0% { transform: translateY(-18px) scale(0.96); opacity: 0; }
+                100% { transform: translateY(0) scale(1); opacity: 1; }
+              }
+            `}</style>
+
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <img src={detailCoin.image} alt={detailCoin.name} className="w-12 h-12 rounded-full" />
+                <div>
+                  <div className="text-lg font-black leading-tight">{detailCoin.name}</div>
+                  <div className="text-xs font-bold text-gray-500 dark:text-gray-400">
+                    {detailCoin.symbol?.toUpperCase()} • Rank #{detailCoin.market_cap_rank ?? '-'}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => { setDetailOpen(false); setSelectedParticle(null); }}
+                className="p-2 rounded-lg bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 border border-gray-200 dark:border-white/10"
+                title="Fechar"
+              >
+                <CloseIcon size={18} />
+              </button>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between gap-4">
+              <div className="text-sm">
+                <div className="text-xs font-black text-gray-500 dark:text-gray-400">Preço</div>
+                <div className="text-xl font-black">{formatPrice(detailCoin.current_price)}</div>
+              </div>
+
+              <div className="text-sm text-right">
+                <div className="text-xs font-black text-gray-500 dark:text-gray-400">Variação ({timeframe})</div>
+                <div className="text-xl font-black" style={{ color: detailColor }}>
+                  {(detailPerf?.pct ?? 0).toFixed(2)}%
+                </div>
+              </div>
+            </div>
+
+            {/* Variations row (no inner boxes) */}
+            <div className="mt-4 rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50/60 dark:bg-white/5 px-4 py-3">
+              <div className="text-xs font-black text-gray-500 dark:text-gray-400 mb-2">Variações</div>
+              <div className="flex items-center justify-between text-sm font-bold">
+                <div>1h: <span style={{ color: (pct1h ?? 0) >= 0 ? '#089981' : '#f23645' }}>{pct1h === null ? '-' : `${pct1h.toFixed(2)}%`}</span></div>
+                <div>24h: <span style={{ color: (pct24h ?? 0) >= 0 ? '#089981' : '#f23645' }}>{pct24h === null ? '-' : `${pct24h.toFixed(2)}%`}</span></div>
+                <div>7d: <span style={{ color: (pct7d ?? 0) >= 0 ? '#089981' : '#f23645' }}>{pct7d === null ? '-' : `${pct7d.toFixed(2)}%`}</span></div>
+              </div>
+            </div>
+
+            {/* Details list (2 columns, “solta”) */}
+            <div className="mt-4">
+              <div className="text-xs font-black text-gray-500 dark:text-gray-400 mb-2">Detalhes</div>
+
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                <div className="flex items-baseline justify-between gap-3 border-b border-gray-200/60 dark:border-white/10 pb-1">
+                  <dt className="text-xs font-black text-gray-500 dark:text-gray-400">Market Cap</dt>
+                  <dd className="font-black">{formatCompact(detailCoin.market_cap)}</dd>
+                </div>
+
+                <div className="flex items-baseline justify-between gap-3 border-b border-gray-200/60 dark:border-white/10 pb-1">
+                  <dt className="text-xs font-black text-gray-500 dark:text-gray-400">Volume 24h</dt>
+                  <dd className="font-black">{formatCompact(detailCoin.total_volume)}</dd>
+                </div>
+
+                <div className="flex items-baseline justify-between gap-3 border-b border-gray-200/60 dark:border-white/10 pb-1">
+                  <dt className="text-xs font-black text-gray-500 dark:text-gray-400">Preço Máx 24h</dt>
+                  <dd className="font-black">{formatPrice((detailCoin as any)?.high_24h)}</dd>
+                </div>
+
+                <div className="flex items-baseline justify-between gap-3 border-b border-gray-200/60 dark:border-white/10 pb-1">
+                  <dt className="text-xs font-black text-gray-500 dark:text-gray-400">Preço Mín 24h</dt>
+                  <dd className="font-black">{formatPrice((detailCoin as any)?.low_24h)}</dd>
+                </div>
+
+                <div className="flex items-baseline justify-between gap-3 border-b border-gray-200/60 dark:border-white/10 pb-1">
+                  <dt className="text-xs font-black text-gray-500 dark:text-gray-400">ATH</dt>
+                  <dd className="font-black">{formatPrice((detailCoin as any)?.ath)}</dd>
+                </div>
+
+                <div className="flex items-baseline justify-between gap-3 border-b border-gray-200/60 dark:border-white/10 pb-1">
+                  <dt className="text-xs font-black text-gray-500 dark:text-gray-400">ATL</dt>
+                  <dd className="font-black">{formatPrice((detailCoin as any)?.atl)}</dd>
+                </div>
+
+                <div className="flex items-baseline justify-between gap-3 border-b border-gray-200/60 dark:border-white/10 pb-1">
+                  <dt className="text-xs font-black text-gray-500 dark:text-gray-400">Supply Circulante</dt>
+                  <dd className="font-black">{Number.isFinite(Number((detailCoin as any)?.circulating_supply)) ? Number((detailCoin as any)?.circulating_supply).toLocaleString() : '-'}</dd>
+                </div>
+
+                <div className="flex items-baseline justify-between gap-3 border-b border-gray-200/60 dark:border-white/10 pb-1">
+                  <dt className="text-xs font-black text-gray-500 dark:text-gray-400">Supply Total</dt>
+                  <dd className="font-black">{Number.isFinite(Number((detailCoin as any)?.total_supply)) ? Number((detailCoin as any)?.total_supply).toLocaleString() : '-'}</dd>
+                </div>
+              </dl>
+            </div>
+
+            {/* Your socials (simple row, no boxes) */}
+            <div className="mt-4 pt-3 border-t border-gray-200/70 dark:border-white/10">
+              <div className="text-xs font-black text-gray-500 dark:text-gray-400 mb-2">Redes do site</div>
+              <div className="flex flex-wrap items-center gap-2">
+                {SITE_SOCIALS.filter(s => !!s.href).map(s => (
+                  <a
+                    key={s.id}
+                    href={s.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-3 py-1.5 rounded-full text-xs font-black border border-gray-200 dark:border-white/10 bg-gray-100/70 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"
+                  >
+                    {s.label}
+                  </a>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-3 text-xs font-bold text-gray-500 dark:text-gray-400">
+              Clique fora para fechar. Clique em outra bolha para trocar (reanima).
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div ref={stageRef} className="flex-1 w-full relative cursor-crosshair overflow-hidden">
+        <canvas
+          ref={canvasRef}
+          onMouseMove={handleMouseMove}
+          onMouseDown={(e) => { e.preventDefault(); handleMouseDown(e); }}
+          onMouseUp={(e) => { e.preventDefault(); handleMouseUpGlobal(); }}
+          onClick={(e) => { e.preventDefault(); handleCanvasClick(e); }}
+          onMouseLeave={() => { setHoveredParticle(null); handleMouseUpGlobal(); }}
+          onWheel={handleWheel}
+          className="absolute inset-0 w-full h-full block"
+        />
+      </div>
+    </div>
+  );
+};
+
+export default MarketWindSwarm;
