@@ -5,7 +5,7 @@ import TreemapModule from 'highcharts/modules/treemap';
 import HeatmapModule from 'highcharts/modules/heatmap';
 import { createPortal } from 'react-dom';
 import { Loader2, Maximize2, X, RefreshCw, AlertTriangle, Minimize2, BarChart2, PieChart } from 'lucide-react';
-import { fetchTopCoins } from '../services/api';
+import { fetchWithFallback } from '../services/api';
 import { DashboardItem, ApiCoin } from '../../../types';
 
 // Initialize Highcharts modules
@@ -44,9 +44,14 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
       setLoading(true);
       setError('');
       try {
-        const data = await fetchTopCoins({ force: true });
-        if (data && data.length > 0) {
-          setCoins(data);
+        // Use requested lite endpoint
+        const data = await fetchWithFallback('/cachecko/cachecko_lite.json');
+        
+        // Handle array or object wrapper
+        const list = Array.isArray(data) ? data : (data?.data || []);
+        
+        if (list && list.length > 0) {
+          setCoins(list);
         } else {
           setError('No data available.');
         }
@@ -65,20 +70,29 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
     if (!coins.length) return [];
 
     return coins
-      .filter(c => c && c.symbol) // Filter invalid entries
+      .filter(c => c && (c.symbol || (c as any).s)) // Support 's' from lite json if needed
       .map(coin => {
-        const change = coin.price_change_percentage_24h || 0;
-        const val = metric === 'mcap' ? (coin.market_cap || 0) : (coin.total_volume || 0);
+        // Support standard ApiCoin fields or fallback to lite fields
+        const symbol = coin.symbol || (coin as any).s || '';
+        const name = coin.name || (coin as any).n || symbol;
+        const change = coin.price_change_percentage_24h ?? (coin as any).p24 ?? 0;
+        const price = coin.current_price ?? (coin as any).p ?? 0;
+        
+        // Market Cap & Volume might be abbreviated in lite, ensure numeric
+        const mcap = coin.market_cap ?? (coin as any).mc ?? 0;
+        const vol = coin.total_volume ?? (coin as any).v ?? 0;
+
+        const val = metric === 'mcap' ? mcap : vol;
         
         return {
-            id: coin.id,
-            name: (coin.symbol || '').toUpperCase(),
+            id: coin.id || symbol,
+            name: symbol.toUpperCase(),
             value: val,       
             colorValue: change,
             custom: {
-                fullName: coin.name || '',
-                price: coin.current_price || 0,
-                performance: (change < 0 ? '' : '+') + change.toFixed(2) + '%'
+                fullName: name,
+                price: price,
+                performance: (change < 0 ? '' : '+') + Number(change).toFixed(2) + '%'
             }
         };
       })
@@ -99,7 +113,8 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
             style: { fontFamily: 'Inter, sans-serif' },
             margin: [0, 0, 0, 0],
             spacing: [0, 0, 0, 0],
-            height: isFullscreen ? '100%' : '100%'
+            // Use 100% height to fill container
+            height: '100%' 
         },
         title: { text: undefined },
         credits: { enabled: false },
@@ -120,8 +135,14 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
                 // Format: SYMBOL <br> +2.5%
                 formatter: function() {
                     const point = this.point as any;
-                    const fontSize = Math.min(24, Math.max(10, Math.sqrt(point.shapeArgs.width * point.shapeArgs.height) / 5));
-                    if (point.shapeArgs.width < 30 || point.shapeArgs.height < 30) return ''; // Hide if too small
+                    // Protect against missing shapeArgs during initial render
+                    if (!point.shapeArgs) return '';
+                    
+                    const width = point.shapeArgs.width || 0;
+                    const height = point.shapeArgs.height || 0;
+                    const fontSize = Math.min(24, Math.max(10, Math.sqrt(width * height) / 5));
+                    
+                    if (width < 30 || height < 30) return ''; 
                     
                     return `<span style="font-size: ${fontSize}px; color: white;">${point.name}</span><br/>` +
                            `<span style="font-size: ${fontSize * 0.7}px; font-weight: normal; opacity: 0.9; color: white;">${point.custom.performance}</span>`;
@@ -178,14 +199,17 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
 
     if (chartInstanceRef.current) {
         chartInstanceRef.current.update(options);
-        setTimeout(() => chartInstanceRef.current?.reflow(), 50);
+        // Ensure resize happens after update to fix empty rendering
+        requestAnimationFrame(() => {
+             chartInstanceRef.current?.reflow();
+        });
     } else {
         chartInstanceRef.current = Highcharts.chart(chartContainerRef.current, options);
     }
 
   }, [chartData, isFullscreen, loading, metric]);
 
-  // Handle Resize Events
+  // Handle Resize
   useEffect(() => {
       const handleResize = () => {
           if (chartInstanceRef.current) {
@@ -198,11 +222,13 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
 
   // Force reflow when fullscreen toggles
   useEffect(() => {
-      setTimeout(() => {
+      // Small delay to ensure container size is applied before reflow
+      const timer = setTimeout(() => {
           if (chartInstanceRef.current) {
               chartInstanceRef.current.reflow();
           }
       }, 100);
+      return () => clearTimeout(timer);
   }, [isFullscreen]);
 
   const handleToggleFullscreen = () => {
@@ -215,7 +241,9 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
 
   // Widget Content
   const WidgetContent = (
-    <div className={`relative w-full h-full flex flex-col ${isFullscreen ? 'bg-[#1a1c1e]' : 'bg-transparent'} overflow-hidden`}>
+    // Force background color here to avoid transparency issues in fullscreen
+    // overflow-hidden is crucial to prevent scrollbars in fullscreen
+    <div className={`relative w-full h-full flex flex-col bg-[#1a1c1e] overflow-hidden`}>
         {/* Header Control Bar */}
         <div className="flex justify-between items-center px-4 py-3 border-b border-gray-800 bg-[#1a1c1e] shrink-0 z-10">
             <div className="flex items-center gap-3">
@@ -264,8 +292,8 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
             </div>
         </div>
 
-        {/* Chart Area */}
-        <div className="flex-1 relative w-full h-full min-h-0 bg-[#1a1c1e]">
+        {/* Chart Area - Must utilize flex-1 to fill space */}
+        <div className="flex-1 relative w-full min-h-0 bg-[#1a1c1e]">
             {loading && chartData.length === 0 ? (
                 <div className="absolute inset-0 flex items-center justify-center z-20 bg-[#1a1c1e]">
                     <div className="flex flex-col items-center gap-3 text-gray-500">
@@ -288,10 +316,11 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
     </div>
   );
 
-  // Render via Portal if fullscreen to ensure top layer
+  // Render via Portal if fullscreen to ensure top layer and proper sizing
+  // Fixed: w-screen h-screen ensures full viewport usage without scrollbars (due to overflow-hidden on container)
   if (isFullscreen) {
     return createPortal(
-        <div className="fixed inset-0 z-[9999] flex flex-col bg-[#1a1c1e] animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-[9999] w-screen h-screen bg-[#1a1c1e] flex flex-col overflow-hidden">
             {WidgetContent}
         </div>,
         document.body

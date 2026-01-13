@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
 ChevronLeft,
@@ -1097,6 +1098,7 @@ return (
 <span className="font-bold text-sm uppercase tracking-widest animate-pulse">Carregando Categorias...</span>
 </div>
 ) : (
+<DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onCatDragEnd}>
 <table className="w-full text-left border-collapse min-w-[1200px] table-fixed">
 <colgroup>
 {catColOrder.map((cid) => (
@@ -1106,7 +1108,6 @@ return (
 
 <thead className="sticky top-0 z-20 bg-white dark:bg-[#2f3032]">
 <tr className="border-b border-gray-100 dark:border-slate-800">
-<DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onCatDragEnd}>
 <SortableContext items={catColOrder} strategy={horizontalListSortingStrategy}>
 {catColOrder.map((cid) => {
 const c = CAT_COLS[cid];
@@ -1122,7 +1123,6 @@ onSort={handleCatSort}
 );
 })}
 </SortableContext>
-</DndContext>
 </tr>
 </thead>
 
@@ -1294,6 +1294,7 @@ Nenhuma categoria encontrada.
 )}
 </tbody>
 </table>
+</DndContext>
 )}
 </div>
 </div>
@@ -1602,6 +1603,7 @@ OK
 <span className="font-bold text-sm uppercase tracking-widest animate-pulse">Sincronizando Mercado...</span>
 </div>
 ) : (
+<DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
 <table className="w-full text-left border-collapse min-w-[1180px] table-fixed">
 <colgroup>
 <col style={{ width: COIN_COL_WIDTH.fav }} />
@@ -1618,7 +1620,6 @@ OK
 </span>
 </th>
 
-<DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
 <SortableContext items={colOrder} strategy={horizontalListSortingStrategy}>
 {colOrder.map((cid) => {
 const c = COLS[cid];
@@ -1634,7 +1635,6 @@ onSort={(k) => { handleSort(k); }}
 );
 })}
 </SortableContext>
-</DndContext>
 </tr>
 </thead>
 
@@ -1849,6 +1849,7 @@ return <td key={cid} className="p-2" />;
 )}
 </tbody>
 </table>
+</DndContext>
 )}
 </div>
 </div>
