@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { ApiCoin, Language } from '../../../types';
-import { Search, XCircle, Settings, Droplets, X as CloseIcon, Atom, Coins, Maximize, Wind, Info, Shuffle } from 'lucide-react';
+import { Search, XCircle, Settings, Droplets, X as CloseIcon, Atom, Coins, Maximize, Wind, Info } from 'lucide-react';
 import { fetchTopCoins } from '../services/api';
 
 interface Particle {
@@ -161,21 +161,24 @@ const [legendTipOpen, setLegendTipOpen] = useState(false);
 
 const [isGameMode, setIsGameMode] = useState(false);
 
-// ✅ NOVO: modo livre (sem escala)
+// ✅ Modo Livre agora só no Settings
 const [isFreeMode, setIsFreeMode] = useState(false);
 
 const [numCoins, setNumCoins] = useState(50);
 
-// ✅ default 100%
+// default 100%
 const [floatStrengthRaw, setFloatStrengthRaw] = useState(1.0);
 const [trailLength, setTrailLength] = useState(25);
 
+// força base (só aparece no game)
 const [cuePowerRaw, setCuePowerRaw] = useState(0.6);
+
 const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
 
 // Detail panel
 const [detailOpen, setDetailOpen] = useState(false);
 const [detailCoin, setDetailCoin] = useState<ApiCoin | null>(null);
+const [detailAnimKey, setDetailAnimKey] = useState(0);
 
 // Transform
 const transformRef = useRef({ k: 1, x: 0, y: 0 });
@@ -184,7 +187,10 @@ const panStartRef = useRef({ clientX: 0, clientY: 0, x: 0, y: 0 });
 const draggedParticleRef = useRef<Particle | null>(null);
 const lastMousePosRef = useRef<{ x: number; y: number } | null>(null);
 
-// ✅ 2 cliques: mira + força
+// ✅ Reset “força” redraw imediato
+const invalidateRef = useRef(0);
+const invalidate = useCallback(() => { invalidateRef.current++; }, []);
+
 const aimingRef = useRef<{
 phase: AimPhase;
 cueX: number;
@@ -232,6 +238,7 @@ selectedParticleRef.current = selectedParticle;
 const detailOpenRef = useRef(detailOpen);
 detailOpenRef.current = detailOpen;
 
+// lock scroll
 useEffect(() => {
 const prevBody = document.body.style.overflow;
 const prevHtml = document.documentElement.style.overflow;
@@ -294,9 +301,11 @@ if (particlesRef.current.length === 0) setStatus('error');
 }
 }, []);
 
+// ✅ Reset agora funciona sempre (pan/zoom)
 const resetZoom = useCallback(() => {
 transformRef.current = { k: 1, x: 0, y: 0 };
-}, []);
+invalidate();
+}, [invalidate]);
 
 const screenToWorld = (clientX: number, clientY: number) => {
 const canvas = canvasRef.current;
@@ -325,7 +334,7 @@ const volFactor = Math.log10(vol + 1);
 return absPct * volFactor;
 }, [getCoinAbsPct]);
 
-// ✅ Melhor tamanho (LOG) no marketcap e proporcionalidade mais forte no topo
+// LOG + top proporcional
 const computeTargetRadius = useCallback((
 coin: any,
 mode: ChartMode,
@@ -347,17 +356,14 @@ const logMin = Math.log10(Math.max(1, minR));
 const logMax = Math.log10(Math.max(1, maxR));
 const tLog = clamp((Math.log10(mc) - logMin) / (logMax - logMin || 1), 0, 1);
 
-// topN com proporcionalidade mais forte
 const topN = 12;
 const tTop = clamp(Math.sqrt(mc / Math.max(1, maxMc)), 0, 1);
-const wTop = rank <= topN ? (1 - (rank - 1) / (topN - 1)) : 0; // 1..0
+const wTop = rank <= topN ? (1 - (rank - 1) / (topN - 1)) : 0;
 const t = clamp((tLog * (1 - 0.55 * wTop)) + (tTop * (0.55 * wTop)), 0, 1);
 
-// range maior pra ocupar espaço
 return 22 + t * 95; // 22..117
 }
 
-// performance: mantém range bom
 const t = clamp((metric - minR) / (maxR - minR || 1), 0, 1);
 return 15 + t * 70;
 }, [sizeMetricPerf]);
@@ -411,10 +417,8 @@ const pct = getCoinPerfPct(p.coin) || 0;
 const baseColor = pct >= 0 ? '#089981' : '#f23645';
 const isBTC = String(p.coin.id).toLowerCase() === 'bitcoin';
 
-const rrMin = minR;
-const rrMax = maxR;
 const targetRadius = !isGameMode
-? computeTargetRadius(p.coin, mode, rrMin, rrMax, maxMc)
+? computeTargetRadius(p.coin, mode, minR, maxR, maxMc)
 : p.targetRadius;
 
 if (!isGameMode) {
@@ -599,10 +603,7 @@ return () => window.removeEventListener('mouseup', up);
 // eslint-disable-next-line react-hooks/exhaustive-deps
 }, []);
 
-// =========================
 // BUILD PARTICLES ONLY on coins/numCoins
-// ✅ removido chartMode do deps (isso era o PISCO)
-// =========================
 useEffect(() => {
 const topCoins = coins.slice(0, numCoins);
 if (topCoins.length === 0) return;
@@ -659,11 +660,17 @@ if (coins.length === 0) return;
 recomputeStatsAndTargets(coins, chartMode);
 }, [chartMode, timeframe, coins, recomputeStatsAndTargets]);
 
+// ✅ Regras de exclusão: game ganha de livre
+useEffect(() => {
+if (isGameMode) {
+setIsFreeMode(false);
+}
+}, [isGameMode]);
+
 // enter/exit game
 useEffect(() => {
 if (isGameMode) {
 resetZoom();
-setIsFreeMode(false);
 setDetailOpen(false);
 setSelectedParticle(null);
 setHoveredParticle(null);
@@ -725,7 +732,6 @@ if (a.phase === 'powering') {
 const mx = worldMouseX - a.powerStartX;
 const my = worldMouseY - a.powerStartY;
 
-// proj along direction; pull is inverse (puxar pra trás = mais força)
 const proj = mx * a.dirX + my * a.dirY;
 a.pull = clamp(-proj, 0, a.maxPull);
 return;
@@ -746,6 +752,7 @@ const dx = e.clientX - panStartRef.current.clientX;
 const dy = e.clientY - panStartRef.current.clientY;
 transformRef.current.x = panStartRef.current.x + dx;
 transformRef.current.y = panStartRef.current.y + dy;
+invalidate();
 return;
 }
 
@@ -781,6 +788,7 @@ setHoveredParticle(found);
 const openDetailFor = (p: Particle) => {
 setSelectedParticle(p);
 setDetailCoin(p.coin);
+setDetailAnimKey(v => v + 1);
 setDetailOpen(true);
 };
 
@@ -796,7 +804,6 @@ if (!cue || cue.isFalling) return;
 const w = screenToWorld(e.clientX, e.clientY);
 const a = aimingRef.current;
 
-// 1º clique: aiming (segura e gira)
 if (a.phase === 'idle') {
 a.phase = 'aiming';
 a.cueX = cue.x;
@@ -816,7 +823,6 @@ setSelectedParticle(cue);
 return;
 }
 
-// 2º clique: powering (segura e regula força)
 if (a.phase === 'powering_ready') {
 a.phase = 'powering';
 a.powerStartX = w.x;
@@ -824,13 +830,18 @@ a.powerStartY = w.y;
 return;
 }
 
-// se clicar em outras fases, ignora
 return;
 }
 
 if (hoveredParticleRef.current) {
 openDetailFor(hoveredParticleRef.current);
 return;
+}
+
+// clique em vazio fecha card (quando aberto já é bloqueado, então aqui é pro caso “não abriu ainda”)
+if (!hoveredParticleRef.current) {
+setDetailOpen(false);
+setSelectedParticle(null);
 }
 
 if (!isFreeMode) {
@@ -855,20 +866,17 @@ a.pull = 0;
 return;
 }
 
-// soltou 1º clique: trava direção
 if (a.phase === 'aiming') {
 a.phase = 'powering_ready';
 a.pull = 0;
 return;
 }
 
-// soltou 2º clique: dispara
 if (a.phase === 'powering') {
 const pullNorm = clamp(a.pull / a.maxPull, 0, 1);
 
-// ✅ forte o suficiente pra atravessar a mesa
-const basePower = 6200;
-const power = basePower * (0.20 + cuePowerRaw * 1.80) * pullNorm;
+const basePower = 6800;
+const power = basePower * (0.20 + cuePowerRaw * 1.90) * pullNorm;
 
 cue.vx += a.dirX * (power / Math.max(1, cue.mass));
 cue.vy += a.dirY * (power / Math.max(1, cue.mass));
@@ -880,7 +888,6 @@ a.pull = 0;
 return;
 }
 
-// powering_ready solto: mantém esperando 2º clique
 if (a.phase === 'powering_ready') return;
 }
 
@@ -915,6 +922,7 @@ const newX = mouseX - worldX * clampedK;
 const newY = mouseY - worldY * clampedK;
 
 transformRef.current = { k: clampedK, x: newX, y: newY };
+invalidate();
 };
 
 const legendText = useMemo(() => {
@@ -934,10 +942,10 @@ return (
 if (isFreeMode) {
 return (
 <>
-<div><span className="font-black">Modo Livre (Sem Escala)</span></div>
+<div><span className="font-black">Modo Livre</span></div>
 <div>• Bolhas flutuam soltas.</div>
+<div>• Batem e se repelem (colisão).</div>
 <div>• MarketCap/Variação mudam só o tamanho.</div>
-<div>• Sem eixos/escala.</div>
 </>
 );
 }
@@ -1001,7 +1009,6 @@ const cy = toScreenY(cueBall.y);
 
 const a = aimingRef.current;
 
-// direção do taco
 let ux = 1;
 let uy = 0;
 
@@ -1034,7 +1041,6 @@ uy = dy / dist;
 
 const contactGap = 12;
 
-// pull só aparece no powering
 const pull =
 (a.phase === 'powering' || a.phase === 'powering_ready')
 ? a.pull
@@ -1054,7 +1060,6 @@ ctx2.save();
 ctx2.globalAlpha = 0.92;
 ctx2.lineCap = 'round';
 
-// body
 ctx2.beginPath();
 ctx2.moveTo(buttX, buttY);
 ctx2.lineTo(tipX, tipY);
@@ -1062,7 +1067,6 @@ ctx2.strokeStyle = isDarkTheme ? 'rgba(210,170,120,0.78)' : 'rgba(120,85,45,0.72
 ctx2.lineWidth = thick;
 ctx2.stroke();
 
-// tip
 const tipLen = Math.min(30, stickLen * 0.12);
 ctx2.beginPath();
 ctx2.moveTo(tipX - ux * tipLen, tipY - uy * tipLen);
@@ -1108,6 +1112,57 @@ ctx2.stroke();
 ctx2.restore();
 };
 
+// ✅ colisão elástica (Newton)
+const resolveCollisions = (
+list: Particle[],
+restitution: number,
+stepDt: number
+) => {
+for (let i = 0; i < list.length; i++) {
+const p1 = list[i];
+if (p1.isFalling) continue;
+
+for (let j = i + 1; j < list.length; j++) {
+const p2 = list[j];
+if (p2.isFalling) continue;
+
+const dx = p2.x - p1.x;
+const dy = p2.y - p1.y;
+const minDist = p1.radius + p2.radius;
+
+const distSq = dx * dx + dy * dy;
+if (distSq >= minDist * minDist) continue;
+
+const dist = Math.sqrt(distSq) || 0.0001;
+const nx = dx / dist;
+const ny = dy / dist;
+
+const overlap = (minDist - dist);
+
+const totalMass = (p1.mass + p2.mass) || 1;
+const move1 = (p2.mass / totalMass);
+const move2 = (p1.mass / totalMass);
+
+if (!p1.isFixed) { p1.x -= nx * overlap * move1; p1.y -= ny * overlap * move1; }
+if (!p2.isFixed) { p2.x += nx * overlap * move2; p2.y += ny * overlap * move2; }
+
+const rvx = p2.vx - p1.vx;
+const rvy = p2.vy - p1.vy;
+const velAlongNormal = rvx * nx + rvy * ny;
+if (velAlongNormal > 0) continue;
+
+let impulse = -(1 + restitution) * velAlongNormal;
+impulse /= (1 / p1.mass + 1 / p2.mass);
+
+const impulseX = impulse * nx;
+const impulseY = impulse * ny;
+
+if (!p1.isFixed) { p1.vx -= impulseX / p1.mass; p1.vy -= impulseY / p1.mass; }
+if (!p2.isFixed) { p2.vx += impulseX / p2.mass; p2.vy += impulseY / p2.mass; }
+}
+}
+};
+
 const loop = () => {
 const now = performance.now();
 const dtRaw = (now - lastTime) / 1000;
@@ -1134,6 +1189,7 @@ const toScreenY = (val: number) => val * k + panY;
 
 const particles: Particle[] = particlesRef.current;
 
+// radius easing
 for (const p of particles) {
 const viewRadius = p.targetRadius * Math.pow(k, 0.25);
 p.radius += (viewRadius - p.radius) * 0.15;
@@ -1288,7 +1344,7 @@ ctx.restore();
 }
 
 // =======================
-// PHYSICS / POSITIONING
+// PHYSICS
 // =======================
 if (isGameMode) {
 const subSteps = 3;
@@ -1322,50 +1378,7 @@ if (p.y < p.radius + GAME_WALL_PAD) { p.y = p.radius + GAME_WALL_PAD; p.vy *= -1
 else if (p.y > worldH - p.radius - GAME_WALL_PAD) { p.y = worldH - p.radius - GAME_WALL_PAD; p.vy *= -1; }
 }
 
-for (let i = 0; i < particles.length; i++) {
-const p1 = particles[i];
-if (p1.isFalling) continue;
-
-for (let j = i + 1; j < particles.length; j++) {
-const p2 = particles[j];
-if (p2.isFalling) continue;
-
-const dx = p2.x - p1.x;
-const dy = p2.y - p1.y;
-const minDist = p1.radius + p2.radius;
-
-const distSq = dx * dx + dy * dy;
-if (distSq >= minDist * minDist) continue;
-
-const dist = Math.sqrt(distSq) || 0.001;
-const nx = dx / dist;
-const ny = dy / dist;
-
-const overlap = minDist - dist;
-const totalMass = (p1.mass + p2.mass) || 1;
-
-const move1 = (p2.mass / totalMass);
-const move2 = (p1.mass / totalMass);
-
-if (!p1.isFixed) { p1.x -= nx * overlap * move1; p1.y -= ny * overlap * move1; }
-if (!p2.isFixed) { p2.x += nx * overlap * move2; p2.y += ny * overlap * move2; }
-
-const rvx = p2.vx - p1.vx;
-const rvy = p2.vy - p1.vy;
-const velAlongNormal = rvx * nx + rvy * ny;
-if (velAlongNormal > 0) continue;
-
-const restitution = 0.96;
-let impulse = -(1 + restitution) * velAlongNormal;
-impulse /= (1 / p1.mass + 1 / p2.mass);
-
-const impulseX = impulse * nx;
-const impulseY = impulse * ny;
-
-if (!p1.isFixed) { p1.vx -= impulseX / p1.mass; p1.vy -= impulseY / p1.mass; }
-if (!p2.isFixed) { p2.vx += impulseX / p2.mass; p2.vy += impulseY / p2.mass; }
-}
-}
+resolveCollisions(particles, 0.96, stepDt);
 
 for (const p of particles) {
 if (p.isFalling) continue;
@@ -1386,7 +1399,6 @@ break;
 }
 }
 
-// ✅ bola encaçapada sai definitivamente (sem reset)
 for (const p of particles) {
 if (!p.isFalling) continue;
 p.fallT = (p.fallT || 0) + stepDt;
@@ -1408,14 +1420,21 @@ particlesRef.current = particlesRef.current.filter(pp => pp !== p);
 }
 }
 } else if (isFreeMode) {
-// ✅ modo livre: bolhas flutuando soltas na tela
+// ✅ MODO LIVRE COM COLISÃO / NEWTON
+const subSteps = 2;
+const stepDt = dt / subSteps;
+
 const worldW = width / k;
 const worldH = height / k;
 
-const maxAmp = 70 * floatStrengthRaw; // flutuação mais “viva”
-const drift = 10 + 55 * floatStrengthRaw;
+const maxAmp = 70 * floatStrengthRaw;
+const drift = 12 + 58 * floatStrengthRaw;
 
+const drag = Math.pow(0.992, stepDt * 60);
+
+for (let step = 0; step < subSteps; step++) {
 for (const p of particles) {
+if (p.isFalling) continue;
 if (p.isFixed) continue;
 
 const fx = Math.sin(now * 0.00055 + p.phase) * (maxAmp * 0.02);
@@ -1424,6 +1443,9 @@ const fy = Math.cos(now * 0.00050 + p.phase) * (maxAmp * 0.02);
 p.vx += fx;
 p.vy += fy;
 
+p.vx *= drag;
+p.vy *= drag;
+
 const sp = Math.hypot(p.vx, p.vy) || 0.0001;
 const maxSp = drift;
 if (sp > maxSp) {
@@ -1431,8 +1453,8 @@ p.vx = (p.vx / sp) * maxSp;
 p.vy = (p.vy / sp) * maxSp;
 }
 
-p.x += p.vx * dt;
-p.y += p.vy * dt;
+p.x += p.vx * stepDt;
+p.y += p.vy * stepDt;
 
 if (p.x < p.radius + GAME_WALL_PAD) { p.x = p.radius + GAME_WALL_PAD; p.vx *= -1; }
 else if (p.x > worldW - p.radius - GAME_WALL_PAD) { p.x = worldW - p.radius - GAME_WALL_PAD; p.vx *= -1; }
@@ -1440,7 +1462,11 @@ else if (p.x > worldW - p.radius - GAME_WALL_PAD) { p.x = worldW - p.radius - GA
 if (p.y < p.radius + GAME_WALL_PAD) { p.y = p.radius + GAME_WALL_PAD; p.vy *= -1; }
 else if (p.y > worldH - p.radius - GAME_WALL_PAD) { p.y = worldH - p.radius - GAME_WALL_PAD; p.vy *= -1; }
 }
+
+resolveCollisions(particles, 0.88, stepDt);
+}
 } else {
+// map positioning
 if (!statsRef.current) {
 reqIdRef.current = requestAnimationFrame(loop);
 return;
@@ -1497,7 +1523,7 @@ p.y += (targetY - p.y) * 0.05;
 }
 
 // =======================
-// DRAW PARTICLES
+// DRAW
 // =======================
 for (const p of particlesRef.current) {
 const screenX = toScreenX(p.x);
@@ -1618,7 +1644,6 @@ ctx.stroke();
 ctx.restore();
 }
 
-// taco por último (sempre “por cima”)
 if (isGameMode) {
 const cueBall = particlesRef.current.find(p => String(p.coin.id).toLowerCase() === 'bitcoin');
 if (cueBall) drawCueStick(ctx, cueBall, now, toScreenX, toScreenY, k, isDark);
@@ -1627,15 +1652,31 @@ if (cueBall) drawCueStick(ctx, cueBall, now, toScreenX, toScreenY, k, isDark);
 reqIdRef.current = requestAnimationFrame(loop);
 };
 
+// tocar invalidateRef pra não “otimizar” nada fora
+void invalidateRef.current;
+
 reqIdRef.current = requestAnimationFrame(loop);
 return () => cancelAnimationFrame(reqIdRef.current);
 }, [isDark, chartMode, isGameMode, isFreeMode, timeframe, floatStrengthRaw, trailLength, searchTerm, getCoinPerfPct, cuePowerRaw]);
+
+// UI helpers
+const setMapMode = (mode: ChartMode) => {
+setIsFreeMode(false);
+setChartMode(mode);
+};
 
 return (
 <div
 ref={containerRef}
 className="fixed inset-0 z-[2000] bg-white dark:bg-[#0b0f14] text-gray-900 dark:text-white flex flex-col overflow-hidden touch-none select-none overscroll-none h-[100dvh]"
 >
+<style>{`
+@keyframes cardDropZoom {
+0% { transform: translateY(-28px) scale(0.96); opacity: 0; }
+100% { transform: translateY(0px) scale(1); opacity: 1; }
+}
+`}</style>
+
 <div className="flex justify-between items-start p-4 z-20 bg-white/80 dark:bg-black/50 backdrop-blur-sm border-b border-gray-200 dark:border-white/10 shrink-0">
 <div className="flex items-center gap-4">
 <Coins size={28} className="text-[#dd9933]" />
@@ -1651,8 +1692,8 @@ className="fixed inset-0 z-[2000] bg-white dark:bg-[#0b0f14] text-gray-900 dark:
 <div className="flex items-center gap-2">
 <div className="flex bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10">
 <button
-onClick={() => { setIsFreeMode(false); setChartMode('valuation'); }}
-className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'valuation' ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500 dark:text-gray-300'}`}
+onClick={() => setMapMode('valuation')}
+className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'valuation' && !isFreeMode ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500 dark:text-gray-300'}`}
 >
 Market Cap
 </button>
@@ -1660,8 +1701,8 @@ Market Cap
 
 <div className="flex items-center bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10">
 <button
-onClick={() => { setIsFreeMode(false); setChartMode('performance'); }}
-className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'performance' ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500 dark:text-gray-300'}`}
+onClick={() => setMapMode('performance')}
+className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'performance' && !isFreeMode ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500 dark:text-gray-300'}`}
 >
 Variação:
 </button>
@@ -1674,7 +1715,7 @@ Variação:
 value={timeframe}
 onChange={(e) => setTimeframe(e.target.value as Timeframe)}
 className="bg-white dark:bg-[#2f3032] text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs font-black border border-gray-200 dark:border-white/10 outline-none"
-disabled={chartMode !== 'performance'}
+disabled={chartMode !== 'performance' || isFreeMode}
 >
 <option value="1h">1h</option>
 <option value="24h">24h</option>
@@ -1683,17 +1724,6 @@ disabled={chartMode !== 'performance'}
 </div>
 </div>
 
-{/* ✅ MODO LIVRE */}
-<button
-onClick={() => { if (!isGameMode) setIsFreeMode(v => !v); }}
-className={`px-3 py-2 rounded-lg border text-xs font-black transition-colors ${isFreeMode ? 'bg-[#dd9933] text-black border-[#dd9933]' : 'bg-gray-100 dark:bg-black/50 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10'}`}
-title="Modo Livre (sem escala)"
->
-<Shuffle size={14} className="inline-block mr-2" />
-Livre
-</button>
-
-{/* ✅ # moedas no header */}
 <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/50 p-2 rounded-lg border border-gray-200 dark:border-white/10">
 <span className="text-xs font-black text-gray-500 dark:text-gray-400">#</span>
 <select
@@ -1779,6 +1809,7 @@ className="absolute top-24 right-4 bg-white/90 dark:bg-black/80 p-4 rounded-lg b
 onWheel={(e) => e.stopPropagation()}
 onMouseDown={(e) => e.stopPropagation()}
 >
+{/* Game toggle */}
 <div className="flex items-center justify-between gap-3">
 <div className="flex items-center gap-2">
 <Atom size={14} />
@@ -1793,6 +1824,24 @@ title="Modo Game"
 <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isGameMode ? 'translate-x-6' : 'translate-x-1'}`} />
 </button>
 </div>
+
+{/* ✅ Free toggle abaixo do game e some quando game ativo */}
+{!isGameMode && (
+<div className="flex items-center justify-between gap-3 mt-3">
+<div className="flex items-center gap-2">
+<Atom size={14} />
+<span className="text-xs font-black uppercase tracking-wider">Modo Livre</span>
+</div>
+
+<button
+onClick={() => { setIsFreeMode(v => !v); }}
+className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isFreeMode ? 'bg-[#dd9933]' : 'bg-gray-200 dark:bg-[#2f3032]'}`}
+title="Modo Livre"
+>
+<span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isFreeMode ? 'translate-x-6' : 'translate-x-1'}`} />
+</button>
+</div>
+)}
 
 <div className="mt-4 space-y-4">
 <div className={isGameMode ? 'opacity-50' : ''}>
@@ -1834,7 +1883,6 @@ className="w-full accent-[#dd9933] mt-2"
 />
 </div>
 
-{/* ✅ força só aparece no modo game */}
 {isGameMode && (
 <div>
 <div className="flex items-center justify-between gap-3">
@@ -1859,14 +1907,16 @@ className="w-full accent-[#dd9933] mt-2"
 </div>
 )}
 
-{/* DETAIL PANEL (mantive o teu simples aqui) */}
+{/* ✅ CARD BONITÃO CENTRAL COM ANIMAÇÃO */}
 {detailOpen && detailCoin && (
 <div
 className="absolute inset-0 z-[60] flex items-center justify-center bg-black/45"
 onMouseDown={() => setDetailOpen(false)}
 >
 <div
-className="w-[92vw] max-w-[560px] rounded-2xl border border-gray-200 dark:border-white/10 bg-white/95 dark:bg-black/80 backdrop-blur-md shadow-2xl p-5"
+key={detailAnimKey}
+className="w-[92vw] max-w-[620px] rounded-2xl border border-gray-200 dark:border-white/10 bg-white/95 dark:bg-black/80 backdrop-blur-md shadow-2xl p-5"
+style={{ animation: 'cardDropZoom 220ms ease-out' }}
 onMouseDown={(e) => e.stopPropagation()}
 >
 <div className="flex items-start justify-between gap-4">
@@ -1883,6 +1933,7 @@ onMouseDown={(e) => e.stopPropagation()}
 <button
 onClick={() => setDetailOpen(false)}
 className="p-2 rounded-lg bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 border border-gray-200 dark:border-white/10"
+title="Fechar"
 >
 <CloseIcon size={18} />
 </button>
