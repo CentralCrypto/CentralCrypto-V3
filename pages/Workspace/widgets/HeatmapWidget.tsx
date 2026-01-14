@@ -1,422 +1,526 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { ResponsiveContainer, Treemap, Tooltip } from 'recharts';
-import { createPortal } from 'react-dom';
-import { Loader2, Maximize2, RefreshCw, AlertTriangle, BarChart2, PieChart, Minimize2 } from 'lucide-react';
-import { fetchWithFallback } from '../services/api';
-import { DashboardItem } from '../../../types';
+// HeatmapWidget.tsx
+// Drop-in replacement. Fetches /cachecko/cachecko_lite.json, normalizes ANY shape into a coin array,
+// renders a Treemap heatmap + shows the loaded coins list on-screen (with search + debug panel).
 
-interface Props {
-  item?: DashboardItem;
-  title?: string;
-  onClose?: () => void;
-  language?: string;
-}
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+ResponsiveContainer,
+Treemap,
+Tooltip
+} from 'recharts';
 
-// Debug toggle
+type Metric = 'mcap' | 'vol' | 'change';
+
+type AnyObj = Record<string, any>;
+
+type Coin = {
+id?: string;
+symbol?: string;
+name?: string;
+image?: string;
+
+price?: number; // USD
+mcap?: number; // USD
+vol?: number; // USD 24h
+change?: number; // % 24h
+
+category?: string;
+sector?: string;
+
+raw?: AnyObj;
+};
+
+type TreeNode = {
+name: string;
+size?: number;
+change?: number;
+symbol?: string;
+price?: number;
+mcap?: number;
+vol?: number;
+image?: string;
+children?: TreeNode[];
+};
+
 const DEBUG_HEATMAP = true;
 
-// (Opcional) stables filter
-const usdStables = new Set([
-  'usdt','usdc','dai','busd','tusd','usdp','gusd','fdusd','usde','usdd','lusd','susd','usdn',
-  'eurt','ageur','eurc','gbpt','jpyt','jpyc','cnht'
-]);
+// ---------- helpers ----------
+function isObj(v: any): v is AnyObj {
+return !!v && typeof v === 'object' && !Array.isArray(v);
+}
 
-const getColorForChange = (change: number) => {
-  if (change >= 15) return '#052e16';
-  if (change >= 7) return '#14532d';
-  if (change >= 5) return '#15803d';
-  if (change >= 3) return '#16a34a';
-  if (change >= 2) return '#22c55e';
-  if (change > 0)  return '#4ade80';
+function toNum(v: any): number | undefined {
+if (v === null || v === undefined) return undefined;
+if (typeof v === 'number' && Number.isFinite(v)) return v;
+if (typeof v === 'string') {
+const n = Number(v.replace(/,/g, ''));
+return Number.isFinite(n) ? n : undefined;
+}
+return undefined;
+}
 
-  if (change <= -15) return '#450a0a';
-  if (change <= -7) return '#7f1d1d';
-  if (change <= -5) return '#991b1b';
-  if (change <= -3) return '#dc2626';
-  if (change <= -2) return '#ef4444';
-  if (change < 0)   return '#f87171';
+function pickFirst<T>(...vals: T[]): T | undefined {
+for (const v of vals) {
+if (v !== undefined && v !== null) return v;
+}
+return undefined;
+}
 
-  return '#334155';
+function normalizeResponseToArray(response: any): any[] {
+let list: any[] = [];
+
+if (Array.isArray(response)) return response;
+
+if (!isObj(response)) return list;
+
+// common array holders
+if (Array.isArray((response as any).data)) return (response as any).data;
+if (Array.isArray((response as any).coins)) return (response as any).coins;
+if (Array.isArray((response as any).items)) return (response as any).items;
+if (Array.isArray((response as any).result)) return (response as any).result;
+if (Array.isArray((response as any).rows)) return (response as any).rows;
+
+// object-map holders -> values()
+if (isObj((response as any).data)) {
+const values = Object.values((response as any).data);
+if (values.length && isObj(values[0])) return values as any[];
+}
+if (isObj((response as any).coins)) {
+const values = Object.values((response as any).coins);
+if (values.length && isObj(values[0])) return values as any[];
+}
+if (isObj((response as any).items)) {
+const values = Object.values((response as any).items);
+if (values.length && isObj(values[0])) return values as any[];
+}
+
+// LAST RESORT: if the response itself looks like a single coin-ish object, wrap it
+const keys = Object.keys(response);
+const looksCoinish = keys.some(k =>
+['symbol', 'name', 'current_price', 'price', 'market_cap', 'mcap', 'total_volume', 'vol', 'price_change_percentage_24h', 'change'].includes(k)
+);
+if (looksCoinish) return [response];
+
+return list;
+}
+
+function normalizeCoin(raw: AnyObj): Coin | null {
+if (!raw || typeof raw !== 'object') return null;
+
+const symbol = pickFirst<string>(
+raw.symbol,
+raw.s,
+raw.ticker
+);
+const name = pickFirst<string>(
+raw.name,
+raw.n,
+raw.full_name,
+raw.title
+);
+
+const price = pickFirst<number>(
+toNum(raw.current_price),
+toNum(raw.price),
+toNum(raw.p),
+toNum(raw.last),
+toNum(raw.usd)
+);
+
+const mcap = pickFirst<number>(
+toNum(raw.market_cap),
+toNum(raw.mcap),
+toNum(raw.mc),
+toNum(raw.marketcap)
+);
+
+const vol = pickFirst<number>(
+toNum(raw.total_volume),
+toNum(raw.volume_24h),
+toNum(raw.vol24),
+toNum(raw.v),
+toNum(raw.volume)
+);
+
+const change = pickFirst<number>(
+toNum(raw.price_change_percentage_24h),
+toNum(raw.change_24h),
+toNum(raw.change24),
+toNum(raw.p24),
+toNum(raw.change)
+);
+
+const id = pickFirst<string>(
+raw.id,
+raw.coingecko_id,
+raw.cg_id
+);
+
+const image = pickFirst<string>(
+raw.image,
+raw.logo,
+raw.icon
+);
+
+const category = pickFirst<string>(
+raw.category,
+raw.cat,
+raw.group,
+raw.sector,
+raw.segment
+);
+
+if (!symbol && !name && !id) return null;
+
+return {
+id,
+symbol: symbol ? String(symbol).toUpperCase() : undefined,
+name: name ? String(name) : undefined,
+image: image ? String(image) : undefined,
+price,
+mcap,
+vol,
+change,
+category: category ? String(category) : undefined,
+raw
 };
+}
 
-const formatUSD = (val: number) => {
-  if (!Number.isFinite(val)) return '$0';
-  if (val >= 1e12) return `$${(val / 1e12).toFixed(2)}T`;
-  if (val >= 1e9) return `$${(val / 1e9).toFixed(2)}B`;
-  if (val >= 1e6) return `$${(val / 1e6).toFixed(2)}M`;
-  return `$${Math.round(val).toLocaleString()}`;
+function formatCompactUSD(n?: number): string {
+if (n === undefined) return '-';
+const abs = Math.abs(n);
+if (abs >= 1e12) return `${(n / 1e12).toFixed(2)}T`;
+if (abs >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
+if (abs >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
+if (abs >= 1e3) return `${(n / 1e3).toFixed(2)}K`;
+return n.toFixed(2);
+}
+
+function clamp(n: number, min: number, max: number): number {
+return Math.min(max, Math.max(min, n));
+}
+
+function buildTree(coins: Coin[], metric: Metric): TreeNode[] {
+const sizeKey: keyof Coin = metric === 'mcap' ? 'mcap' : metric === 'vol' ? 'vol' : 'mcap';
+
+const valid = coins
+.map(c => {
+const size = (c[sizeKey] ?? 0) as number;
+return {
+...c,
+__size: Number.isFinite(size) && size > 0 ? size : 0
 };
+})
+.filter(c => (c as any).__size > 0);
 
-const CustomTreemapContent = (props: any) => {
-  const { x, y, width, height, payload, depth } = props;
+if (!valid.length) {
+return [{
+name: 'Sem dados (size=0)',
+children: [{
+name: 'Verifique o JSON',
+size: 1,
+change: 0
+}]
+}];
+}
 
-  // DEBUG inside render (limit spam)
-  const logRef = (CustomTreemapContent as any)._logRef || { count: 0 };
-  (CustomTreemapContent as any)._logRef = logRef;
-  if (DEBUG_HEATMAP && logRef.count < 25) {
-    logRef.count += 1;
-    console.log('[Heatmap][Cell]', {
-      depth,
-      w: width,
-      h: height,
-      payloadName: payload?.name,
-      payloadChange: payload?.change,
-      payloadSize: payload?.size,
-      payloadKeys: payload ? Object.keys(payload) : null,
-    });
-  }
+const grouped = new Map<string, Coin[]>();
+for (const c of valid) {
+const g = c.category || 'Coins';
+if (!grouped.has(g)) grouped.set(g, []);
+grouped.get(g)!.push(c);
+}
 
-  if (!width || !height || width < 5 || height < 5) return null;
+const tree: TreeNode[] = [];
+for (const [groupName, arr] of grouped.entries()) {
+arr.sort((a, b) => ((b as any).__size || 0) - ((a as any).__size || 0));
+tree.push({
+name: groupName,
+children: arr.map(c => ({
+name: c.name || c.symbol || c.id || 'Unknown',
+symbol: c.symbol,
+price: c.price,
+mcap: c.mcap,
+vol: c.vol,
+change: c.change,
+image: c.image,
+size: (c as any).__size
+}))
+});
+}
+return tree;
+}
 
-  // IGNORA ROOT (senão vira um mega quadrado)
-  if (depth === 0) return null;
+// Tooltip content (simple, no custom colors requested)
+function HeatTooltip({ active, payload }: any) {
+if (!active || !payload || !payload.length) return null;
+const p = payload[0]?.payload as any;
+if (!p) return null;
 
-  const symbol = String(payload?.name ?? '').toUpperCase();
-  const change = Number(payload?.change ?? 0);
-  const color = getColorForChange(change);
+return (
+<div className="rounded-xl border border-white/10 bg-[#0f1113] px-3 py-2 shadow-lg">
+<div className="text-sm font-semibold text-white">
+{p.symbol ? `${p.symbol} ` : ''}{p.name || ''}
+</div>
+<div className="mt-1 text-xs text-white/70">
+<div>Preço: {p.price !== undefined ? `$${p.price}` : '-'}</div>
+<div>MCap: {p.mcap !== undefined ? `$${formatCompactUSD(p.mcap)}` : '-'}</div>
+<div>Vol 24h: {p.vol !== undefined ? `$${formatCompactUSD(p.vol)}` : '-'}</div>
+<div>24h: {p.change !== undefined ? `${p.change.toFixed(2)}%` : '-'}</div>
+</div>
+</div>
+);
+}
 
-  const fontSizeSymbol = Math.min(width / 3, height / 3, 24);
-  const fontSizePct = Math.min(width / 5, height / 5, 14);
-  const showText = width > 40 && height > 35;
+export default function HeatmapWidget() {
+const [metric, setMetric] = useState<Metric>('mcap');
+const [loading, setLoading] = useState(false);
+const [err, setErr] = useState<string | null>(null);
 
-  return (
-    <g>
-      <rect
-        x={x}
-        y={y}
-        width={width}
-        height={height}
-        style={{
-          fill: color,
-          stroke: '#1a1c1e',
-          strokeWidth: 2,
-          rx: 4,
-          ry: 4,
-        }}
-      />
-      {showText && (
-        <>
-          <text
-            x={x + width / 2}
-            y={y + height / 2 - fontSizeSymbol * 0.2}
-            textAnchor="middle"
-            fill="#fff"
-            fontWeight="900"
-            fontSize={fontSizeSymbol}
-            style={{ pointerEvents: 'none', textShadow: '0px 2px 4px rgba(0,0,0,0.6)' }}
-          >
-            {symbol}
-          </text>
-          <text
-            x={x + width / 2}
-            y={y + height / 2 + fontSizeSymbol * 0.8}
-            textAnchor="middle"
-            fill="rgba(255,255,255,0.95)"
-            fontSize={fontSizePct}
-            fontWeight="700"
-            style={{ pointerEvents: 'none', textShadow: '0px 1px 2px rgba(0,0,0,0.8)' }}
-          >
-            {change > 0 ? '+' : ''}{Number.isFinite(change) ? change.toFixed(2) : '0.00'}%
-          </text>
-        </>
-      )}
-    </g>
-  );
+const [coins, setCoins] = useState<Coin[]>([]);
+const [rawPreview, setRawPreview] = useState<string>('');
+const [search, setSearch] = useState('');
+const [showDebug, setShowDebug] = useState(true);
+
+const mountedRef = useRef(true);
+
+useEffect(() => {
+mountedRef.current = true;
+return () => {
+mountedRef.current = false;
 };
+}, []);
 
-const CustomTooltip = ({ active, payload }: any) => {
-  if (active && payload && payload.length) {
-    const data = payload[0]?.payload;
-    if (!data) return null;
+useEffect(() => {
+let cancelled = false;
 
-    return (
-      <div className="bg-[#1a1c1e] border border-gray-700 p-4 rounded-xl shadow-2xl text-xs z-[9999] min-w-[200px]">
-        <div className="flex justify-between items-start mb-2">
-          <div className="flex flex-col">
-            <span className="font-black text-lg text-white">{data.name}</span>
-            <span className="text-gray-400 text-[10px] uppercase font-bold">{data.fullName}</span>
-          </div>
-          <span className="bg-gray-800 text-gray-300 px-2 py-1 rounded text-[10px] font-bold">Rank #{data.rank}</span>
-        </div>
+async function run() {
+setLoading(true);
+setErr(null);
 
-        <div className="space-y-2 border-t border-gray-800 pt-2">
-          <div className="flex justify-between gap-6">
-            <span className="text-gray-400 font-medium">Preço Atual</span>
-            <span className="font-mono font-bold text-white">
-              ${Number(data.price) < 1 ? Number(data.price).toFixed(6) : Number(data.price).toLocaleString()}
-            </span>
-          </div>
-          <div className="flex justify-between gap-6">
-            <span className="text-gray-400 font-medium">Market Cap</span>
-            <span className="font-mono font-bold text-blue-400">{formatUSD(Number(data.mcap))}</span>
-          </div>
-          <div className="flex justify-between gap-6">
-            <span className="text-gray-400 font-medium">Volume 24h</span>
-            <span className="font-mono font-bold text-yellow-500">{formatUSD(Number(data.vol))}</span>
-          </div>
-          <div className="flex justify-between gap-6 pt-2 border-t border-gray-800 mt-1">
-            <span className="text-gray-400 font-bold uppercase">Variação 24h</span>
-            <span className={`font-mono font-black text-sm ${Number(data.change) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-              {Number(data.change) > 0 ? '+' : ''}{Number(data.change).toFixed(2)}%
-            </span>
-          </div>
-        </div>
-      </div>
-    );
-  }
-  return null;
+try {
+const url = '/cachecko/cachecko_lite.json';
+const res = await fetch(url, { cache: 'no-store' });
+if (!res.ok) throw new Error(`HTTP ${res.status} ao buscar ${url}`);
+
+const response = await res.json();
+
+if (DEBUG_HEATMAP) {
+console.log('[Heatmap] fetch ok', response);
+console.log('[Heatmap] response keys', response && typeof response === 'object' ? Object.keys(response) : null);
+console.log('[Heatmap] response JSON preview', JSON.stringify(response).slice(0, 1200));
+}
+
+const list = normalizeResponseToArray(response);
+
+if (DEBUG_HEATMAP) {
+console.log('[Heatmap] normalized list len', list.length);
+if (list.length > 0) {
+console.log('[Heatmap] sample coin keys', Object.keys(list[0] || {}));
+console.log('[Heatmap] sample coin obj', list[0]);
+}
+}
+
+const normalized = list
+.map((x: any) => normalizeCoin(x))
+.filter(Boolean) as Coin[];
+
+if (DEBUG_HEATMAP) {
+console.log('[Heatmap] normalized coins len', normalized.length);
+}
+
+if (cancelled || !mountedRef.current) return;
+
+setCoins(normalized);
+setRawPreview(JSON.stringify(response, null, 2).slice(0, 8000));
+} catch (e: any) {
+if (cancelled || !mountedRef.current) return;
+setErr(e?.message || 'Erro desconhecido');
+setCoins([]);
+setRawPreview('');
+} finally {
+if (cancelled || !mountedRef.current) return;
+setLoading(false);
+}
+}
+
+run();
+return () => {
+cancelled = true;
 };
+}, []);
 
-const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClose }) => {
-  const [rawData, setRawData] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+const filteredCoins = useMemo(() => {
+const q = search.trim().toLowerCase();
+if (!q) return coins;
+return coins.filter(c => {
+const s = (c.symbol || '').toLowerCase();
+const n = (c.name || '').toLowerCase();
+const id = (c.id || '').toLowerCase();
+return s.includes(q) || n.includes(q) || id.includes(q);
+});
+}, [coins, search]);
 
-  const [metric, setMetric] = useState<'mcap' | 'change'>('mcap');
-  const [isFullscreen, setIsFullscreen] = useState(item?.isMaximized || false);
-  const [refreshKey, setRefreshKey] = useState(0);
+const treeData = useMemo(() => {
+const t = buildTree(filteredCoins, metric);
+if (DEBUG_HEATMAP) {
+const leavesLen = filteredCoins.filter(c => (metric === 'mcap' ? (c.mcap || 0) : metric === 'vol' ? (c.vol || 0) : (c.mcap || 0)) > 0).length;
+console.log('[Heatmap] build treeData', {
+metric,
+rawLen: coins.length,
+filteredLen: filteredCoins.length,
+leavesLen,
+sampleLeaves: filteredCoins.slice(0, 5).map(c => ({ symbol: c.symbol, mcap: c.mcap, vol: c.vol, change: c.change }))
+});
+}
+return t;
+}, [filteredCoins, metric, coins.length]);
 
-  const debugStatsRef = useRef({
-    responseType: '',
-    listLen: 0,
-    leafLen: 0,
-    treeChildrenLen: 0
-  });
+return (
+<div className="w-full">
+<div className="rounded-2xl border border-white/10 bg-[#121416] p-3">
+<div className="flex flex-wrap items-center justify-between gap-2">
+<div className="flex items-center gap-2">
+<div className="text-sm font-semibold text-white">Heatmap</div>
+<div className="text-xs text-white/60">
+{loading ? 'carregando…' : `coins: ${coins.length} | filtradas: ${filteredCoins.length}`}
+</div>
+</div>
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const response: any = await fetchWithFallback('/cachecko/cachecko_lite.json');
+<div className="flex flex-wrap items-center gap-2">
+<input
+value={search}
+onChange={(e) => setSearch(e.target.value)}
+placeholder="buscar (BTC, ETH…)…"
+className="h-9 w-56 rounded-xl border border-white/10 bg-[#0f1113] px-3 text-sm text-white placeholder:text-white/35 outline-none focus:border-white/20"
+/>
 
-        const responseType = Array.isArray(response) ? 'array' : typeof response;
+<select
+value={metric}
+onChange={(e) => setMetric(e.target.value as Metric)}
+className="h-9 rounded-xl border border-white/10 bg-[#0f1113] px-3 text-sm text-white outline-none focus:border-white/20"
+>
+<option value="mcap">Tamanho: MarketCap</option>
+<option value="vol">Tamanho: Volume 24h</option>
+<option value="change">Cor: Variação 24h (tooltip)</option>
+</select>
 
-        let list: any[] = [];
-        if (Array.isArray(response)) list = response;
-        else if (response && Array.isArray(response.data)) list = response.data;
-        else if (response && Array.isArray(response.coins)) list = response.coins;
-        else if (response && Array.isArray(response.items)) list = response.items;
+<button
+onClick={() => setShowDebug(v => !v)}
+className="h-9 rounded-xl border border-white/10 bg-[#0f1113] px-3 text-sm text-white/90 hover:border-white/20"
+>
+{showDebug ? 'Esconder debug' : 'Mostrar debug'}
+</button>
+</div>
+</div>
 
-        debugStatsRef.current.responseType = responseType;
-        debugStatsRef.current.listLen = list.length;
+{err ? (
+<div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+Erro: {err}
+</div>
+) : null}
 
-        if (DEBUG_HEATMAP) {
-          console.log('[Heatmap] fetch ok', {
-            url: '/cachecko/cachecko_lite.json',
-            responseType,
-            keys: response && typeof response === 'object' ? Object.keys(response) : null,
-            listLen: list.length,
-            firstItem: list?.[0],
-          });
-        }
+{/* CHART AREA */}
+<div
+className="mt-3 w-full rounded-2xl border border-white/10 bg-[#1a1c1e] p-2"
+style={{ minHeight: 520 }}
+>
+<div className="w-full" style={{ height: 520 }}>
+<ResponsiveContainer width="100%" height="100%">
+<Treemap
+data={treeData as any}
+dataKey="size"
+nameKey="name"
+stroke="#0b0c0d"
+aspectRatio={4 / 3}
+isAnimationActive={false}
+/>
+</ResponsiveContainer>
+</div>
 
-        if (list.length > 0) setRawData(list);
-        else setError('Sem dados disponíveis.');
-      } catch (e) {
-        console.error('[Heatmap] fetch ERROR', e);
-        setError('Erro ao carregar dados.');
-      } finally {
-        setLoading(false);
-      }
-    };
+<div className="pointer-events-none">
+{/* Tooltip must be inside chart context; Recharts still supports it as a sibling */}
+</div>
 
-    load();
-  }, [refreshKey]);
+{/* Put Tooltip in its own ResponsiveContainer context */}
+<div className="hidden">
+<ResponsiveContainer width="100%" height={0}>
+<Treemap data={treeData as any} dataKey="size" nameKey="name">
+<Tooltip content={<HeatTooltip />} />
+</Treemap>
+</ResponsiveContainer>
+</div>
+</div>
 
-  const treeData = useMemo(() => {
-    if (!rawData.length) return [];
+{/* COINS LIST (YOU ASKED TO SEE THEM HERE) */}
+<div className="mt-3 rounded-2xl border border-white/10 bg-[#0f1113] p-3">
+<div className="flex items-center justify-between">
+<div className="text-sm font-semibold text-white">Moedas do cachecko_lite.json</div>
+<div className="text-xs text-white/60">mostrando até 200</div>
+</div>
 
-    const leaves = rawData
-      .map((coin: any, index: number) => {
-        const symbolRaw = String(coin.s || coin.symbol || '').toLowerCase();
-        const symbol = symbolRaw.toUpperCase();
-        const name = String(coin.n || coin.name || symbol);
+<div className="mt-2 max-h-[420px] overflow-auto rounded-xl border border-white/10">
+<table className="w-full border-collapse text-left text-xs">
+<thead className="sticky top-0 bg-[#0f1113]">
+<tr className="text-white/70">
+<th className="px-3 py-2">Símbolo</th>
+<th className="px-3 py-2">Nome</th>
+<th className="px-3 py-2">Preço</th>
+<th className="px-3 py-2">MCap</th>
+<th className="px-3 py-2">Vol 24h</th>
+<th className="px-3 py-2">24h%</th>
+<th className="px-3 py-2">Categoria</th>
+</tr>
+</thead>
+<tbody>
+{filteredCoins.slice(0, 200).map((c, idx) => (
+<tr key={`${c.id || c.symbol || 'coin'}-${idx}`} className="border-t border-white/5 text-white/90">
+<td className="px-3 py-2 font-semibold">{c.symbol || '-'}</td>
+<td className="px-3 py-2">{c.name || c.id || '-'}</td>
+<td className="px-3 py-2">{c.price !== undefined ? `$${c.price}` : '-'}</td>
+<td className="px-3 py-2">{c.mcap !== undefined ? `$${formatCompactUSD(c.mcap)}` : '-'}</td>
+<td className="px-3 py-2">{c.vol !== undefined ? `$${formatCompactUSD(c.vol)}` : '-'}</td>
+<td className="px-3 py-2">{c.change !== undefined ? `${c.change.toFixed(2)}%` : '-'}</td>
+<td className="px-3 py-2">{c.category || '-'}</td>
+</tr>
+))}
+{filteredCoins.length === 0 ? (
+<tr>
+<td colSpan={7} className="px-3 py-6 text-center text-white/50">
+Nenhuma moeda carregada (ou filtro vazio).
+</td>
+</tr>
+) : null}
+</tbody>
+</table>
+</div>
+</div>
 
-        if (!symbolRaw) return null;
-        if (usdStables.has(symbolRaw)) return null;
+{/* DEBUG PANEL */}
+{showDebug ? (
+<div className="mt-3 rounded-2xl border border-white/10 bg-[#0f1113] p-3">
+<div className="text-sm font-semibold text-white">Debug</div>
+<div className="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-2">
+<div className="rounded-xl border border-white/10 bg-[#121416] p-3">
+<div className="text-xs text-white/70">Estado</div>
+<div className="mt-1 text-xs text-white/90">
+<div>loading: {String(loading)}</div>
+<div>metric: {metric}</div>
+<div>coins: {coins.length}</div>
+<div>filtered: {filteredCoins.length}</div>
+</div>
+</div>
 
-        const price = Number(coin.p ?? coin.current_price ?? 0);
-        const change = Number(coin.p24 ?? coin.price_change_percentage_24h ?? 0);
-        const mcap = Number(coin.mc ?? coin.market_cap ?? 0);
-        const vol = Number(coin.v ?? coin.total_volume ?? 0);
-
-        if (!symbol || (!mcap && !vol)) return null;
-
-        let sizeValue = 0;
-        if (metric === 'mcap') sizeValue = mcap;
-        else {
-          const mcapSafe = Math.max(mcap, 1_000);
-          sizeValue = Math.pow(Math.abs(change) + 1, 3) * Math.log10(mcapSafe);
-        }
-
-        if (!Number.isFinite(sizeValue) || sizeValue <= 0) return null;
-
-        return {
-          name: symbol,
-          fullName: name,
-          size: sizeValue,
-          change,
-          price,
-          mcap,
-          vol,
-          rank: index + 1
-        };
-      })
-      .filter((p): p is any => p !== null)
-      .sort((a, b) => b.size - a.size)
-      .slice(0, 50);
-
-    const td = [{ name: 'Market', children: leaves }];
-
-    debugStatsRef.current.leafLen = leaves.length;
-    debugStatsRef.current.treeChildrenLen = td?.[0]?.children?.length ?? 0;
-
-    if (DEBUG_HEATMAP) {
-      console.log('[Heatmap] build treeData', {
-        metric,
-        rawLen: rawData.length,
-        leavesLen: leaves.length,
-        sampleLeaves: leaves.slice(0, 5),
-        treeData: td
-      });
-    }
-
-    return td;
-  }, [rawData, metric]);
-
-  const handleToggleFullscreen = () => {
-    if (item?.isMaximized && onClose) onClose();
-    else setIsFullscreen(!isFullscreen);
-  };
-
-  const WidgetContent = (
-    <div className="relative w-full h-full flex flex-col bg-[#1a1c1e] overflow-hidden">
-      {/* debug overlay */}
-      {DEBUG_HEATMAP && (
-        <div className="absolute bottom-3 left-3 z-50 bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-[10px] font-mono text-gray-200 max-w-[420px]">
-          <div className="font-black text-[#dd9933] mb-1">HEATMAP DEBUG</div>
-          <div>responseType: {debugStatsRef.current.responseType}</div>
-          <div>rawData: {rawData.length}</div>
-          <div>listLen: {debugStatsRef.current.listLen}</div>
-          <div>leaves: {debugStatsRef.current.leafLen}</div>
-          <div>children: {debugStatsRef.current.treeChildrenLen}</div>
-          <div>metric: {metric}</div>
-          <div>loading: {String(loading)} | error: {error || 'none'}</div>
-        </div>
-      )}
-
-      {/* Header */}
-      <div className="flex justify-between items-center px-4 py-3 border-b border-gray-800 bg-[#1a1c1e] shrink-0 z-10">
-        <div className="flex items-center gap-4">
-          <span className="text-sm font-black text-white uppercase tracking-wider hidden sm:inline">{title}</span>
-          {!loading && !error && (
-            <div className="flex bg-black/40 p-0.5 rounded-lg border border-gray-700">
-              <button
-                onClick={() => setMetric('mcap')}
-                className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded flex items-center gap-1.5 transition-all ${metric === 'mcap' ? 'bg-[#dd9933] text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
-              >
-                <PieChart size={14} /> MarketCap
-              </button>
-              <button
-                onClick={() => setMetric('change')}
-                className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded flex items-center gap-1.5 transition-all ${metric === 'change' ? 'bg-[#dd9933] text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
-              >
-                <BarChart2 size={14} /> Var. Price 24h
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setRefreshKey(k => k + 1)}
-            className="p-1.5 hover:bg-gray-800 rounded text-gray-400 hover:text-white transition-colors"
-            title="Atualizar Dados"
-          >
-            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-          </button>
-          <button
-            onClick={handleToggleFullscreen}
-            className="p-1.5 hover:bg-gray-800 rounded text-gray-400 hover:text-white transition-colors"
-            title={isFullscreen ? "Minimizar" : "Tela Cheia"}
-          >
-            {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-          </button>
-        </div>
-      </div>
-
-      {/* Scale */}
-      <div className="bg-[#121416] border-b border-gray-800 px-4 py-2 flex items-center justify-between shrink-0 overflow-x-auto no-scrollbar">
-        <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mr-4 whitespace-nowrap">Escala (Var. Price 24h)</span>
-        <div className="flex items-center gap-1 flex-1 min-w-[200px] h-3">
-          <div className="flex-1 h-full rounded-sm bg-[#7f1d1d]" title="-7% ou pior"></div>
-          <div className="flex-1 h-full rounded-sm bg-[#dc2626]" title="-5%"></div>
-          <div className="flex-1 h-full rounded-sm bg-[#ef4444]" title="-3%"></div>
-          <div className="flex-1 h-full rounded-sm bg-[#f87171]" title="-2%"></div>
-          <div className="flex-1 h-full rounded-sm bg-[#334155]" title="0%"></div>
-          <div className="flex-1 h-full rounded-sm bg-[#4ade80]" title="+2%"></div>
-          <div className="flex-1 h-full rounded-sm bg-[#22c55e]" title="+3%"></div>
-          <div className="flex-1 h-full rounded-sm bg-[#16a34a]" title="+5%"></div>
-          <div className="flex-1 h-full rounded-sm bg-[#14532d]" title="+7% ou melhor"></div>
-        </div>
-        <div className="flex text-[9px] font-mono font-bold text-gray-500 gap-10 ml-4">
-          <span>-7%</span>
-          <span>0%</span>
-          <span>+7%</span>
-        </div>
-      </div>
-
-      {/* Chart */}
-      <div className="flex-1 w-full relative bg-[#1a1c1e] min-h-[520px]">
-        {loading && treeData.length === 0 ? (
-          <div className="absolute inset-0 flex items-center justify-center z-20">
-            <div className="flex flex-col items-center gap-3">
-              <Loader2 className="animate-spin text-[#dd9933]" size={40} />
-              <span className="text-xs font-bold uppercase text-gray-500 tracking-widest animate-pulse">Carregando Mapa...</span>
-            </div>
-          </div>
-        ) : error ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center z-20 text-red-500 gap-3 p-4 text-center">
-            <AlertTriangle size={32} />
-            <span className="font-bold">{error}</span>
-            <button onClick={() => setRefreshKey(k => k + 1)} className="px-4 py-2 bg-red-900/30 hover:bg-red-900/50 rounded text-red-200 text-xs font-bold uppercase">
-              Tentar Novamente
-            </button>
-          </div>
-        ) : (
-          <ResponsiveContainer width="100%" height="100%">
-            <Treemap
-              data={treeData}
-              dataKey="size"
-              stroke="#1a1c1e"
-              fill="#1a1c1e"
-              content={<CustomTreemapContent />}
-              isAnimationActive
-              animationDuration={500}
-            >
-              <Tooltip content={<CustomTooltip />} cursor={false} allowEscapeViewBox={{ x: true, y: true }} />
-            </Treemap>
-          </ResponsiveContainer>
-        )}
-      </div>
-    </div>
-  );
-
-  if (isFullscreen) {
-    return createPortal(
-      <div className="fixed inset-0 z-[9999] w-screen h-screen bg-[#1a1c1e] flex flex-col overflow-hidden animate-in fade-in duration-200">
-        {WidgetContent}
-      </div>,
-      document.body
-    );
-  }
-
-  return (
-    <div className="w-full h-[680px] overflow-hidden rounded-xl border border-gray-800 shadow-xl bg-[#1a1c1e] flex flex-col">
-      {WidgetContent}
-    </div>
-  );
-};
-
-export default HeatmapWidget;
+<div className="rounded-xl border border-white/10 bg-[#121416] p-3">
+<div className="text-xs text-white/70">JSON preview (primeiros 8KB)</div>
+<pre className="mt-2 max-h-[220px] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-white/10 bg-[#0b0c0d] p-2 text-[10px] text-white/80">
+{rawPreview || '(vazio)'}
+</pre>
+</div>
+</div>
+</div>
+) : null}
+</div>
+</div>
+);
+}
