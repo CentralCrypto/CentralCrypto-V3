@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { ResponsiveContainer, Treemap, Tooltip } from 'recharts';
 import { createPortal } from 'react-dom';
 import { Loader2, Maximize2, RefreshCw, AlertTriangle, BarChart2, PieChart, Minimize2 } from 'lucide-react';
@@ -12,29 +12,31 @@ interface Props {
   language?: string;
 }
 
-// (Opcional) stables pra filtrar igual marketcap table costuma fazer
+// Debug toggle
+const DEBUG_HEATMAP = true;
+
+// (Opcional) stables filter
 const usdStables = new Set([
   'usdt','usdc','dai','busd','tusd','usdp','gusd','fdusd','usde','usdd','lusd','susd','usdn',
   'eurt','ageur','eurc','gbpt','jpyt','jpyc','cnht'
 ]);
 
-// Escala de cores expandida (Degradê rico)
 const getColorForChange = (change: number) => {
-  if (change >= 15) return '#052e16'; // Very Dark Green
-  if (change >= 7) return '#14532d'; // Green 900
-  if (change >= 5) return '#15803d'; // Green 700
-  if (change >= 3) return '#16a34a'; // Green 600
-  if (change >= 2) return '#22c55e'; // Green 500
-  if (change > 0)  return '#4ade80'; // Green 400
+  if (change >= 15) return '#052e16';
+  if (change >= 7) return '#14532d';
+  if (change >= 5) return '#15803d';
+  if (change >= 3) return '#16a34a';
+  if (change >= 2) return '#22c55e';
+  if (change > 0)  return '#4ade80';
 
-  if (change <= -15) return '#450a0a'; // Very Dark Red
-  if (change <= -7) return '#7f1d1d'; // Red 900
-  if (change <= -5) return '#991b1b'; // Red 800
-  if (change <= -3) return '#dc2626'; // Red 600
-  if (change <= -2) return '#ef4444'; // Red 500
-  if (change < 0)   return '#f87171'; // Red 400
+  if (change <= -15) return '#450a0a';
+  if (change <= -7) return '#7f1d1d';
+  if (change <= -5) return '#991b1b';
+  if (change <= -3) return '#dc2626';
+  if (change <= -2) return '#ef4444';
+  if (change < 0)   return '#f87171';
 
-  return '#334155'; // Slate 700 (Neutro)
+  return '#334155';
 };
 
 const formatUSD = (val: number) => {
@@ -45,19 +47,32 @@ const formatUSD = (val: number) => {
   return `$${Math.round(val).toLocaleString()}`;
 };
 
-// Componente visual de cada bloco do Treemap
-// ⚠️ Recharts passa os dados reais em props.payload
 const CustomTreemapContent = (props: any) => {
   const { x, y, width, height, payload, depth } = props;
 
-  // Só desenha retângulos de leaf (depth >= 1 geralmente)
-  // Mas deixa desenhar todos; o root costuma ocupar tudo e "atrapalhar", então ignoramos depth 0.
+  // DEBUG inside render (limit spam)
+  const logRef = (CustomTreemapContent as any)._logRef || { count: 0 };
+  (CustomTreemapContent as any)._logRef = logRef;
+  if (DEBUG_HEATMAP && logRef.count < 25) {
+    logRef.count += 1;
+    console.log('[Heatmap][Cell]', {
+      depth,
+      w: width,
+      h: height,
+      payloadName: payload?.name,
+      payloadChange: payload?.change,
+      payloadSize: payload?.size,
+      payloadKeys: payload ? Object.keys(payload) : null,
+    });
+  }
+
   if (!width || !height || width < 5 || height < 5) return null;
+
+  // IGNORA ROOT (senão vira um mega quadrado)
   if (depth === 0) return null;
 
   const symbol = String(payload?.name ?? '').toUpperCase();
   const change = Number(payload?.change ?? 0);
-
   const color = getColorForChange(change);
 
   const fontSizeSymbol = Math.min(width / 3, height / 3, 24);
@@ -101,7 +116,7 @@ const CustomTreemapContent = (props: any) => {
             fontWeight="700"
             style={{ pointerEvents: 'none', textShadow: '0px 1px 2px rgba(0,0,0,0.8)' }}
           >
-            {change > 0 ? '+' : ''}{change.toFixed(2)}%
+            {change > 0 ? '+' : ''}{Number.isFinite(change) ? change.toFixed(2) : '0.00'}%
           </text>
         </>
       )}
@@ -157,14 +172,17 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // 'mcap' = Tamanho por Capitalização
-  // 'change' = Tamanho por Volatilidade (Absoluta de variação)
   const [metric, setMetric] = useState<'mcap' | 'change'>('mcap');
-
   const [isFullscreen, setIsFullscreen] = useState(item?.isMaximized || false);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Carregar Dados
+  const debugStatsRef = useRef({
+    responseType: '',
+    listLen: 0,
+    leafLen: 0,
+    treeChildrenLen: 0
+  });
+
   useEffect(() => {
     const load = async () => {
       setLoading(true);
@@ -172,17 +190,31 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
       try {
         const response: any = await fetchWithFallback('/cachecko/cachecko_lite.json');
 
-        // ✅ Parsing robusto (array direto / data / coins / items)
+        const responseType = Array.isArray(response) ? 'array' : typeof response;
+
         let list: any[] = [];
         if (Array.isArray(response)) list = response;
         else if (response && Array.isArray(response.data)) list = response.data;
         else if (response && Array.isArray(response.coins)) list = response.coins;
         else if (response && Array.isArray(response.items)) list = response.items;
 
+        debugStatsRef.current.responseType = responseType;
+        debugStatsRef.current.listLen = list.length;
+
+        if (DEBUG_HEATMAP) {
+          console.log('[Heatmap] fetch ok', {
+            url: '/cachecko/cachecko_lite.json',
+            responseType,
+            keys: response && typeof response === 'object' ? Object.keys(response) : null,
+            listLen: list.length,
+            firstItem: list?.[0],
+          });
+        }
+
         if (list.length > 0) setRawData(list);
         else setError('Sem dados disponíveis.');
       } catch (e) {
-        console.error(e);
+        console.error('[Heatmap] fetch ERROR', e);
         setError('Erro ao carregar dados.');
       } finally {
         setLoading(false);
@@ -192,18 +224,16 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
     load();
   }, [refreshKey]);
 
-  // Processamento de Dados
   const treeData = useMemo(() => {
     if (!rawData.length) return [];
 
     const leaves = rawData
       .map((coin: any, index: number) => {
-        // Fallback robusto de propriedades (cachecko_lite costuma ter: s,n,p,p24,mc,v)
         const symbolRaw = String(coin.s || coin.symbol || '').toLowerCase();
         const symbol = symbolRaw.toUpperCase();
         const name = String(coin.n || coin.name || symbol);
 
-        // filtra stables (se quiser ver stables, comenta esse if)
+        if (!symbolRaw) return null;
         if (usdStables.has(symbolRaw)) return null;
 
         const price = Number(coin.p ?? coin.current_price ?? 0);
@@ -213,12 +243,9 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
 
         if (!symbol || (!mcap && !vol)) return null;
 
-        // Definição do tamanho do bloco
         let sizeValue = 0;
-        if (metric === 'mcap') {
-          sizeValue = mcap;
-        } else {
-          // tamanho por “força” da variação, ponderado pelo mcap
+        if (metric === 'mcap') sizeValue = mcap;
+        else {
           const mcapSafe = Math.max(mcap, 1_000);
           sizeValue = Math.pow(Math.abs(change) + 1, 3) * Math.log10(mcapSafe);
         }
@@ -240,8 +267,22 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
       .sort((a, b) => b.size - a.size)
       .slice(0, 50);
 
-    // ⚠️ Recharts Treemap espera root com children
-    return [{ name: 'Market', children: leaves }];
+    const td = [{ name: 'Market', children: leaves }];
+
+    debugStatsRef.current.leafLen = leaves.length;
+    debugStatsRef.current.treeChildrenLen = td?.[0]?.children?.length ?? 0;
+
+    if (DEBUG_HEATMAP) {
+      console.log('[Heatmap] build treeData', {
+        metric,
+        rawLen: rawData.length,
+        leavesLen: leaves.length,
+        sampleLeaves: leaves.slice(0, 5),
+        treeData: td
+      });
+    }
+
+    return td;
   }, [rawData, metric]);
 
   const handleToggleFullscreen = () => {
@@ -251,6 +292,20 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
 
   const WidgetContent = (
     <div className="relative w-full h-full flex flex-col bg-[#1a1c1e] overflow-hidden">
+      {/* debug overlay */}
+      {DEBUG_HEATMAP && (
+        <div className="absolute bottom-3 left-3 z-50 bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-[10px] font-mono text-gray-200 max-w-[420px]">
+          <div className="font-black text-[#dd9933] mb-1">HEATMAP DEBUG</div>
+          <div>responseType: {debugStatsRef.current.responseType}</div>
+          <div>rawData: {rawData.length}</div>
+          <div>listLen: {debugStatsRef.current.listLen}</div>
+          <div>leaves: {debugStatsRef.current.leafLen}</div>
+          <div>children: {debugStatsRef.current.treeChildrenLen}</div>
+          <div>metric: {metric}</div>
+          <div>loading: {String(loading)} | error: {error || 'none'}</div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex justify-between items-center px-4 py-3 border-b border-gray-800 bg-[#1a1c1e] shrink-0 z-10">
         <div className="flex items-center gap-4">
@@ -260,14 +315,12 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
               <button
                 onClick={() => setMetric('mcap')}
                 className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded flex items-center gap-1.5 transition-all ${metric === 'mcap' ? 'bg-[#dd9933] text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
-                title="Tamanho proporcional ao Market Cap"
               >
                 <PieChart size={14} /> MarketCap
               </button>
               <button
                 onClick={() => setMetric('change')}
                 className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded flex items-center gap-1.5 transition-all ${metric === 'change' ? 'bg-[#dd9933] text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
-                title="Tamanho proporcional à Variação de Preço (Volatilidade)"
               >
                 <BarChart2 size={14} /> Var. Price 24h
               </button>
@@ -293,7 +346,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
         </div>
       </div>
 
-      {/* Legenda */}
+      {/* Scale */}
       <div className="bg-[#121416] border-b border-gray-800 px-4 py-2 flex items-center justify-between shrink-0 overflow-x-auto no-scrollbar">
         <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mr-4 whitespace-nowrap">Escala (Var. Price 24h)</span>
         <div className="flex items-center gap-1 flex-1 min-w-[200px] h-3">
@@ -314,7 +367,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
         </div>
       </div>
 
-      {/* Área do Gráfico */}
+      {/* Chart */}
       <div className="flex-1 w-full relative bg-[#1a1c1e] min-h-[520px]">
         {loading && treeData.length === 0 ? (
           <div className="absolute inset-0 flex items-center justify-center z-20">
@@ -327,7 +380,9 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
           <div className="absolute inset-0 flex flex-col items-center justify-center z-20 text-red-500 gap-3 p-4 text-center">
             <AlertTriangle size={32} />
             <span className="font-bold">{error}</span>
-            <button onClick={() => setRefreshKey(k => k + 1)} className="px-4 py-2 bg-red-900/30 hover:bg-red-900/50 rounded text-red-200 text-xs font-bold uppercase">Tentar Novamente</button>
+            <button onClick={() => setRefreshKey(k => k + 1)} className="px-4 py-2 bg-red-900/30 hover:bg-red-900/50 rounded text-red-200 text-xs font-bold uppercase">
+              Tentar Novamente
+            </button>
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
@@ -338,7 +393,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
               fill="#1a1c1e"
               content={<CustomTreemapContent />}
               isAnimationActive
-              animationDuration={600}
+              animationDuration={500}
             >
               <Tooltip content={<CustomTooltip />} cursor={false} allowEscapeViewBox={{ x: true, y: true }} />
             </Treemap>
@@ -357,7 +412,6 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
     );
   }
 
-  // ⚠️ Se o pai não tiver height, h-full vira 0. Então garantimos um height aqui.
   return (
     <div className="w-full h-[680px] overflow-hidden rounded-xl border border-gray-800 shadow-xl bg-[#1a1c1e] flex flex-col">
       {WidgetContent}
