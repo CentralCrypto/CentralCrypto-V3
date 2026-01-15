@@ -1250,7 +1250,6 @@ ctx.restore();
 
 ctx.restore();
 }
-
 // PHYSICS
 if (isGameMode) {
 const subSteps = 3;
@@ -1261,6 +1260,7 @@ const worldH = height / k;
 for (let step = 0; step < subSteps; step++) {
 const drag = Math.pow(GAME_LINEAR_DAMP, stepDt * 60);
 
+// integra movimento + parede
 for (const p of particles) {
 if (p.isFalling) continue;
 if (p.isFixed) continue;
@@ -1280,6 +1280,7 @@ if (p.y < p.radius + GAME_WALL_PAD) { p.y = p.radius + GAME_WALL_PAD; p.vy *= -0
 else if (p.y > worldH - p.radius - GAME_WALL_PAD) { p.y = worldH - p.radius - GAME_WALL_PAD; p.vy *= -0.95; }
 }
 
+// colisões
 for (let i = 0; i < particles.length; i++) {
 const p1 = particles[i];
 if (p1.isFalling) continue;
@@ -1323,6 +1324,7 @@ if (!p2.isFixed) { p2.vx += ix / p2.mass; p2.vy += iy / p2.mass; }
 }
 }
 
+// checa pockets
 for (const p of particles) {
 if (p.isFalling) continue;
 if (p.isFixed) continue;
@@ -1342,6 +1344,7 @@ break;
 }
 }
 
+// anima queda + remove
 for (const p of [...particles]) {
 if (!p.isFalling) continue;
 p.fallT = (p.fallT || 0) + stepDt;
@@ -1366,7 +1369,6 @@ pocketedCountRef.current += 1;
 setPocketedUI({ count: pocketedCountRef.current, max: pocketedMaxRef.current });
 }
 playPocket();
-}
 }
 }
 }
@@ -1473,6 +1475,7 @@ p.x = baseX + jx;
 p.y = baseY + jy;
 }
 }
+
 
 // DRAW particles (WORLD SPACE)
 for (const p of particlesRef.current) {
