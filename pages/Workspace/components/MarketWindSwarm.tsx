@@ -2058,7 +2058,6 @@ Nenhum post carregado (verifique /2/wp-json/wp/v2/posts).
 </div>
 </div>
 </div>
-</div>
 )}
 
 <div ref={stageRef} className="flex-1 w-full relative cursor-crosshair overflow-hidden">
