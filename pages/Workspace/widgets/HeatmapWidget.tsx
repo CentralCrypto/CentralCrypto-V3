@@ -31,7 +31,8 @@ const formatCompact = (num: number) => {
     return `$${num.toLocaleString()}`;
 };
 
-const formatPrice = (price: number) => {
+const formatPrice = (price: number | undefined | null) => {
+    if (price === undefined || price === null || typeof price !== 'number' || isNaN(price)) return '$0.00';
     if (price < 1) return `$${price.toFixed(6)}`;
     if (price < 10) return `$${price.toFixed(4)}`;
     return `$${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -40,7 +41,8 @@ const formatPrice = (price: number) => {
 const CustomTreemapContent = (props: any) => {
   const { x, y, width, height, name, change, image, symbol, price } = props;
   
-  if (!width || !height || width < 5 || height < 5) return null;
+  // Guard clause: if no width/height or no symbol (likely a root/container node), don't render
+  if (!width || !height || width < 5 || height < 5 || !symbol) return null;
 
   const color = getColorForChange(change || 0);
   const showDetail = width > 50 && height > 50;
@@ -79,8 +81,8 @@ const CustomTreemapContent = (props: any) => {
                     <span className="text-[10px] font-bold text-white/90 drop-shadow-sm mt-0.5">
                         {formatPrice(price)}
                     </span>
-                    <span className={`text-[10px] font-black drop-shadow-sm mt-0.5 ${change >= 0 ? 'text-green-100' : 'text-red-100'}`}>
-                        {change > 0 ? '+' : ''}{change.toFixed(2)}%
+                    <span className={`text-[10px] font-black drop-shadow-sm mt-0.5 ${(change || 0) >= 0 ? 'text-green-100' : 'text-red-100'}`}>
+                        {(change || 0) > 0 ? '+' : ''}{(change || 0).toFixed(2)}%
                     </span>
                 </>
             )}
@@ -93,6 +95,8 @@ const CustomTreemapContent = (props: any) => {
 const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
+    if (!data || !data.symbol) return null; // Avoid empty tooltips for root nodes
+
     const isPositive = data.change >= 0;
 
     return (
@@ -100,7 +104,7 @@ const CustomTooltip = ({ active, payload }: any) => {
         {/* Header */}
         <div className="bg-gradient-to-r from-gray-800 to-gray-900 p-4 border-b border-gray-700 flex items-center justify-between">
             <div className="flex items-center gap-3">
-                <img src={data.image} className="w-10 h-10 rounded-full border-2 border-white/10 shadow-lg bg-white" alt="" />
+                <img src={data.image} className="w-10 h-10 rounded-full border-2 border-white/10 shadow-lg bg-white" alt="" onError={(e) => (e.currentTarget.style.display = 'none')} />
                 <div>
                     <h4 className="text-lg font-black text-white leading-none">{data.fullName}</h4>
                     <div className="flex items-center gap-2 mt-1">
@@ -148,7 +152,7 @@ const CustomTooltip = ({ active, payload }: any) => {
                     <span className="font-mono font-medium text-gray-300">{formatPrice(data.ath)}</span>
                     <span className="text-[10px] text-red-500 font-bold">{data.ath_p?.toFixed(1)}%</span>
                 </div>
-                <div className="text-[9px] text-gray-600">{new Date(data.ath_date).toLocaleDateString()}</div>
+                <div className="text-[9px] text-gray-600">{data.ath_date ? new Date(data.ath_date).toLocaleDateString() : '-'}</div>
             </div>
             
             <div className="space-y-1 text-right">
