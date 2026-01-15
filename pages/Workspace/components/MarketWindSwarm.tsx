@@ -147,9 +147,9 @@ const SFX_POCKET = '/widgets/sfx-pocket.wav';
 const GAME_BALL_RADIUS = 26;
 const GAME_CUE_RADIUS = 34;
 const GAME_WALL_PAD = 14;
-
 const GAME_LINEAR_DAMP = 0.962;
 const GAME_STOP_EPS = 1.6;
+const GAME_MAX_COINS = 50; // BTC + 49 alts
 
 // FREE MODE physics
 const FREE_LINEAR_DAMP = 0.992;
@@ -261,6 +261,12 @@ holdStart: number;
 
 const cueHideUntilRef = useRef<number>(0);
 const pointerDownRef = useRef(false);
+
+// socials (SINGLE DECLARATION)
+const siteSocials = useMemo(() => ([
+{ name: 'Site', icon: Globe, href: 'https://centralcrypto.com.br' },
+{ name: 'RSS', icon: Rss, href: 'https://centralcrypto.com.br/2/feed/' }
+]), []);
 
 // ===== Helpers: coordinate transforms =====
 const screenToWorld = (clientX: number, clientY: number) => {
@@ -406,8 +412,8 @@ return clamp(t, 0, 1);
 }, []);
 
 // ===== Stats + targets =====
-const recomputeStatsAndTargets = useCallback((coinsList: ApiCoin[], mode: ChartMode) => {
-const topCoins = coinsList.slice(0, isGameMode ? Math.min(50, numCoins) : numCoins);
+const recomputeStatsAndTargets = useCallback((coinsList: ApiCoin[], mode: ChartMode, listForParticles: ApiCoin[]) => {
+const topCoins = listForParticles;
 if (topCoins.length === 0) return;
 
 const xData: number[] = [];
@@ -472,7 +478,7 @@ p.mass = Math.max(1, p.targetRadius);
 
 p.color = isBTC ? '#ffffff' : baseColor;
 }
-}, [getCoinPerfPct, sizeMetricPerf, sizeLogScale, numCoins, isGameMode]);
+}, [getCoinPerfPct, sizeMetricPerf, sizeLogScale, isGameMode]);
 
 // ===== Map targets (world coords = "map space") =====
 const computeMapTargets = useCallback(() => {
@@ -602,7 +608,7 @@ setPocketedUI({ count: 0, max: maxPocket });
 
 gameCtlRef.current.phase = 0;
 gameCtlRef.current.powerPull = 0;
-cueHideUntilRef.current = 0;
+cueHideUntilRef.current = 0; // IMPORTANT: no phantom hide
 pointerDownRef.current = false;
 }, []);
 
@@ -635,9 +641,14 @@ setMagPosts(mapped);
 useEffect(() => { void fetchMagazine(); }, [fetchMagazine]);
 
 useEffect(() => {
-// keep magIndex valid always
 const slides = Math.max(1, Math.ceil((magPosts.length || 0) / 3));
 setMagIndex(i => clamp(i, 0, slides - 1));
+}, [magPosts]);
+
+const magSlides = useMemo(() => {
+const out: MagazinePost[][] = [];
+for (let i = 0; i < magPosts.length; i += 3) out.push(magPosts.slice(i, i + 3));
+return out.length ? out : [[]];
 }, [magPosts]);
 
 // ===== Init + resize =====
@@ -684,11 +695,22 @@ window.removeEventListener('resize', resizeCanvas);
 };
 }, [loadData, computeMapTargets, isGameMode, isFreeMode]);
 
-// ===== Build particles (but DO NOT rebuild in game, or it "resets from beyond") =====
+// ===== Build particles (DO NOT rebuild in game to avoid “reset from beyond”) =====
 useEffect(() => {
-const effectiveNum = isGameMode ? Math.min(50, numCoins) : numCoins;
-const topCoins = coins.slice(0, effectiveNum);
-if (topCoins.length === 0) return;
+if (coins.length === 0) return;
+
+let topCoins: ApiCoin[] = [];
+if (isGameMode) {
+const btc = coins.find(c => String(c.id).toLowerCase() === 'bitcoin');
+const alts = coins
+.filter(c => String(c.id).toLowerCase() !== 'bitcoin')
+.sort((a, b) => (a.market_cap_rank ?? 999999) - (b.market_cap_rank ?? 999999))
+.slice(0, GAME_MAX_COINS - 1);
+if (btc) topCoins = [btc, ...alts];
+else topCoins = coins.slice(0, GAME_MAX_COINS);
+} else {
+topCoins = coins.slice(0, numCoins);
+}
 
 for (const c of topCoins) {
 if (c?.image && !imageCache.current.has(c.image)) {
@@ -699,13 +721,15 @@ imageCache.current.set(c.image, img);
 }
 
 if (isGameMode) {
-// update coin data on existing particles only
+// game: if particles already exist, only update coin data
+if (particlesRef.current.length > 0) {
 const map = new Map<string, ApiCoin>(topCoins.map(c => [c.id, c]));
 for (const p of particlesRef.current) {
 const up = map.get(p.id);
 if (up) p.coin = up;
 }
 return;
+}
 }
 
 const existingMap = new Map<string, Particle>(particlesRef.current.map(p => [p.id, p]));
@@ -742,16 +766,19 @@ mapT: 0
 
 particlesRef.current = newParticles;
 
-recomputeStatsAndTargets(coins, chartMode);
-if (!isFreeMode) computeMapTargets();
+// recompute stats + targets for current topCoins
+recomputeStatsAndTargets(coins, chartMode, topCoins);
+if (!isFreeMode && !isGameMode) computeMapTargets();
 }, [coins, numCoins, recomputeStatsAndTargets, chartMode, isGameMode, isFreeMode, computeMapTargets]);
 
 useEffect(() => {
 if (coins.length === 0) return;
 if (isGameMode) return;
-recomputeStatsAndTargets(coins, chartMode);
+
+const topCoins = coins.slice(0, numCoins);
+recomputeStatsAndTargets(coins, chartMode, topCoins);
 if (!isFreeMode) computeMapTargets();
-}, [chartMode, timeframe, coins, recomputeStatsAndTargets, isGameMode, isFreeMode, computeMapTargets]);
+}, [chartMode, timeframe, coins, numCoins, recomputeStatsAndTargets, isGameMode, isFreeMode, computeMapTargets]);
 
 // ===== Mode toggles =====
 useEffect(() => {
@@ -762,8 +789,6 @@ setSelectedParticle(null);
 setHoveredParticle(null);
 
 setIsFreeMode(false);
-if (numCoins > 50) setNumCoins(50);
-
 setupGameLayout();
 } else {
 resetZoom();
@@ -776,9 +801,17 @@ draggedParticleRef.current.isFixed = false;
 draggedParticleRef.current = null;
 }
 
-if (!isFreeMode) computeMapTargets();
+if (!isFreeMode) {
+// IMPORTANT: restore map transition when leaving game
+for (const p of particlesRef.current) {
+p.mapFromX = p.x;
+p.mapFromY = p.y;
+p.mapT = 0;
 }
-}, [isGameMode, resetZoom, setupGameLayout, numCoins, isFreeMode, computeMapTargets]);
+computeMapTargets();
+}
+}
+}, [isGameMode, resetZoom, setupGameLayout, isFreeMode, computeMapTargets]);
 
 useEffect(() => {
 // FREE MODE must "release from current position", no snap recalcs
@@ -1053,20 +1086,8 @@ const detailPerf7d = useMemo(() => detailCoin ? computeSparkChange(detailCoin, '
 
 const perfColor = (pct?: number) => (Number(pct) >= 0 ? '#089981' : '#f23645');
 
-const effectiveNumCoins = useMemo(() => (isGameMode ? Math.min(50, numCoins) : numCoins), [isGameMode, numCoins]);
-const gameCoinOptions = useMemo(() => [10, 20, 30], []);
+const effectiveNumCoins = useMemo(() => (isGameMode ? GAME_MAX_COINS : numCoins), [isGameMode, numCoins]);
 const normalCoinOptions = useMemo(() => [50, 100, 150, 200, 250], []);
-
-const siteSocials = useMemo(() => ([
-{ name: 'Site', icon: Globe, href: 'https://centralcrypto.com.br' },
-{ name: 'RSS', icon: Rss, href: 'https://centralcrypto.com.br/2/feed/' }
-]), []);
-
-const magSlides = useMemo(() => {
-const out: MagazinePost[][] = [];
-for (let i = 0; i < magPosts.length; i += 3) out.push(magPosts.slice(i, i + 3));
-return out.length ? out : [[]];
-}, [magPosts]);
 
 // ===== RENDER LOOP =====
 useEffect(() => {
@@ -1107,7 +1128,7 @@ ctx.scale(dpr, dpr);
 
 drawWatermark(ctx, width, height, watermarkRef.current, isDark, isGameMode);
 
-// APPLY WORLD TRANSFORM ONCE (fixes “scale frozen” vs “coins moving”)
+// APPLY WORLD TRANSFORM ONCE (keeps axes/coins aligned under zoom/pan)
 const { k, x: panX, y: panY } = transformRef.current;
 ctx.save();
 ctx.translate(panX, panY);
@@ -1159,7 +1180,7 @@ ctx.stroke();
 ctx.restore();
 }
 
-// axes (WORLD SPACE, same space as map points)
+// axes (WORLD SPACE)
 if (!isGameMode && !isFreeMode && statsRef.current) {
 const s = statsRef.current;
 const margin = { top: 18, right: 18, bottom: 92, left: 86 };
@@ -1691,13 +1712,16 @@ cuePowerRaw,
 playPocket
 ]);
 
+const handleCloseDetail = () => {
+setDetailOpen(false);
+};
+
 return (
 <div
 ref={containerRef}
 className="fixed inset-0 z-[2000] bg-white dark:bg-[#0b0f14] text-gray-900 dark:text-white flex flex-col overflow-hidden touch-none select-none overscroll-none h-[100dvh]"
 >
 <div className="flex justify-between items-start p-4 z-20 bg-white/80 dark:bg-black/50 backdrop-blur-sm border-b border-gray-200 dark:border-white/10 shrink-0">
-<div className="flex items-center justify-between w-full">
 <div className="flex items-center gap-4">
 <Coins size={28} className="text-[#dd9933]" />
 <div>
@@ -1755,6 +1779,7 @@ disabled={isGameMode}
 </div>
 </div>
 
+{!isGameMode && (
 <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/50 p-2 rounded-lg border border-gray-200 dark:border-white/10">
 <Coins size={16} className="text-gray-400" />
 <select
@@ -1762,11 +1787,12 @@ value={effectiveNumCoins}
 onChange={e => setNumCoins(parseInt(e.target.value))}
 className="bg-white dark:bg-[#2f3032] text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs font-black border border-gray-200 dark:border-white/10 outline-none"
 >
-{(isGameMode ? gameCoinOptions : normalCoinOptions).map(n => (
+{normalCoinOptions.map(n => (
 <option key={n} value={n}>{n} moedas</option>
 ))}
 </select>
 </div>
+)}
 
 <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/50 p-2 rounded-lg border border-gray-200 dark:border-white/10">
 <Search size={16} className="text-gray-400" />
@@ -1891,6 +1917,7 @@ step="0.05"
 value={floatStrengthRaw}
 onChange={e => setFloatStrengthRaw(parseFloat(e.target.value))}
 className="w-full accent-[#dd9933] mt-2"
+disabled={isGameMode}
 />
 </div>
 
@@ -1937,11 +1964,11 @@ className="w-full accent-[#dd9933] mt-2"
 </div>
 )}
 
-{/* DETAIL CARD SIMPLE LIST */}
+{/* DETAIL CARD */}
 {detailOpen && detailCoin && (
 <div
 className="absolute inset-0 z-[80] flex items-center justify-center bg-black/55"
-onPointerDown={() => setDetailOpen(false)}
+onPointerDown={handleCloseDetail}
 >
 <div
 key={detailAnimKey}
@@ -1962,7 +1989,7 @@ onPointerDown={(e) => e.stopPropagation()}
 </div>
 
 <button
-onClick={() => setDetailOpen(false)}
+onClick={handleCloseDetail}
 className="p-2 rounded-lg bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 border border-gray-200 dark:border-white/10"
 title="Fechar"
 >
@@ -2054,6 +2081,7 @@ className="group rounded-xl border border-gray-200 dark:border-white/10 bg-white
 Nenhum post carregado (verifique /2/wp-json/wp/v2/posts).
 </div>
 )}
+</div>
 </div>
 </div>
 </div>
