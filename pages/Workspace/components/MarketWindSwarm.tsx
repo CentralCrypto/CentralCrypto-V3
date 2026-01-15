@@ -1250,6 +1250,7 @@ ctx.restore();
 
 ctx.restore();
 }
+
 // PHYSICS
 if (isGameMode) {
 const subSteps = 3;
@@ -1476,7 +1477,6 @@ p.y = baseY + jy;
 }
 }
 
-
 // DRAW particles (WORLD SPACE)
 for (const p of particlesRef.current) {
 let drawRadius = p.radius;
@@ -1691,18 +1691,13 @@ cuePowerRaw,
 playPocket
 ]);
 
-// ===== UI =====
-const siteSocials = useMemo(() => ([
-{ name: 'Site', icon: Globe, href: 'https://centralcrypto.com.br' },
-{ name: 'RSS', icon: Rss, href: 'https://centralcrypto.com.br/2/feed/' }
-]), []);
-
 return (
 <div
 ref={containerRef}
 className="fixed inset-0 z-[2000] bg-white dark:bg-[#0b0f14] text-gray-900 dark:text-white flex flex-col overflow-hidden touch-none select-none overscroll-none h-[100dvh]"
 >
 <div className="flex justify-between items-start p-4 z-20 bg-white/80 dark:bg-black/50 backdrop-blur-sm border-b border-gray-200 dark:border-white/10 shrink-0">
+<div className="flex items-center justify-between w-full">
 <div className="flex items-center gap-4">
 <Coins size={28} className="text-[#dd9933]" />
 <div>
@@ -2059,6 +2054,7 @@ className="group rounded-xl border border-gray-200 dark:border-white/10 bg-white
 Nenhum post carregado (verifique /2/wp-json/wp/v2/posts).
 </div>
 )}
+</div>
 </div>
 </div>
 </div>
