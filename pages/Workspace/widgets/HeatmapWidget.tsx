@@ -13,7 +13,6 @@ interface Props {
   language?: string;
 }
 
-// Escala de cores (Vermelho -> Verde)
 const getColorForChange = (change: number) => {
     if (change >= 7) return '#14532d'; // Green 900
     if (change >= 3) return '#16a34a'; // Green 600
@@ -130,27 +129,29 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
       setLoading(true);
       setError('');
       try {
-        // Lendo cachecko_lite.json conforme solicitado
         const response = await fetchWithFallback('/cachecko/cachecko_lite.json');
         
-        let list: any[] = [];
+        let rawList: any[] = [];
         if (Array.isArray(response)) {
-            list = response;
-        } else if (response && Array.isArray(response.data)) {
-            list = response.data;
+            // Check if it's wrapped in an object like [{"data": [...]}]
+            if (response[0] && response[0].data && Array.isArray(response[0].data)) {
+                rawList = response[0].data;
+            } else {
+                rawList = response;
+            }
+        } else if (response && response.data && Array.isArray(response.data)) {
+            rawList = response.data;
         }
 
-        if (list.length > 0) {
-          // Mapeando os campos abreviados do lite (s=symbol, n=name, p=price, p24=percent, mc=mcap, v=vol)
-          const mapped = list.map((coin: any) => ({
+        if (rawList.length > 0) {
+          const mapped = rawList.map((coin: any) => ({
               name: (coin.s || coin.symbol || '').toUpperCase(),
               fullName: coin.n || coin.name,
-              // Tenta pegar do lite, senão fallback para full
               price: Number(coin.p ?? coin.current_price ?? 0),
               change: Number(coin.p24 ?? coin.price_change_percentage_24h ?? 0),
               mcap: Number(coin.mc ?? coin.market_cap ?? 0),
               vol: Number(coin.v ?? coin.total_volume ?? 0)
-          })).filter(c => c.mcap > 0); // Remove lixo sem marketcap
+          })).filter(c => c.mcap > 0 && c.name); 
 
           setData(mapped);
         } else {
@@ -175,7 +176,6 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
         .slice(0, 50);
 
     const leaves = top50.map((coin, index) => {
-        // Define o tamanho do bloco
         let sizeValue = 0;
         if (metric === 'mcap') {
             sizeValue = coin.mcap;
@@ -199,7 +199,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
       else setIsFullscreen(!isFullscreen);
   };
 
-  const WidgetContent = (
+  const renderContent = () => (
     <div className="flex flex-col w-full h-full bg-[#1a1c1e] text-white overflow-hidden relative">
         <div className="flex justify-between items-center px-4 py-2 border-b border-gray-800 bg-[#1a1c1e] shrink-0 z-10">
             <div className="flex items-center gap-4">
@@ -258,7 +258,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
                         fill="#1a1c1e"
                         content={<CustomTreemapContent />}
                         animationDuration={400}
-                        aspectRatio={1.6} // Ajuste para retângulos mais largos
+                        aspectRatio={1.6} 
                     >
                         <Tooltip content={<CustomTooltip />} cursor={false} allowEscapeViewBox={{ x: true, y: true }} />
                     </Treemap>
@@ -281,7 +281,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
   if (isFullscreen) {
     return createPortal(
         <div className="fixed inset-0 z-[9999] w-screen h-screen bg-[#1a1c1e]">
-            {WidgetContent}
+            {renderContent()}
         </div>,
         document.body
     );
@@ -289,7 +289,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
 
   return (
     <div className="w-full h-full overflow-hidden rounded-xl border border-gray-800 shadow-xl bg-[#1a1c1e]">
-        {WidgetContent}
+        {renderContent()}
     </div>
   );
 };
