@@ -1,3 +1,4 @@
+
 import * as React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiCoin, Language } from '../../../types';
@@ -2204,7 +2205,6 @@ className="group rounded-xl border border-gray-200 dark:border-white/10 bg-white
 Nenhum post carregado (verifique /2/wp-json/wp/v2/posts).
 </div>
 )}
-</div>
 </div>
 </div>
 </div>

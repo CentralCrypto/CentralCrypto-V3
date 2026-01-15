@@ -250,6 +250,7 @@ const RsiWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ ite
     const [rsiTimeframe, setRsiTimeframe] = useState('7d');
     const [coinLimit, setCoinLimit] = useState(100);
     const [xMode, setXMode] = useState<XMode>('marketCap');
+    const [isLoadingAvg, setIsLoadingAvg] = useState(true);
 
     const t = getTranslations(language as Language).dashboard.widgets.rsi;
 
@@ -262,14 +263,22 @@ const RsiWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ ite
     const dynamicRsiAvg = useMemo(() => currentRsiPoints.length === 0 ? 50 : currentRsiPoints.reduce((acc, p) => acc + p.rsi[rsiTimeframe], 0) / currentRsiPoints.length, [currentRsiPoints, rsiTimeframe]);
 
     useEffect(() => {
-        fetchRsiAverage().then(setRsiAvgData);
+        setIsLoadingAvg(true);
+        fetchRsiAverage().then(data => {
+            setRsiAvgData(data);
+            setIsLoadingAvg(false);
+        }).catch(() => {
+            setIsLoadingAvg(false);
+        });
+
         if (item.isMaximized) {
             setRsiTrackerLoading(true);
             fetchRsiTracker().then(data => { setRsiTrackerData(data); setRsiTrackerLoading(false); });
         }
     }, [item.isMaximized]);
     
-    if (!rsiAvgData && !item.isMaximized) return <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-slate-500" /></div>;
+    if (isLoadingAvg && !rsiAvgData && !item.isMaximized) return <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-slate-500" /></div>;
+    if (!rsiAvgData && !item.isMaximized) return <div className="flex items-center justify-center h-full text-xs text-slate-500">Sem dados</div>;
 
     const rsiVal = item.isMaximized ? dynamicRsiAvg : (rsiAvgData?.averageRsi || 50);
     const label = rsiVal < 30 ? t.oversold : rsiVal > 70 ? t.overbought : t.neutral;

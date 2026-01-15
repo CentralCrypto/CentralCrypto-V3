@@ -15,8 +15,11 @@ export const fetchWithFallback = async (url: string): Promise<any | null> => {
     const finalUrl = url.includes('?') ? `${url}&_cb=${salt}` : `${url}?_cb=${salt}`;
     const { data } = await httpGetJson(finalUrl, { timeoutMs: 10000, retries: 2 });
     return data;
-  } catch (e) {
-    console.error(`[API] Erro ao buscar ${url}: `, (e as any).message || e);
+  } catch (e: any) {
+    // Silent fail for 404 to avoid console spam as per user request
+    if (e.status !== 404) {
+        console.warn(`[API] Warn fetching ${url}:`, e.message || e);
+    }
   }
   return null;
 };
@@ -196,7 +199,6 @@ export interface AltSeasonHistoryPoint { timestamp: number; altcoinIndex: number
 export interface AltSeasonData { index: number; yesterday: number; lastWeek: number; lastMonth: number; history?: AltSeasonHistoryPoint[]; }
 
 export const fetchCryptoNews = async (symbol: string, coinName: string): Promise<NewsItem[]> => {
-  // Fix: Use the correct endpoint from `ENDPOINTS.special`
   const url = ENDPOINTS.special.news;
   const finalUrl = `${url}?s=${encodeURIComponent(symbol)}&n=${encodeURIComponent(coinName)}`;
   const data = await fetchWithFallback(finalUrl);
@@ -318,7 +320,6 @@ export const fetchOrderBook = async (symbol: string): Promise<OrderBookData | nu
   return null;
 };
 
-// Fix: Add missing fetchMarketCapHistory function.
 export const fetchMarketCapHistory = async (): Promise<any | null> => {
   const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.mktcapHist));
   return data;
