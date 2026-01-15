@@ -1,15 +1,7 @@
-// HeatmapWidget.tsx
-// Drop-in replacement. Fetches /cachecko/cachecko_lite.json, normalizes ANY shape into a coin array,
-// renders a Treemap heatmap + shows the loaded coins list on-screen (with search + debug panel).
-
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-ResponsiveContainer,
-Treemap,
-Tooltip
-} from 'recharts';
+import { ResponsiveContainer, Treemap, Tooltip } from 'recharts';
 
-type Metric = 'mcap' | 'vol' | 'change';
+type Metric = 'mcap' | 'vol';
 
 type AnyObj = Record<string, any>;
 
@@ -19,32 +11,29 @@ symbol?: string;
 name?: string;
 image?: string;
 
-price?: number; // USD
-mcap?: number; // USD
-vol?: number; // USD 24h
-change?: number; // % 24h
+price?: number;
+mcap?: number;
+vol?: number;
+change?: number;
 
 category?: string;
-sector?: string;
-
 raw?: AnyObj;
 };
 
 type TreeNode = {
 name: string;
 size?: number;
-change?: number;
 symbol?: string;
 price?: number;
 mcap?: number;
 vol?: number;
+change?: number;
 image?: string;
 children?: TreeNode[];
 };
 
 const DEBUG_HEATMAP = true;
 
-// ---------- helpers ----------
 function isObj(v: any): v is AnyObj {
 return !!v && typeof v === 'object' && !Array.isArray(v);
 }
@@ -66,58 +55,89 @@ if (v !== undefined && v !== null) return v;
 return undefined;
 }
 
-function normalizeResponseToArray(response: any): any[] {
-let list: any[] = [];
+/**
+* Resolve qualquer formato de /cachecko/cachecko_lite.json para:
+* - array de moedas [{...},{...}]
+*/
+function resolveCoinsList(response: any): any[] {
+if (!response) return [];
 
-if (Array.isArray(response)) return response;
+let root = response;
 
-if (!isObj(response)) return list;
+// CASE A: response is array
+if (Array.isArray(root)) {
+// if it is [ { wrapper } ] -> unwrap
+if (root.length === 1 && isObj(root[0])) {
+const w = root[0];
 
-// common array holders
-if (Array.isArray((response as any).data)) return (response as any).data;
-if (Array.isArray((response as any).coins)) return (response as any).coins;
-if (Array.isArray((response as any).items)) return (response as any).items;
-if (Array.isArray((response as any).result)) return (response as any).result;
-if (Array.isArray((response as any).rows)) return (response as any).rows;
-
-// object-map holders -> values()
-if (isObj((response as any).data)) {
-const values = Object.values((response as any).data);
-if (values.length && isObj(values[0])) return values as any[];
-}
-if (isObj((response as any).coins)) {
-const values = Object.values((response as any).coins);
-if (values.length && isObj(values[0])) return values as any[];
-}
-if (isObj((response as any).items)) {
-const values = Object.values((response as any).items);
-if (values.length && isObj(values[0])) return values as any[];
+if (DEBUG_HEATMAP) {
+console.log('[Heatmap] array wrapper detected keys:', Object.keys(w));
+console.log('[Heatmap] wrapper preview:', JSON.stringify(w).slice(0, 800));
 }
 
-// LAST RESORT: if the response itself looks like a single coin-ish object, wrap it
-const keys = Object.keys(response);
-const looksCoinish = keys.some(k =>
-['symbol', 'name', 'current_price', 'price', 'market_cap', 'mcap', 'total_volume', 'vol', 'price_change_percentage_24h', 'change'].includes(k)
-);
-if (looksCoinish) return [response];
+// common list holders inside wrapper
+const candidates = [
+w.data,
+w.coins,
+w.items,
+w.result,
+w.rows,
+w.list,
+w.market,
+w.cachecko,
+w.cachecko_lite
+];
 
-return list;
+for (const c of candidates) {
+if (Array.isArray(c)) return c;
+if (isObj(c)) {
+const vals = Object.values(c);
+if (vals.length && isObj(vals[0])) return vals as any[];
+}
+}
+
+// maybe wrapper itself contains object-map of coins
+const vals = Object.values(w);
+if (vals.length && isObj(vals[0])) return vals as any[];
+}
+
+// normal array already is coin list
+return root;
+}
+
+// CASE B: response is object
+if (isObj(root)) {
+const candidates = [
+root.data,
+root.coins,
+root.items,
+root.result,
+root.rows,
+root.list,
+root.market
+];
+
+for (const c of candidates) {
+if (Array.isArray(c)) return c;
+if (isObj(c)) {
+const vals = Object.values(c);
+if (vals.length && isObj(vals[0])) return vals as any[];
+}
+}
+
+// if object-map coins
+const vals = Object.values(root);
+if (vals.length && isObj(vals[0])) return vals as any[];
+}
+
+return [];
 }
 
 function normalizeCoin(raw: AnyObj): Coin | null {
 if (!raw || typeof raw !== 'object') return null;
 
-const symbol = pickFirst<string>(
-raw.symbol,
-raw.s,
-raw.ticker
-);
-const name = pickFirst<string>(
-raw.name,
-raw.n,
-raw.full_name,
-raw.title
-);
+const symbol = pickFirst<string>(raw.symbol, raw.s, raw.ticker);
+const name = pickFirst<string>(raw.name, raw.n, raw.full_name, raw.title);
 
 const price = pickFirst<number>(
 toNum(raw.current_price),
@@ -150,25 +170,9 @@ toNum(raw.p24),
 toNum(raw.change)
 );
 
-const id = pickFirst<string>(
-raw.id,
-raw.coingecko_id,
-raw.cg_id
-);
-
-const image = pickFirst<string>(
-raw.image,
-raw.logo,
-raw.icon
-);
-
-const category = pickFirst<string>(
-raw.category,
-raw.cat,
-raw.group,
-raw.sector,
-raw.segment
-);
+const id = pickFirst<string>(raw.id, raw.coingecko_id, raw.cg_id);
+const image = pickFirst<string>(raw.image, raw.logo, raw.icon);
+const category = pickFirst<string>(raw.category, raw.cat, raw.group, raw.sector);
 
 if (!symbol && !name && !id) return null;
 
@@ -196,36 +200,27 @@ if (abs >= 1e3) return `${(n / 1e3).toFixed(2)}K`;
 return n.toFixed(2);
 }
 
-function clamp(n: number, min: number, max: number): number {
-return Math.min(max, Math.max(min, n));
-}
-
 function buildTree(coins: Coin[], metric: Metric): TreeNode[] {
-const sizeKey: keyof Coin = metric === 'mcap' ? 'mcap' : metric === 'vol' ? 'vol' : 'mcap';
+const sizeKey: keyof Coin = metric === 'mcap' ? 'mcap' : 'vol';
 
-const valid = coins
+const leaves = coins
 .map(c => {
 const size = (c[sizeKey] ?? 0) as number;
-return {
-...c,
-__size: Number.isFinite(size) && size > 0 ? size : 0
-};
+return { ...c, __size: Number.isFinite(size) && size > 0 ? size : 0 };
 })
 .filter(c => (c as any).__size > 0);
 
-if (!valid.length) {
-return [{
-name: 'Sem dados (size=0)',
-children: [{
-name: 'Verifique o JSON',
-size: 1,
-change: 0
-}]
-}];
+if (!leaves.length) {
+return [
+{
+name: 'Sem dados válidos',
+children: [{ name: 'mcap/vol = 0', size: 1 }]
+}
+];
 }
 
 const grouped = new Map<string, Coin[]>();
-for (const c of valid) {
+for (const c of leaves) {
 const g = c.category || 'Coins';
 if (!grouped.has(g)) grouped.set(g, []);
 grouped.get(g)!.push(c);
@@ -248,10 +243,10 @@ size: (c as any).__size
 }))
 });
 }
+
 return tree;
 }
 
-// Tooltip content (simple, no custom colors requested)
 function HeatTooltip({ active, payload }: any) {
 if (!active || !payload || !payload.length) return null;
 const p = payload[0]?.payload as any;
@@ -305,20 +300,16 @@ if (!res.ok) throw new Error(`HTTP ${res.status} ao buscar ${url}`);
 
 const response = await res.json();
 
-if (DEBUG_HEATMAP) {
-console.log('[Heatmap] fetch ok', response);
-console.log('[Heatmap] response keys', response && typeof response === 'object' ? Object.keys(response) : null);
-console.log('[Heatmap] response JSON preview', JSON.stringify(response).slice(0, 1200));
-}
-
-const list = normalizeResponseToArray(response);
+const list = resolveCoinsList(response);
 
 if (DEBUG_HEATMAP) {
-console.log('[Heatmap] normalized list len', list.length);
-if (list.length > 0) {
-console.log('[Heatmap] sample coin keys', Object.keys(list[0] || {}));
-console.log('[Heatmap] sample coin obj', list[0]);
-}
+console.log('[Heatmap] fetch ok', {
+url,
+responseType: Array.isArray(response) ? 'array' : typeof response,
+keys: isObj(response) ? Object.keys(response) : Array.isArray(response) && response[0] && typeof response[0] === 'object' ? Object.keys(response[0]) : [],
+listLen: list.length,
+firstItem: list[0]
+});
 }
 
 const normalized = list
@@ -327,12 +318,13 @@ const normalized = list
 
 if (DEBUG_HEATMAP) {
 console.log('[Heatmap] normalized coins len', normalized.length);
+if (normalized.length) console.log('[Heatmap] sample normalized', normalized.slice(0, 3));
 }
 
 if (cancelled || !mountedRef.current) return;
 
 setCoins(normalized);
-setRawPreview(JSON.stringify(response, null, 2).slice(0, 8000));
+setRawPreview(JSON.stringify(response, null, 2).slice(0, 12000));
 } catch (e: any) {
 if (cancelled || !mountedRef.current) return;
 setErr(e?.message || 'Erro desconhecido');
@@ -363,22 +355,25 @@ return s.includes(q) || n.includes(q) || id.includes(q);
 
 const treeData = useMemo(() => {
 const t = buildTree(filteredCoins, metric);
+
 if (DEBUG_HEATMAP) {
-const leavesLen = filteredCoins.filter(c => (metric === 'mcap' ? (c.mcap || 0) : metric === 'vol' ? (c.vol || 0) : (c.mcap || 0)) > 0).length;
+const leavesLen = filteredCoins.filter(c => (metric === 'mcap' ? (c.mcap || 0) : (c.vol || 0)) > 0).length;
 console.log('[Heatmap] build treeData', {
 metric,
 rawLen: coins.length,
 filteredLen: filteredCoins.length,
 leavesLen,
-sampleLeaves: filteredCoins.slice(0, 5).map(c => ({ symbol: c.symbol, mcap: c.mcap, vol: c.vol, change: c.change }))
+treeDataLen: t.length
 });
 }
+
 return t;
 }, [filteredCoins, metric, coins.length]);
 
 return (
 <div className="w-full">
 <div className="rounded-2xl border border-white/10 bg-[#121416] p-3">
+
 <div className="flex flex-wrap items-center justify-between gap-2">
 <div className="flex items-center gap-2">
 <div className="text-sm font-semibold text-white">Heatmap</div>
@@ -402,7 +397,6 @@ className="h-9 rounded-xl border border-white/10 bg-[#0f1113] px-3 text-sm text-
 >
 <option value="mcap">Tamanho: MarketCap</option>
 <option value="vol">Tamanho: Volume 24h</option>
-<option value="change">Cor: Variação 24h (tooltip)</option>
 </select>
 
 <button
@@ -421,11 +415,8 @@ Erro: {err}
 ) : null}
 
 {/* CHART AREA */}
-<div
-className="mt-3 w-full rounded-2xl border border-white/10 bg-[#1a1c1e] p-2"
-style={{ minHeight: 520 }}
->
-<div className="w-full" style={{ height: 520 }}>
+<div className="mt-3 w-full rounded-2xl border border-white/10 bg-[#1a1c1e] p-2" style={{ minHeight: 520 }}>
+<div className="w-full" style={{ height: 520, minHeight: 520 }}>
 <ResponsiveContainer width="100%" height="100%">
 <Treemap
 data={treeData as any}
@@ -434,25 +425,14 @@ nameKey="name"
 stroke="#0b0c0d"
 aspectRatio={4 / 3}
 isAnimationActive={false}
-/>
-</ResponsiveContainer>
-</div>
-
-<div className="pointer-events-none">
-{/* Tooltip must be inside chart context; Recharts still supports it as a sibling */}
-</div>
-
-{/* Put Tooltip in its own ResponsiveContainer context */}
-<div className="hidden">
-<ResponsiveContainer width="100%" height={0}>
-<Treemap data={treeData as any} dataKey="size" nameKey="name">
+>
 <Tooltip content={<HeatTooltip />} />
 </Treemap>
 </ResponsiveContainer>
 </div>
 </div>
 
-{/* COINS LIST (YOU ASKED TO SEE THEM HERE) */}
+{/* COINS LIST */}
 <div className="mt-3 rounded-2xl border border-white/10 bg-[#0f1113] p-3">
 <div className="flex items-center justify-between">
 <div className="text-sm font-semibold text-white">Moedas do cachecko_lite.json</div>
@@ -487,7 +467,7 @@ isAnimationActive={false}
 {filteredCoins.length === 0 ? (
 <tr>
 <td colSpan={7} className="px-3 py-6 text-center text-white/50">
-Nenhuma moeda carregada (ou filtro vazio).
+Nenhuma moeda carregada.
 </td>
 </tr>
 ) : null}
@@ -496,7 +476,7 @@ Nenhuma moeda carregada (ou filtro vazio).
 </div>
 </div>
 
-{/* DEBUG PANEL */}
+{/* DEBUG */}
 {showDebug ? (
 <div className="mt-3 rounded-2xl border border-white/10 bg-[#0f1113] p-3">
 <div className="text-sm font-semibold text-white">Debug</div>
@@ -504,15 +484,15 @@ Nenhuma moeda carregada (ou filtro vazio).
 <div className="rounded-xl border border-white/10 bg-[#121416] p-3">
 <div className="text-xs text-white/70">Estado</div>
 <div className="mt-1 text-xs text-white/90">
-<div>loading: {String(loading)}</div>
 <div>metric: {metric}</div>
-<div>coins: {coins.length}</div>
-<div>filtered: {filteredCoins.length}</div>
+<div>loading: {String(loading)}</div>
+<div>error: {err ? err : 'none'}</div>
+<div>rawData: {coins.length}</div>
 </div>
 </div>
 
 <div className="rounded-xl border border-white/10 bg-[#121416] p-3">
-<div className="text-xs text-white/70">JSON preview (primeiros 8KB)</div>
+<div className="text-xs text-white/70">JSON preview</div>
 <pre className="mt-2 max-h-[220px] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-white/10 bg-[#0b0c0d] p-2 text-[10px] text-white/80">
 {rawPreview || '(vazio)'}
 </pre>
@@ -520,6 +500,7 @@ Nenhuma moeda carregada (ou filtro vazio).
 </div>
 </div>
 ) : null}
+
 </div>
 </div>
 );

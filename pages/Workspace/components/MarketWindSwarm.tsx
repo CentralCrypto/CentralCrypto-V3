@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiCoin, Language } from '../../../types';
 import {
 Search,
@@ -12,13 +12,8 @@ Coins,
 Maximize,
 Wind,
 Info,
-ChevronLeft,
-ChevronRight,
-ExternalLink,
-Calendar,
-Clock,
-BarChart2,
-AlertTriangle
+Globe,
+Rss
 } from 'lucide-react';
 import { fetchTopCoins } from '../services/api';
 
@@ -30,26 +25,23 @@ radius: number;
 targetRadius: number;
 color: string;
 coin: ApiCoin;
-trail: { x: number, y: number, age: number }[];
+trail: { x: number; y: number; age: number }[];
 phase: number;
 isFixed?: boolean;
 mass: number;
 
-// game
 isFalling?: boolean;
 fallT?: number;
 fallPocket?: { x: number; y: number; r: number } | null;
 fallFromX?: number;
 fallFromY?: number;
 
-// tween map transition
-tweenActive?: boolean;
-tweenStart?: number;
-tweenDur?: number;
-tweenFromX?: number;
-tweenFromY?: number;
-tweenToX?: number;
-tweenToY?: number;
+// map transition
+mapFromX?: number;
+mapFromY?: number;
+mapToX?: number;
+mapToY?: number;
+mapT?: number;
 }
 
 type ChartMode = 'performance' | 'valuation';
@@ -59,10 +51,6 @@ type Timeframe = '1h' | '24h' | '7d';
 interface MarketWindSwarmProps { language: Language; onClose: () => void; }
 
 const clamp = (val: number, min: number, max: number) => Math.max(min, Math.min(val, max));
-
-const easeInOutCubic = (t: number) => t < 0.5
-? 4 * t * t * t
-: 1 - Math.pow(-2 * t + 2, 3) / 2;
 
 const formatCompact = (v?: number) => {
 const n = Number(v);
@@ -78,20 +66,8 @@ return `$${n.toFixed(0)}`;
 const formatPrice = (v?: number) => {
 const n = Number(v);
 if (!isFinite(n)) return '-';
-if (Math.abs(n) < 0.01) return `$${n.toPrecision(3)}`;
+if (n < 0.01) return `$${n.toPrecision(3)}`;
 return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-};
-
-const fmtPct = (v?: number) => {
-const n = Number(v);
-if (!isFinite(n)) return '-';
-return `${n.toFixed(2)}%`;
-};
-
-const pctColor = (v?: number) => {
-const n = Number(v);
-if (!isFinite(n) || n === 0) return '#9aa4b2';
-return n > 0 ? '#089981' : '#f23645';
 };
 
 const getSpark = (coin: any): number[] | null => {
@@ -128,130 +104,70 @@ inferredMinutesPerPoint: minutesPerPoint
 };
 };
 
-// ========================
-// WATERMARK
-// ========================
+// watermark
 const WATERMARK_LOCAL = '/logo2-transp.png';
 const WATERMARK_REMOTE = '';
 
-// ========================
-// MAGAZINE (WordPress REST)
-// ========================
-const MAGAZINE_API_BASE = '/magazine/wp-json/wp/v2';
-const MAGAZINE_POSTS_ENDPOINT = `${MAGAZINE_API_BASE}/posts?per_page=6&_embed=1&orderby=date&order=desc`;
-const MAGAZINE_FALLBACK_LINK_BASE = '/magazine';
+const drawWatermark = (
+ctx: CanvasRenderingContext2D,
+width: number,
+height: number,
+img: HTMLImageElement | null,
+isDark: boolean,
+isGameMode: boolean
+) => {
+if (!img || !img.complete || img.naturalWidth <= 0 || img.naturalHeight <= 0) return;
+
+const maxW = width * 0.78;
+const maxH = height * 0.78;
+const scale = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight);
+
+const w = img.naturalWidth * scale;
+const h = img.naturalHeight * scale;
+
+const x = (width - w) / 2;
+const y = (height - h) / 2;
+
+const alphaBase = isDark ? 0.055 : 0.035;
+const alpha = isGameMode ? alphaBase * 0.85 : alphaBase;
+
+ctx.save();
+ctx.globalAlpha = alpha;
+ctx.imageSmoothingEnabled = true;
+ctx.imageSmoothingQuality = 'high';
+ctx.drawImage(img, x, y, w, h);
+ctx.restore();
+};
+
+// audio
+const SFX_CUE_HIT = '/widgets/sfx-cue-hit.wav';
+const SFX_POCKET = '/widgets/sfx-pocket.wav';
+
+// GAME CONFIG
+const GAME_BALL_RADIUS = 26;
+const GAME_CUE_RADIUS = 34;
+const GAME_WALL_PAD = 14;
+
+const GAME_LINEAR_DAMP = 0.962;
+const GAME_STOP_EPS = 1.6;
+
+// FREE MODE physics
+const FREE_LINEAR_DAMP = 0.992;
+const FREE_MAX_SPEED = 420;
+const FREE_REPULSE = 0.95;
+
+// Transform
+type Transform = { k: number; x: number; y: number };
+type TransformTween = { active: boolean; from: Transform; to: Transform; t: number; dur: number };
 
 type MagazinePost = {
 id: number;
-link: string;
+title: string;
+excerpt: string;
 date: string;
-title: { rendered: string };
-excerpt?: { rendered: string };
-_embedded?: any;
+link: string;
+image?: string;
 };
-
-const stripHtml = (html: string) => {
-if (!html) return '';
-return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-};
-
-const safeTitle = (s: string) => stripHtml(s || '').slice(0, 120);
-
-const pickFeatured = (p: MagazinePost): string | null => {
-try {
-const media = p?._embedded?.['wp:featuredmedia']?.[0];
-const sizes = media?.media_details?.sizes;
-const url =
-sizes?.medium?.source_url ||
-sizes?.thumbnail?.source_url ||
-media?.source_url ||
-null;
-return url;
-} catch {
-return null;
-}
-};
-
-// ========================
-// SOCIAL ICONS (inline SVG, no CDN)
-// ========================
-const SocialIcon = ({ type }: { type: string }) => {
-const cls = "w-5 h-5";
-if (type === 'website') {
-return (
-<svg className={cls} viewBox="0 0 24 24" fill="none">
-<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Z" stroke="currentColor" strokeWidth="2"/>
-<path d="M2 12h20" stroke="currentColor" strokeWidth="2"/>
-<path d="M12 2c2.7 2.9 4 6.2 4 10s-1.3 7.1-4 10c-2.7-2.9-4-6.2-4-10s1.3-7.1 4-10Z" stroke="currentColor" strokeWidth="2"/>
-</svg>
-);
-}
-if (type === 'x') {
-return (
-<svg className={cls} viewBox="0 0 24 24" fill="none">
-<path d="M18.9 3H22l-6.8 7.8L23 21h-6.2l-4.9-6.4L6 21H3l7.4-8.5L1 3h6.4l4.4 5.8L18.9 3Z" fill="currentColor"/>
-</svg>
-);
-}
-if (type === 'telegram') {
-return (
-<svg className={cls} viewBox="0 0 24 24" fill="none">
-<path d="M21.8 4.6 19 20.2c-.2 1.1-.8 1.4-1.6.9l-4.5-3.3-2.2 2.1c-.2.2-.4.4-.8.4l.3-4.9 8.9-8c.4-.4-.1-.6-.6-.2l-11 6.9-4.7-1.5c-1-.3-1-1 .2-1.5L20 3.8c.9-.3 1.7.2 1.8.8Z" fill="currentColor"/>
-</svg>
-);
-}
-if (type === 'github') {
-return (
-<svg className={cls} viewBox="0 0 24 24" fill="none">
-<path fill="currentColor" d="M12 .6a11.4 11.4 0 0 0-3.6 22.2c.6.1.8-.2.8-.6v-2.1c-3.2.7-3.9-1.4-3.9-1.4-.5-1.2-1.2-1.6-1.2-1.6-1-.7.1-.7.1-.7 1.1.1 1.7 1.1 1.7 1.1 1 1.7 2.7 1.2 3.3.9.1-.7.4-1.2.7-1.5-2.6-.3-5.3-1.3-5.3-5.8 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.4 11.4 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.6.2 2.8.1 3.1.8.8 1.2 1.9 1.2 3.2 0 4.5-2.7 5.5-5.3 5.8.4.3.8 1 .8 2.1v3.1c0 .4.2.7.8.6A11.4 11.4 0 0 0 12 .6Z"/>
-</svg>
-);
-}
-if (type === 'instagram') {
-return (
-<svg className={cls} viewBox="0 0 24 24" fill="none">
-<path fill="currentColor" d="M7.5 2h9A5.5 5.5 0 0 1 22 7.5v9A5.5 5.5 0 0 1 16.5 22h-9A5.5 5.5 0 0 1 2 16.5v-9A5.5 5.5 0 0 1 7.5 2Zm0 2A3.5 3.5 0 0 0 4 7.5v9A3.5 3.5 0 0 0 7.5 20h9a3.5 3.5 0 0 0 3.5-3.5v-9A3.5 3.5 0 0 0 16.5 4h-9Zm10.3 1.8a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8ZM12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10Zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/>
-</svg>
-);
-}
-if (type === 'youtube') {
-return (
-<svg className={cls} viewBox="0 0 24 24" fill="none">
-<path fill="currentColor" d="M21.6 7.2a3 3 0 0 0-2.1-2.1C17.8 4.7 12 4.7 12 4.7s-5.8 0-7.5.4A3 3 0 0 0 2.4 7.2 31 31 0 0 0 2 12a31 31 0 0 0 .4 4.8 3 3 0 0 0 2.1 2.1c1.7.4 7.5.4 7.5.4s5.8 0 7.5-.4a3 3 0 0 0 2.1-2.1A31 31 0 0 0 22 12a31 31 0 0 0-.4-4.8ZM10 15.3V8.7L16 12l-6 3.3Z"/>
-</svg>
-);
-}
-return null;
-};
-
-type SocialLink = { type: string; label: string; url: string };
-
-const normalizeUrl = (u: string) => {
-if (!u) return '';
-const s = String(u).trim();
-if (!s) return '';
-if (s.startsWith('http://') || s.startsWith('https://')) return s;
-return `https://${s.replace(/^\/+/, '')}`;
-};
-
-// redes sociais do SEU SITE
-const SITE_SOCIALS: SocialLink[] = [
-{ type: 'website', label: 'Site', url: 'https://centralcrypto.com.br' },
-{ type: 'x', label: 'X', url: 'https://x.com/centralcrypto' },
-{ type: 'telegram', label: 'Telegram', url: 'https://t.me/centralcryptotr' },
-{ type: 'instagram', label: 'Instagram', url: 'https://instagram.com/centralcrypto' },
-{ type: 'youtube', label: 'YouTube', url: 'https://www.youtube.com/@LigaCrypto' },
-{ type: 'github', label: 'GitHub', url: 'https://github.com/' }
-];
-
-// ========================
-// GAME CONFIG
-// ========================
-const GAME_BALL_RADIUS = 24;
-const GAME_CUE_RADIUS = 30;
-const GAME_WALL_PAD = 14;
-const POCKET_R = 34;
-const POCKET_INNER_R = 18;
 
 const MarketWindSwarm = ({ language, onClose }: MarketWindSwarmProps) => {
 const containerRef = useRef<HTMLDivElement>(null);
@@ -279,95 +195,111 @@ const [legendTipOpen, setLegendTipOpen] = useState(false);
 const [isGameMode, setIsGameMode] = useState(false);
 const [isFreeMode, setIsFreeMode] = useState(false);
 
-// default 50 (map). in game always starts 18.
 const [numCoins, setNumCoins] = useState(50);
-const lastMapNumCoinsRef = useRef<number>(50);
 
-const [floatStrengthRaw, setFloatStrengthRaw] = useState(0.5);
+const [floatStrengthRaw, setFloatStrengthRaw] = useState(1.0);
 const [trailLength, setTrailLength] = useState(25);
 
-// kept for game balancing (slider appears only in game)
 const [cuePowerRaw, setCuePowerRaw] = useState(0.7);
 
 const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
 
-// counter: balls outside view
-const [offscreenCount, setOffscreenCount] = useState(0);
-const offscreenRef = useRef(0);
-const offscreenTickRef = useRef<number>(0);
-
-// Detail panel
+// detail panel
 const [detailOpen, setDetailOpen] = useState(false);
 const [detailCoin, setDetailCoin] = useState<ApiCoin | null>(null);
+const [detailAnimKey, setDetailAnimKey] = useState(0);
 
-// Magazine posts
+// magazine
 const [magPosts, setMagPosts] = useState<MagazinePost[]>([]);
-const [magLoading, setMagLoading] = useState(false);
-const [magError, setMagError] = useState<string | null>(null);
 const [magIndex, setMagIndex] = useState(0);
-const magTimerRef = useRef<number>(0);
 
 // Transform
-const transformRef = useRef({ k: 1, x: 0, y: 0 });
+const transformRef = useRef<Transform>({ k: 1, x: 0, y: 0 });
+const tweenRef = useRef<TransformTween>({ active: false, from: { k: 1, x: 0, y: 0 }, to: { k: 1, x: 0, y: 0 }, t: 0, dur: 0.35 });
+
 const isPanningRef = useRef(false);
 const panStartRef = useRef({ clientX: 0, clientY: 0, x: 0, y: 0 });
 const draggedParticleRef = useRef<Particle | null>(null);
 const lastMousePosRef = useRef<{ x: number; y: number } | null>(null);
 
-// aiming (2-click)
-const aimingRef = useRef<{
-active: boolean;
-stage: 0 | 1;
-targetX: number;
-targetY: number;
-pull: number;
-}>({ active: false, stage: 0, targetX: 0, targetY: 0, pull: 0 });
-
-const cueHideUntilRef = useRef<number>(0);
-
 const watermarkRef = useRef<HTMLImageElement | null>(null);
 
+// Map stats cache
 const statsRef = useRef<{
 minX: number, maxX: number,
 minY: number, maxY: number,
 minR: number, maxR: number,
 logMinX: number, logMaxX: number,
-logMinY: number, logMaxY: number,
-// extra for MC sizing
-mcLogMin?: number, mcLogMax?: number
+logMinY: number, logMaxY: number
 } | null>(null);
 
-// game pockets cached
-const pocketsRef = useRef<{ x: number; y: number; r: number }[]>([]);
+const hoveredParticleRef = useRef(hoveredParticle);
+hoveredParticleRef.current = hoveredParticle;
 
-// refs mirroring states
-const hoveredParticleRef = useRef<Particle | null>(null);
-const selectedParticleRef = useRef<Particle | null>(null);
-const detailOpenRef = useRef(false);
+const selectedParticleRef = useRef(selectedParticle);
+selectedParticleRef.current = selectedParticle;
 
-const chartModeRef = useRef<ChartMode>(chartMode);
-const timeframeRef = useRef<Timeframe>(timeframe);
-const isGameModeRef = useRef<boolean>(isGameMode);
-const isFreeModeRef = useRef<boolean>(isFreeMode);
-const isDarkRef = useRef<boolean>(isDark);
-const floatStrengthRef = useRef<number>(floatStrengthRaw);
-const trailLengthRef = useRef<number>(trailLength);
-const cuePowerRef = useRef<number>(cuePowerRaw);
-const searchTermRef = useRef<string>(searchTerm);
+const detailOpenRef = useRef(detailOpen);
+detailOpenRef.current = detailOpen;
 
-useEffect(() => { hoveredParticleRef.current = hoveredParticle; }, [hoveredParticle]);
-useEffect(() => { selectedParticleRef.current = selectedParticle; }, [selectedParticle]);
-useEffect(() => { detailOpenRef.current = detailOpen; }, [detailOpen]);
+// score + audio
+const pocketedCountRef = useRef(0);
+const pocketedMaxRef = useRef(0);
+const [pocketedUI, setPocketedUI] = useState({ count: 0, max: 0 });
 
-useEffect(() => { chartModeRef.current = chartMode; }, [chartMode]);
-useEffect(() => { timeframeRef.current = timeframe; }, [timeframe]);
-useEffect(() => { isGameModeRef.current = isGameMode; }, [isGameMode]);
-useEffect(() => { isFreeModeRef.current = isFreeMode; }, [isFreeMode]);
-useEffect(() => { isDarkRef.current = isDark; }, [isDark]);
-useEffect(() => { floatStrengthRef.current = floatStrengthRaw; }, [floatStrengthRaw]);
-useEffect(() => { trailLengthRef.current = trailLength; }, [trailLength]);
-useEffect(() => { cuePowerRef.current = cuePowerRaw; }, [cuePowerRaw]);
-useEffect(() => { searchTermRef.current = searchTerm; }, [searchTerm]);
+const sfxHitRef = useRef<HTMLAudioElement | null>(null);
+const sfxPocketRef = useRef<HTMLAudioElement | null>(null);
+
+// ====== GAME 2-CLICK MECHANIC ======
+const gameCtlRef = useRef<{
+phase: 0 | 1 | 2 | 3;
+aimX: number; aimY: number;
+aimPulseT: number;
+powerPull: number;
+holdStart: number;
+}>({ phase: 0, aimX: 0, aimY: 0, aimPulseT: 0, powerPull: 0, holdStart: 0 });
+
+const cueHideUntilRef = useRef<number>(0);
+const pointerDownRef = useRef(false);
+
+// ===== Helpers: coordinate transforms =====
+const screenToWorld = (clientX: number, clientY: number) => {
+const canvas = canvasRef.current;
+if (!canvas) return { x: 0, y: 0, mx: 0, my: 0 };
+const rect = canvas.getBoundingClientRect();
+const mx = clientX - rect.left;
+const my = clientY - rect.top;
+
+const { k, x, y } = transformRef.current;
+return {
+x: (mx - x) / k,
+y: (my - y) / k,
+mx,
+my
+};
+};
+
+// ===== audio =====
+useEffect(() => {
+const a1 = new Audio(SFX_CUE_HIT);
+const a2 = new Audio(SFX_POCKET);
+a1.preload = 'auto';
+a2.preload = 'auto';
+sfxHitRef.current = a1;
+sfxPocketRef.current = a2;
+}, []);
+
+const playHit = useCallback(() => {
+const a = sfxHitRef.current;
+if (!a) return;
+try { a.currentTime = 0; void a.play(); } catch {}
+}, []);
+
+const playPocket = useCallback(() => {
+const a = sfxPocketRef.current;
+if (!a) return;
+try { a.currentTime = 0; void a.play(); } catch {}
+}, []);
 
 useEffect(() => {
 const prevBody = document.body.style.overflow;
@@ -389,7 +321,6 @@ img.onload = () => { watermarkRef.current = img; onOk(); };
 img.onerror = () => onFail();
 img.src = src;
 };
-
 tryLoad(
 WATERMARK_LOCAL,
 () => {},
@@ -404,21 +335,22 @@ setDetailOpen(false);
 setSettingsOpen(false);
 setLegendTipOpen(false);
 
-aimingRef.current.active = false;
-aimingRef.current.stage = 0;
-aimingRef.current.pull = 0;
-
 if (draggedParticleRef.current) {
 draggedParticleRef.current.isFixed = false;
 draggedParticleRef.current = null;
 }
 isPanningRef.current = false;
+
+gameCtlRef.current.phase = 0;
+gameCtlRef.current.powerPull = 0;
+pointerDownRef.current = false;
 }
 };
 window.addEventListener('keydown', onKey);
 return () => window.removeEventListener('keydown', onKey);
 }, []);
 
+// ===== Data loading =====
 const loadData = useCallback(async () => {
 if (particlesRef.current.length === 0) setStatus('loading');
 try {
@@ -432,28 +364,29 @@ if (particlesRef.current.length === 0) setStatus('error');
 }
 }, []);
 
-const resetZoom = useCallback(() => {
-transformRef.current = { k: 1, x: 0, y: 0 };
+// ===== Transform animation =====
+const animateTransformTo = useCallback((to: Transform, dur = 0.35) => {
+tweenRef.current = { active: true, from: { ...transformRef.current }, to, t: 0, dur };
 }, []);
 
-const screenToWorld = (clientX: number, clientY: number) => {
-const canvas = canvasRef.current;
-if (!canvas) return { x: 0, y: 0, mx: 0, my: 0 };
-const rect = canvas.getBoundingClientRect();
-const mouseX = clientX - rect.left;
-const mouseY = clientY - rect.top;
+const resetZoom = useCallback(() => {
+gameCtlRef.current.phase = 0;
+gameCtlRef.current.powerPull = 0;
+pointerDownRef.current = false;
 
-const { k, x, y } = transformRef.current;
-return {
-x: (mouseX - x) / k,
-y: (mouseY - y) / k,
-mx: mouseX,
-my: mouseY
-};
-};
+if (draggedParticleRef.current) {
+draggedParticleRef.current.isFixed = false;
+draggedParticleRef.current = null;
+}
+isPanningRef.current = false;
 
-const getCoinPerfPct = useCallback((coin: any) => computeSparkChange(coin, timeframeRef.current).pct, []);
-const getCoinAbsPct = useCallback((coin: any) => computeSparkChange(coin, timeframeRef.current).absPct, []);
+animateTransformTo({ k: 1, x: 0, y: 0 }, 0.35);
+}, [animateTransformTo]);
+
+// ===== Metrics =====
+const getCoinPerf = useCallback((coin: any) => computeSparkChange(coin, timeframe), [timeframe]);
+const getCoinPerfPct = useCallback((coin: any) => getCoinPerf(coin).pct, [getCoinPerf]);
+const getCoinAbsPct = useCallback((coin: any) => getCoinPerf(coin).absPct, [getCoinPerf]);
 
 const sizeMetricPerf = useCallback((coin: any) => {
 const absPct = Math.max(0, getCoinAbsPct(coin));
@@ -462,36 +395,27 @@ const volFactor = Math.log10(vol + 1);
 return absPct * volFactor;
 }, [getCoinAbsPct]);
 
-const getPlotGeometry = useCallback(() => {
-const canvas = canvasRef.current;
-const s = statsRef.current;
-if (!canvas || !s) return null;
-
-const dpr = dprRef.current || 1;
-const width = canvas.width / dpr;
-const height = canvas.height / dpr;
-
-const margin = { top: 18, right: 18, bottom: 92, left: 86 };
-const chartW = Math.max(50, width - margin.left - margin.right);
-const chartH = Math.max(50, height - margin.top - margin.bottom);
-
-const originX = margin.left;
-const originY = margin.top + chartH;
-
-return { width, height, margin, chartW, chartH, originX, originY, s };
+const sizeLogScale = useCallback((metric: number, minR: number, maxR: number) => {
+const safeMin = Math.max(1, minR);
+const safeMax = Math.max(safeMin + 1, maxR);
+const lnMin = Math.log10(safeMin);
+const lnMax = Math.log10(safeMax);
+const lnV = Math.log10(Math.max(1, metric));
+const t = (lnV - lnMin) / (lnMax - lnMin || 1);
+return clamp(t, 0, 1);
 }, []);
 
+// ===== Stats + targets =====
 const recomputeStatsAndTargets = useCallback((coinsList: ApiCoin[], mode: ChartMode) => {
-const topCoins = coinsList.slice(0, numCoins);
+const topCoins = coinsList.slice(0, isGameMode ? Math.min(50, numCoins) : numCoins);
 if (topCoins.length === 0) return;
 
 const xData: number[] = [];
 const yData: number[] = [];
 const rData: number[] = [];
-const mcLogs: number[] = [];
 
 for (const c of topCoins) {
-const vol = Math.max(1, Number(c?.total_volume) || 1);
+const vol = Math.max(1, Number(c.total_volume) || 1);
 yData.push(vol);
 
 if (mode === 'performance') {
@@ -499,10 +423,9 @@ const x = getCoinPerfPct(c) || 0;
 xData.push(x);
 rData.push(Math.max(0.000001, sizeMetricPerf(c)));
 } else {
-const mc = Math.max(1, Number(c?.market_cap) || 1);
+const mc = Math.max(1, Number(c.market_cap) || 1);
 xData.push(mc);
 rData.push(mc);
-mcLogs.push(Math.log10(mc));
 }
 }
 
@@ -513,16 +436,11 @@ const minR = Math.min(...rData), maxR = Math.max(...rData);
 const logMinX = (mode === 'valuation') ? Math.log10(Math.max(1, minX)) : 0;
 const logMaxX = (mode === 'valuation') ? Math.log10(Math.max(1, maxX)) : 0;
 
-const mcLogMin = mcLogs.length ? Math.min(...mcLogs) : 0;
-const mcLogMax = mcLogs.length ? Math.max(...mcLogs) : 0;
-
 statsRef.current = {
 minX, maxX, minY, maxY, minR, maxR,
 logMinX, logMaxX,
 logMinY: Math.log10(Math.max(1, minY)),
-logMaxY: Math.log10(Math.max(1, maxY)),
-mcLogMin,
-mcLogMax
+logMaxY: Math.log10(Math.max(1, maxY))
 };
 
 const coinMap = new Map<string, ApiCoin>(topCoins.map(c => [c.id, c]));
@@ -534,58 +452,49 @@ const pct = getCoinPerfPct(p.coin) || 0;
 const baseColor = pct >= 0 ? '#089981' : '#f23645';
 const isBTC = String(p.coin.id).toLowerCase() === 'bitcoin';
 
-// --- targetRadius
-let targetRadius = 24;
+let metric = 1;
+if (mode === 'performance') metric = Math.max(0.000001, sizeMetricPerf(p.coin));
+else metric = Math.max(1, Number(p.coin.market_cap) || 1);
 
-if (!isGameModeRef.current) {
-// performance sizing (unchanged)
+let targetRadius = 24;
 if (mode === 'performance') {
-let metric = Math.max(0.000001, sizeMetricPerf(p.coin));
-const rrMin = minR;
-const rrMax = maxR;
-const t = (metric - rrMin) / (rrMax - rrMin || 1);
+const t = (metric - minR) / (maxR - minR || 1);
 targetRadius = 15 + clamp(t, 0, 1) * 55;
 } else {
-// marketcap sizing improved: log + density
-const mc = Math.max(1, Number(p.coin.market_cap) || 1);
-const s = statsRef.current;
-const lmin = s?.mcLogMin ?? 0;
-const lmax = s?.mcLogMax ?? 1;
-const logv = Math.log10(mc);
-let t = (logv - lmin) / (lmax - lmin || 1);
-t = clamp(t, 0, 1);
-
-// curve to keep ETH visible while BTC still dominates
-// (slightly compress top end)
-const curved = Math.pow(t, 0.78);
-
-// density factor: more coins -> smaller max radius
-const density = clamp(Math.sqrt(180 / Math.max(12, numCoins)), 0.62, 1.12);
-
-// radii range tuned to fill space without overcrowding
-const rMin = 14;
-const rMax = 86 * density;
-
-targetRadius = rMin + curved * (rMax - rMin);
+const tlog = sizeLogScale(metric, minR, maxR);
+targetRadius = 16 + tlog * 74;
 }
 
+if (!isGameMode) {
 p.targetRadius = targetRadius;
 p.mass = Math.max(1, p.targetRadius);
 }
 
 p.color = isBTC ? '#ffffff' : baseColor;
 }
-}, [getCoinPerfPct, numCoins, sizeMetricPerf]);
+}, [getCoinPerfPct, sizeMetricPerf, sizeLogScale, numCoins, isGameMode]);
 
-const projectCoinToMapXY = useCallback((coin: ApiCoin, mode: ChartMode) => {
-const g = getPlotGeometry();
-if (!g) return { x: 0, y: 0 };
+// ===== Map targets (world coords = "map space") =====
+const computeMapTargets = useCallback(() => {
+if (!statsRef.current) return;
+const canvas = canvasRef.current;
+if (!canvas) return;
 
-const { originX, originY, margin, chartW, chartH, s } = g;
+const dpr = dprRef.current || 1;
+const width = canvas.width / dpr;
+const height = canvas.height / dpr;
+const s = statsRef.current;
+
+const margin = { top: 18, right: 18, bottom: 92, left: 86 };
+const chartW = Math.max(50, width - margin.left - margin.right);
+const chartH = Math.max(50, height - margin.top - margin.bottom);
+
+const originX = margin.left;
+const originY = margin.top + chartH;
 
 const projectX = (v: number) => {
 let norm = 0;
-if (mode === 'valuation') {
+if (chartMode === 'valuation') {
 if (v <= 0) return originX;
 norm = (Math.log10(v) - s.logMinX) / (s.logMaxX - s.logMinX || 1);
 } else {
@@ -600,52 +509,25 @@ const norm = (Math.log10(v) - s.logMinY) / (s.logMaxY - s.logMinY || 1);
 return margin.top + (1 - norm) * chartH;
 };
 
-const yVal = Math.max(1, Number(coin.total_volume) || 1);
+for (const p of particlesRef.current) {
+const yVal = Math.max(1, Number(p.coin.total_volume) || 1);
 let xVal = 0;
 
-if (mode === 'performance') xVal = getCoinPerfPct(coin) || 0;
-else xVal = Math.max(1, Number(coin.market_cap) || 1);
+if (chartMode === 'performance') xVal = getCoinPerfPct(p.coin) || 0;
+else xVal = Math.max(1, Number(p.coin.market_cap) || 1);
 
-return { x: projectX(xVal), y: projectY(yVal) };
-}, [getCoinPerfPct, getPlotGeometry]);
+const tx = projectX(xVal);
+const ty = projectY(yVal);
 
-const beginMapTransition = useCallback((mode: ChartMode) => {
-if (!statsRef.current) return;
-const now = performance.now();
-
-const dur = 780;
-for (const p of particlesRef.current) {
-if (p.isFalling) continue;
-p.tweenActive = true;
-p.tweenStart = now;
-p.tweenDur = dur + (Math.sin(p.phase) * 80);
-p.tweenFromX = p.x;
-p.tweenFromY = p.y;
-
-const to = projectCoinToMapXY(p.coin, mode);
-p.tweenToX = to.x;
-p.tweenToY = to.y;
+p.mapFromX = p.x;
+p.mapFromY = p.y;
+p.mapToX = tx;
+p.mapToY = ty;
+p.mapT = 0;
 }
-}, [projectCoinToMapXY]);
+}, [chartMode, getCoinPerfPct]);
 
-const buildPockets = useCallback(() => {
-const canvas = canvasRef.current;
-if (!canvas) return;
-const dpr = dprRef.current || 1;
-const width = canvas.width / dpr;
-const height = canvas.height / dpr;
-
-const pad = GAME_WALL_PAD;
-pocketsRef.current = [
-{ x: pad, y: pad, r: POCKET_R },
-{ x: width / 2, y: pad, r: POCKET_R },
-{ x: width - pad, y: pad, r: POCKET_R },
-{ x: pad, y: height - pad, r: POCKET_R },
-{ x: width / 2, y: height - pad, r: POCKET_R },
-{ x: width - pad, y: height - pad, r: POCKET_R }
-];
-}, []);
-
+// ===== Game layout =====
 const setupGameLayout = useCallback(() => {
 const canvas = canvasRef.current;
 if (!canvas) return;
@@ -654,10 +536,10 @@ const dpr = dprRef.current || 1;
 const width = canvas.width / dpr;
 const height = canvas.height / dpr;
 
-buildPockets();
+const w = width;
+const h = height;
 
 const cue = particlesRef.current.find(p => String(p.coin.id).toLowerCase() === 'bitcoin');
-
 const others = particlesRef.current
 .filter(p => String(p.coin.id).toLowerCase() !== 'bitcoin')
 .sort((a, b) => (Number(a.coin.market_cap_rank) || 99999) - (Number(b.coin.market_cap_rank) || 99999));
@@ -666,26 +548,23 @@ for (const p of particlesRef.current) {
 const isBTC = String(p.coin.id).toLowerCase() === 'bitcoin';
 p.targetRadius = isBTC ? GAME_CUE_RADIUS : GAME_BALL_RADIUS;
 p.radius = p.targetRadius;
-
-p.mass = Math.max(1, p.targetRadius * 0.7);
-
+p.mass = Math.max(1, p.targetRadius);
 p.vx = 0; p.vy = 0;
 p.trail = [];
 p.isFixed = false;
 p.isFalling = false;
 p.fallT = 0;
 p.fallPocket = null;
-
-p.tweenActive = false;
+p.mapT = 1;
 }
 
 if (cue) {
-cue.x = width * 0.78;
-cue.y = height * 0.5;
+cue.x = w * 0.78;
+cue.y = h * 0.5;
 }
 
-const rackApexX = width * 0.22;
-const rackApexY = height * 0.50;
+const rackApexX = w * 0.20;
+const rackApexY = h * 0.50;
 const spacing = GAME_BALL_RADIUS * 2.08;
 
 const N = others.length;
@@ -707,17 +586,61 @@ p.y = rowYStart + c * spacing;
 }
 
 const minX = GAME_WALL_PAD + GAME_BALL_RADIUS;
-const maxX = width - GAME_WALL_PAD - GAME_BALL_RADIUS;
+const maxX = w - GAME_WALL_PAD - GAME_BALL_RADIUS;
 const minY = GAME_WALL_PAD + GAME_BALL_RADIUS;
-const maxY = height - GAME_WALL_PAD - GAME_BALL_RADIUS;
+const maxY = h - GAME_WALL_PAD - GAME_BALL_RADIUS;
 
 for (const p of particlesRef.current) {
 p.x = clamp(p.x, minX, maxX);
 p.y = clamp(p.y, minY, maxY);
 }
-}, [buildPockets]);
 
-// init + resize
+pocketedCountRef.current = 0;
+const maxPocket = Math.max(0, others.length);
+pocketedMaxRef.current = maxPocket;
+setPocketedUI({ count: 0, max: maxPocket });
+
+gameCtlRef.current.phase = 0;
+gameCtlRef.current.powerPull = 0;
+cueHideUntilRef.current = 0;
+pointerDownRef.current = false;
+}, []);
+
+// ===== Magazine fetch =====
+const fetchMagazine = useCallback(async () => {
+try {
+const res = await fetch('/2/wp-json/wp/v2/posts?per_page=6&_embed=1', { cache: 'no-store' });
+if (!res.ok) return;
+const data = await res.json();
+if (!Array.isArray(data)) return;
+
+const mapped: MagazinePost[] = data.map((p: any) => {
+const img = p?._embedded?.['wp:featuredmedia']?.[0]?.source_url;
+const title = String(p?.title?.rendered ?? '').replace(/<[^>]*>/g, '').trim();
+const excerpt = String(p?.excerpt?.rendered ?? '').replace(/<[^>]*>/g, '').trim();
+return {
+id: Number(p?.id ?? 0),
+title,
+excerpt,
+date: String(p?.date ?? ''),
+link: String(p?.link ?? ''),
+image: img
+};
+}).filter((p: MagazinePost) => p.id);
+
+setMagPosts(mapped);
+} catch {}
+}, []);
+
+useEffect(() => { void fetchMagazine(); }, [fetchMagazine]);
+
+useEffect(() => {
+// keep magIndex valid always
+const slides = Math.max(1, Math.ceil((magPosts.length || 0) / 3));
+setMagIndex(i => clamp(i, 0, slides - 1));
+}, [magPosts]);
+
+// ===== Init + resize =====
 useEffect(() => {
 loadData();
 const interval = setInterval(loadData, 60000);
@@ -739,8 +662,8 @@ canvas.height = Math.max(1, Math.floor(cssH * ratio));
 canvas.style.width = `${cssW}px`;
 canvas.style.height = `${cssH}px`;
 
-// recalcula pockets quando resize no game
-if (isGameModeRef.current) buildPockets();
+// do not recompute map targets in game/free
+if (!isGameMode && !isFreeMode) computeMapTargets();
 };
 
 resizeCanvas();
@@ -759,19 +682,12 @@ ro.disconnect();
 observer.disconnect();
 window.removeEventListener('resize', resizeCanvas);
 };
-}, [loadData, buildPockets]);
+}, [loadData, computeMapTargets, isGameMode, isFreeMode]);
 
-// global mouseup (still used for drag release)
+// ===== Build particles (but DO NOT rebuild in game, or it "resets from beyond") =====
 useEffect(() => {
-const up = () => handleMouseUp();
-window.addEventListener('mouseup', up);
-return () => window.removeEventListener('mouseup', up);
-// eslint-disable-next-line react-hooks/exhaustive-deps
-}, []);
-
-// build particles when coins/numCoins changes
-useEffect(() => {
-const topCoins = coins.slice(0, numCoins);
+const effectiveNum = isGameMode ? Math.min(50, numCoins) : numCoins;
+const topCoins = coins.slice(0, effectiveNum);
 if (topCoins.length === 0) return;
 
 for (const c of topCoins) {
@@ -782,13 +698,22 @@ imageCache.current.set(c.image, img);
 }
 }
 
+if (isGameMode) {
+// update coin data on existing particles only
+const map = new Map<string, ApiCoin>(topCoins.map(c => [c.id, c]));
+for (const p of particlesRef.current) {
+const up = map.get(p.id);
+if (up) p.coin = up;
+}
+return;
+}
+
 const existingMap = new Map<string, Particle>(particlesRef.current.map(p => [p.id, p]));
 const w = stageRef.current?.clientWidth || 1000;
 const h = stageRef.current?.clientHeight || 800;
 
 const newParticles: Particle[] = topCoins.map(coin => {
 const existing = existingMap.get(coin.id);
-
 if (existing) {
 existing.coin = coin;
 return existing;
@@ -798,8 +723,8 @@ return {
 id: coin.id,
 x: Math.random() * w,
 y: Math.random() * h,
-vx: (Math.random() - 0.5) * 60,
-vy: (Math.random() - 0.5) * 60,
+vx: (Math.random() - 0.5) * 80,
+vy: (Math.random() - 0.5) * 80,
 radius: 0,
 targetRadius: 24,
 color: '#dd9933',
@@ -811,50 +736,24 @@ mass: 24,
 isFalling: false,
 fallT: 0,
 fallPocket: null,
-
-tweenActive: false
+mapT: 0
 };
 });
 
 particlesRef.current = newParticles;
 
-recomputeStatsAndTargets(coins, chartModeRef.current);
+recomputeStatsAndTargets(coins, chartMode);
+if (!isFreeMode) computeMapTargets();
+}, [coins, numCoins, recomputeStatsAndTargets, chartMode, isGameMode, isFreeMode, computeMapTargets]);
 
-// map transition only if not game and not free
-if (!isGameModeRef.current && !isFreeModeRef.current) beginMapTransition(chartModeRef.current);
-if (isGameModeRef.current) setupGameLayout();
-
-// free mode: spread them with anti-overlap
-if (isFreeModeRef.current && stageRef.current) {
-const canvas = canvasRef.current;
-const dpr = dprRef.current || 1;
-const width = (canvas ? canvas.width / dpr : w);
-const height = (canvas ? canvas.height / dpr : h);
-
-for (const p of particlesRef.current) {
-p.tweenActive = false;
-p.isFalling = false;
-p.vx = (Math.random() - 0.5) * 120;
-p.vy = (Math.random() - 0.5) * 120;
-p.x = Math.random() * width;
-p.y = Math.random() * height;
-p.trail = [];
-}
-
-}
-}, [coins, numCoins, recomputeStatsAndTargets, beginMapTransition, setupGameLayout]);
-
-// mode/timeframe changes: update stats + tween (map only)
 useEffect(() => {
 if (coins.length === 0) return;
 if (isGameMode) return;
-if (isFreeMode) return;
-
 recomputeStatsAndTargets(coins, chartMode);
-beginMapTransition(chartMode);
-}, [chartMode, timeframe, coins, isGameMode, isFreeMode, recomputeStatsAndTargets, beginMapTransition]);
+if (!isFreeMode) computeMapTargets();
+}, [chartMode, timeframe, coins, recomputeStatsAndTargets, isGameMode, isFreeMode, computeMapTargets]);
 
-// enter/exit game
+// ===== Mode toggles =====
 useEffect(() => {
 if (isGameMode) {
 resetZoom();
@@ -862,18 +761,8 @@ setDetailOpen(false);
 setSelectedParticle(null);
 setHoveredParticle(null);
 
-// game implies free false
 setIsFreeMode(false);
-
-aimingRef.current.active = false;
-aimingRef.current.stage = 0;
-aimingRef.current.pull = 0;
-
-cueHideUntilRef.current = 0;
-
-// force 18 default and restrict selector
-lastMapNumCoinsRef.current = numCoins;
-setNumCoins(18);
+if (numCoins > 50) setNumCoins(50);
 
 setupGameLayout();
 } else {
@@ -882,155 +771,76 @@ setDetailOpen(false);
 setSettingsOpen(false);
 setLegendTipOpen(false);
 
-aimingRef.current.active = false;
-aimingRef.current.stage = 0;
-aimingRef.current.pull = 0;
-
 if (draggedParticleRef.current) {
 draggedParticleRef.current.isFixed = false;
 draggedParticleRef.current = null;
 }
 
-if (coins.length > 0) {
-recomputeStatsAndTargets(coins, chartModeRef.current);
-if (!isFreeModeRef.current) beginMapTransition(chartModeRef.current);
+if (!isFreeMode) computeMapTargets();
 }
-}
-}, [isGameMode, coins, resetZoom, setupGameLayout, recomputeStatsAndTargets, beginMapTransition, numCoins]);
+}, [isGameMode, resetZoom, setupGameLayout, numCoins, isFreeMode, computeMapTargets]);
 
-// enter/exit free mode
 useEffect(() => {
+// FREE MODE must "release from current position", no snap recalcs
 if (isFreeMode) {
-// free implies game false
-if (isGameModeRef.current) setIsGameMode(false);
-
-resetZoom();
-setDetailOpen(false);
-setSelectedParticle(null);
-setHoveredParticle(null);
-
-// no tween
 for (const p of particlesRef.current) {
-p.tweenActive = false;
-p.trail = [];
-}
-
-// randomize positions for a fresh start
-const canvas = canvasRef.current;
-const dpr = dprRef.current || 1;
-const width = canvas ? canvas.width / dpr : (stageRef.current?.clientWidth || 1000);
-const height = canvas ? canvas.height / dpr : (stageRef.current?.clientHeight || 800);
-
-for (const p of particlesRef.current) {
-p.x = Math.random() * width;
-p.y = Math.random() * height;
-p.vx = (Math.random() - 0.5) * 140;
-p.vy = (Math.random() - 0.5) * 140;
-p.isFalling = false;
-p.fallPocket = null;
-p.fallT = 0;
-}
-} else {
-// leaving free: rebuild stats + tween if not game
-if (!isGameModeRef.current && coins.length > 0) {
-recomputeStatsAndTargets(coins, chartModeRef.current);
-beginMapTransition(chartModeRef.current);
+p.mapT = 1;
+p.mapFromX = p.x;
+p.mapFromY = p.y;
+p.mapToX = p.x;
+p.mapToY = p.y;
 }
 }
-}, [isFreeMode, coins, resetZoom, recomputeStatsAndTargets, beginMapTransition]);
+}, [isFreeMode]);
 
-// =========================
-// Magazine fetch + carousel timer
-// =========================
-const fetchMagazine = useCallback(async () => {
-setMagLoading(true);
-setMagError(null);
-try {
-const res = await fetch(MAGAZINE_POSTS_ENDPOINT, { cache: 'no-store' });
-if (!res.ok) throw new Error(`HTTP ${res.status}`);
-const data = await res.json();
-const arr = Array.isArray(data) ? (data as MagazinePost[]) : [];
-setMagPosts(arr.slice(0, 6));
-setMagIndex(0);
-} catch (e: any) {
-setMagError(e?.message || 'Erro ao buscar posts');
-setMagPosts([]);
-setMagIndex(0);
-} finally {
-setMagLoading(false);
-}
-}, []);
-
-useEffect(() => {
-if (!detailOpen) {
-setMagPosts([]);
-setMagLoading(false);
-setMagError(null);
-setMagIndex(0);
-if (magTimerRef.current) window.clearInterval(magTimerRef.current);
-magTimerRef.current = 0;
-return;
-}
-
-fetchMagazine();
-
-if (magTimerRef.current) window.clearInterval(magTimerRef.current);
-magTimerRef.current = window.setInterval(() => {
-setMagIndex((prev) => (prev === 0 ? 1 : 0));
-}, 6500);
-
-return () => {
-if (magTimerRef.current) window.clearInterval(magTimerRef.current);
-magTimerRef.current = 0;
+// ===== UI helpers =====
+const openDetailFor = (p: Particle) => {
+setSelectedParticle(p);
+setDetailCoin(p.coin);
+setDetailAnimKey(k => k + 1);
+setDetailOpen(true);
 };
-}, [detailOpen, fetchMagazine]);
 
-const magPageCount = useMemo(() => {
-return magPosts.length >= 6 ? 2 : (magPosts.length > 0 ? 1 : 0);
-}, [magPosts]);
-
-const magVisible = useMemo(() => {
-if (magPosts.length === 0) return [];
-const start = magIndex * 3;
-return magPosts.slice(start, start + 3);
-}, [magPosts, magIndex]);
-
-const goMagPrev = () => setMagIndex((p) => (p === 0 ? Math.max(0, magPageCount - 1) : p - 1));
-const goMagNext = () => setMagIndex((p) => (p + 1 >= magPageCount ? 0 : p + 1));
-
-// =======================
-// Pointer handlers
-// =======================
-const handleMouseMove = (e: React.MouseEvent) => {
-const canvas = canvasRef.current; if (!canvas) return;
-
+const handlePointerMove = (e: React.PointerEvent) => {
 const wpos = screenToWorld(e.clientX, e.clientY);
-const worldMouseX = wpos.x;
-const worldMouseY = wpos.y;
+lastMousePosRef.current = { x: wpos.x, y: wpos.y };
 
-lastMousePosRef.current = { x: worldMouseX, y: worldMouseY };
+if (detailOpenRef.current) return;
 
-if (isGameModeRef.current && aimingRef.current.active && aimingRef.current.stage === 1) {
+// game aiming / power drag
+if (isGameMode) {
 const cue = particlesRef.current.find(pp => String(pp.coin.id).toLowerCase() === 'bitcoin');
 if (!cue || cue.isFalling) return;
-const dx = worldMouseX - cue.x;
-const dy = worldMouseY - cue.y;
-const dist = Math.hypot(dx, dy);
-const maxPull = 220;
-aimingRef.current.pull = clamp(dist, 0, maxPull);
-aimingRef.current.targetX = worldMouseX;
-aimingRef.current.targetY = worldMouseY;
+
+if (gameCtlRef.current.phase === 1) {
+gameCtlRef.current.aimX = wpos.x;
+gameCtlRef.current.aimY = wpos.y;
 return;
 }
 
+if (gameCtlRef.current.phase === 3) {
+const dx = gameCtlRef.current.aimX - cue.x;
+const dy = gameCtlRef.current.aimY - cue.y;
+const distDir = Math.hypot(dx, dy) || 0.0001;
+const nx = dx / distDir;
+const ny = dy / distDir;
+
+const along = (wpos.x - cue.x) * nx + (wpos.y - cue.y) * ny;
+const pull = clamp(-along, 0, 220);
+gameCtlRef.current.powerPull = pull;
+return;
+}
+}
+
+// dragging
 if (draggedParticleRef.current) {
 const p = draggedParticleRef.current;
-p.x = worldMouseX;
-p.y = worldMouseY;
+p.x = wpos.x;
+p.y = wpos.y;
 return;
 }
 
-if (!isGameModeRef.current && !isFreeModeRef.current && isPanningRef.current) {
+if (!isGameMode && isPanningRef.current) {
 const dx = e.clientX - panStartRef.current.clientX;
 const dy = e.clientY - panStartRef.current.clientY;
 transformRef.current.x = panStartRef.current.x + dx;
@@ -1038,9 +848,12 @@ transformRef.current.y = panStartRef.current.y + dy;
 return;
 }
 
+const canvas = canvasRef.current;
+if (!canvas) return;
+
 const rect = canvas.getBoundingClientRect();
-const mouseX = e.clientX - rect.left;
-const mouseY = e.clientY - rect.top;
+const mx = e.clientX - rect.left;
+const my = e.clientY - rect.top;
 
 const { k, x, y } = transformRef.current;
 
@@ -1053,80 +866,57 @@ const sx = p.x * k + x;
 const sy = p.y * k + y;
 const sr = p.radius;
 
-const dx = sx - mouseX;
-const dy = sy - mouseY;
+const dx = sx - mx;
+const dy = sy - my;
 
 if (dx * dx + dy * dy < (sr + 5) * (sr + 5)) {
 found = p;
 break;
 }
 }
-
 setHoveredParticle(found);
 };
 
-const openDetailFor = (p: Particle) => {
-setSelectedParticle(p);
-setDetailCoin(p.coin);
-setDetailOpen(true);
-};
-
-const handleMouseDown = (e: React.MouseEvent) => {
+const handlePointerDown = (e: React.PointerEvent) => {
 if (detailOpenRef.current) return;
+pointerDownRef.current = true;
+
 if (e.button !== 0) return;
 
-if (isGameModeRef.current) {
+if (isGameMode) {
 const cue = particlesRef.current.find(pp => String(pp.coin.id).toLowerCase() === 'bitcoin');
 if (!cue || cue.isFalling) return;
 
 const w = screenToWorld(e.clientX, e.clientY);
 
-if (!aimingRef.current.active) {
-// first click: arm
-aimingRef.current.active = true;
-aimingRef.current.stage = 1;
-aimingRef.current.targetX = w.x;
-aimingRef.current.targetY = w.y;
-aimingRef.current.pull = 0;
-setSelectedParticle(cue);
+if (gameCtlRef.current.phase === 0) {
+gameCtlRef.current.phase = 1;
+gameCtlRef.current.aimX = w.x;
+gameCtlRef.current.aimY = w.y;
+gameCtlRef.current.powerPull = 0;
+gameCtlRef.current.holdStart = performance.now();
 return;
 }
 
-// second click: fire
-const tx = w.x;
-const ty = w.y;
-const dx = tx - cue.x;
-const dy = ty - cue.y;
-const dist = Math.hypot(dx, dy) || 0.0001;
-const nx = dx / dist;
-const ny = dy / dist;
-
-const pull = clamp(dist, 0, 220);
-const pullNorm = clamp(pull / 220, 0, 1);
-
-// power scaling
-const basePower = 7600;
-const power = basePower * pullNorm * (0.55 + cuePowerRef.current * 1.6);
-
-cue.vx += nx * (power / Math.max(1, cue.mass));
-cue.vy += ny * (power / Math.max(1, cue.mass));
-
-cueHideUntilRef.current = performance.now() + 5000;
-
-aimingRef.current.active = false;
-aimingRef.current.stage = 0;
-aimingRef.current.pull = 0;
+if (gameCtlRef.current.phase === 2) {
+gameCtlRef.current.phase = 3;
+gameCtlRef.current.powerPull = 0;
+gameCtlRef.current.holdStart = performance.now();
+return;
+}
 
 return;
 }
 
-// free/map: click bubble opens detail
+// non-game: click coin opens detail
 if (hoveredParticleRef.current) {
 openDetailFor(hoveredParticleRef.current);
 return;
 }
 
-if (!isFreeModeRef.current) {
+setDetailOpen(false);
+setSelectedParticle(null);
+
 isPanningRef.current = true;
 panStartRef.current = {
 clientX: e.clientX,
@@ -1134,38 +924,85 @@ clientY: e.clientY,
 x: transformRef.current.x,
 y: transformRef.current.y
 };
-}
 };
 
-const handleMouseUp = () => {
+const handlePointerUp = useCallback(() => {
+if (!pointerDownRef.current) return;
+pointerDownRef.current = false;
+
+if (isGameMode) {
+const cue = particlesRef.current.find(pp => String(pp.coin.id).toLowerCase() === 'bitcoin');
+if (!cue || cue.isFalling) {
+gameCtlRef.current.phase = 0;
+gameCtlRef.current.powerPull = 0;
+return;
+}
+
+if (gameCtlRef.current.phase === 1) {
+gameCtlRef.current.phase = 2;
+gameCtlRef.current.aimPulseT = performance.now();
+return;
+}
+
+if (gameCtlRef.current.phase === 3) {
+const dx = gameCtlRef.current.aimX - cue.x;
+const dy = gameCtlRef.current.aimY - cue.y;
+const dist = Math.hypot(dx, dy) || 0.0001;
+
+const nx = dx / dist;
+const ny = dy / dist;
+
+const pull = clamp(gameCtlRef.current.powerPull, 0, 220);
+const pullNorm = pull / 220;
+
+const basePower = 5200;
+const power = basePower * pullNorm * (0.35 + cuePowerRaw * 1.65);
+
+cue.vx += nx * (power / Math.max(1, cue.mass));
+cue.vy += ny * (power / Math.max(1, cue.mass));
+
+cueHideUntilRef.current = performance.now() + 5000;
+playHit();
+
+gameCtlRef.current.phase = 0;
+gameCtlRef.current.powerPull = 0;
+return;
+}
+}
+
 if (draggedParticleRef.current) {
 draggedParticleRef.current.isFixed = false;
 draggedParticleRef.current = null;
 }
 isPanningRef.current = false;
-};
+}, [isGameMode, cuePowerRaw, playHit]);
+
+useEffect(() => {
+const up = () => handlePointerUp();
+window.addEventListener('pointerup', up);
+return () => window.removeEventListener('pointerup', up);
+}, [handlePointerUp]);
 
 const handleWheel = (e: React.WheelEvent) => {
 e.preventDefault();
 if (detailOpenRef.current) return;
-if (isGameModeRef.current) return;
-if (isFreeModeRef.current) return;
+if (isGameMode) return;
 
 const canvas = canvasRef.current; if (!canvas) return;
 const rect = canvas.getBoundingClientRect();
-const mouseX = e.clientX - rect.left;
-const mouseY = e.clientY - rect.top;
+const mx = e.clientX - rect.left;
+const my = e.clientY - rect.top;
 
-const worldX = (mouseX - transformRef.current.x) / transformRef.current.k;
-const worldY = (mouseY - transformRef.current.y) / transformRef.current.k;
+const worldX = (mx - transformRef.current.x) / transformRef.current.k;
+const worldY = (my - transformRef.current.y) / transformRef.current.k;
 
 const zoomFactor = 1.1;
 const oldK = transformRef.current.k;
 const newK = e.deltaY < 0 ? oldK * zoomFactor : oldK / zoomFactor;
 const clampedK = clamp(newK, 0.1, 10.0);
 
-const newX = mouseX - worldX * clampedK;
-const newY = mouseY - worldY * clampedK;
+const newX = mx - worldX * clampedK;
+const newY = my - worldY * clampedK;
 
 transformRef.current = { k: clampedK, x: newX, y: newY };
 };
@@ -1174,366 +1011,64 @@ const legendText = useMemo(() => {
 if (isGameMode) {
 return (
 <>
-<div><span className="font-black">Modo Game (Bilhar)</span></div>
-<div>• A bola branca é o BTC.</div>
-<div>• 1º clique: arma a mira. 2º clique: tacada.</div>
-<div>• Taco some por 5s depois da tacada.</div>
-<div>• Caçapa: círculo entra no círculo.</div>
+<div><span className="font-black">Modo Game (2 cliques)</span></div>
+<div>• 1º clique e segura: mira. Soltou: trava a mira.</div>
+<div>• 2º clique e segura: regula força. Soltou: tacada.</div>
+<div>• Bolas encaçapadas saem definitivamente.</div>
 </>
 );
 }
-
 if (isFreeMode) {
 return (
 <>
 <div><span className="font-black">Modo Livre</span></div>
-<div>• Sem eixos e sem mapa.</div>
-<div>• Bolhas flutuam e colidem (repulsão real).</div>
-<div>• Botões Market Cap/Variação definem o tamanho.</div>
+<div>• Bolhas flutuam com colisão (não atravessa).</div>
+<div>• Market Cap / Variação alteram tamanho e cor.</div>
 </>
 );
 }
-
 if (chartMode === 'performance') {
 return (
 <>
 <div><span className="font-black">Modo Variação</span></div>
 <div>• X: Variação {timeframe} (%)</div>
 <div>• Y: Volume 24h (log)</div>
-<div>• Tamanho: |%var| × log(volume)</div>
-<div>• Cor: verde/vermelho</div>
+<div>• Tamanho: |%| × log(volume)</div>
 </>
 );
 }
-
 return (
 <>
 <div><span className="font-black">Modo Market Cap</span></div>
 <div>• X: Market Cap (log)</div>
 <div>• Y: Volume 24h (log)</div>
-<div>• Tamanho: Market Cap (log scaling)</div>
-<div>• Cor: verde/vermelho</div>
+<div>• Tamanho: Market Cap (escala log)</div>
 </>
 );
 }, [chartMode, timeframe, isGameMode, isFreeMode]);
 
-// Detail computed fields
-const changes = useMemo(() => {
-if (!detailCoin) return null;
-const c: any = detailCoin;
+const detailPerf24 = useMemo(() => detailCoin ? computeSparkChange(detailCoin, '24h') : null, [detailCoin]);
+const detailPerf1h = useMemo(() => detailCoin ? computeSparkChange(detailCoin, '1h') : null, [detailCoin]);
+const detailPerf7d = useMemo(() => detailCoin ? computeSparkChange(detailCoin, '7d') : null, [detailCoin]);
 
-const p1h =
-c.price_change_percentage_1h_in_currency ??
-c.price_change_percentage_1h ??
-c.price_change_percentage_1h_in_currency_usd ??
-null;
+const perfColor = (pct?: number) => (Number(pct) >= 0 ? '#089981' : '#f23645');
 
-const p24 =
-c.price_change_percentage_24h_in_currency ??
-c.price_change_percentage_24h ??
-null;
+const effectiveNumCoins = useMemo(() => (isGameMode ? Math.min(50, numCoins) : numCoins), [isGameMode, numCoins]);
+const gameCoinOptions = useMemo(() => [10, 20, 30], []);
+const normalCoinOptions = useMemo(() => [50, 100, 150, 200, 250], []);
 
-const p7d =
-c.price_change_percentage_7d_in_currency ??
-c.price_change_percentage_7d ??
-null;
+const siteSocials = useMemo(() => ([
+{ name: 'Site', icon: Globe, href: 'https://centralcrypto.com.br' },
+{ name: 'RSS', icon: Rss, href: 'https://centralcrypto.com.br/2/feed/' }
+]), []);
 
-return { p1h, p24, p7d };
-}, [detailCoin]);
+const magSlides = useMemo(() => {
+const out: MagazinePost[][] = [];
+for (let i = 0; i < magPosts.length; i += 3) out.push(magPosts.slice(i, i + 3));
+return out.length ? out : [[]];
+}, [magPosts]);
 
-const detailListRows = useMemo(() => {
-if (!detailCoin) return [];
-const c: any = detailCoin;
-
-const rows: { k: string; v: string }[] = [];
-const add = (k: string, v: any, fmt?: (x: any) => string) => {
-if (v === null || v === undefined) return;
-const s = fmt ? fmt(v) : String(v);
-if (!s || s === 'undefined' || s === 'null') return;
-rows.push({ k, v: s });
-};
-
-add('Símbolo', c.symbol ? String(c.symbol).toUpperCase() : null);
-add('Rank', c.market_cap_rank ?? null);
-add('Preço', c.current_price ?? null, formatPrice);
-add('Market Cap', c.market_cap ?? null, formatCompact);
-add('FDV', c.fully_diluted_valuation ?? null, formatCompact);
-add('Volume 24h', c.total_volume ?? null, formatCompact);
-add('Circ. Supply', c.circulating_supply ?? null, (x) => Number(x).toLocaleString());
-add('Total Supply', c.total_supply ?? null, (x) => Number(x).toLocaleString());
-add('Max Supply', c.max_supply ?? null, (x) => Number(x).toLocaleString());
-add('ATH', c.ath ?? null, formatPrice);
-add('ATL', c.atl ?? null, formatPrice);
-add('Updated', c.last_updated ?? null, (x) => new Date(x).toLocaleString());
-
-return rows;
-}, [detailCoin]);
-
-const closeDetail = () => {
-setDetailOpen(false);
-setDetailCoin(null);
-setSelectedParticle(null);
-};
-
-// =======================
-// Helpers: Axis & Grid
-// =======================
-const niceStep = (min: number, max: number, ticks: number) => {
-const range = max - min;
-if (!isFinite(range) || range <= 0) return 1;
-const rough = range / Math.max(1, ticks);
-const pow = Math.pow(10, Math.floor(Math.log10(rough)));
-const scaled = rough / pow;
-let nice = 1;
-if (scaled >= 5) nice = 5;
-else if (scaled >= 2) nice = 2;
-else nice = 1;
-return nice * pow;
-};
-
-const drawAxisAndGrid = (ctx: CanvasRenderingContext2D) => {
-const g = getPlotGeometry();
-if (!g) return;
-if (isGameModeRef.current) return;
-if (isFreeModeRef.current) return;
-
-const { width, height, margin, chartW, chartH, originX, originY, s } = g;
-const dark = isDarkRef.current;
-const mode = chartModeRef.current;
-
-// background overlay
-ctx.save();
-ctx.fillStyle = dark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)';
-ctx.fillRect(originX, margin.top, chartW, chartH);
-ctx.restore();
-
-const gridColor = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
-const axisColor = dark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)';
-const textColor = dark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.65)';
-
-// X ticks
-const xTicks = 6;
-let xVals: number[] = [];
-
-if (mode === 'performance') {
-const minX = s.minX;
-const maxX = s.maxX;
-const step = niceStep(minX, maxX, xTicks);
-const start = Math.floor(minX / step) * step;
-for (let v = start; v <= maxX + step * 0.5; v += step) xVals.push(v);
-} else {
-const minL = Math.floor(s.logMinX);
-const maxL = Math.ceil(s.logMaxX);
-for (let p = minL; p <= maxL; p++) xVals.push(Math.pow(10, p));
-}
-
-// Y ticks log volume
-const yVals: number[] = [];
-const minLY = Math.floor(s.logMinY);
-const maxLY = Math.ceil(s.logMaxY);
-for (let p = minLY; p <= maxLY; p++) yVals.push(Math.pow(10, p));
-
-const projX = (v: number) => {
-if (mode === 'valuation') {
-const norm = (Math.log10(Math.max(1, v)) - s.logMinX) / (s.logMaxX - s.logMinX || 1);
-return originX + norm * chartW;
-}
-const norm = (v - s.minX) / (s.maxX - s.minX || 1);
-return originX + norm * chartW;
-};
-
-const projY = (v: number) => {
-const norm = (Math.log10(Math.max(1, v)) - s.logMinY) / (s.logMaxY - s.logMinY || 1);
-return margin.top + (1 - norm) * chartH;
-};
-
-// grid lines X
-ctx.save();
-ctx.strokeStyle = gridColor;
-ctx.lineWidth = 1;
-
-for (const xv of xVals) {
-const x = projX(xv);
-if (!isFinite(x)) continue;
-ctx.beginPath();
-ctx.moveTo(x, margin.top);
-ctx.lineTo(x, margin.top + chartH);
-ctx.stroke();
-}
-
-// grid lines Y
-for (const yv of yVals) {
-const y = projY(yv);
-if (!isFinite(y)) continue;
-ctx.beginPath();
-ctx.moveTo(originX, y);
-ctx.lineTo(originX + chartW, y);
-ctx.stroke();
-}
-ctx.restore();
-
-// axes
-ctx.save();
-ctx.strokeStyle = axisColor;
-ctx.lineWidth = 1.5;
-ctx.beginPath();
-ctx.moveTo(originX, margin.top);
-ctx.lineTo(originX, originY);
-ctx.lineTo(originX + chartW, originY);
-ctx.stroke();
-ctx.restore();
-
-// labels & ticks
-ctx.save();
-ctx.fillStyle = textColor;
-ctx.font = `900 12px Inter`;
-ctx.textAlign = 'center';
-ctx.textBaseline = 'top';
-
-const xLabel = mode === 'performance' ? `Variação ${timeframeRef.current} (%)` : `Market Cap (log)`;
-ctx.fillText(xLabel, originX + chartW / 2, originY + 54);
-
-ctx.save();
-ctx.translate(originX - 60, margin.top + chartH / 2);
-ctx.rotate(-Math.PI / 2);
-ctx.textAlign = 'center';
-ctx.textBaseline = 'top';
-ctx.fillText('Volume 24h (log)', 0, 0);
-ctx.restore();
-
-// x tick text
-ctx.font = `800 11px Inter`;
-ctx.textBaseline = 'top';
-for (const xv of xVals) {
-const x = projX(xv);
-if (!isFinite(x)) continue;
-
-ctx.beginPath();
-ctx.strokeStyle = axisColor;
-ctx.lineWidth = 1;
-ctx.moveTo(x, originY);
-ctx.lineTo(x, originY + 6);
-ctx.stroke();
-
-let txt = '';
-if (mode === 'performance') txt = `${xv.toFixed(0)}%`;
-else txt = formatCompact(xv).replace('$', '');
-ctx.fillStyle = textColor;
-ctx.fillText(txt, x, originY + 10);
-}
-
-// y tick text
-ctx.textAlign = 'right';
-ctx.textBaseline = 'middle';
-for (const yv of yVals) {
-const y = projY(yv);
-if (!isFinite(y)) continue;
-
-ctx.beginPath();
-ctx.strokeStyle = axisColor;
-ctx.lineWidth = 1;
-ctx.moveTo(originX - 6, y);
-ctx.lineTo(originX, y);
-ctx.stroke();
-
-const txt = formatCompact(yv).replace('$', '');
-ctx.fillStyle = textColor;
-ctx.fillText(txt, originX - 10, y);
-}
-
-ctx.restore();
-
-// zero line for performance
-if (mode === 'performance') {
-const x0 = projX(0);
-ctx.save();
-ctx.strokeStyle = dark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.18)';
-ctx.lineWidth = 2;
-ctx.setLineDash([6, 6]);
-ctx.beginPath();
-ctx.moveTo(x0, margin.top);
-ctx.lineTo(x0, margin.top + chartH);
-ctx.stroke();
-ctx.restore();
-}
-};
-
-// =======================
-// Physics: collisions (game + free)
-// =======================
-const resolveCollisions = (particles: Particle[], restitution: number) => {
-for (let i = 0; i < particles.length; i++) {
-const a = particles[i];
-if (a.isFalling) continue;
-
-for (let j = i + 1; j < particles.length; j++) {
-const b = particles[j];
-if (b.isFalling) continue;
-
-const dx = b.x - a.x;
-const dy = b.y - a.y;
-const dist = Math.hypot(dx, dy);
-const minDist = a.radius + b.radius;
-
-if (dist > 0 && dist < minDist) {
-const nx = dx / dist;
-const ny = dy / dist;
-const overlap = (minDist - dist);
-
-// separate
-a.x -= nx * overlap * 0.5;
-a.y -= ny * overlap * 0.5;
-b.x += nx * overlap * 0.5;
-b.y += ny * overlap * 0.5;
-
-// velocity exchange along normal
-const dvx = b.vx - a.vx;
-const dvy = b.vy - a.vy;
-const relVel = dvx * nx + dvy * ny;
-
-if (relVel < 0) {
-const invMa = 1 / Math.max(1, a.mass);
-const invMb = 1 / Math.max(1, b.mass);
-
-const impulse = -(1 + restitution) * relVel / (invMa + invMb);
-const ix = impulse * nx;
-const iy = impulse * ny;
-
-a.vx -= ix * invMa;
-a.vy -= iy * invMa;
-b.vx += ix * invMb;
-b.vy += iy * invMb;
-}
-}
-}
-}
-};
-
-const checkPockets = (p: Particle) => {
-if (p.isFalling) return;
-const pockets = pocketsRef.current;
-
-for (const pocket of pockets) {
-const dx = p.x - pocket.x;
-const dy = p.y - pocket.y;
-const dist = Math.hypot(dx, dy);
-
-if (dist <= pocket.r) {
-p.isFalling = true;
-p.fallT = 0;
-p.fallPocket = pocket;
-p.fallFromX = p.x;
-p.fallFromY = p.y;
-p.vx = 0;
-p.vy = 0;
-return;
-}
-}
-};
-
-// =======================
-// RAF LOOP
-// =======================
+// ===== RENDER LOOP =====
 useEffect(() => {
 const canvas = canvasRef.current;
 const ctx = canvas?.getContext('2d', { alpha: false });
@@ -1551,299 +1086,429 @@ const dpr = dprRef.current || 1;
 const width = canvas.width / dpr;
 const height = canvas.height / dpr;
 
+// tween transform
+if (tweenRef.current.active) {
+const tw = tweenRef.current;
+tw.t = clamp(tw.t + dt / tw.dur, 0, 1);
+const e = 1 - Math.pow(1 - tw.t, 3);
+transformRef.current = {
+k: tw.from.k + (tw.to.k - tw.from.k) * e,
+x: tw.from.x + (tw.to.x - tw.from.x) * e,
+y: tw.from.y + (tw.to.y - tw.from.y) * e
+};
+if (tw.t >= 1) tw.active = false;
+}
+
+// clear background (screen space)
 ctx.setTransform(1, 0, 0, 1, 0, 0);
-
-const dark = isDarkRef.current;
-const game = isGameModeRef.current;
-const free = isFreeModeRef.current;
-
-ctx.fillStyle = game ? (dark ? '#07120c' : '#e8f3ea') : (dark ? '#0b0f14' : '#ffffff');
+ctx.fillStyle = isGameMode ? (isDark ? '#08110c' : '#e8f3ea') : (isDark ? '#0b0f14' : '#ffffff');
 ctx.fillRect(0, 0, canvas.width, canvas.height);
 ctx.scale(dpr, dpr);
 
-// watermark
-const img = watermarkRef.current;
-if (img && img.complete && img.naturalWidth > 0) {
-const maxW = width * 0.78;
-const maxH = height * 0.78;
-const scale = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight);
-const w = img.naturalWidth * scale;
-const h = img.naturalHeight * scale;
-const x = (width - w) / 2;
-const y = (height - h) / 2;
+drawWatermark(ctx, width, height, watermarkRef.current, isDark, isGameMode);
 
-ctx.save();
-ctx.globalAlpha = dark ? 0.055 : 0.035;
-ctx.imageSmoothingEnabled = true;
-ctx.imageSmoothingQuality = 'high';
-ctx.drawImage(img, x, y, w, h);
-ctx.restore();
-}
-
-// axes/grid only in map
-drawAxisAndGrid(ctx);
-
+// APPLY WORLD TRANSFORM ONCE (fixes “scale frozen” vs “coins moving”)
 const { k, x: panX, y: panY } = transformRef.current;
-const toScreenX = (val: number) => val * k + panX;
-const toScreenY = (val: number) => val * k + panY;
+ctx.save();
+ctx.translate(panX, panY);
+ctx.scale(k, k);
 
 const particles = particlesRef.current;
 
-// radius smoothing
+// update radii
 for (const p of particles) {
 const viewRadius = p.targetRadius * Math.pow(k, 0.25);
 p.radius += (viewRadius - p.radius) * 0.15;
-p.mass = Math.max(1, p.radius * (game ? 0.7 : (free ? 0.9 : 1)));
+p.mass = Math.max(1, p.radius);
 }
 
-// GAME physics
-if (game) {
-const friction = 0.985;
-const speedStop = 6;
+// pockets + rails (WORLD SPACE)
+let pockets: { x: number; y: number; r: number }[] = [];
+if (isGameMode) {
+const worldW = width / k;
+const worldH = height / k;
+const pr = Math.max(26, Math.min(40, Math.min(worldW, worldH) * 0.04));
+pockets = [
+{ x: pr, y: pr, r: pr },
+{ x: worldW / 2, y: pr, r: pr },
+{ x: worldW - pr, y: pr, r: pr },
+{ x: pr, y: worldH - pr, r: pr },
+{ x: worldW / 2, y: worldH - pr, r: pr },
+{ x: worldW - pr, y: worldH - pr, r: pr }
+];
 
-const minX = GAME_WALL_PAD + GAME_BALL_RADIUS;
-const maxX = width - GAME_WALL_PAD - GAME_BALL_RADIUS;
-const minY = GAME_WALL_PAD + GAME_BALL_RADIUS;
-const maxY = height - GAME_WALL_PAD - GAME_BALL_RADIUS;
-
-for (const p of particles) {
-if (p.isFalling) {
-p.fallT = (p.fallT || 0) + dt;
-const t = clamp((p.fallT || 0) / 0.45, 0, 1);
-const e = easeInOutCubic(t);
-
-const pocket = p.fallPocket;
-if (pocket && p.fallFromX != null && p.fallFromY != null) {
-p.x = p.fallFromX + (pocket.x - p.fallFromX) * e;
-p.y = p.fallFromY + (pocket.y - p.fallFromY) * e;
-p.radius = p.targetRadius * (1 - e);
-}
-
-continue;
-}
-
-p.x += p.vx * dt;
-p.y += p.vy * dt;
-
-p.vx *= friction;
-p.vy *= friction;
-
-const sp = Math.hypot(p.vx, p.vy);
-if (sp < speedStop) { p.vx = 0; p.vy = 0; }
-
-// bounce walls
-if (p.x < minX) { p.x = minX; p.vx *= -0.9; }
-if (p.x > maxX) { p.x = maxX; p.vx *= -0.9; }
-if (p.y < minY) { p.y = minY; p.vy *= -0.9; }
-if (p.y > maxY) { p.y = maxY; p.vy *= -0.9; }
-}
-
-resolveCollisions(particles, 0.92);
-for (const p of particles) checkPockets(p);
-}
-
-// FREE physics (Newton-ish + collisions)
-if (free) {
-const friction = 0.992;
-const speedStop = 3;
-
-const pad = 18;
-for (const p of particles) {
-p.x += p.vx * dt;
-p.y += p.vy * dt;
-
-p.vx *= friction;
-p.vy *= friction;
-
-const sp = Math.hypot(p.vx, p.vy);
-if (sp < speedStop) { p.vx = 0; p.vy = 0; }
-
-const minX = pad + p.radius;
-const maxX = width - pad - p.radius;
-const minY = pad + p.radius;
-const maxY = height - pad - p.radius;
-
-if (p.x < minX) { p.x = minX; p.vx *= -0.85; }
-if (p.x > maxX) { p.x = maxX; p.vx *= -0.85; }
-if (p.y < minY) { p.y = minY; p.vy *= -0.85; }
-if (p.y > maxY) { p.y = maxY; p.vy *= -0.85; }
-}
-
-resolveCollisions(particles, 0.88);
-
-// gentle drift so it stays “alive”
-for (const p of particles) {
-const floatAmp = 10 * (0.3 + floatStrengthRef.current * 0.7);
-const floatFreq = 0.00025 * (1 + floatStrengthRef.current);
-p.vx += Math.sin(now * floatFreq + p.phase) * floatAmp * dt;
-p.vy += Math.cos(now * (floatFreq * 1.2) + p.phase) * floatAmp * dt;
-}
-}
-
-// MAP motion with tween (no change)
-if (!game && !free) {
-const s2 = statsRef.current;
-const mode = chartModeRef.current;
-if (s2) {
-const mappedFloatMaxAmp = 5.2 * 1.3;
-const mappedFloatAmp = floatStrengthRef.current * mappedFloatMaxAmp;
-
-for (const p of particles) {
-if (p.tweenActive && p.tweenStart != null && p.tweenDur != null) {
-const tt = clamp((now - p.tweenStart) / p.tweenDur, 0, 1);
-const e = easeInOutCubic(tt);
-
-const fx = p.tweenFromX ?? p.x;
-const fy = p.tweenFromY ?? p.y;
-const tx = p.tweenToX ?? p.x;
-const ty = p.tweenToY ?? p.y;
-
-p.x = fx + (tx - fx) * e;
-p.y = fy + (ty - fy) * e;
-
-if (tt >= 1) {
-p.tweenActive = false;
-p.tweenStart = undefined;
-p.tweenDur = undefined;
-p.tweenFromX = undefined;
-p.tweenFromY = undefined;
-p.tweenToX = undefined;
-p.tweenToY = undefined;
-}
-
-continue;
-}
-
-const to = projectCoinToMapXY(p.coin, mode);
-const floatFreq = 0.0002 * (1 + floatStrengthRef.current);
-
-const floatX = mappedFloatAmp > 0 ? Math.sin(now * floatFreq + p.phase) * mappedFloatAmp : 0;
-const floatY = mappedFloatAmp > 0 ? Math.cos(now * (floatFreq * 1.3) + p.phase) * mappedFloatAmp : 0;
-
-const targetX = to.x + floatX;
-const targetY = to.y + floatY;
-
-p.x += (targetX - p.x) * 0.05;
-p.y += (targetY - p.y) * 0.05;
-}
-}
-}
-
-// Draw game overlay
-if (game) {
 ctx.save();
-ctx.strokeStyle = dark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.12)';
-ctx.lineWidth = 6;
-ctx.strokeRect(GAME_WALL_PAD, GAME_WALL_PAD, width - GAME_WALL_PAD * 2, height - GAME_WALL_PAD * 2);
+ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.10)';
+ctx.lineWidth = 4 / k;
+ctx.strokeRect(8 / k, 8 / k, (width - 16) / k, (height - 16) / k);
 ctx.restore();
 
-for (const pk of pocketsRef.current) {
 ctx.save();
-ctx.fillStyle = dark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.35)';
+for (const pk of pockets) {
 ctx.beginPath();
 ctx.arc(pk.x, pk.y, pk.r, 0, Math.PI * 2);
+ctx.fillStyle = isDark ? 'rgba(0,0,0,0.72)' : 'rgba(0,0,0,0.18)';
 ctx.fill();
 
-ctx.fillStyle = dark ? 'rgba(0,0,0,0.85)' : 'rgba(0,0,0,0.55)';
 ctx.beginPath();
-ctx.arc(pk.x, pk.y, POCKET_INNER_R, 0, Math.PI * 2);
-ctx.fill();
+ctx.arc(pk.x, pk.y, pk.r, 0, Math.PI * 2);
+ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)';
+ctx.lineWidth = 2 / k;
+ctx.stroke();
+}
 ctx.restore();
 }
 
-const hide = now < cueHideUntilRef.current;
-if (!hide && aimingRef.current.active) {
-const cue = particlesRef.current.find(pp => String(pp.coin.id).toLowerCase() === 'bitcoin');
-if (cue && !cue.isFalling) {
-const tx = aimingRef.current.targetX;
-const ty = aimingRef.current.targetY;
+// axes (WORLD SPACE, same space as map points)
+if (!isGameMode && !isFreeMode && statsRef.current) {
+const s = statsRef.current;
+const margin = { top: 18, right: 18, bottom: 92, left: 86 };
+const chartW = Math.max(50, width - margin.left - margin.right);
+const chartH = Math.max(50, height - margin.top - margin.bottom);
+const originX = margin.left;
+const originY = margin.top + chartH;
 
-const dx = tx - cue.x;
-const dy = ty - cue.y;
-const dist = Math.hypot(dx, dy) || 0.0001;
+ctx.save();
+ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)';
+ctx.lineWidth = 1 / k;
+ctx.font = `${12 / k}px Inter`;
+ctx.fillStyle = isDark ? 'rgba(255,255,255,0.78)' : 'rgba(0,0,0,0.72)';
+ctx.textBaseline = 'middle';
+
+const projectX = (v: number) => {
+let norm = 0;
+if (chartMode === 'valuation') {
+if (v <= 0) return originX;
+norm = (Math.log10(v) - s.logMinX) / (s.logMaxX - s.logMinX || 1);
+} else {
+norm = (v - s.minX) / (s.maxX - s.minX || 1);
+}
+return originX + norm * chartW;
+};
+
+const xSteps = 6;
+for (let i = 0; i <= xSteps; i++) {
+const percent = i / xSteps;
+let val = 0;
+if (chartMode === 'valuation') val = Math.pow(10, s.logMinX + percent * (s.logMaxX - s.logMinX));
+else val = s.minX + percent * (s.maxX - s.minX);
+
+const worldX = projectX(val);
+
+ctx.beginPath();
+ctx.moveTo(worldX, margin.top);
+ctx.lineTo(worldX, originY);
+ctx.stroke();
+
+ctx.textAlign = 'center';
+const label = (chartMode === 'performance') ? `${val.toFixed(1)}%` : formatCompact(val);
+ctx.fillText(label, worldX, originY + 18 / k);
+}
+
+const ySteps = 5;
+const projectY = (v: number) => {
+if (v <= 0) return originY;
+const norm = (Math.log10(v) - s.logMinY) / (s.logMaxY - s.logMinY || 1);
+return margin.top + (1 - norm) * chartH;
+};
+
+for (let i = 0; i <= ySteps; i++) {
+const percent = i / ySteps;
+const val = Math.pow(10, s.logMinY + percent * (s.logMaxY - s.logMinY));
+const worldY = projectY(val);
+
+ctx.beginPath();
+ctx.moveTo(originX, worldY);
+ctx.lineTo(originX + chartW, worldY);
+ctx.stroke();
+
+ctx.textAlign = 'right';
+ctx.fillText(formatCompact(val), originX - 10 / k, worldY);
+}
+
+ctx.beginPath();
+ctx.moveTo(originX, originY);
+ctx.lineTo(originX + chartW, originY);
+ctx.stroke();
+
+ctx.beginPath();
+ctx.moveTo(originX, margin.top);
+ctx.lineTo(originX, originY);
+ctx.stroke();
+
+ctx.font = `${14 / k}px Inter`;
+ctx.textAlign = 'center';
+ctx.fillStyle = isDark ? '#dd9933' : '#333';
+const xLabel = chartMode === 'performance' ? `Variação ${timeframe} (%)` : 'Market Cap (Log)';
+ctx.fillText(xLabel, (width / 2) / k, originY + 56 / k);
+
+ctx.save();
+ctx.translate(18 / k, (height / 2) / k);
+ctx.rotate(-Math.PI / 2);
+ctx.fillText('Volume 24h (Log)', 0, 0);
+ctx.restore();
+
+ctx.restore();
+}
+
+// PHYSICS
+if (isGameMode) {
+const subSteps = 3;
+const stepDt = dt / subSteps;
+const worldW = width / k;
+const worldH = height / k;
+
+for (let step = 0; step < subSteps; step++) {
+const drag = Math.pow(GAME_LINEAR_DAMP, stepDt * 60);
+
+for (const p of particles) {
+if (p.isFalling) continue;
+if (p.isFixed) continue;
+
+p.vx *= drag;
+p.vy *= drag;
+
+if (Math.hypot(p.vx, p.vy) < GAME_STOP_EPS) { p.vx = 0; p.vy = 0; }
+
+p.x += p.vx * stepDt;
+p.y += p.vy * stepDt;
+
+if (p.x < p.radius + GAME_WALL_PAD) { p.x = p.radius + GAME_WALL_PAD; p.vx *= -0.95; }
+else if (p.x > worldW - p.radius - GAME_WALL_PAD) { p.x = worldW - p.radius - GAME_WALL_PAD; p.vx *= -0.95; }
+
+if (p.y < p.radius + GAME_WALL_PAD) { p.y = p.radius + GAME_WALL_PAD; p.vy *= -0.95; }
+else if (p.y > worldH - p.radius - GAME_WALL_PAD) { p.y = worldH - p.radius - GAME_WALL_PAD; p.vy *= -0.95; }
+}
+
+for (let i = 0; i < particles.length; i++) {
+const p1 = particles[i];
+if (p1.isFalling) continue;
+
+for (let j = i + 1; j < particles.length; j++) {
+const p2 = particles[j];
+if (p2.isFalling) continue;
+
+const dx = p2.x - p1.x;
+const dy = p2.y - p1.y;
+const minDist = p1.radius + p2.radius;
+const distSq = dx * dx + dy * dy;
+if (distSq >= minDist * minDist) continue;
+
+const dist = Math.sqrt(distSq) || 0.001;
 const nx = dx / dist;
 const ny = dy / dist;
 
-const pull = aimingRef.current.pull;
-const stickLen = 260;
-const back = cue.radius + 18 + pull;
+const overlap = minDist - dist;
+const totalMass = (p1.mass + p2.mass) || 1;
+const move1 = (p2.mass / totalMass);
+const move2 = (p1.mass / totalMass);
 
-const x1 = cue.x - nx * back;
-const y1 = cue.y - ny * back;
-const x2 = cue.x - nx * (back + stickLen);
-const y2 = cue.y - ny * (back + stickLen);
+if (!p1.isFixed) { p1.x -= nx * overlap * move1; p1.y -= ny * overlap * move1; }
+if (!p2.isFixed) { p2.x += nx * overlap * move2; p2.y += ny * overlap * move2; }
 
-ctx.save();
-ctx.lineCap = 'round';
+const rvx = p2.vx - p1.vx;
+const rvy = p2.vy - p1.vy;
+const velAlongNormal = rvx * nx + rvy * ny;
+if (velAlongNormal > 0) continue;
 
-// outer dark
-ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-ctx.lineWidth = 10;
-ctx.beginPath();
-ctx.moveTo(x1, y1);
-ctx.lineTo(x2, y2);
-ctx.stroke();
+const restitution = 0.92;
+let impulse = -(1 + restitution) * velAlongNormal;
+impulse /= (1 / p1.mass + 1 / p2.mass);
 
-// wood
-ctx.strokeStyle = dark ? 'rgba(255,220,160,0.85)' : 'rgba(160,110,40,0.85)';
-ctx.lineWidth = 7;
-ctx.beginPath();
-ctx.moveTo(x1, y1);
-ctx.lineTo(x2, y2);
-ctx.stroke();
+const ix = impulse * nx;
+const iy = impulse * ny;
 
-// tip
-ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-ctx.lineWidth = 4;
-ctx.beginPath();
-ctx.moveTo(x1, y1);
-ctx.lineTo(x1 - nx * 18, y1 - ny * 18);
-ctx.stroke();
+if (!p1.isFixed) { p1.vx -= ix / p1.mass; p1.vy -= iy / p1.mass; }
+if (!p2.isFixed) { p2.vx += ix / p2.mass; p2.vy += iy / p2.mass; }
+}
+}
 
-ctx.restore();
+for (const p of particles) {
+if (p.isFalling) continue;
+if (p.isFixed) continue;
+
+for (const pk of pockets) {
+const dist = Math.hypot(p.x - pk.x, p.y - pk.y);
+if (dist < (pk.r + p.radius)) {
+p.isFalling = true;
+p.fallT = 0;
+p.vx = 0;
+p.vy = 0;
+p.fallPocket = pk;
+p.fallFromX = p.x;
+p.fallFromY = p.y;
+break;
 }
 }
 }
 
-// draw particles + offscreen count
-const st = searchTermRef.current;
-const tl = trailLengthRef.current;
+for (const p of [...particles]) {
+if (!p.isFalling) continue;
+p.fallT = (p.fallT || 0) + stepDt;
 
-let off = 0;
+const t = clamp((p.fallT || 0) / 0.35, 0, 1);
+const ease = 1 - Math.pow(1 - t, 3);
 
+const pk = p.fallPocket;
+if (pk) {
+const fx = p.fallFromX ?? p.x;
+const fy = p.fallFromY ?? p.y;
+p.x = fx + (pk.x - fx) * ease;
+p.y = fy + (pk.y - fy) * ease;
+}
+
+if (t >= 1) {
+const wasCue = String(p.coin.id).toLowerCase() === 'bitcoin';
+particlesRef.current = particlesRef.current.filter(pp => pp !== p);
+
+if (!wasCue) {
+pocketedCountRef.current += 1;
+setPocketedUI({ count: pocketedCountRef.current, max: pocketedMaxRef.current });
+}
+playPocket();
+}
+}
+}
+}
+} else if (isFreeMode) {
+const subSteps = 2;
+const stepDt = dt / subSteps;
+const worldW = width / k;
+const worldH = height / k;
+
+for (let step = 0; step < subSteps; step++) {
+const drag = Math.pow(FREE_LINEAR_DAMP, stepDt * 60);
+
+for (const p of particles) {
+if (p.isFalling) continue;
+if (p.isFixed) continue;
+
+p.vx *= drag;
+p.vy *= drag;
+
+const drift = 18 * (0.25 + floatStrengthRaw);
+p.vx += Math.sin(now * 0.0007 + p.phase) * drift * stepDt;
+p.vy += Math.cos(now * 0.0009 + p.phase) * drift * stepDt;
+
+const sp = Math.hypot(p.vx, p.vy);
+if (sp > FREE_MAX_SPEED) {
+p.vx = (p.vx / sp) * FREE_MAX_SPEED;
+p.vy = (p.vy / sp) * FREE_MAX_SPEED;
+}
+
+p.x += p.vx * stepDt;
+p.y += p.vy * stepDt;
+
+if (p.x < p.radius) { p.x = p.radius; p.vx *= -0.92; }
+else if (p.x > worldW - p.radius) { p.x = worldW - p.radius; p.vx *= -0.92; }
+
+if (p.y < p.radius) { p.y = p.radius; p.vy *= -0.92; }
+else if (p.y > worldH - p.radius) { p.y = worldH - p.radius; p.vy *= -0.92; }
+}
+
+for (let i = 0; i < particles.length; i++) {
+const p1 = particles[i];
+if (p1.isFalling) continue;
+
+for (let j = i + 1; j < particles.length; j++) {
+const p2 = particles[j];
+if (p2.isFalling) continue;
+
+const dx = p2.x - p1.x;
+const dy = p2.y - p1.y;
+const minDist = p1.radius + p2.radius;
+const distSq = dx * dx + dy * dy;
+if (distSq >= minDist * minDist) continue;
+
+const dist = Math.sqrt(distSq) || 0.001;
+const nx = dx / dist;
+const ny = dy / dist;
+
+const overlap = minDist - dist;
+const totalMass = (p1.mass + p2.mass) || 1;
+const move1 = (p2.mass / totalMass);
+const move2 = (p1.mass / totalMass);
+
+if (!p1.isFixed) { p1.x -= nx * overlap * move1 * FREE_REPULSE; p1.y -= ny * overlap * move1 * FREE_REPULSE; }
+if (!p2.isFixed) { p2.x += nx * overlap * move2 * FREE_REPULSE; p2.y += ny * overlap * move2 * FREE_REPULSE; }
+
+const rvx = p2.vx - p1.vx;
+const rvy = p2.vy - p1.vy;
+const velAlongNormal = rvx * nx + rvy * ny;
+if (velAlongNormal > 0) continue;
+
+const restitution = 0.90;
+let impulse = -(1 + restitution) * velAlongNormal;
+impulse /= (1 / p1.mass + 1 / p2.mass);
+
+const ix = impulse * nx;
+const iy = impulse * ny;
+
+if (!p1.isFixed) { p1.vx -= ix / p1.mass; p1.vy -= iy / p1.mass; }
+if (!p2.isFixed) { p2.vx += ix / p2.mass; p2.vy += iy / p2.mass; }
+}
+}
+}
+} else {
+// MAPPED MODE
+for (const p of particles) {
+const t0 = p.mapT ?? 1;
+const t1 = clamp(t0 + dt / 0.55, 0, 1);
+p.mapT = t1;
+
+const ease = 1 - Math.pow(1 - t1, 3);
+const fx = p.mapFromX ?? p.x;
+const fy = p.mapFromY ?? p.y;
+const tx = p.mapToX ?? p.x;
+const ty = p.mapToY ?? p.y;
+
+const baseX = fx + (tx - fx) * ease;
+const baseY = fy + (ty - fy) * ease;
+
+const jitterAmp = 1.6 * floatStrengthRaw;
+const jx = Math.sin(now * 0.002 + p.phase) * jitterAmp;
+const jy = Math.cos(now * 0.0024 + p.phase) * jitterAmp;
+
+p.x = baseX + jx;
+p.y = baseY + jy;
+}
+}
+
+// DRAW particles (WORLD SPACE)
 for (const p of particlesRef.current) {
-const screenX = toScreenX(p.x);
-const screenY = toScreenY(p.y);
-
-const outside = (screenX + p.radius < 0 || screenX - p.radius > width || screenY + p.radius < 0 || screenY - p.radius > height);
-if (outside) off++;
-
-if (outside) continue;
-
+let drawRadius = p.radius;
 let alpha = 1.0;
+
+if (p.isFalling) {
+const t = clamp((p.fallT || 0) / 0.35, 0, 1);
+drawRadius = p.radius * (1 - t);
+alpha = 1 - t;
+}
 
 const isHovered = hoveredParticleRef.current?.id === p.id;
 const isSelected = selectedParticleRef.current?.id === p.id;
 
-const isDimmed = st
-&& !p.coin.name.toLowerCase().includes(st.toLowerCase())
-&& !p.coin.symbol.toLowerCase().includes(st.toLowerCase());
+const isDimmed = searchTerm
+&& !p.coin.name.toLowerCase().includes(searchTerm.toLowerCase())
+&& !p.coin.symbol.toLowerCase().includes(searchTerm.toLowerCase());
 
 if (isDimmed) alpha *= 0.12;
 
-// trails only in map
-if (!game && !free && tl > 0 && alpha > 0.05) {
-const last = p.trail[p.trail.length - 1];
-const ddx = last ? screenX - last.x : 10;
-const ddy = last ? screenY - last.y : 10;
+if (trailLength > 0 && alpha > 0.05) {
+const sx = p.x;
+const sy = p.y;
 
-if (!last || (ddx * ddx + ddy * ddy > 4)) p.trail.push({ x: screenX, y: screenY, age: 1.0 });
+const last = p.trail[p.trail.length - 1];
+const ddx = last ? sx - last.x : 10;
+const ddy = last ? sy - last.y : 10;
+
+if (!last || (ddx * ddx + ddy * ddy > 4)) p.trail.push({ x: sx, y: sy, age: 1.0 });
 
 for (let tIdx = 0; tIdx < p.trail.length; tIdx++) p.trail[tIdx].age -= 0.02;
 p.trail = p.trail.filter(t => t.age > 0);
 
 if (p.trail.length > 1) {
-const grad = ctx.createLinearGradient(p.trail[0].x, p.trail[0].y, screenX, screenY);
+const grad = ctx.createLinearGradient(p.trail[0].x, p.trail[0].y, sx, sy);
 grad.addColorStop(0, 'rgba(0,0,0,0)');
 grad.addColorStop(1, p.color);
 
@@ -1853,7 +1518,7 @@ for (let i = 1; i < p.trail.length; i++) ctx.lineTo(p.trail[i].x, p.trail[i].y);
 
 ctx.strokeStyle = grad;
 ctx.globalAlpha = alpha;
-ctx.lineWidth = Math.min(p.radius * 0.35, 4);
+ctx.lineWidth = Math.min(drawRadius * 0.18, 4 / k);
 ctx.stroke();
 ctx.globalAlpha = 1.0;
 }
@@ -1861,84 +1526,181 @@ ctx.globalAlpha = 1.0;
 p.trail = [];
 }
 
+if (drawRadius <= 0.5) continue;
+
+const isBTC = String(p.coin.id).toLowerCase() === 'bitcoin';
+
 ctx.save();
 ctx.globalAlpha = alpha;
 
-const isBTC = String(p.coin.id).toLowerCase() === 'bitcoin';
 ctx.beginPath();
-ctx.arc(screenX, screenY, p.radius, 0, Math.PI * 2);
+ctx.arc(p.x, p.y, drawRadius, 0, Math.PI * 2);
 
-const logo = imageCache.current.get(p.coin.image);
-if (logo?.complete) {
+const img = imageCache.current.get(p.coin.image);
+if (img?.complete) {
 ctx.save();
 ctx.clip();
-ctx.drawImage(logo, screenX - p.radius, screenY - p.radius, p.radius * 2, p.radius * 2);
+ctx.drawImage(img, p.x - drawRadius, p.y - drawRadius, drawRadius * 2, drawRadius * 2);
 ctx.restore();
 
-ctx.strokeStyle = isBTC ? '#ffffff' : p.color;
-ctx.lineWidth = isSelected ? 4 : 2;
+ctx.strokeStyle = isBTC && isGameMode ? (isDark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.35)') : p.color;
+ctx.lineWidth = (isSelected ? 4 : 2) / k;
 ctx.stroke();
 } else {
-ctx.fillStyle = isBTC ? '#ffffff' : p.color;
+ctx.fillStyle = isBTC && isGameMode ? '#ffffff' : p.color;
 ctx.fill();
 }
 
-if (p.radius > 12) {
+if (!isGameMode && drawRadius > 12) {
 ctx.fillStyle = '#fff';
-ctx.font = `bold ${Math.max(10, p.radius * 0.42)}px Inter`;
+ctx.font = `bold ${Math.max(11, drawRadius * 0.42) / k}px Inter`;
 ctx.textAlign = 'center';
 ctx.textBaseline = 'middle';
 ctx.shadowColor = 'rgba(0,0,0,0.8)';
-ctx.shadowBlur = 4;
-ctx.fillText(p.coin.symbol.toUpperCase(), screenX, screenY);
+ctx.shadowBlur = 4 / k;
+ctx.fillText(p.coin.symbol.toUpperCase(), p.x, p.y);
 ctx.shadowBlur = 0;
 }
 
 if (isHovered || isSelected) {
-ctx.strokeStyle = dark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)';
-ctx.lineWidth = 2;
+ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)';
+ctx.lineWidth = 2 / k;
 ctx.beginPath();
-ctx.arc(screenX, screenY, p.radius + 4, 0, Math.PI * 2);
+ctx.arc(p.x, p.y, drawRadius + 4 / k, 0, Math.PI * 2);
 ctx.stroke();
 }
 
 ctx.restore();
 }
 
-// offscreen update throttled
-offscreenRef.current = off;
-if (!offscreenTickRef.current || now - offscreenTickRef.current > 350) {
-offscreenTickRef.current = now;
-setOffscreenCount(off);
+// draw cue + aim marker (game) WORLD SPACE
+if (isGameMode) {
+const cueBall = particlesRef.current.find(p => String(p.coin.id).toLowerCase() === 'bitcoin');
+if (cueBall && now >= cueHideUntilRef.current) {
+const cx = cueBall.x;
+const cy = cueBall.y;
+
+const aimX = gameCtlRef.current.aimX;
+const aimY = gameCtlRef.current.aimY;
+
+let tx = cx + 120;
+let ty = cy;
+
+if (gameCtlRef.current.phase === 1 || gameCtlRef.current.phase === 2 || gameCtlRef.current.phase === 3) {
+tx = aimX;
+ty = aimY;
+} else if (lastMousePosRef.current) {
+tx = lastMousePosRef.current.x;
+ty = lastMousePosRef.current.y;
 }
+
+const dx = tx - cx;
+const dy = ty - cy;
+const dist = Math.hypot(dx, dy) || 0.0001;
+const ux = dx / dist;
+const uy = dy / dist;
+
+const contactGap = 12;
+const pull = (gameCtlRef.current.phase === 3) ? gameCtlRef.current.powerPull : 14;
+
+// continuous “vai e vem”
+const bob = (Math.sin(now * 0.012) * 6);
+
+const tipX = cx - ux * (cueBall.radius + contactGap + pull + bob);
+const tipY = cy - uy * (cueBall.radius + contactGap + pull + bob);
+
+const stickLen = Math.max(260, cueBall.radius * 7.5);
+const buttX = tipX - ux * stickLen;
+const buttY = tipY - uy * stickLen;
+
+const thick = Math.max(8, cueBall.radius * 0.40);
+const tipThick = Math.max(5, thick * 0.55);
+
+ctx.save();
+ctx.globalAlpha = 0.92;
+ctx.lineCap = 'round';
+
+ctx.beginPath();
+ctx.moveTo(buttX, buttY);
+ctx.lineTo(tipX, tipY);
+ctx.strokeStyle = isDark ? 'rgba(210,170,120,0.78)' : 'rgba(120,85,45,0.72)';
+ctx.lineWidth = thick / k;
+ctx.stroke();
+
+const tipLen = Math.min(30, stickLen * 0.12);
+ctx.beginPath();
+ctx.moveTo(tipX - ux * tipLen, tipY - uy * tipLen);
+ctx.lineTo(tipX, tipY);
+ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.62)' : 'rgba(255,255,255,0.78)';
+ctx.lineWidth = tipThick / k;
+ctx.stroke();
+
+ctx.restore();
+}
+
+// aim marker locked
+if (gameCtlRef.current.phase === 2 || gameCtlRef.current.phase === 3) {
+const sx = gameCtlRef.current.aimX;
+const sy = gameCtlRef.current.aimY;
+const pulse = 1 + Math.sin(now * 0.012) * 0.12;
+
+ctx.save();
+ctx.globalAlpha = 0.9;
+ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.75)';
+ctx.lineWidth = 2 / k;
+
+ctx.beginPath();
+ctx.arc(sx, sy, (12 * pulse) / k, 0, Math.PI * 2);
+ctx.stroke();
+
+ctx.beginPath();
+ctx.moveTo(sx - 18 / k, sy);
+ctx.lineTo(sx + 18 / k, sy);
+ctx.stroke();
+
+ctx.beginPath();
+ctx.moveTo(sx, sy - 18 / k);
+ctx.lineTo(sx, sy + 18 / k);
+ctx.stroke();
+
+ctx.restore();
+}
+}
+
+// restore from world transform
+ctx.restore();
 
 reqIdRef.current = requestAnimationFrame(loop);
 };
 
 reqIdRef.current = requestAnimationFrame(loop);
 return () => cancelAnimationFrame(reqIdRef.current);
-}, [projectCoinToMapXY, getPlotGeometry]);
+}, [
+isDark,
+chartMode,
+isGameMode,
+isFreeMode,
+timeframe,
+floatStrengthRaw,
+trailLength,
+searchTerm,
+cuePowerRaw,
+playPocket
+]);
 
-const detailHeader = useMemo(() => {
-if (!detailCoin) return null;
-return {
-name: detailCoin.name,
-symbol: detailCoin.symbol?.toUpperCase(),
-rank: (detailCoin as any).market_cap_rank ?? '-',
-image: detailCoin.image
-};
-}, [detailCoin]);
+// ===== UI =====
+const siteSocials = useMemo(() => ([
+{ name: 'Site', icon: Globe, href: 'https://centralcrypto.com.br' },
+{ name: 'RSS', icon: Rss, href: 'https://centralcrypto.com.br/2/feed/' }
+]), []);
 
-// =======================
-// RENDER
-// =======================
 return (
 <div
 ref={containerRef}
 className="fixed inset-0 z-[2000] bg-white dark:bg-[#0b0f14] text-gray-900 dark:text-white flex flex-col overflow-hidden touch-none select-none overscroll-none h-[100dvh]"
 >
 <div className="flex justify-between items-start p-4 z-20 bg-white/80 dark:bg-black/50 backdrop-blur-sm border-b border-gray-200 dark:border-white/10 shrink-0">
-<div className="flex items-center gap-4 flex-wrap">
+<div className="flex items-center gap-4">
 <Coins size={28} className="text-[#dd9933]" />
 <div>
 <h3 className="text-xl font-black uppercase tracking-wider">Crypto Bubbles</h3>
@@ -1947,32 +1709,44 @@ className="fixed inset-0 z-[2000] bg-white dark:bg-[#0b0f14] text-gray-900 dark:
 </p>
 </div>
 
-<div className="w-px h-8 bg-gray-200 dark:bg-white/10 mx-2"></div>
+{isGameMode && (
+<div className="ml-3 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5">
+<div className="text-[11px] font-black text-gray-500 dark:text-gray-400">Bolas fora</div>
+<div className="text-sm font-black">{pocketedUI.count}/{pocketedUI.max}</div>
+</div>
+)}
+
+<div className="w-px h-8 bg-gray-200 dark:bg-white/10 mx-4"></div>
 
 <div className="flex items-center gap-2">
 <div className="flex bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10">
 <button
 onClick={() => setChartMode('valuation')}
 className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'valuation' ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500 dark:text-gray-300'}`}
+disabled={isGameMode}
 >
 Market Cap
 </button>
+</div>
+
+<div className="flex items-center bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10">
 <button
 onClick={() => setChartMode('performance')}
 className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'performance' ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500 dark:text-gray-300'}`}
+disabled={isGameMode}
 >
-Variação
+Variação:
 </button>
-</div>
 
-<div className={`flex items-center bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10 ${isGameMode || isFreeMode ? 'opacity-50' : ''}`}>
+<div className="w-px h-5 bg-gray-200 dark:bg-white/10 mx-1"></div>
+
 <div className="flex items-center gap-2 px-2 py-1">
 <Wind size={14} className="text-gray-400" />
 <select
 value={timeframe}
 onChange={(e) => setTimeframe(e.target.value as Timeframe)}
 className="bg-white dark:bg-[#2f3032] text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs font-black border border-gray-200 dark:border-white/10 outline-none"
-disabled={isGameMode || isFreeMode}
+disabled={isGameMode}
 >
 <option value="1h">1h</option>
 <option value="24h">24h</option>
@@ -1980,39 +1754,20 @@ disabled={isGameMode || isFreeMode}
 </select>
 </div>
 </div>
+</div>
+</div>
 
-{/* numCoins selector (map) OR game selector */}
-<div className="flex items-center bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10">
-<div className="flex items-center gap-2 px-2 py-1">
-<span className="text-xs font-black text-gray-500 dark:text-gray-400">#</span>
-
-{isGameMode ? (
+<div className="flex items-center gap-2 bg-gray-100 dark:bg-black/50 p-2 rounded-lg border border-gray-200 dark:border-white/10">
+<Coins size={16} className="text-gray-400" />
 <select
-value={numCoins}
+value={effectiveNumCoins}
 onChange={e => setNumCoins(parseInt(e.target.value))}
 className="bg-white dark:bg-[#2f3032] text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs font-black border border-gray-200 dark:border-white/10 outline-none"
 >
-{[12, 18, 24].map(n => <option key={n} value={n}>{n}</option>)}
+{(isGameMode ? gameCoinOptions : normalCoinOptions).map(n => (
+<option key={n} value={n}>{n} moedas</option>
+))}
 </select>
-) : (
-<select
-value={numCoins}
-onChange={e => setNumCoins(parseInt(e.target.value))}
-className="bg-white dark:bg-[#2f3032] text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs font-black border border-gray-200 dark:border-white/10 outline-none"
->
-{[50, 100, 150, 200, 250].map(n => <option key={n} value={n}>{n}</option>)}
-</select>
-)}
-</div>
-</div>
-
-{/* offscreen counter */}
-<div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-100 dark:bg-black/50">
-<AlertTriangle size={16} className="text-[#dd9933]" />
-<span className="text-xs font-black text-gray-700 dark:text-gray-200">
-Fora: <span className="text-[#dd9933]">{offscreenCount}</span>
-</span>
-</div>
 </div>
 
 <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/50 p-2 rounded-lg border border-gray-200 dark:border-white/10">
@@ -2023,6 +1778,7 @@ value={searchTerm}
 onChange={(e) => setSearchTerm(e.target.value)}
 placeholder="Buscar ativo..."
 className="bg-transparent outline-none text-sm w-48 text-gray-900 dark:text-white"
+disabled={false}
 />
 {searchTerm && (
 <button onClick={() => { setSearchTerm(''); setSelectedParticle(null); }}>
@@ -2035,9 +1791,8 @@ className="bg-transparent outline-none text-sm w-48 text-gray-900 dark:text-whit
 <div className="flex items-center gap-3 relative">
 <button
 onClick={resetZoom}
-className={`p-3 bg-[#dd9933]/10 hover:bg-[#dd9933]/20 text-[#dd9933] rounded-lg border border-[#dd9933]/30 transition-colors ${isGameMode || isFreeMode ? 'opacity-50' : ''}`}
+className="p-3 bg-[#dd9933]/10 hover:bg-[#dd9933]/20 text-[#dd9933] rounded-lg border border-[#dd9933]/30 transition-colors"
 title="Reset Zoom"
-disabled={isGameMode || isFreeMode}
 >
 <Maximize size={20} />
 </button>
@@ -2083,12 +1838,11 @@ title="Close"
 </div>
 </div>
 
-{/* SETTINGS */}
 {settingsOpen && (
 <div
 className="absolute top-24 right-4 bg-white/90 dark:bg-black/80 p-4 rounded-lg border border-gray-200 dark:border-white/10 backdrop-blur-md w-80 z-30 shadow-xl"
 onWheel={(e) => e.stopPropagation()}
-onMouseDown={(e) => e.stopPropagation()}
+onPointerDown={(e) => e.stopPropagation()}
 >
 <div className="flex items-center justify-between gap-3">
 <div className="flex items-center gap-2">
@@ -2105,8 +1859,8 @@ title="Modo Game"
 </button>
 </div>
 
-{/* Free mode toggle (hidden/disabled when game) */}
-<div className={`mt-3 flex items-center justify-between gap-3 ${isGameMode ? 'opacity-50 pointer-events-none' : ''}`}>
+{!isGameMode && (
+<div className="mt-3 flex items-center justify-between gap-3">
 <div className="flex items-center gap-2">
 <Wind size={14} />
 <span className="text-xs font-black uppercase tracking-wider">Modo Livre</span>
@@ -2120,13 +1874,14 @@ title="Modo Livre"
 <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isFreeMode ? 'translate-x-6' : 'translate-x-1'}`} />
 </button>
 </div>
+)}
 
 <div className="mt-4 space-y-4">
-<div className={(isGameMode || isFreeMode) ? 'opacity-50' : ''}>
+<div className={isGameMode ? 'opacity-50' : ''}>
 <div className="flex items-center justify-between gap-3">
 <div className="flex items-center gap-2">
 <Wind size={14} />
-<span className="text-xs font-black uppercase tracking-wider">Flutuação (Mapa/Livre)</span>
+<span className="text-xs font-black uppercase tracking-wider">Flutuação</span>
 </div>
 <span className="text-xs font-bold text-gray-500 dark:text-gray-400">{Math.round(floatStrengthRaw * 100)}%</span>
 </div>
@@ -2138,11 +1893,10 @@ step="0.05"
 value={floatStrengthRaw}
 onChange={e => setFloatStrengthRaw(parseFloat(e.target.value))}
 className="w-full accent-[#dd9933] mt-2"
-disabled={isGameMode}
 />
 </div>
 
-<div className={(isGameMode || isFreeMode) ? 'opacity-50' : ''}>
+<div>
 <div className="flex items-center justify-between gap-3">
 <div className="flex items-center gap-2">
 <Droplets size={14} />
@@ -2158,16 +1912,15 @@ step="1"
 value={trailLength}
 onChange={e => setTrailLength(parseInt(e.target.value))}
 className="w-full accent-[#dd9933] mt-2"
-disabled={isGameMode || isFreeMode}
 />
 </div>
 
-{/* cue power only in game */}
-<div className={isGameMode ? '' : 'opacity-50'}>
+{isGameMode && (
+<div>
 <div className="flex items-center justify-between gap-3">
 <div className="flex items-center gap-2">
 <Atom size={14} />
-<span className="text-xs font-black uppercase tracking-wider">Força da Tacada</span>
+<span className="text-xs font-black uppercase tracking-wider">Força Base</span>
 </div>
 <span className="text-xs font-bold text-gray-500 dark:text-gray-400">{Math.round(cuePowerRaw * 100)}%</span>
 </div>
@@ -2179,279 +1932,142 @@ step="0.05"
 value={cuePowerRaw}
 onChange={e => setCuePowerRaw(parseFloat(e.target.value))}
 className="w-full accent-[#dd9933] mt-2"
-disabled={!isGameMode}
 />
 </div>
+)}
 </div>
 </div>
 )}
 
-{/* DETAIL MODAL */}
+{/* DETAIL CARD SIMPLE LIST */}
 {detailOpen && detailCoin && (
 <div
-className="absolute inset-0 z-[60] flex items-center justify-center bg-black/55"
-onMouseDown={() => closeDetail()}
+className="absolute inset-0 z-[80] flex items-center justify-center bg-black/55"
+onPointerDown={() => setDetailOpen(false)}
 >
 <div
-className="w-[94vw] max-w-[920px] max-h-[88vh] overflow-auto rounded-2xl border border-gray-200 dark:border-white/10 bg-white/95 dark:bg-black/80 backdrop-blur-md shadow-2xl p-5"
-onMouseDown={(e) => e.stopPropagation()}
+key={detailAnimKey}
+className="w-[92vw] max-w-[760px] rounded-2xl border border-gray-200 dark:border-white/10 bg-white/95 dark:bg-black/80 backdrop-blur-md shadow-2xl p-5 animate-[dropin_0.28s_ease-out]"
+onPointerDown={(e) => e.stopPropagation()}
 >
+<style>{`@keyframes dropin{0%{transform:translateY(-18px) scale(0.96);opacity:0}100%{transform:translateY(0) scale(1);opacity:1}}`}</style>
+
 <div className="flex items-start justify-between gap-4">
-<div className="flex items-center gap-4">
-<img src={detailHeader?.image} alt={detailHeader?.name} className="w-12 h-12 rounded-2xl" />
+<div className="flex items-center gap-3">
+<img src={detailCoin.image} alt={detailCoin.name} className="w-12 h-12 rounded-full" />
 <div>
-<div className="text-xl font-black leading-tight">{detailHeader?.name}</div>
-<div className="mt-1 flex items-center gap-2 text-xs font-bold text-gray-500 dark:text-gray-400">
-<span className="px-2 py-1 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5">
-{detailHeader?.symbol}
-</span>
-<span className="px-2 py-1 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5">
-Rank #{detailHeader?.rank}
-</span>
-<a
-className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10"
-href={(detailCoin as any)?.link || '#'}
-target="_blank"
-rel="noreferrer"
-title="Abrir fonte"
->
-<ExternalLink size={14} />
-<span>Fonte</span>
-</a>
+<div className="text-lg font-black leading-tight">{detailCoin.name}</div>
+<div className="text-xs font-bold text-gray-500 dark:text-gray-400">
+{detailCoin.symbol?.toUpperCase()} • Rank #{detailCoin.market_cap_rank ?? '-'}
 </div>
 </div>
 </div>
 
 <button
-onClick={() => closeDetail()}
-className="p-2 rounded-xl bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 border border-gray-200 dark:border-white/10"
+onClick={() => setDetailOpen(false)}
+className="p-2 rounded-lg bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 border border-gray-200 dark:border-white/10"
 title="Fechar"
 >
 <CloseIcon size={18} />
 </button>
 </div>
 
-<div className="mt-4 rounded-2xl p-4 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10">
-<div className="flex items-center justify-between">
-<div className="flex items-center gap-2">
-<BarChart2 size={16} className="text-[#dd9933]" />
-<div className="text-sm font-black">Variações</div>
-</div>
-<div className="text-xs font-bold text-gray-500 dark:text-gray-400 flex items-center gap-2">
-<Clock size={14} />
-<span>1h / 24h / 7d</span>
-</div>
-</div>
-
-<div className="mt-3 flex flex-wrap gap-2">
-<div className="px-3 py-2 rounded-xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30">
-<div className="text-[11px] font-black text-gray-500 dark:text-gray-400">1h</div>
-<div className="text-sm font-black" style={{ color: pctColor(changes?.p1h as any) }}>{fmtPct(changes?.p1h as any)}</div>
+<div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+<div className="text-sm space-y-2">
+<div className="flex justify-between gap-4"><span className="font-bold text-gray-500 dark:text-gray-400">Preço</span><span className="font-black">{formatPrice(detailCoin.current_price)}</span></div>
+<div className="flex justify-between gap-4"><span className="font-bold text-gray-500 dark:text-gray-400">Market Cap</span><span className="font-black">{formatCompact(detailCoin.market_cap)}</span></div>
+<div className="flex justify-between gap-4"><span className="font-bold text-gray-500 dark:text-gray-400">Volume 24h</span><span className="font-black">{formatCompact(detailCoin.total_volume)}</span></div>
+<div className="flex justify-between gap-4"><span className="font-bold text-gray-500 dark:text-gray-400">High 24h</span><span className="font-black">{formatPrice((detailCoin as any).high_24h)}</span></div>
+<div className="flex justify-between gap-4"><span className="font-bold text-gray-500 dark:text-gray-400">Low 24h</span><span className="font-black">{formatPrice((detailCoin as any).low_24h)}</span></div>
+<div className="flex justify-between gap-4"><span className="font-bold text-gray-500 dark:text-gray-400">ATH</span><span className="font-black">{formatPrice((detailCoin as any).ath)}</span></div>
+<div className="flex justify-between gap-4"><span className="font-bold text-gray-500 dark:text-gray-400">ATL</span><span className="font-black">{formatPrice((detailCoin as any).atl)}</span></div>
 </div>
 
-<div className="px-3 py-2 rounded-xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30">
-<div className="text-[11px] font-black text-gray-500 dark:text-gray-400">24h</div>
-<div className="text-sm font-black" style={{ color: pctColor(changes?.p24 as any) }}>{fmtPct(changes?.p24 as any)}</div>
-</div>
+<div className="text-sm space-y-2">
+<div className="flex justify-between gap-4"><span className="font-bold text-gray-500 dark:text-gray-400">1h</span><span className="font-black" style={{ color: perfColor(detailPerf1h?.pct) }}>{(detailPerf1h?.pct ?? 0).toFixed(2)}%</span></div>
+<div className="flex justify-between gap-4"><span className="font-bold text-gray-500 dark:text-gray-400">24h</span><span className="font-black" style={{ color: perfColor(detailPerf24?.pct) }}>{(detailPerf24?.pct ?? 0).toFixed(2)}%</span></div>
+<div className="flex justify-between gap-4"><span className="font-bold text-gray-500 dark:text-gray-400">7d</span><span className="font-black" style={{ color: perfColor(detailPerf7d?.pct) }}>{(detailPerf7d?.pct ?? 0).toFixed(2)}%</span></div>
 
-<div className="px-3 py-2 rounded-xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30">
-<div className="text-[11px] font-black text-gray-500 dark:text-gray-400">7d</div>
-<div className="text-sm font-black" style={{ color: pctColor(changes?.p7d as any) }}>{fmtPct(changes?.p7d as any)}</div>
-</div>
-</div>
-</div>
-
-<div className="mt-4 rounded-2xl border border-gray-200 dark:border-white/10 overflow-hidden">
-<div className="px-4 py-3 bg-gray-100/70 dark:bg-white/5 border-b border-gray-200 dark:border-white/10 flex items-center justify-between">
-<div className="text-sm font-black">Detalhes</div>
-</div>
-
-<div className="p-4 bg-white/70 dark:bg-black/30">
-<div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-{detailListRows.map((r) => (
-<div key={r.k} className="flex items-center justify-between gap-3 rounded-xl px-3 py-2 border border-gray-200 dark:border-white/10 bg-white/60 dark:bg-white/5">
-<div className="text-[11px] font-black text-gray-500 dark:text-gray-400">{r.k}</div>
-<div className="text-xs font-black text-gray-900 dark:text-gray-100 text-right">{r.v}</div>
-</div>
-))}
-</div>
-</div>
-</div>
-
-<div className="mt-4 rounded-2xl p-4 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10">
-<div className="text-sm font-black mb-3">Redes sociais</div>
-<div className="flex flex-wrap gap-2">
-{SITE_SOCIALS.map((s) => (
-<a
-key={`${s.type}:${s.url}`}
-href={normalizeUrl(s.url)}
-target="_blank"
-rel="noreferrer"
-className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
-title={s.label}
->
-<span className="text-gray-700 dark:text-gray-200">
-<SocialIcon type={s.type} />
-</span>
-<span className="text-xs font-black">{s.label}</span>
-</a>
-))}
-</div>
-</div>
-
-<div className="mt-4 rounded-2xl border border-gray-200 dark:border-white/10 overflow-hidden bg-gray-50 dark:bg-white/5">
-<div className="px-4 py-3 border-b border-gray-200 dark:border-white/10 flex items-center justify-between">
-<div className="text-sm font-black">Magazine</div>
-
-<div className="flex items-center gap-2">
-<a
-href={MAGAZINE_FALLBACK_LINK_BASE}
-target="_blank"
-rel="noreferrer"
-className="px-2 py-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30 hover:bg-gray-100 dark:hover:bg-white/10 text-xs font-black inline-flex items-center gap-1"
-title="Abrir Magazine"
->
-<ExternalLink size={14} />
-<span>Abrir</span>
-</a>
-
-<button
-onClick={goMagPrev}
-className="p-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30 hover:bg-gray-100 dark:hover:bg-white/10"
-title="Anterior"
-disabled={magPageCount <= 1}
->
-<ChevronLeft size={16} />
-</button>
-<button
-onClick={goMagNext}
-className="p-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30 hover:bg-gray-100 dark:hover:bg-white/10"
-title="Próximo"
-disabled={magPageCount <= 1}
->
-<ChevronRight size={16} />
-</button>
-</div>
-</div>
-
-<div className="p-4">
-{magLoading && (
-<div className="text-sm font-bold text-gray-500 dark:text-gray-400">
-Carregando últimas do Magazine...
-</div>
-)}
-
-{!magLoading && magError && (
-<div className="text-sm font-bold text-red-600 dark:text-red-400">
-Falha ao carregar: {magError}
-</div>
-)}
-
-{!magLoading && !magError && magVisible.length === 0 && (
-<div className="text-sm font-bold text-gray-500 dark:text-gray-400">
-Sem posts disponíveis.
-</div>
-)}
-
-{!magLoading && !magError && magVisible.length > 0 && (
-<div className="space-y-3">
-{magVisible.map((p) => {
-const img = pickFeatured(p);
-const title = safeTitle(p?.title?.rendered || '');
-const excerpt = stripHtml(p?.excerpt?.rendered || '').slice(0, 120);
-const dt = p?.date ? new Date(p.date) : null;
-
+<div className="pt-2 flex items-center gap-2">
+{siteSocials.map(s => {
+const Icon = s.icon;
 return (
+<a
+key={s.name}
+href={s.href}
+target="_blank"
+rel="noreferrer"
+className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 transition-colors text-xs font-black"
+>
+<Icon size={14} />
+<span>{s.name}</span>
+</a>
+);
+})}
+</div>
+</div>
+
+<div className="md:col-span-2 pt-2">
+<div className="flex items-center justify-between">
+<div className="text-xs font-black text-gray-500 dark:text-gray-400">Magazine</div>
+<div className="flex items-center gap-2">
+<button
+onClick={() => setMagIndex(i => (i - 1 + magSlides.length) % magSlides.length)}
+className="px-3 py-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-xs font-black"
+disabled={magSlides.length <= 1}
+>
+◀
+</button>
+<button
+onClick={() => setMagIndex(i => (i + 1) % magSlides.length)}
+className="px-3 py-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-xs font-black"
+disabled={magSlides.length <= 1}
+>
+▶
+</button>
+</div>
+</div>
+
+<div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+{(magSlides[magIndex] ?? []).map(p => (
 <a
 key={p.id}
 href={p.link}
 target="_blank"
 rel="noreferrer"
-className="group block rounded-2xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-black/30 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors overflow-hidden"
-title={title}
+className="group rounded-xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 transition-colors overflow-hidden"
 >
-<div className="flex gap-3 p-3">
-<div className="w-20 h-14 rounded-xl overflow-hidden border border-gray-200 dark:border-white/10 bg-gray-200/60 dark:bg-white/5 shrink-0">
-{img ? (
-<img src={img} alt="" className="w-full h-full object-cover" />
+<div className="h-24 w-full bg-black/5 dark:bg-white/5">
+{p.image ? (
+<img src={p.image} alt={p.title} className="w-full h-full object-cover" />
 ) : (
-<div className="w-full h-full flex items-center justify-center text-xs font-black text-gray-500 dark:text-gray-400">
-NEWS
-</div>
+<div className="w-full h-full flex items-center justify-center text-xs font-black text-gray-500 dark:text-gray-400">Sem imagem</div>
 )}
 </div>
-
-<div className="flex-1 min-w-0">
-<div className="text-sm font-black text-gray-900 dark:text-gray-100 line-clamp-2">
-{title}
-</div>
-<div className="mt-1 text-xs font-bold text-gray-500 dark:text-gray-400 line-clamp-2">
-{excerpt || 'Abrir matéria'}
-</div>
-
-{dt && (
-<div className="mt-2 text-[11px] font-black text-gray-400 dark:text-gray-500 flex items-center gap-2">
-<Calendar size={12} />
-<span>{dt.toLocaleDateString()}</span>
-</div>
-)}
-</div>
+<div className="p-3">
+<div className="text-sm font-black line-clamp-2">{p.title}</div>
 </div>
 </a>
-);
-})}
-</div>
-)}
-
-{magPosts.length > 0 && (
-<div className="mt-4 pt-3 border-t border-gray-200 dark:border-white/10">
-<div className="text-[11px] font-black text-gray-500 dark:text-gray-400 mb-2">
-Últimas 6 (previews)
-</div>
-<div className="grid grid-cols-6 gap-2">
-{magPosts.slice(0, 6).map((p, idx) => {
-const img = pickFeatured(p);
-const active = (magIndex === 0 && idx < 3) || (magIndex === 1 && idx >= 3);
-return (
-<button
-key={p.id}
-onClick={() => setMagIndex(idx < 3 ? 0 : 1)}
-className={`h-10 rounded-lg overflow-hidden border transition-colors ${
-active ? 'border-[#dd9933]' : 'border-gray-200 dark:border-white/10'
-} bg-gray-200/60 dark:bg-white/5 hover:opacity-90`}
-title={safeTitle(p?.title?.rendered || '')}
->
-{img ? (
-<img src={img} alt="" className="w-full h-full object-cover" />
-) : (
-<div className="w-full h-full flex items-center justify-center text-[10px] font-black text-gray-500 dark:text-gray-400">
-{idx + 1}
-</div>
-)}
-</button>
-);
-})}
-</div>
-</div>
-)}
-</div>
+))}
 </div>
 
-<div className="mt-4 text-xs font-bold text-gray-500 dark:text-gray-400">
-Clique fora para fechar.
+{magPosts.length === 0 && (
+<div className="mt-2 text-xs font-bold text-gray-500 dark:text-gray-400">
+Nenhum post carregado (verifique /2/wp-json/wp/v2/posts).
+</div>
+)}
+</div>
 </div>
 </div>
 </div>
 )}
 
-{/* STAGE */}
 <div ref={stageRef} className="flex-1 w-full relative cursor-crosshair overflow-hidden">
 <canvas
 ref={canvasRef}
-onMouseMove={handleMouseMove}
-onMouseDown={(e) => { e.preventDefault(); handleMouseDown(e); }}
-onMouseUp={(e) => { e.preventDefault(); handleMouseUp(); }}
-onMouseLeave={() => { setHoveredParticle(null); handleMouseUp(); }}
+onPointerMove={handlePointerMove}
+onPointerDown={(e) => { e.preventDefault(); handlePointerDown(e); }}
+onPointerLeave={() => { setHoveredParticle(null); handlePointerUp(); }}
 onWheel={handleWheel}
 className="absolute inset-0 w-full h-full block"
 />
