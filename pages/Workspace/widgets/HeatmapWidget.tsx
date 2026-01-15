@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { ResponsiveContainer, Treemap, Tooltip } from 'recharts';
 import { createPortal } from 'react-dom';
-import { Loader2, Maximize2, RefreshCw, AlertTriangle, BarChart2, PieChart, Minimize2 } from 'lucide-react';
+import { Loader2, Maximize2, RefreshCw, AlertTriangle, BarChart2, PieChart, Minimize2, TrendingUp, TrendingDown, Info, DollarSign, Activity, Layers } from 'lucide-react';
 import { fetchWithFallback } from '../services/api';
 import { DashboardItem } from '../../../types';
 
@@ -13,32 +13,38 @@ interface Props {
   language?: string;
 }
 
+// Escala de cores "Matte" (Menos saturada, mais profissional)
 const getColorForChange = (change: number) => {
-    if (change >= 7) return '#14532d'; // Green 900
-    if (change >= 3) return '#16a34a'; // Green 600
-    if (change >= 0) return '#22c55e'; // Green 500
-    if (change >= -3) return '#ef4444'; // Red 500
-    if (change >= -7) return '#b91c1c'; // Red 700
-    return '#7f1d1d'; // Red 900
+    if (change >= 15) return '#14532d'; // Deepest Green
+    if (change >= 5) return '#166534';  // Deep Green
+    if (change >= 0) return '#15803d';  // Matte Green
+    if (change >= -5) return '#b91c1c'; // Matte Red
+    if (change >= -15) return '#991b1b'; // Deep Red
+    return '#7f1d1d'; // Deepest Red
 };
 
-const formatUSD = (val: number) => {
-    if (!val) return '$0';
-    if (val >= 1e12) return `$${(val / 1e12).toFixed(2)}T`;
-    if (val >= 1e9) return `$${(val / 1e9).toFixed(2)}B`;
-    if (val >= 1e6) return `$${(val / 1e6).toFixed(2)}M`;
-    return `$${val.toLocaleString()}`;
+const formatCompact = (num: number) => {
+    if (!num) return '-';
+    if (num >= 1e12) return `$${(num / 1e12).toFixed(2)}T`;
+    if (num >= 1e9) return `$${(num / 1e9).toFixed(2)}B`;
+    if (num >= 1e6) return `$${(num / 1e6).toFixed(2)}M`;
+    return `$${num.toLocaleString()}`;
+};
+
+const formatPrice = (price: number) => {
+    if (price < 1) return `$${price.toFixed(6)}`;
+    if (price < 10) return `$${price.toFixed(4)}`;
+    return `$${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
 const CustomTreemapContent = (props: any) => {
-  const { x, y, width, height, name, change } = props;
+  const { x, y, width, height, name, change, image, symbol, price } = props;
   
-  if (!width || !height || width < 10 || height < 10) return null;
+  if (!width || !height || width < 5 || height < 5) return null;
 
   const color = getColorForChange(change || 0);
-  const fontSizeSymbol = Math.min(width / 3, height / 3, 20);
-  const fontSizePct = Math.min(width / 5, height / 5, 12);
-  const showText = width > 35 && height > 30;
+  const showDetail = width > 50 && height > 50;
+  const showLogo = width > 35 && height > 35;
 
   return (
     <g>
@@ -51,36 +57,35 @@ const CustomTreemapContent = (props: any) => {
           fill: color,
           stroke: '#1a1c1e',
           strokeWidth: 2,
-          rx: 4, 
-          ry: 4,
+          rx: 6, 
+          ry: 6,
         }}
       />
-      {showText && (
-        <>
-          <text
-            x={x + width / 2}
-            y={y + height / 2 - fontSizeSymbol * 0.2}
-            textAnchor="middle"
-            fill="#fff"
-            fontWeight="900"
-            fontSize={fontSizeSymbol}
-            style={{ pointerEvents: 'none', textShadow: '0px 1px 3px rgba(0,0,0,0.5)' }}
-          >
-            {name}
-          </text>
-          <text
-            x={x + width / 2}
-            y={y + height / 2 + fontSizeSymbol * 0.8}
-            textAnchor="middle"
-            fill="rgba(255,255,255,0.9)"
-            fontSize={fontSizePct}
-            fontWeight="bold"
-            style={{ pointerEvents: 'none', textShadow: '0px 1px 2px rgba(0,0,0,0.5)' }}
-          >
-            {(change || 0) > 0 ? '+' : ''}{(change || 0).toFixed(2)}%
-          </text>
-        </>
-      )}
+      <foreignObject x={x} y={y} width={width} height={height} style={{ pointerEvents: 'none' }}>
+        <div className="w-full h-full flex flex-col items-center justify-center p-1 overflow-hidden text-center">
+            {showLogo && image && (
+                <img 
+                    src={image} 
+                    alt={name} 
+                    className="w-6 h-6 md:w-8 md:h-8 rounded-full mb-1 shadow-sm drop-shadow-md" 
+                    onError={(e) => (e.currentTarget.style.display = 'none')}
+                />
+            )}
+            <span className={`font-black text-white drop-shadow-md ${showDetail ? 'text-sm' : 'text-[10px]'} leading-tight`}>
+                {symbol}
+            </span>
+            {showDetail && (
+                <>
+                    <span className="text-[10px] font-bold text-white/90 drop-shadow-sm mt-0.5">
+                        {formatPrice(price)}
+                    </span>
+                    <span className={`text-[10px] font-black drop-shadow-sm mt-0.5 ${change >= 0 ? 'text-green-100' : 'text-red-100'}`}>
+                        {change > 0 ? '+' : ''}{change.toFixed(2)}%
+                    </span>
+                </>
+            )}
+        </div>
+      </foreignObject>
     </g>
   );
 };
@@ -88,26 +93,68 @@ const CustomTreemapContent = (props: any) => {
 const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
+    const isPositive = data.change >= 0;
+
     return (
-      <div className="bg-[#1a1c1e] border border-gray-700 p-3 rounded-xl shadow-2xl text-xs z-[9999] min-w-[180px]">
-        <div className="flex justify-between items-center mb-2 pb-2 border-b border-gray-800">
-            <span className="font-black text-lg text-white">{data.name}</span>
-            <span className={`font-black text-sm ${data.change >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                {data.change > 0 ? '+' : ''}{data.change?.toFixed(2)}%
-            </span>
+      <div className="bg-[#121314]/95 backdrop-blur-xl border border-gray-700/50 p-0 rounded-2xl shadow-2xl z-[9999] min-w-[280px] overflow-hidden">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-gray-800 to-gray-900 p-4 border-b border-gray-700 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+                <img src={data.image} className="w-10 h-10 rounded-full border-2 border-white/10 shadow-lg bg-white" alt="" />
+                <div>
+                    <h4 className="text-lg font-black text-white leading-none">{data.fullName}</h4>
+                    <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs font-bold text-gray-400 bg-black/30 px-1.5 py-0.5 rounded">Rank #{data.rank}</span>
+                        <span className="text-xs font-bold text-blue-400 uppercase">{data.symbol}</span>
+                    </div>
+                </div>
+            </div>
+            <div className="text-right">
+                <div className="text-xl font-mono font-black text-white">{formatPrice(data.price)}</div>
+                <div className={`text-xs font-black flex items-center justify-end gap-1 ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+                    {isPositive ? <TrendingUp size={12}/> : <TrendingDown size={12}/>}
+                    {isPositive ? '+' : ''}{data.change?.toFixed(2)}%
+                </div>
+            </div>
         </div>
-        <div className="space-y-1">
-            <div className="flex justify-between gap-4">
-                <span className="text-gray-400">Price:</span>
-                <span className="font-mono font-bold text-white">${data.price < 1 ? data.price.toFixed(6) : data.price.toLocaleString()}</span>
+
+        {/* Body Stats */}
+        <div className="p-4 grid grid-cols-2 gap-4 text-xs">
+            <div className="space-y-1">
+                <span className="text-gray-500 font-bold uppercase text-[9px] tracking-wider">Market Cap</span>
+                <div className="font-mono font-bold text-gray-200 text-sm">{formatCompact(data.mcap)}</div>
             </div>
-            <div className="flex justify-between gap-4">
-                <span className="text-gray-400">Mkt Cap:</span>
-                <span className="font-mono font-bold text-blue-400">{formatUSD(data.mcap)}</span>
+            <div className="space-y-1 text-right">
+                <span className="text-gray-500 font-bold uppercase text-[9px] tracking-wider">Volume 24h</span>
+                <div className="font-mono font-bold text-[#dd9933] text-sm">{formatCompact(data.vol)}</div>
             </div>
-            <div className="flex justify-between gap-4">
-                <span className="text-gray-400">Vol 24h:</span>
-                <span className="font-mono font-bold text-yellow-500">{formatUSD(data.vol)}</span>
+            
+            <div className="col-span-2 h-px bg-gray-800 my-1"></div>
+
+            <div className="space-y-1">
+                <span className="text-gray-500 font-bold uppercase text-[9px] tracking-wider">High 24h</span>
+                <div className="font-mono font-medium text-green-400">{formatPrice(data.high24)}</div>
+            </div>
+            <div className="space-y-1 text-right">
+                <span className="text-gray-500 font-bold uppercase text-[9px] tracking-wider">Low 24h</span>
+                <div className="font-mono font-medium text-red-400">{formatPrice(data.low24)}</div>
+            </div>
+
+            <div className="col-span-2 h-px bg-gray-800 my-1"></div>
+
+            <div className="space-y-1">
+                <span className="text-gray-500 font-bold uppercase text-[9px] tracking-wider">All Time High (ATH)</span>
+                <div className="flex justify-between items-center">
+                    <span className="font-mono font-medium text-gray-300">{formatPrice(data.ath)}</span>
+                    <span className="text-[10px] text-red-500 font-bold">{data.ath_p?.toFixed(1)}%</span>
+                </div>
+                <div className="text-[9px] text-gray-600">{new Date(data.ath_date).toLocaleDateString()}</div>
+            </div>
+            
+            <div className="space-y-1 text-right">
+                <span className="text-gray-500 font-bold uppercase text-[9px] tracking-wider">Supply Circulante</span>
+                <div className="font-mono font-medium text-gray-300">{formatCompact(data.supply)}</div>
+                <div className="text-[9px] text-gray-600">Max: {data.max_supply ? formatCompact(data.max_supply) : '∞'}</div>
             </div>
         </div>
       </div>
@@ -133,7 +180,6 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
         
         let rawList: any[] = [];
         if (Array.isArray(response)) {
-            // Check if it's wrapped in an object like [{"data": [...]}]
             if (response[0] && response[0].data && Array.isArray(response[0].data)) {
                 rawList = response[0].data;
             } else {
@@ -147,11 +193,22 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
           const mapped = rawList.map((coin: any) => ({
               name: (coin.s || coin.symbol || '').toUpperCase(),
               fullName: coin.n || coin.name,
+              symbol: (coin.s || coin.symbol || '').toUpperCase(),
+              image: coin.image || coin.i || '', // Fallback for image key if minimized
               price: Number(coin.p ?? coin.current_price ?? 0),
               change: Number(coin.p24 ?? coin.price_change_percentage_24h ?? 0),
               mcap: Number(coin.mc ?? coin.market_cap ?? 0),
-              vol: Number(coin.v ?? coin.total_volume ?? 0)
-          })).filter(c => c.mcap > 0 && c.name); 
+              vol: Number(coin.v ?? coin.total_volume ?? 0),
+              // Extra fields for rich card
+              rank: coin.market_cap_rank || coin.r || 0,
+              high24: Number(coin.h24 ?? coin.high_24h ?? 0),
+              low24: Number(coin.l24 ?? coin.low_24h ?? 0),
+              ath: Number(coin.ath ?? 0),
+              ath_p: Number(coin.ath_p ?? coin.ath_change_percentage ?? 0),
+              ath_date: coin.ath_d ?? coin.ath_date ?? '',
+              supply: Number(coin.cs ?? coin.circulating_supply ?? 0),
+              max_supply: Number(coin.ms ?? coin.max_supply ?? 0)
+          })).filter(c => c.mcap > 0 && c.symbol); 
 
           setData(mapped);
         } else {
@@ -170,17 +227,16 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
   const treeData = useMemo(() => {
     if (!data.length) return [];
 
-    // Ordena e pega top 50 para não travar o navegador
-    const top50 = [...data]
-        .sort((a, b) => b.mcap - a.mcap)
-        .slice(0, 50);
+    // Increase limit to 250 for deeper market view without killing the DOM
+    const limit = 250;
+    const sorted = [...data].sort((a, b) => b.mcap - a.mcap).slice(0, limit);
 
-    const leaves = top50.map((coin, index) => {
+    const leaves = sorted.map((coin, index) => {
         let sizeValue = 0;
         if (metric === 'mcap') {
             sizeValue = coin.mcap;
         } else {
-            // Para visualização de volatilidade, usamos valor absoluto da variação
+            // Logarithmic scale for volatility to prevent tiny blocks
             sizeValue = Math.pow(Math.abs(coin.change) + 1, 2) * (Math.log10(coin.mcap || 1000));
         }
 
@@ -200,10 +256,10 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
   };
 
   const renderContent = () => (
-    <div className="flex flex-col w-full h-full bg-[#1a1c1e] text-white overflow-hidden relative">
+    <div className="flex flex-col w-full h-full bg-[#1a1c1e] text-white overflow-hidden relative font-sans">
         <div className="flex justify-between items-center px-4 py-2 border-b border-gray-800 bg-[#1a1c1e] shrink-0 z-10">
             <div className="flex items-center gap-4">
-                <span className="text-sm font-black uppercase tracking-wider hidden sm:inline">{title}</span>
+                <span className="text-sm font-black uppercase tracking-wider hidden sm:inline text-gray-300">{title}</span>
                 {!loading && !error && (
                     <div className="flex bg-black/40 p-0.5 rounded-lg border border-gray-700">
                         <button 
@@ -223,6 +279,10 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
             </div>
             
             <div className="flex items-center gap-2">
+                <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-gray-800/50 rounded text-[10px] font-bold text-gray-400">
+                    <Layers size={12} />
+                    {data.length > 0 ? `250 de ${data.length} moedas` : '0 moedas'}
+                </div>
                 <button 
                     onClick={() => setRefreshKey(k => k + 1)} 
                     className="p-1.5 hover:bg-gray-800 rounded text-gray-400 hover:text-white transition-colors"
@@ -238,42 +298,46 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
             </div>
         </div>
 
-        <div className="flex-1 w-full min-h-0 relative">
+        <div className="flex-1 w-full min-h-0 relative bg-[#0f1011]">
             {loading ? (
-                <div className="absolute inset-0 flex items-center justify-center">
-                    <Loader2 className="animate-spin text-[#dd9933]" size={32} />
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+                    <Loader2 className="animate-spin text-[#dd9933]" size={40} />
+                    <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Carregando Mercado...</span>
                 </div>
             ) : error ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-red-500 gap-2">
                     <AlertTriangle size={24} />
                     <span className="text-xs font-bold">{error}</span>
-                    <button onClick={() => setRefreshKey(k => k + 1)} className="px-3 py-1 bg-red-900/20 rounded text-xs">Retry</button>
+                    <button onClick={() => setRefreshKey(k => k + 1)} className="px-3 py-1 bg-red-900/20 rounded text-xs hover:bg-red-900/30 transition-colors">Tentar Novamente</button>
                 </div>
             ) : (
                 <ResponsiveContainer width="100%" height="100%">
                     <Treemap
                         data={treeData}
                         dataKey="size"
-                        stroke="#1a1c1e"
+                        stroke="#0f1011" // Darker stroke to separate blocks cleaner
                         fill="#1a1c1e"
                         content={<CustomTreemapContent />}
-                        animationDuration={400}
+                        animationDuration={600}
                         aspectRatio={1.6} 
                     >
-                        <Tooltip content={<CustomTooltip />} cursor={false} allowEscapeViewBox={{ x: true, y: true }} />
+                        <Tooltip content={<CustomTooltip />} cursor={true} allowEscapeViewBox={{ x: true, y: true }} isAnimationActive={false} />
                     </Treemap>
                 </ResponsiveContainer>
             )}
         </div>
         
-        {/* Barra de Legenda */}
-        <div className="h-6 bg-[#121416] border-t border-gray-800 flex items-center justify-center gap-1 px-4 shrink-0">
-            <span className="text-[9px] text-gray-500 font-bold mr-2">-7%</span>
-            <div className="w-4 h-2 bg-[#7f1d1d] rounded-sm"></div>
-            <div className="w-4 h-2 bg-[#ef4444] rounded-sm"></div>
-            <div className="w-4 h-2 bg-[#22c55e] rounded-sm"></div>
-            <div className="w-4 h-2 bg-[#14532d] rounded-sm"></div>
-            <span className="text-[9px] text-gray-500 font-bold ml-2">+7%</span>
+        {/* Barra de Legenda - Cores "Matte" Profissionais */}
+        <div className="h-8 bg-[#121416] border-t border-gray-800 flex items-center justify-center gap-1 px-4 shrink-0 overflow-hidden">
+            <span className="text-[9px] text-gray-500 font-bold mr-2">-15%</span>
+            <div className="w-6 h-3 bg-[#7f1d1d] rounded-sm" title="-15%"></div>
+            <div className="w-6 h-3 bg-[#991b1b] rounded-sm" title="-5%"></div>
+            <div className="w-6 h-3 bg-[#b91c1c] rounded-sm" title="-2%"></div>
+            <div className="w-6 h-3 bg-[#334155] rounded-sm border border-gray-700" title="0%"></div>
+            <div className="w-6 h-3 bg-[#15803d] rounded-sm" title="+2%"></div>
+            <div className="w-6 h-3 bg-[#166534] rounded-sm" title="+5%"></div>
+            <div className="w-6 h-3 bg-[#14532d] rounded-sm" title="+15%"></div>
+            <span className="text-[9px] text-gray-500 font-bold ml-2">+15%</span>
         </div>
     </div>
   );

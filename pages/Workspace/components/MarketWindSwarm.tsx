@@ -1,4 +1,3 @@
-
 import * as React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiCoin, Language } from '../../../types';
@@ -198,9 +197,13 @@ const [isFreeMode, setIsFreeMode] = useState(false);
 
 const [numCoins, setNumCoins] = useState(50);
 
+// GAME: agora é “bolas alvo” (exclui o BTC bola branca)
+const [gameBalls, setGameBalls] = useState(12);
+
 const [floatStrengthRaw, setFloatStrengthRaw] = useState(1.0);
 const [trailLength, setTrailLength] = useState(25);
 
+// base power (continua existindo como ajuste fino)
 const [cuePowerRaw, setCuePowerRaw] = useState(0.7);
 
 const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
@@ -251,14 +254,15 @@ const [pocketedUI, setPocketedUI] = useState({ count: 0, max: 0 });
 const sfxHitRef = useRef<HTMLAudioElement | null>(null);
 const sfxPocketRef = useRef<HTMLAudioElement | null>(null);
 
-// ====== GAME 2-CLICK MECHANIC ======
+// ====== GAME 2-CLICK MECHANIC (NOVA) ======
+// phase 0: mira livre (segue mouse)
+// phase 2: mira travada (1º clique)
+// phase 3: puxando taco (2º clique segurando + arrastando)
 const gameCtlRef = useRef<{
-phase: 0 | 1 | 2 | 3;
+phase: 0 | 2 | 3;
 aimX: number; aimY: number;
-aimPulseT: number;
 powerPull: number;
-holdStart: number;
-}>({ phase: 0, aimX: 0, aimY: 0, aimPulseT: 0, powerPull: 0, holdStart: 0 });
+}>({ phase: 0, aimX: 0, aimY: 0, powerPull: 0 });
 
 const cueHideUntilRef = useRef<number>(0);
 const pointerDownRef = useRef(false);
@@ -279,6 +283,11 @@ mx,
 my
 };
 };
+
+const getBgCss = useCallback(() => {
+if (isGameMode) return (isDark ? '#08110c' : '#e8f3ea');
+return (isDark ? '#0b0f14' : '#ffffff');
+}, [isDark, isGameMode]);
 
 // ===== audio =====
 useEffect(() => {
@@ -384,6 +393,28 @@ isPanningRef.current = false;
 animateTransformTo({ k: 1, x: 0, y: 0 }, 0.35);
 }, [animateTransformTo]);
 
+// Reset “de verdade”: também sai do Modo Livre pro início do gráfico (MAPA)
+const handleResetAll = useCallback(() => {
+resetZoom();
+setDetailOpen(false);
+setSelectedParticle(null);
+setHoveredParticle(null);
+setSearchTerm('');
+
+if (isFreeMode) setIsFreeMode(false);
+
+// no game, reset vira “re-rack” (não tira game)
+if (isGameMode) {
+setTimeout(() => {
+setupGameLayout();
+}, 0);
+} else {
+setTimeout(() => {
+computeMapTargets();
+}, 0);
+}
+}, [resetZoom, isFreeMode, isGameMode]);
+
 // ===== Metrics =====
 const getCoinPerf = useCallback((coin: any) => computeSparkChange(coin, timeframe), [timeframe]);
 const getCoinPerfPct = useCallback((coin: any) => getCoinPerf(coin).pct, [getCoinPerf]);
@@ -408,7 +439,8 @@ return clamp(t, 0, 1);
 
 // ===== Stats + targets =====
 const recomputeStatsAndTargets = useCallback((coinsList: ApiCoin[], mode: ChartMode) => {
-const topCoins = coinsList.slice(0, isGameMode ? Math.min(50, numCoins) : numCoins);
+const effectiveNum = isGameMode ? Math.min(50, gameBalls + 1) : numCoins;
+const topCoins = coinsList.slice(0, effectiveNum);
 if (topCoins.length === 0) return;
 
 const xData: number[] = [];
@@ -473,7 +505,7 @@ p.mass = Math.max(1, p.targetRadius);
 
 p.color = isBTC ? '#ffffff' : baseColor;
 }
-}, [getCoinPerfPct, sizeMetricPerf, sizeLogScale, numCoins, isGameMode]);
+}, [getCoinPerfPct, sizeMetricPerf, sizeLogScale, numCoins, isGameMode, gameBalls]);
 
 // ===== Map targets (world coords = "map space") =====
 const computeMapTargets = useCallback(() => {
@@ -520,6 +552,7 @@ else xVal = Math.max(1, Number(p.coin.market_cap) || 1);
 const tx = projectX(xVal);
 const ty = projectY(yVal);
 
+// transição suave SEM “flash”: parte sempre da posição atual
 p.mapFromX = p.x;
 p.mapFromY = p.y;
 p.mapToX = tx;
@@ -564,6 +597,7 @@ cue.x = w * 0.78;
 cue.y = h * 0.5;
 }
 
+// rack triangular
 const rackApexX = w * 0.20;
 const rackApexY = h * 0.50;
 const spacing = GAME_BALL_RADIUS * 2.08;
@@ -601,8 +635,14 @@ const maxPocket = Math.max(0, others.length);
 pocketedMaxRef.current = maxPocket;
 setPocketedUI({ count: 0, max: maxPocket });
 
+// reset controls
 gameCtlRef.current.phase = 0;
 gameCtlRef.current.powerPull = 0;
+
+// inicializa mira livre no centro pra não “pular”
+gameCtlRef.current.aimX = w * 0.5;
+gameCtlRef.current.aimY = h * 0.5;
+
 cueHideUntilRef.current = 0;
 pointerDownRef.current = false;
 }, []);
@@ -658,10 +698,21 @@ const rect = stage.getBoundingClientRect();
 const cssW = Math.max(1, Math.floor(rect.width));
 const cssH = Math.max(1, Math.floor(rect.height));
 
+// IMPORTANTE: setar background CSS evita “flash preto” quando canvas é recriado/limpo
+canvas.style.background = getBgCss();
+
 canvas.width = Math.max(1, Math.floor(cssW * ratio));
 canvas.height = Math.max(1, Math.floor(cssH * ratio));
 canvas.style.width = `${cssW}px`;
 canvas.style.height = `${cssH}px`;
+
+// pinta imediatamente 1 frame “seguro” depois do resize (evita flash)
+const ctx = canvas.getContext('2d');
+if (ctx) {
+ctx.setTransform(1, 0, 0, 1, 0, 0);
+ctx.fillStyle = getBgCss();
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
 
 // do not recompute map targets in game/free
 if (!isGameMode && !isFreeMode) computeMapTargets();
@@ -683,11 +734,11 @@ ro.disconnect();
 observer.disconnect();
 window.removeEventListener('resize', resizeCanvas);
 };
-}, [loadData, computeMapTargets, isGameMode, isFreeMode]);
+}, [loadData, computeMapTargets, isGameMode, isFreeMode, getBgCss]);
 
 // ===== Build particles (but DO NOT rebuild in game, or it "resets from beyond") =====
 useEffect(() => {
-const effectiveNum = isGameMode ? Math.min(50, numCoins) : numCoins;
+const effectiveNum = isGameMode ? Math.min(50, gameBalls + 1) : numCoins;
 const topCoins = coins.slice(0, effectiveNum);
 if (topCoins.length === 0) return;
 
@@ -745,7 +796,7 @@ particlesRef.current = newParticles;
 
 recomputeStatsAndTargets(coins, chartMode);
 if (!isFreeMode) computeMapTargets();
-}, [coins, numCoins, recomputeStatsAndTargets, chartMode, isGameMode, isFreeMode, computeMapTargets]);
+}, [coins, numCoins, gameBalls, recomputeStatsAndTargets, chartMode, isGameMode, isFreeMode, computeMapTargets]);
 
 useEffect(() => {
 if (coins.length === 0) return;
@@ -763,7 +814,9 @@ setSelectedParticle(null);
 setHoveredParticle(null);
 
 setIsFreeMode(false);
-if (numCoins > 50) setNumCoins(50);
+
+// inicia SEMPRE com 12 bolas no game
+setGameBalls(12);
 
 setupGameLayout();
 } else {
@@ -779,7 +832,7 @@ draggedParticleRef.current = null;
 
 if (!isFreeMode) computeMapTargets();
 }
-}, [isGameMode, resetZoom, setupGameLayout, numCoins, isFreeMode, computeMapTargets]);
+}, [isGameMode]);
 
 useEffect(() => {
 // FREE MODE must "release from current position", no snap recalcs
@@ -793,6 +846,14 @@ p.mapToY = p.y;
 }
 }
 }, [isFreeMode]);
+
+useEffect(() => {
+// quando sair do free mode: recalcula targets e faz transição suave (sem flash)
+if (!isFreeMode && !isGameMode && coins.length) {
+recomputeStatsAndTargets(coins, chartMode);
+computeMapTargets();
+}
+}, [isFreeMode, isGameMode, coins, chartMode, recomputeStatsAndTargets, computeMapTargets]);
 
 // ===== UI helpers =====
 const openDetailFor = (p: Particle) => {
@@ -813,12 +874,14 @@ if (isGameMode) {
 const cue = particlesRef.current.find(pp => String(pp.coin.id).toLowerCase() === 'bitcoin');
 if (!cue || cue.isFalling) return;
 
-if (gameCtlRef.current.phase === 1) {
+// mira SEMPRE acompanha mouse no phase 0 (mira livre)
+if (gameCtlRef.current.phase === 0) {
 gameCtlRef.current.aimX = wpos.x;
 gameCtlRef.current.aimY = wpos.y;
 return;
 }
 
+// puxando força no phase 3 (segurando)
 if (gameCtlRef.current.phase === 3) {
 const dx = gameCtlRef.current.aimX - cue.x;
 const dy = gameCtlRef.current.aimY - cue.y;
@@ -826,11 +889,17 @@ const distDir = Math.hypot(dx, dy) || 0.0001;
 const nx = dx / distDir;
 const ny = dy / distDir;
 
+// projeção ao longo do eixo do taco: arrastar “pra trás” aumenta força
 const along = (wpos.x - cue.x) * nx + (wpos.y - cue.y) * ny;
-const pull = clamp(-along, 0, 220);
+
+// distancia mínima -> 1% de força
+const pullMax = 240;
+const pull = clamp(-along, 0, pullMax);
 gameCtlRef.current.powerPull = pull;
 return;
 }
+
+return;
 }
 
 // dragging
@@ -890,19 +959,19 @@ if (!cue || cue.isFalling) return;
 
 const w = screenToWorld(e.clientX, e.clientY);
 
+// 1º clique: trava a mira onde está o mouse (phase 0 -> 2)
 if (gameCtlRef.current.phase === 0) {
-gameCtlRef.current.phase = 1;
+gameCtlRef.current.phase = 2;
 gameCtlRef.current.aimX = w.x;
 gameCtlRef.current.aimY = w.y;
 gameCtlRef.current.powerPull = 0;
-gameCtlRef.current.holdStart = performance.now();
 return;
 }
 
+// 2º clique: segura e arrasta pra trás (phase 2 -> 3)
 if (gameCtlRef.current.phase === 2) {
 gameCtlRef.current.phase = 3;
 gameCtlRef.current.powerPull = 0;
-gameCtlRef.current.holdStart = performance.now();
 return;
 }
 
@@ -939,12 +1008,7 @@ gameCtlRef.current.powerPull = 0;
 return;
 }
 
-if (gameCtlRef.current.phase === 1) {
-gameCtlRef.current.phase = 2;
-gameCtlRef.current.aimPulseT = performance.now();
-return;
-}
-
+// soltar no phase 3: dispara tacada
 if (gameCtlRef.current.phase === 3) {
 const dx = gameCtlRef.current.aimX - cue.x;
 const dy = gameCtlRef.current.aimY - cue.y;
@@ -953,8 +1017,11 @@ const dist = Math.hypot(dx, dy) || 0.0001;
 const nx = dx / dist;
 const ny = dy / dist;
 
-const pull = clamp(gameCtlRef.current.powerPull, 0, 220);
-const pullNorm = pull / 220;
+const pullMax = 240;
+const pull = clamp(gameCtlRef.current.powerPull, 0, pullMax);
+
+// distancia mínima vira 1% (não 0)
+const pullNorm = clamp(pull / pullMax, 0.01, 1.0);
 
 const basePower = 5200;
 const power = basePower * pullNorm * (0.35 + cuePowerRaw * 1.65);
@@ -969,6 +1036,9 @@ gameCtlRef.current.phase = 0;
 gameCtlRef.current.powerPull = 0;
 return;
 }
+
+// se soltou no phase 2, mantém mira travada (ok)
+return;
 }
 
 if (draggedParticleRef.current) {
@@ -1013,8 +1083,9 @@ if (isGameMode) {
 return (
 <>
 <div><span className="font-black">Modo Game (2 cliques)</span></div>
-<div>• 1º clique e segura: mira. Soltou: trava a mira.</div>
-<div>• 2º clique e segura: regula força. Soltou: tacada.</div>
+<div>• Mira aparece no mouse; taco acompanha.</div>
+<div>• 1º clique: trava a mira.</div>
+<div>• 2º clique (segura + arrasta): define força. Soltou: tacada.</div>
 <div>• Bolas encaçapadas saem definitivamente.</div>
 </>
 );
@@ -1054,9 +1125,7 @@ const detailPerf7d = useMemo(() => detailCoin ? computeSparkChange(detailCoin, '
 
 const perfColor = (pct?: number) => (Number(pct) >= 0 ? '#089981' : '#f23645');
 
-const effectiveNumCoins = useMemo(() => (isGameMode ? Math.min(50, numCoins) : numCoins), [isGameMode, numCoins]);
-const gameCoinOptions = useMemo(() => [10, 20, 30], []);
-const normalCoinOptions = useMemo(() => [50, 100, 150, 200, 250], []);
+const effectiveNumCoins = useMemo(() => (isGameMode ? Math.min(50, gameBalls + 1) : numCoins), [isGameMode, numCoins, gameBalls]);
 
 const siteSocials = useMemo(() => ([
 { name: 'Site', icon: Globe, href: 'https://centralcrypto.com.br' },
@@ -1072,7 +1141,9 @@ return out.length ? out : [[]];
 // ===== RENDER LOOP =====
 useEffect(() => {
 const canvas = canvasRef.current;
-const ctx = canvas?.getContext('2d', { alpha: false });
+
+// alpha true + CSS bg = sem “flash preto”
+const ctx = canvas?.getContext('2d', { alpha: true });
 if (!ctx || !canvas) return;
 
 let lastTime = performance.now();
@@ -1102,13 +1173,13 @@ if (tw.t >= 1) tw.active = false;
 
 // clear background (screen space)
 ctx.setTransform(1, 0, 0, 1, 0, 0);
-ctx.fillStyle = isGameMode ? (isDark ? '#08110c' : '#e8f3ea') : (isDark ? '#0b0f14' : '#ffffff');
+ctx.fillStyle = getBgCss();
 ctx.fillRect(0, 0, canvas.width, canvas.height);
 ctx.scale(dpr, dpr);
 
 drawWatermark(ctx, width, height, watermarkRef.current, isDark, isGameMode);
 
-// APPLY WORLD TRANSFORM ONCE (fixes “scale frozen” vs “coins moving”)
+// APPLY WORLD TRANSFORM ONCE
 const { k, x: panX, y: panY } = transformRef.current;
 ctx.save();
 ctx.translate(panX, panY);
@@ -1160,7 +1231,7 @@ ctx.stroke();
 ctx.restore();
 }
 
-// axes (WORLD SPACE, same space as map points)
+// axes (WORLD SPACE)
 if (!isGameMode && !isFreeMode && statsRef.current) {
 const s = statsRef.current;
 const margin = { top: 18, right: 18, bottom: 92, left: 86 };
@@ -1587,29 +1658,19 @@ const cy = cueBall.y;
 const aimX = gameCtlRef.current.aimX;
 const aimY = gameCtlRef.current.aimY;
 
-let tx = cx + 120;
-let ty = cy;
-
-if (gameCtlRef.current.phase === 1 || gameCtlRef.current.phase === 2 || gameCtlRef.current.phase === 3) {
-tx = aimX;
-ty = aimY;
-} else if (lastMousePosRef.current) {
-tx = lastMousePosRef.current.x;
-ty = lastMousePosRef.current.y;
-}
-
-const dx = tx - cx;
-const dy = ty - cy;
+const dx = aimX - cx;
+const dy = aimY - cy;
 const dist = Math.hypot(dx, dy) || 0.0001;
 const ux = dx / dist;
 const uy = dy / dist;
 
-const contactGap = 12;
+// pull (phase 3) define a distância do taco
 const pull = (gameCtlRef.current.phase === 3) ? gameCtlRef.current.powerPull : 14;
 
-// continuous “vai e vem”
-const bob = (Math.sin(now * 0.012) * 6);
+// “vai e vem” suave apenas quando não está puxando
+const bob = (gameCtlRef.current.phase === 3) ? 0 : (Math.sin(now * 0.012) * 6);
 
+const contactGap = 12;
 const tipX = cx - ux * (cueBall.radius + contactGap + pull + bob);
 const tipY = cy - uy * (cueBall.radius + contactGap + pull + bob);
 
@@ -1642,14 +1703,16 @@ ctx.stroke();
 ctx.restore();
 }
 
-// aim marker locked
-if (gameCtlRef.current.phase === 2 || gameCtlRef.current.phase === 3) {
+// mira: aparece SEMPRE (livre ou travada)
+{
 const sx = gameCtlRef.current.aimX;
 const sy = gameCtlRef.current.aimY;
-const pulse = 1 + Math.sin(now * 0.012) * 0.12;
+
+const locked = (gameCtlRef.current.phase === 2 || gameCtlRef.current.phase === 3);
+const pulse = locked ? (1 + Math.sin(now * 0.012) * 0.12) : 1;
 
 ctx.save();
-ctx.globalAlpha = 0.9;
+ctx.globalAlpha = locked ? 0.9 : 0.65;
 ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.75)';
 ctx.lineWidth = 2 / k;
 
@@ -1674,6 +1737,74 @@ ctx.restore();
 // restore from world transform
 ctx.restore();
 
+// ===== POWER HUD flutuante (screen space) =====
+if (isGameMode) {
+const cueBall = particlesRef.current.find(p => String(p.coin.id).toLowerCase() === 'bitcoin');
+if (cueBall && now >= cueHideUntilRef.current) {
+const { k: zk, x: zx, y: zy } = transformRef.current;
+
+const cxS = cueBall.x * zk + zx;
+const cyS = cueBall.y * zk + zy;
+
+const pullMax = 240;
+const pull = clamp(gameCtlRef.current.powerPull, 0, pullMax);
+const pct = Math.round(clamp(pull / pullMax, 0.01, 1) * 100);
+
+// só mostra forte quando está puxando
+const show = (gameCtlRef.current.phase === 3);
+
+if (show) {
+const wBox = 92;
+const hBox = 34;
+const bx = cxS + 18;
+const by = cyS - 58;
+
+ctx.save();
+ctx.setTransform(1, 0, 0, 1, 0, 0);
+ctx.globalAlpha = 0.92;
+
+ctx.fillStyle = isDark ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.78)';
+ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.12)';
+ctx.lineWidth = 1;
+
+const r = 10;
+ctx.beginPath();
+ctx.moveTo(bx + r, by);
+ctx.lineTo(bx + wBox - r, by);
+ctx.quadraticCurveTo(bx + wBox, by, bx + wBox, by + r);
+ctx.lineTo(bx + wBox, by + hBox - r);
+ctx.quadraticCurveTo(bx + wBox, by + hBox, bx + wBox - r, by + hBox);
+ctx.lineTo(bx + r, by + hBox);
+ctx.quadraticCurveTo(bx, by + hBox, bx, by + hBox - r);
+ctx.lineTo(bx, by + r);
+ctx.quadraticCurveTo(bx, by, bx + r, by);
+ctx.closePath();
+ctx.fill();
+ctx.stroke();
+
+// barra
+const barX = bx + 10;
+const barY = by + 20;
+const barW = wBox - 20;
+const barH = 6;
+
+ctx.fillStyle = isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.10)';
+ctx.fillRect(barX, barY, barW, barH);
+
+ctx.fillStyle = '#dd9933';
+ctx.fillRect(barX, barY, barW * (pct / 100), barH);
+
+ctx.fillStyle = isDark ? 'rgba(255,255,255,0.92)' : 'rgba(0,0,0,0.78)';
+ctx.font = `bold 12px Inter`;
+ctx.textAlign = 'left';
+ctx.textBaseline = 'middle';
+ctx.fillText(`Força ${pct}%`, barX, by + 12);
+
+ctx.restore();
+}
+}
+}
+
 reqIdRef.current = requestAnimationFrame(loop);
 };
 
@@ -1689,8 +1820,13 @@ floatStrengthRaw,
 trailLength,
 searchTerm,
 cuePowerRaw,
-playPocket
+playPocket,
+getBgCss
 ]);
+
+// ===== UI derived options =====
+const gameBallOptions = useMemo(() => [12, 18, 24], []);
+const normalCoinOptions = useMemo(() => [50, 100, 150, 200, 250], []);
 
 return (
 <div
@@ -1758,15 +1894,28 @@ disabled={isGameMode}
 
 <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/50 p-2 rounded-lg border border-gray-200 dark:border-white/10">
 <Coins size={16} className="text-gray-400" />
+
+{isGameMode ? (
+<select
+value={gameBalls}
+onChange={e => setGameBalls(parseInt(e.target.value))}
+className="bg-white dark:bg-[#2f3032] text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs font-black border border-gray-200 dark:border-white/10 outline-none"
+>
+{gameBallOptions.map(n => (
+<option key={n} value={n}>{n} bolas</option>
+))}
+</select>
+) : (
 <select
 value={effectiveNumCoins}
 onChange={e => setNumCoins(parseInt(e.target.value))}
 className="bg-white dark:bg-[#2f3032] text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs font-black border border-gray-200 dark:border-white/10 outline-none"
 >
-{(isGameMode ? [50] : [50, 100, 150, 200, 250]).map(n => (
+{normalCoinOptions.map(n => (
 <option key={n} value={n}>{n} moedas</option>
 ))}
 </select>
+)}
 </div>
 
 <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/50 p-2 rounded-lg border border-gray-200 dark:border-white/10">
@@ -1789,9 +1938,9 @@ disabled={false}
 
 <div className="flex items-center gap-3 relative">
 <button
-onClick={resetZoom}
+onClick={handleResetAll}
 className="p-3 bg-[#dd9933]/10 hover:bg-[#dd9933]/20 text-[#dd9933] rounded-lg border border-[#dd9933]/30 transition-colors"
-title="Reset Zoom"
+title="Reset"
 >
 <Maximize size={20} />
 </button>
@@ -2055,6 +2204,7 @@ className="group rounded-xl border border-gray-200 dark:border-white/10 bg-white
 Nenhum post carregado (verifique /2/wp-json/wp/v2/posts).
 </div>
 )}
+</div>
 </div>
 </div>
 </div>
