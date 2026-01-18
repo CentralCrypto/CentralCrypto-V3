@@ -278,6 +278,7 @@ const RsiWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ ite
     }, [item.isMaximized]);
     
     if (isLoadingAvg && !rsiAvgData && !item.isMaximized) return <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-slate-500" /></div>;
+    // Show 'No Data' instead of crashing if null
     if (!rsiAvgData && !item.isMaximized) return <div className="flex items-center justify-center h-full text-xs text-slate-500">Sem dados</div>;
 
     const rsiVal = item.isMaximized ? dynamicRsiAvg : (rsiAvgData?.averageRsi || 50);

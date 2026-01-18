@@ -55,12 +55,12 @@ const CustomTreemapContent = (props: any) => {
         y={y}
         width={width}
         height={height}
+        rx={6} 
+        ry={6}
         style={{
           fill: color,
           stroke: '#1a1c1e',
           strokeWidth: 2,
-          rx: 6, 
-          ry: 6,
         }}
       />
       <foreignObject x={x} y={y} width={width} height={height} style={{ pointerEvents: 'none' }}>

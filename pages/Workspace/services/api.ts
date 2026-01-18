@@ -16,7 +16,7 @@ export const fetchWithFallback = async (url: string): Promise<any | null> => {
     const { data } = await httpGetJson(finalUrl, { timeoutMs: 10000, retries: 2 });
     return data;
   } catch (e: any) {
-    // Silent fail for 404 to avoid console spam as per user request
+    // Suppress 404 errors to avoid console noise for optional resources
     if (e.status !== 404) {
         console.warn(`[API] Warn fetching ${url}:`, e.message || e);
     }
