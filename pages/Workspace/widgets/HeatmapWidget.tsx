@@ -56,14 +56,14 @@ const CustomTreemapContent = (props: any) => {
   
   // Logic for display density based on size
   const isTiny = width < 35 || height < 35;   // Too small -> Empty
-  const isSmall = !isTiny && (width < 80 || height < 70); // Small -> Logo Only
+  const isSmall = !isTiny && (width < 90 || height < 80); // Small -> Logo Only
   const isLarge = !isTiny && !isSmall;        // Large -> Full info
 
   // Logic for Tooltip Trigger
-  // Small/Tiny squares: Tooltip triggers on entire box (otherwise too hard to hover)
-  // Large squares: Tooltip triggers ONLY on the content (logo/symbol/price/pct)
+  // Small/Tiny squares: Tooltip triggers on entire box
+  // Large squares: Tooltip triggers ONLY on the content
   const rectPointerEvents = isLarge ? 'none' : 'all';
-  const contentPointerEvents = isLarge ? 'all' : 'none'; // 'none' for small because rect handles it
+  const contentPointerEvents = isLarge ? 'all' : 'none'; 
 
   return (
     <g>
@@ -78,7 +78,7 @@ const CustomTreemapContent = (props: any) => {
           fill: color,
           stroke: '#1a1c1e',
           strokeWidth: 2,
-          pointerEvents: rectPointerEvents, // Control trigger zone
+          pointerEvents: rectPointerEvents, 
           cursor: 'default'
         }}
       />
@@ -88,32 +88,32 @@ const CustomTreemapContent = (props: any) => {
             y={y} 
             width={width} 
             height={height} 
-            style={{ pointerEvents: 'none' }} // Container transparent to events
+            style={{ pointerEvents: 'none' }} 
         >
             <div 
                 className="w-full h-full flex flex-col items-center justify-center p-1 overflow-hidden text-center transition-opacity hover:opacity-90"
-                style={{ pointerEvents: contentPointerEvents, cursor: 'default' }} // Inner content captures events if large
+                style={{ pointerEvents: contentPointerEvents, cursor: 'default' }}
             >
                 {/* Logo Logic */}
                 {image && (
                     <img 
                         src={image} 
                         alt={name} 
-                        className={`rounded-full shadow-sm drop-shadow-md mb-0.5 object-cover ${isSmall ? 'w-full h-full max-w-[28px] max-h-[28px] object-contain' : 'w-8 h-8 mb-1'}`}
+                        className={`rounded-full shadow-sm drop-shadow-md mb-0.5 object-cover ${isSmall ? 'w-full h-full max-w-[28px] max-h-[28px] object-contain' : 'w-9 h-9 mb-1'}`}
                         onError={(e) => (e.currentTarget.style.display = 'none')}
                     />
                 )}
 
-                {/* Text Logic - Only for Large */}
+                {/* Text Logic - Only for Large - FONTS INCREASED */}
                 {isLarge && (
                     <>
-                        <span className="font-black text-white drop-shadow-md text-sm leading-tight mt-0.5">
+                        <span className="font-black text-white drop-shadow-md text-lg leading-tight mt-0.5">
                             {symbol}
                         </span>
-                        <span className="text-[10px] font-bold text-white/90 drop-shadow-sm mt-0.5">
+                        <span className="text-sm font-bold text-white/95 drop-shadow-sm mt-0.5">
                             {formatPrice(price)}
                         </span>
-                        <span className={`text-[10px] font-black drop-shadow-sm mt-0.5 ${(change || 0) >= 0 ? 'text-green-100' : 'text-red-100'}`}>
+                        <span className={`text-xs font-black drop-shadow-sm mt-0.5 ${(change || 0) >= 0 ? 'text-green-50' : 'text-red-50'}`}>
                             {(change || 0) > 0 ? '+' : ''}{(change || 0).toFixed(2)}%
                         </span>
                     </>
@@ -125,75 +125,106 @@ const CustomTreemapContent = (props: any) => {
   );
 };
 
-const CustomTooltip = ({ active, payload }: any) => {
-  if (active && payload && payload.length) {
+// Smart Tooltip to prevent overflow
+const CustomTooltip = ({ active, payload, coordinate, viewBox }: any) => {
+  if (active && payload && payload.length && coordinate && viewBox) {
     const data = payload[0].payload;
     if (!data || !data.symbol) return null;
 
     const isPositive = data.change >= 0;
 
+    // Detect edges to flip tooltip
+    // coordinate.x/y is the mouse position relative to the chart container
+    // viewBox.width/height is the chart container size
+    const x = coordinate.x || 0;
+    const y = coordinate.y || 0;
+    const w = viewBox.width || 0;
+    const h = viewBox.height || 0;
+
+    // Thresholds (pixels from edge)
+    const isRightEdge = x > w - 300; 
+    const isBottomEdge = y > h - 250; 
+
+    // Dynamic classes for positioning
+    // If Right Edge: translate-x-full (move left) + negative margin
+    // If Bottom Edge: translate-y-full (move up) + negative margin
+    let transformClass = "translate-x-4 translate-y-4"; // Default: Right-Down from cursor
+    
+    if (isRightEdge && isBottomEdge) {
+        transformClass = "-translate-x-[102%] -translate-y-[102%]"; // Top-Left
+    } else if (isRightEdge) {
+        transformClass = "-translate-x-[102%] translate-y-4"; // Left-Down
+    } else if (isBottomEdge) {
+        transformClass = "translate-x-4 -translate-y-[102%]"; // Right-Up
+    }
+
     return (
-      <div className="bg-[#121314]/95 backdrop-blur-xl border border-gray-700/50 p-0 rounded-2xl shadow-2xl z-[9999] min-w-[280px] overflow-hidden">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-gray-800 to-gray-900 p-4 border-b border-gray-700 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-                <img src={data.image} className="w-10 h-10 rounded-full border-2 border-white/10 shadow-lg bg-white" alt="" onError={(e) => (e.currentTarget.style.display = 'none')} />
-                <div>
-                    <h4 className="text-lg font-black text-white leading-none">{data.fullName}</h4>
-                    <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs font-bold text-gray-400 bg-black/30 px-1.5 py-0.5 rounded">Rank #{data.rank}</span>
-                        <span className="text-xs font-bold text-blue-400 uppercase">{data.symbol}</span>
+      <div 
+        className={`absolute z-[9999] pointer-events-none transition-transform duration-75 ${transformClass}`}
+        style={{ left: 0, top: 0 }} // Recharts wrapper handles x/y translate, we adjust relative to that
+      >
+          <div className="bg-[#121314]/95 backdrop-blur-xl border border-gray-700/50 p-0 rounded-2xl shadow-2xl min-w-[280px] overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-gray-800 to-gray-900 p-4 border-b border-gray-700 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <img src={data.image} className="w-10 h-10 rounded-full border-2 border-white/10 shadow-lg bg-white" alt="" onError={(e) => (e.currentTarget.style.display = 'none')} />
+                    <div>
+                        <h4 className="text-lg font-black text-white leading-none">{data.fullName}</h4>
+                        <div className="flex items-center gap-2 mt-1">
+                            <span className="text-xs font-bold text-gray-400 bg-black/30 px-1.5 py-0.5 rounded">Rank #{data.rank}</span>
+                            <span className="text-xs font-bold text-blue-400 uppercase">{data.symbol}</span>
+                        </div>
+                    </div>
+                </div>
+                <div className="text-right">
+                    <div className="text-xl font-mono font-black text-white">{formatPrice(data.price)}</div>
+                    <div className={`text-xs font-black flex items-center justify-end gap-1 ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+                        {isPositive ? <TrendingUp size={12}/> : <TrendingDown size={12}/>}
+                        {isPositive ? '+' : ''}{data.change?.toFixed(2)}%
                     </div>
                 </div>
             </div>
-            <div className="text-right">
-                <div className="text-xl font-mono font-black text-white">{formatPrice(data.price)}</div>
-                <div className={`text-xs font-black flex items-center justify-end gap-1 ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
-                    {isPositive ? <TrendingUp size={12}/> : <TrendingDown size={12}/>}
-                    {isPositive ? '+' : ''}{data.change?.toFixed(2)}%
+
+            {/* Body Stats */}
+            <div className="p-4 grid grid-cols-2 gap-4 text-xs">
+                <div className="space-y-1">
+                    <span className="text-gray-500 font-bold uppercase text-[9px] tracking-wider">Market Cap</span>
+                    <div className="font-mono font-bold text-gray-200 text-sm">{formatCompact(data.mcap)}</div>
+                </div>
+                <div className="space-y-1 text-right">
+                    <span className="text-gray-500 font-bold uppercase text-[9px] tracking-wider">Volume 24h</span>
+                    <div className="font-mono font-bold text-[#dd9933] text-sm">{formatCompact(data.vol)}</div>
+                </div>
+                
+                <div className="col-span-2 h-px bg-gray-800 my-1"></div>
+
+                <div className="space-y-1">
+                    <span className="text-gray-500 font-bold uppercase text-[9px] tracking-wider">High 24h</span>
+                    <div className="font-mono font-medium text-green-400">{formatPrice(data.high24)}</div>
+                </div>
+                <div className="space-y-1 text-right">
+                    <span className="text-gray-500 font-bold uppercase text-[9px] tracking-wider">Low 24h</span>
+                    <div className="font-mono font-medium text-red-400">{formatPrice(data.low24)}</div>
+                </div>
+
+                <div className="col-span-2 h-px bg-gray-800 my-1"></div>
+
+                <div className="space-y-1">
+                    <span className="text-gray-500 font-bold uppercase text-[9px] tracking-wider">All Time High (ATH)</span>
+                    <div className="flex justify-between items-center">
+                        <span className="font-mono font-medium text-gray-300">{formatPrice(data.ath)}</span>
+                        <span className="text-[10px] text-red-500 font-bold">{data.ath_p?.toFixed(1)}%</span>
+                    </div>
+                    <div className="text-[9px] text-gray-600">{data.ath_date ? new Date(data.ath_date).toLocaleDateString() : '-'}</div>
+                </div>
+                
+                <div className="space-y-1 text-right">
+                    <span className="text-gray-500 font-bold uppercase text-[9px] tracking-wider">Supply Circulante</span>
+                    <div className="font-mono font-medium text-gray-300">{formatCompact(data.supply)}</div>
+                    <div className="text-[9px] text-gray-600">Max: {data.max_supply ? formatCompact(data.max_supply) : '∞'}</div>
                 </div>
             </div>
-        </div>
-
-        {/* Body Stats */}
-        <div className="p-4 grid grid-cols-2 gap-4 text-xs">
-            <div className="space-y-1">
-                <span className="text-gray-500 font-bold uppercase text-[9px] tracking-wider">Market Cap</span>
-                <div className="font-mono font-bold text-gray-200 text-sm">{formatCompact(data.mcap)}</div>
-            </div>
-            <div className="space-y-1 text-right">
-                <span className="text-gray-500 font-bold uppercase text-[9px] tracking-wider">Volume 24h</span>
-                <div className="font-mono font-bold text-[#dd9933] text-sm">{formatCompact(data.vol)}</div>
-            </div>
-            
-            <div className="col-span-2 h-px bg-gray-800 my-1"></div>
-
-            <div className="space-y-1">
-                <span className="text-gray-500 font-bold uppercase text-[9px] tracking-wider">High 24h</span>
-                <div className="font-mono font-medium text-green-400">{formatPrice(data.high24)}</div>
-            </div>
-            <div className="space-y-1 text-right">
-                <span className="text-gray-500 font-bold uppercase text-[9px] tracking-wider">Low 24h</span>
-                <div className="font-mono font-medium text-red-400">{formatPrice(data.low24)}</div>
-            </div>
-
-            <div className="col-span-2 h-px bg-gray-800 my-1"></div>
-
-            <div className="space-y-1">
-                <span className="text-gray-500 font-bold uppercase text-[9px] tracking-wider">All Time High (ATH)</span>
-                <div className="flex justify-between items-center">
-                    <span className="font-mono font-medium text-gray-300">{formatPrice(data.ath)}</span>
-                    <span className="text-[10px] text-red-500 font-bold">{data.ath_p?.toFixed(1)}%</span>
-                </div>
-                <div className="text-[9px] text-gray-600">{data.ath_date ? new Date(data.ath_date).toLocaleDateString() : '-'}</div>
-            </div>
-            
-            <div className="space-y-1 text-right">
-                <span className="text-gray-500 font-bold uppercase text-[9px] tracking-wider">Supply Circulante</span>
-                <div className="font-mono font-medium text-gray-300">{formatCompact(data.supply)}</div>
-                <div className="text-[9px] text-gray-600">Max: {data.max_supply ? formatCompact(data.max_supply) : '∞'}</div>
-            </div>
-        </div>
+          </div>
       </div>
     );
   }
@@ -309,7 +340,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
                             onClick={() => setMetric('change')} 
                             className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded flex items-center gap-1.5 transition-all ${metric === 'change' ? 'bg-[#dd9933] text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
                         >
-                            <BarChart2 size={12} /> Volatilidade
+                            <BarChart2 size={12} /> Variação 24h
                         </button>
                     </div>
                 )}

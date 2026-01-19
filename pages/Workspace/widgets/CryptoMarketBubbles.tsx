@@ -1,3 +1,4 @@
+
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiCoin, Language } from '../../../types';
 import {
@@ -14,7 +15,10 @@ import {
   Globe,
   Rss,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Play,
+  AlertTriangle,
+  RefreshCw
 } from 'lucide-react';
 import { fetchTopCoins } from '../services/api';
 
@@ -146,8 +150,8 @@ const SFX_POCKET = '/widgets/sfx-pocket.wav';
 
 // GAME CONFIG
 const GAME_BALL_RADIUS = 26;
-// ajuste: no modo game todas as bolas do mesmo tamanho (inclui BTC)
-const GAME_CUE_RADIUS = GAME_BALL_RADIUS;
+// ajuste: bola branca (BTC) um pouco maior
+const GAME_CUE_RADIUS = 32;
 const GAME_WALL_PAD = 14;
 
 // ajuste: bem menos atrito e sem “bola pesando 500kg”
@@ -197,10 +201,15 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
 
   const [isGameMode, setIsGameMode] = useState(false);
   const [isFreeMode, setIsFreeMode] = useState(false);
+  
+  // Game states
+  const [gameOver, setGameOver] = useState(false);
+  const [showGameIntro, setShowGameIntro] = useState(false);
 
   const [numCoins, setNumCoins] = useState(50);
 
-  const [floatStrengthRaw, setFloatStrengthRaw] = useState(1.0);
+  // START FLOAT AT 20%
+  const [floatStrengthRaw, setFloatStrengthRaw] = useState(0.2);
   const [trailLength, setTrailLength] = useState(25);
 
   // game selector lock after first shot
@@ -631,6 +640,8 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
       setTimeout(() => {
         setupGameLayout();
       }, 0);
+      setGameOver(false);
+      setShowGameIntro(true);
     }
   }, [animateTransformTo, isFreeMode, computeMapTargets, isGameMode, setupGameLayout]);
 
@@ -802,6 +813,9 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
       setIsFreeMode(false);
       setSettingsOpen(false);
       setLegendTipOpen(false);
+      
+      setGameOver(false);
+      setShowGameIntro(true);
 
       // ajuste: garante transform neutro ao entrar no game
       animateTransformTo({ k: 1, x: 0, y: 0 }, 0.2);
@@ -815,6 +829,9 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
       setDetailOpen(false);
       setSettingsOpen(false);
       setLegendTipOpen(false);
+      
+      setGameOver(false);
+      setShowGameIntro(false);
 
       if (draggedParticleRef.current) {
         draggedParticleRef.current.isFixed = false;
@@ -1528,7 +1545,9 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
               const wasCue = String(p.coin.id).toLowerCase() === 'bitcoin';
               particlesRef.current = particlesRef.current.filter(pp => pp !== p);
 
-              if (!wasCue) {
+              if (wasCue) {
+                setGameOver(true);
+              } else {
                 pocketedCountRef.current += 1;
                 setPocketedUI({ count: pocketedCountRef.current, max: pocketedMaxRef.current });
               }
@@ -1937,29 +1956,6 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
             <Maximize size={20} />
           </button>
 
-          <div className="relative">
-            <button
-              onMouseEnter={() => setLegendTipOpen(true)}
-              onMouseLeave={() => setLegendTipOpen(false)}
-              className="p-3 rounded-lg border transition-colors backdrop-blur-sm bg-gray-100 dark:bg-black/50 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10"
-              title="Legenda / Instruções"
-            >
-              <Info size={20} />
-            </button>
-
-            {legendTipOpen && (
-              <div
-                className="absolute right-0 mt-2 w-80 bg-white/95 dark:bg-black/85 border border-gray-200 dark:border-white/10 rounded-xl p-3 shadow-xl backdrop-blur-md text-sm"
-                onMouseEnter={() => setLegendTipOpen(true)}
-                onMouseLeave={() => setLegendTipOpen(false)}
-              >
-                <div className="space-y-1 text-gray-800 dark:text-gray-100">
-                  {legendText}
-                </div>
-              </div>
-            )}
-          </div>
-
           <button
             onClick={() => setSettingsOpen(v => !v)}
             className={`p-3 rounded-lg border transition-colors backdrop-blur-sm ${settingsOpen ? 'bg-[#dd9933] text-black border-[#dd9933]' : 'bg-gray-100 dark:bg-black/50 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10'}`}
@@ -1998,7 +1994,7 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
                   <Info size={14} className="text-gray-500 dark:text-gray-300" />
                 </button>
 
-                <div className="absolute left-0 mt-2 w-72 bg-white/95 dark:bg-black/85 border border-gray-200 dark:border-white/10 rounded-xl p-3 shadow-xl backdrop-blur-md text-xs opacity-0 pointer-events-none group-hover:opacity-100">
+                <div className="absolute right-0 top-6 w-72 bg-white/95 dark:bg-black/85 border border-gray-200 dark:border-white/10 rounded-xl p-3 shadow-xl backdrop-blur-md text-xs opacity-0 pointer-events-none group-hover:opacity-100 z-50">
                   <div className="font-black text-gray-800 dark:text-gray-100 mb-1">Como jogar</div>
                   <div className="text-gray-700 dark:text-gray-200 leading-relaxed">
                     Clique 1 fixa a mira. Clique 2: segure e arraste o taco para trás para regular a força. Solte o botão para dar a tacada.
@@ -2080,6 +2076,52 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
           </div>
         </div>
       )}
+
+      {/* GAME INTRO POPUP */}
+      {showGameIntro && isGameMode && (
+        <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in zoom-in duration-300">
+            <div className="bg-white dark:bg-[#1a1c1e] p-8 rounded-2xl max-w-md text-center border border-gray-200 dark:border-white/10 shadow-2xl relative">
+                <button onClick={() => setShowGameIntro(false)} className="absolute top-3 right-3 p-2 text-gray-400 hover:text-white transition-colors"><CloseIcon size={20}/></button>
+                <div className="w-16 h-16 bg-[#dd9933]/10 rounded-full flex items-center justify-center mx-auto mb-4 text-[#dd9933]">
+                    <Atom size={32} />
+                </div>
+                <h2 className="text-2xl font-black text-gray-900 dark:text-white uppercase mb-2">Modo Game</h2>
+                <div className="text-sm text-gray-600 dark:text-gray-300 mb-6 space-y-2 text-left bg-gray-100 dark:bg-black/20 p-4 rounded-xl">
+                    <p className="flex items-start gap-2"><span className="text-[#dd9933] font-bold">•</span><span>Use o mouse para mirar e tacar.</span></p>
+                    <p className="flex items-start gap-2"><span className="text-[#dd9933] font-bold">•</span><span><b>Clique 1:</b> Fixa a mira.</span></p>
+                    <p className="flex items-start gap-2"><span className="text-[#dd9933] font-bold">•</span><span><b>Clique 2 (Segurar):</b> Arraste para trás para definir a força. Solte para tacar.</span></p>
+                    <p className="flex items-start gap-2"><span className="text-[#dd9933] font-bold">•</span><span>Encaçape as moedas menores.</span></p>
+                    <p className="flex items-start gap-2 text-red-500 font-bold"><span className="text-red-500 font-bold">•</span><span>Cuidado: Se o Bitcoin cair, GAME OVER!</span></p>
+                </div>
+                <button 
+                    onClick={() => setShowGameIntro(false)} 
+                    className="bg-[#dd9933] hover:bg-amber-600 text-white font-black py-3 px-8 rounded-full shadow-lg hover:scale-105 transition-all w-full flex items-center justify-center gap-2"
+                >
+                    <Play size={18} fill="currentColor" /> JOGAR AGORA
+                </button>
+            </div>
+        </div>
+      )}
+
+      {/* GAME OVER SCREEN */}
+      {gameOver && isGameMode && (
+        <div className="absolute inset-0 z-[100] flex items-center justify-center bg-red-900/80 backdrop-blur-md animate-in zoom-in duration-500">
+            <div className="text-center text-white p-8">
+                <div className="w-24 h-24 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
+                    <AlertTriangle size={48} className="text-white" />
+                </div>
+                <h1 className="text-6xl font-black mb-2 drop-shadow-lg tracking-tighter">GAME OVER</h1>
+                <p className="text-2xl font-bold mb-8 text-red-200 uppercase tracking-widest">Bitcoin deu DUMP!</p>
+                <button 
+                    onClick={hardResetView} 
+                    className="bg-white text-red-600 font-black py-4 px-10 rounded-full shadow-2xl hover:scale-110 transition-all text-lg flex items-center gap-3 mx-auto"
+                >
+                    <RefreshCw size={24} /> REINICIAR
+                </button>
+            </div>
+        </div>
+      )}
+
       {/* DETAIL CARD SIMPLE LIST */}
       {detailOpen && detailCoin && (
         <div
