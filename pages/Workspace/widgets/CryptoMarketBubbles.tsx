@@ -41,7 +41,7 @@ interface Particle {
   fallFromX?: number;
   fallFromY?: number;
 
-  // map transition
+  // map transition.
   mapFromX?: number;
   mapFromY?: number;
   mapToX?: number;
