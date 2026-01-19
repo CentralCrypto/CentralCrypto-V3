@@ -4,7 +4,7 @@ import React, { useState, useMemo, useRef } from 'react';
 import { ApiCoin, Language, WidgetType, UserTier } from '../../../types';
 import { getTranslations } from '../../../locales';
 import CryptoWidget from './CryptoWidget';
-import MarketWindSwarm from './MarketWindSwarm';
+import CryptoMarketBubbles from '../widgets/CryptoMarketBubbles';
 // Corrected import path
 import MarketCapTable from '../widgets/MarketCapTable';
 
@@ -200,7 +200,7 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
 
         {/* Fullscreen Bubbles modal */}
         {activePage === 'BUBBLES' && (
-          <MarketWindSwarm language={language} onClose={() => setActivePage('MARKETCAP')} />
+          <CryptoMarketBubbles language={language} onClose={() => setActivePage('MARKETCAP')} />
         )}
       </div>
     </div>
