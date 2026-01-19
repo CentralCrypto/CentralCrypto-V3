@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { ResponsiveContainer, Treemap, Tooltip } from 'recharts';
 import { createPortal } from 'react-dom';
-import { Loader2, Maximize2, RefreshCw, AlertTriangle, BarChart2, PieChart, Minimize2, TrendingUp, TrendingDown, Info, DollarSign, Activity, Layers } from 'lucide-react';
+import { Loader2, Maximize2, RefreshCw, AlertTriangle, BarChart2, PieChart, Minimize2, TrendingUp, TrendingDown, Layers, X as CloseIcon } from 'lucide-react';
 import { fetchWithFallback } from '../services/api';
 import { DashboardItem } from '../../../types';
 
@@ -13,14 +13,22 @@ interface Props {
   language?: string;
 }
 
-// Escala de cores "Matte" (Menos saturada, mais profissional)
+// === PALETA DE CORES AJUSTADA (User Request) ===
+// GREEN BASE: #548F3F
+// RED BASE: #ff6961
+
 const getColorForChange = (change: number) => {
-    if (change >= 15) return '#14532d'; // Deepest Green
-    if (change >= 5) return '#166534';  // Deep Green
-    if (change >= 0) return '#15803d';  // Matte Green
-    if (change >= -5) return '#b91c1c'; // Matte Red
-    if (change >= -15) return '#991b1b'; // Deep Red
-    return '#7f1d1d'; // Deepest Red
+    // Escala de Verdes
+    if (change >= 20) return '#345e2a'; // Darker/Stronger Forest
+    if (change >= 7)  return '#467a33'; // Mid Strong
+    if (change >= 0)  return '#548F3F'; // **USER GREEN BASE**
+    
+    // Escala de Vermelhos
+    if (change <= -20) return '#b93c3c'; // Darker Red
+    if (change <= -7)  return '#e0524e'; // Mid Red
+    if (change < 0)    return '#ff6961'; // **USER RED BASE**
+    
+    return '#2d3748'; // Zero/Neutral (Dark Slate)
 };
 
 const formatCompact = (num: number) => {
@@ -41,12 +49,21 @@ const formatPrice = (price: number | undefined | null) => {
 const CustomTreemapContent = (props: any) => {
   const { x, y, width, height, name, change, image, symbol, price } = props;
   
-  // Guard clause: if no width/height or no symbol (likely a root/container node), don't render
+  // Guard clause
   if (!width || !height || width < 5 || height < 5 || !symbol) return null;
 
   const color = getColorForChange(change || 0);
-  const showDetail = width > 50 && height > 50;
-  const showLogo = width > 35 && height > 35;
+  
+  // Logic for display density based on size
+  const isTiny = width < 35 || height < 35;   // Too small -> Empty
+  const isSmall = !isTiny && (width < 80 || height < 70); // Small -> Logo Only
+  const isLarge = !isTiny && !isSmall;        // Large -> Full info
+
+  // Logic for Tooltip Trigger
+  // Small/Tiny squares: Tooltip triggers on entire box (otherwise too hard to hover)
+  // Large squares: Tooltip triggers ONLY on the content (logo/symbol/price/pct)
+  const rectPointerEvents = isLarge ? 'none' : 'all';
+  const contentPointerEvents = isLarge ? 'all' : 'none'; // 'none' for small because rect handles it
 
   return (
     <g>
@@ -61,33 +78,49 @@ const CustomTreemapContent = (props: any) => {
           fill: color,
           stroke: '#1a1c1e',
           strokeWidth: 2,
+          pointerEvents: rectPointerEvents, // Control trigger zone
+          cursor: 'default'
         }}
       />
-      <foreignObject x={x} y={y} width={width} height={height} style={{ pointerEvents: 'none' }}>
-        <div className="w-full h-full flex flex-col items-center justify-center p-1 overflow-hidden text-center">
-            {showLogo && image && (
-                <img 
-                    src={image} 
-                    alt={name} 
-                    className="w-6 h-6 md:w-8 md:h-8 rounded-full mb-1 shadow-sm drop-shadow-md" 
-                    onError={(e) => (e.currentTarget.style.display = 'none')}
-                />
-            )}
-            <span className={`font-black text-white drop-shadow-md ${showDetail ? 'text-sm' : 'text-[10px]'} leading-tight`}>
-                {symbol}
-            </span>
-            {showDetail && (
-                <>
-                    <span className="text-[10px] font-bold text-white/90 drop-shadow-sm mt-0.5">
-                        {formatPrice(price)}
-                    </span>
-                    <span className={`text-[10px] font-black drop-shadow-sm mt-0.5 ${(change || 0) >= 0 ? 'text-green-100' : 'text-red-100'}`}>
-                        {(change || 0) > 0 ? '+' : ''}{(change || 0).toFixed(2)}%
-                    </span>
-                </>
-            )}
-        </div>
-      </foreignObject>
+      {!isTiny && (
+        <foreignObject 
+            x={x} 
+            y={y} 
+            width={width} 
+            height={height} 
+            style={{ pointerEvents: 'none' }} // Container transparent to events
+        >
+            <div 
+                className="w-full h-full flex flex-col items-center justify-center p-1 overflow-hidden text-center transition-opacity hover:opacity-90"
+                style={{ pointerEvents: contentPointerEvents, cursor: 'default' }} // Inner content captures events if large
+            >
+                {/* Logo Logic */}
+                {image && (
+                    <img 
+                        src={image} 
+                        alt={name} 
+                        className={`rounded-full shadow-sm drop-shadow-md mb-0.5 object-cover ${isSmall ? 'w-full h-full max-w-[28px] max-h-[28px] object-contain' : 'w-8 h-8 mb-1'}`}
+                        onError={(e) => (e.currentTarget.style.display = 'none')}
+                    />
+                )}
+
+                {/* Text Logic - Only for Large */}
+                {isLarge && (
+                    <>
+                        <span className="font-black text-white drop-shadow-md text-sm leading-tight mt-0.5">
+                            {symbol}
+                        </span>
+                        <span className="text-[10px] font-bold text-white/90 drop-shadow-sm mt-0.5">
+                            {formatPrice(price)}
+                        </span>
+                        <span className={`text-[10px] font-black drop-shadow-sm mt-0.5 ${(change || 0) >= 0 ? 'text-green-100' : 'text-red-100'}`}>
+                            {(change || 0) > 0 ? '+' : ''}{(change || 0).toFixed(2)}%
+                        </span>
+                    </>
+                )}
+            </div>
+        </foreignObject>
+      )}
     </g>
   );
 };
@@ -95,7 +128,7 @@ const CustomTreemapContent = (props: any) => {
 const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
-    if (!data || !data.symbol) return null; // Avoid empty tooltips for root nodes
+    if (!data || !data.symbol) return null;
 
     const isPositive = data.change >= 0;
 
@@ -319,7 +352,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
                     <Treemap
                         data={treeData}
                         dataKey="size"
-                        stroke="#0f1011" // Darker stroke to separate blocks cleaner
+                        stroke="#0f1011" 
                         fill="#1a1c1e"
                         content={<CustomTreemapContent />}
                         animationDuration={600}
@@ -331,17 +364,19 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
             )}
         </div>
         
-        {/* Barra de Legenda - Cores "Matte" Profissionais */}
+        {/* Barra de Legenda - Cores baseadas nas escolhas do user (#ff6961 red / #548F3F green) */}
         <div className="h-8 bg-[#121416] border-t border-gray-800 flex items-center justify-center gap-1 px-4 shrink-0 overflow-hidden">
-            <span className="text-[9px] text-gray-500 font-bold mr-2">-15%</span>
-            <div className="w-6 h-3 bg-[#7f1d1d] rounded-sm" title="-15%"></div>
-            <div className="w-6 h-3 bg-[#991b1b] rounded-sm" title="-5%"></div>
-            <div className="w-6 h-3 bg-[#b91c1c] rounded-sm" title="-2%"></div>
-            <div className="w-6 h-3 bg-[#334155] rounded-sm border border-gray-700" title="0%"></div>
-            <div className="w-6 h-3 bg-[#15803d] rounded-sm" title="+2%"></div>
-            <div className="w-6 h-3 bg-[#166534] rounded-sm" title="+5%"></div>
-            <div className="w-6 h-3 bg-[#14532d] rounded-sm" title="+15%"></div>
-            <span className="text-[9px] text-gray-500 font-bold ml-2">+15%</span>
+            <span className="text-[9px] text-gray-500 font-bold mr-2">-20%</span>
+            <div className="w-8 h-3 bg-[#b93c3c] rounded-sm" title="<= -20%"></div>
+            <div className="w-8 h-3 bg-[#e0524e] rounded-sm" title="-7% to -20%"></div>
+            <div className="w-8 h-3 bg-[#ff6961] rounded-sm" title="0% to -7% (User Red)"></div>
+            
+            <div className="w-6 h-3 bg-[#2d3748] rounded-sm border border-gray-700 mx-2" title="0% (Neutral)"></div>
+            
+            <div className="w-8 h-3 bg-[#548F3F] rounded-sm" title="0% to +7% (User Green)"></div>
+            <div className="w-8 h-3 bg-[#467a33] rounded-sm" title="+7% to +20%"></div>
+            <div className="w-8 h-3 bg-[#345e2a] rounded-sm" title=">= +20%"></div>
+            <span className="text-[9px] text-gray-500 font-bold ml-2">+20%</span>
         </div>
     </div>
   );

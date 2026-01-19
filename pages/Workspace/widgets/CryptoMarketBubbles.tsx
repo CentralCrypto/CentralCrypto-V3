@@ -1,4 +1,3 @@
-
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiCoin, Language } from '../../../types';
 import {
@@ -147,12 +146,13 @@ const SFX_POCKET = '/widgets/sfx-pocket.wav';
 
 // GAME CONFIG
 const GAME_BALL_RADIUS = 26;
-const GAME_CUE_RADIUS = 34;
+// ajuste: no modo game todas as bolas do mesmo tamanho (inclui BTC)
+const GAME_CUE_RADIUS = GAME_BALL_RADIUS;
 const GAME_WALL_PAD = 14;
 
-// menos atrito (para a bola branca não parecer um caminhão)
-const GAME_LINEAR_DAMP = 0.982;
-const GAME_STOP_EPS = 1.6;
+// ajuste: bem menos atrito e sem “bola pesando 500kg”
+const GAME_LINEAR_DAMP = 0.994;
+const GAME_STOP_EPS = 0.6;
 
 // FREE MODE physics
 const FREE_LINEAR_DAMP = 0.992;
@@ -525,6 +525,10 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    // ajuste: garante que o modo game não herda zoom/pan do modo mapa
+    transformRef.current = { k: 1, x: 0, y: 0 };
+    tweenRef.current.active = false;
+
     const dpr = dprRef.current || 1;
     const width = canvas.width / dpr;
     const height = canvas.height / dpr;
@@ -799,6 +803,9 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
       setSettingsOpen(false);
       setLegendTipOpen(false);
 
+      // ajuste: garante transform neutro ao entrar no game
+      animateTransformTo({ k: 1, x: 0, y: 0 }, 0.2);
+
       setTimeout(() => {
         setupGameLayout();
       }, 0);
@@ -1001,10 +1008,10 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
         const ny = dy / dist;
 
         const pull = clamp(gameCtlRef.current.powerPull, 0, 220);
-        const pullNorm = clamp(pull / 220, 0.01, 1); // mínimo 1%
+        const pullNorm = clamp(pull / 220, 0.01, 1);
 
-        // mais forte por padrão, sem “força base” em settings
-        const basePower = 12000;
+        // ajuste: tacada bem mais forte (e bola não “pesada”)
+        const basePower = 42000;
         const power = basePower * pullNorm;
 
         cue.vx += nx * (power / Math.max(1, cue.mass));
@@ -1013,7 +1020,7 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
         cueHideUntilRef.current = performance.now() + 5000;
         playHit();
 
-        setGameHasShot(true); // trava seletor de bolas após primeira tacada
+        setGameHasShot(true);
 
         gameCtlRef.current.phase = 0;
         gameCtlRef.current.powerPull = 0;
@@ -1272,7 +1279,8 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
 
       // update radii
       for (const p of particles) {
-        const viewRadius = p.targetRadius * Math.pow(k, 0.25);
+        // ajuste: no game, raio não herda escala/visual do mapa
+        const viewRadius = rs.isGameMode ? p.targetRadius : (p.targetRadius * Math.pow(k, 0.25));
         p.radius += (viewRadius - p.radius) * 0.15;
         p.mass = Math.max(1, p.radius);
       }
@@ -1282,27 +1290,31 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
       if (rs.isGameMode) {
         const worldW = width / k;
         const worldH = height / k;
+
+        // ajuste: mesa com borda e caçapas “pra dentro”
+        const railInset = (GAME_WALL_PAD + 8);
         const pr = Math.max(26, Math.min(40, Math.min(worldW, worldH) * 0.04));
+
         pockets = [
-          { x: pr, y: pr, r: pr },
-          { x: worldW / 2, y: pr, r: pr },
-          { x: worldW - pr, y: pr, r: pr },
-          { x: pr, y: worldH - pr, r: pr },
-          { x: worldW / 2, y: worldH - pr, r: pr },
-          { x: worldW - pr, y: worldH - pr, r: pr }
+          { x: railInset, y: railInset, r: pr },
+          { x: worldW / 2, y: railInset, r: pr },
+          { x: worldW - railInset, y: railInset, r: pr },
+          { x: railInset, y: worldH - railInset, r: pr },
+          { x: worldW / 2, y: worldH - railInset, r: pr },
+          { x: worldW - railInset, y: worldH - railInset, r: pr }
         ];
 
         ctx.save();
-        ctx.strokeStyle = rs.isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.10)';
-        ctx.lineWidth = 4 / k;
-        ctx.strokeRect(8 / k, 8 / k, (width - 16) / k, (height - 16) / k);
+        ctx.strokeStyle = rs.isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.12)';
+        ctx.lineWidth = 6 / k;
+        ctx.strokeRect((railInset - pr * 0.55), (railInset - pr * 0.55), (worldW - (railInset - pr * 0.55) * 2), (worldH - (railInset - pr * 0.55) * 2));
         ctx.restore();
 
         ctx.save();
         for (const pk of pockets) {
           ctx.beginPath();
           ctx.arc(pk.x, pk.y, pk.r, 0, Math.PI * 2);
-          ctx.fillStyle = rs.isDark ? 'rgba(0,0,0,0.72)' : 'rgba(0,0,0,0.18)';
+          ctx.fillStyle = rs.isDark ? 'rgba(0,0,0,0.78)' : 'rgba(0,0,0,0.22)';
           ctx.fill();
 
           ctx.beginPath();
@@ -1428,11 +1440,11 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
             p.x += p.vx * stepDt;
             p.y += p.vy * stepDt;
 
-            if (p.x < p.radius + GAME_WALL_PAD) { p.x = p.radius + GAME_WALL_PAD; p.vx *= -0.95; }
-            else if (p.x > worldW - p.radius - GAME_WALL_PAD) { p.x = worldW - p.radius - GAME_WALL_PAD; p.vx *= -0.95; }
+            if (p.x < p.radius + GAME_WALL_PAD) { p.x = p.radius + GAME_WALL_PAD; p.vx *= -0.98; }
+            else if (p.x > worldW - p.radius - GAME_WALL_PAD) { p.x = worldW - p.radius - GAME_WALL_PAD; p.vx *= -0.98; }
 
-            if (p.y < p.radius + GAME_WALL_PAD) { p.y = p.radius + GAME_WALL_PAD; p.vy *= -0.95; }
-            else if (p.y > worldH - p.radius - GAME_WALL_PAD) { p.y = worldH - p.radius - GAME_WALL_PAD; p.vy *= -0.95; }
+            if (p.y < p.radius + GAME_WALL_PAD) { p.y = p.radius + GAME_WALL_PAD; p.vy *= -0.98; }
+            else if (p.y > worldH - p.radius - GAME_WALL_PAD) { p.y = worldH - p.radius - GAME_WALL_PAD; p.vy *= -0.98; }
           }
 
           for (let i = 0; i < particles.length; i++) {
@@ -1466,7 +1478,7 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
               const velAlongNormal = rvx * nx + rvy * ny;
               if (velAlongNormal > 0) continue;
 
-              const restitution = 0.92;
+              const restitution = 0.95;
               let impulse = -(1 + restitution) * velAlongNormal;
               impulse /= (1 / p1.mass + 1 / p2.mass);
 
@@ -1627,7 +1639,6 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
           p.y = baseY + jy;
         }
       }
-
       // DRAW particles
       for (const p of particlesRef.current) {
         let drawRadius = p.radius;
@@ -1788,10 +1799,10 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
 
           ctx.restore();
 
-          // aim marker: sempre aparece (solto ou fixo)
+          // aim marker
           drawAimMarker(ctx, aimTx, aimTy, k, gameCtlRef.current.phase === 2 || gameCtlRef.current.phase === 3, rs.isDark);
 
-          // power meter flutuante perto do taco quando puxando (e também quando fixou a mira)
+          // power meter
           if (gameCtlRef.current.phase === 2 || gameCtlRef.current.phase === 3) {
             const pct = clamp((gameCtlRef.current.phase === 3 ? gameCtlRef.current.powerPull : 0) / 220, 0.01, 1);
             const perpX = -uy;
@@ -1817,65 +1828,28 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
       ref={containerRef}
       className="fixed inset-0 z-[2000] bg-white dark:bg-[#0b0f14] text-gray-900 dark:text-white flex flex-col overflow-hidden touch-none select-none overscroll-none h-[100dvh]"
     >
-      <div className="flex justify-between items-start p-4 z-20 bg-white/80 dark:bg-black/50 backdrop-blur-sm border-b border-gray-200 dark:border-white/10 shrink-0">
-        <div className="flex items-center justify-between w-full">
-          <div className="flex items-center gap-4">
-            <Coins size={28} className="text-[#dd9933]" />
-            <div>
-              <h3 className="text-xl font-black uppercase tracking-wider">Crypto Bubbles</h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400 font-bold">
-                {status === 'demo' ? 'MODO DEMO' : isGameMode ? 'MODO GAME' : isFreeMode ? 'MODO LIVRE' : 'MODO MAPA'}
-              </p>
-            </div>
-
-            {isGameMode && (
-              <div className="ml-3 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5">
-                <div className="text-[11px] font-black text-gray-500 dark:text-gray-400">Bolas fora</div>
-                <div className="text-sm font-black">{pocketedUI.count}/{pocketedUI.max}</div>
-              </div>
-            )}
-
-            <div className="w-px h-8 bg-gray-200 dark:bg-white/10 mx-4"></div>
-
-            <div className="flex items-center gap-2">
-              <div className="flex bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10">
-                <button
-                  onClick={() => setChartMode('valuation')}
-                  className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'valuation' ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500 dark:text-gray-300'}`}
-                  disabled={isGameMode}
-                >
-                  Market Cap
-                </button>
-              </div>
-
-              <div className="flex items-center bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10">
-                <button
-                  onClick={() => setChartMode('performance')}
-                  className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'performance' ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500 dark:text-gray-300'}`}
-                  disabled={isGameMode}
-                >
-                  Variação:
-                </button>
-
-                <div className="w-px h-5 bg-gray-200 dark:bg-white/10 mx-1"></div>
-
-                <div className="flex items-center gap-2 px-2 py-1">
-                  <Wind size={14} className="text-gray-400" />
-                  <select
-                    value={timeframe}
-                    onChange={(e) => setTimeframe(e.target.value as Timeframe)}
-                    className="bg-white dark:bg-[#2f3032] text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs font-black border border-gray-200 dark:border-white/10 outline-none"
-                    disabled={isGameMode}
-                  >
-                    <option value="1h">1h</option>
-                    <option value="24h">24h</option>
-                    <option value="7d">7d</option>
-                  </select>
-                </div>
-              </div>
-            </div>
+      {/* HEADER (reorganizado: esquerda info, meio busca+qtdd, direita botões) */}
+      <div className="flex items-center p-4 z-20 bg-white/80 dark:bg-black/50 backdrop-blur-sm border-b border-gray-200 dark:border-white/10 shrink-0">
+        {/* LEFT */}
+        <div className="flex items-center gap-4 shrink-0">
+          <Coins size={28} className="text-[#dd9933]" />
+          <div>
+            <h3 className="text-xl font-black uppercase tracking-wider">Crypto Bubbles</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 font-bold">
+              {status === 'demo' ? 'MODO DEMO' : isGameMode ? 'MODO GAME' : isFreeMode ? 'MODO LIVRE' : 'MODO MAPA'}
+            </p>
           </div>
 
+          {isGameMode && (
+            <div className="ml-2 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5">
+              <div className="text-[11px] font-black text-gray-500 dark:text-gray-400">Bolas fora</div>
+              <div className="text-sm font-black">{pocketedUI.count}/{pocketedUI.max}</div>
+            </div>
+          )}
+        </div>
+
+        {/* CENTER: qtdd + busca */}
+        <div className="flex-1 flex items-center justify-center gap-3 px-4">
           <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/50 p-2 rounded-lg border border-gray-200 dark:border-white/10">
             <Coins size={16} className="text-gray-400" />
             <select
@@ -1902,7 +1876,7 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Buscar ativo..."
-              className="bg-transparent outline-none text-sm w-48 text-gray-900 dark:text-white"
+              className="bg-transparent outline-none text-sm w-56 text-gray-900 dark:text-white"
               disabled={false}
             />
             {searchTerm && (
@@ -1912,57 +1886,98 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
             )}
           </div>
         </div>
-      </div>
 
-      <div className="flex items-center gap-3 relative">
-        <button
-          onClick={hardResetView}
-          className="p-3 bg-[#dd9933]/10 hover:bg-[#dd9933]/20 text-[#dd9933] rounded-lg border border-[#dd9933]/30 transition-colors"
-          title="Reset (zoom + sair do modo livre + reset game)"
-        >
-          <Maximize size={20} />
-        </button>
+        {/* RIGHT: botões + controles */}
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="flex bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10">
+              <button
+                onClick={() => setChartMode('valuation')}
+                className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'valuation' ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500 dark:text-gray-300'}`}
+                disabled={isGameMode}
+              >
+                Market Cap
+              </button>
+            </div>
 
-        <div className="relative">
-          <button
-            onMouseEnter={() => setLegendTipOpen(true)}
-            onMouseLeave={() => setLegendTipOpen(false)}
-            className="p-3 rounded-lg border transition-colors backdrop-blur-sm bg-gray-100 dark:bg-black/50 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10"
-            title="Legenda / Instruções"
-          >
-            <Info size={20} />
-          </button>
+            <div className="flex items-center bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10">
+              <button
+                onClick={() => setChartMode('performance')}
+                className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'performance' ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500 dark:text-gray-300'}`}
+                disabled={isGameMode}
+              >
+                Variação:
+              </button>
 
-          {legendTipOpen && (
-            <div
-              className="absolute right-0 mt-2 w-80 bg-white/95 dark:bg-black/85 border border-gray-200 dark:border-white/10 rounded-xl p-3 shadow-xl backdrop-blur-md text-sm"
-              onMouseEnter={() => setLegendTipOpen(true)}
-              onMouseLeave={() => setLegendTipOpen(false)}
-            >
-              <div className="space-y-1 text-gray-800 dark:text-gray-100">
-                {legendText}
+              <div className="w-px h-5 bg-gray-200 dark:bg-white/10 mx-1"></div>
+
+              <div className="flex items-center gap-2 px-2 py-1">
+                <Wind size={14} className="text-gray-400" />
+                <select
+                  value={timeframe}
+                  onChange={(e) => setTimeframe(e.target.value as Timeframe)}
+                  className="bg-white dark:bg-[#2f3032] text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs font-black border border-gray-200 dark:border-white/10 outline-none"
+                  disabled={isGameMode}
+                >
+                  <option value="1h">1h</option>
+                  <option value="24h">24h</option>
+                  <option value="7d">7d</option>
+                </select>
               </div>
             </div>
-          )}
+          </div>
+
+          <div className="w-px h-7 bg-gray-200 dark:bg-white/10 mx-2"></div>
+
+          <button
+            onClick={hardResetView}
+            className="p-3 bg-[#dd9933]/10 hover:bg-[#dd9933]/20 text-[#dd9933] rounded-lg border border-[#dd9933]/30 transition-colors"
+            title="Reset (zoom + sair do modo livre + reset game)"
+          >
+            <Maximize size={20} />
+          </button>
+
+          <div className="relative">
+            <button
+              onMouseEnter={() => setLegendTipOpen(true)}
+              onMouseLeave={() => setLegendTipOpen(false)}
+              className="p-3 rounded-lg border transition-colors backdrop-blur-sm bg-gray-100 dark:bg-black/50 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10"
+              title="Legenda / Instruções"
+            >
+              <Info size={20} />
+            </button>
+
+            {legendTipOpen && (
+              <div
+                className="absolute right-0 mt-2 w-80 bg-white/95 dark:bg-black/85 border border-gray-200 dark:border-white/10 rounded-xl p-3 shadow-xl backdrop-blur-md text-sm"
+                onMouseEnter={() => setLegendTipOpen(true)}
+                onMouseLeave={() => setLegendTipOpen(false)}
+              >
+                <div className="space-y-1 text-gray-800 dark:text-gray-100">
+                  {legendText}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <button
+            onClick={() => setSettingsOpen(v => !v)}
+            className={`p-3 rounded-lg border transition-colors backdrop-blur-sm ${settingsOpen ? 'bg-[#dd9933] text-black border-[#dd9933]' : 'bg-gray-100 dark:bg-black/50 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10'}`}
+            title="Settings"
+          >
+            <Settings size={20} />
+          </button>
+
+          <button
+            onClick={() => onClose()}
+            className="p-3 bg-gray-100 dark:bg-black/50 rounded-lg border border-gray-200 dark:border-white/10 hover:bg-red-500/10 text-gray-600 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+            title="Close"
+          >
+            <CloseIcon size={20} />
+          </button>
         </div>
-
-        <button
-          onClick={() => setSettingsOpen(v => !v)}
-          className={`p-3 rounded-lg border transition-colors backdrop-blur-sm ${settingsOpen ? 'bg-[#dd9933] text-black border-[#dd9933]' : 'bg-gray-100 dark:bg-black/50 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10'}`}
-          title="Settings"
-        >
-          <Settings size={20} />
-        </button>
-
-        <button
-          onClick={() => onClose()}
-          className="p-3 bg-gray-100 dark:bg-black/50 rounded-lg border border-gray-200 dark:border-white/10 hover:bg-red-500/10 text-gray-600 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
-          title="Close"
-        >
-          <CloseIcon size={20} />
-        </button>
       </div>
-      
+
       {settingsOpen && (
         <div
           className="absolute top-24 right-4 bg-white/90 dark:bg-black/80 p-4 rounded-lg border border-gray-200 dark:border-white/10 backdrop-blur-md w-80 z-30 shadow-xl"
@@ -2059,13 +2074,12 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
 
             {isGameMode && (
               <div className="text-[11px] font-bold text-gray-500 dark:text-gray-400 leading-relaxed">
-                Força agora fica no medidor flutuante perto do taco. O seletor de bolas trava após a 1ª tacada.
+                Força fica no medidor flutuante perto do taco. O seletor de bolas trava após a 1ª tacada.
               </div>
             )}
           </div>
         </div>
       )}
-
       {/* DETAIL CARD SIMPLE LIST */}
       {detailOpen && detailCoin && (
         <div
@@ -2162,7 +2176,6 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
                     key={p.id}
                     href={p.link}
                     target="_blank"
-                    rel="noreferrer"
                     className="group rounded-xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 transition-colors overflow-hidden"
                   >
                     <div className="h-24 w-full bg-black/5 dark:bg-white/5">
