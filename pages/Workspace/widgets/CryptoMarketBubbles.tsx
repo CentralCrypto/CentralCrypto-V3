@@ -400,16 +400,6 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
     return absPct * volFactor;
   }, [getCoinAbsPct]);
 
-  const sizeLogScale = useCallback((metric: number, minR: number, maxR: number) => {
-    const safeMin = Math.max(1, minR);
-    const safeMax = Math.max(safeMin + 1, maxR);
-    const lnMin = Math.log10(safeMin);
-    const lnMax = Math.log10(safeMax);
-    const lnV = Math.log10(Math.max(1, metric));
-    const t = (lnV - lnMin) / (lnMax - lnMin || 1);
-    return clamp(t, 0, 1);
-  }, []);
-
   // ===== Stats + targets =====
   const recomputeStatsAndTargets = useCallback((coinsList: ApiCoin[], mode: ChartMode, effectiveCount: number) => {
     const topCoins = coinsList.slice(0, effectiveCount);
@@ -461,25 +451,30 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
         // Fix: Force standard sizes in game mode, ignoring market data
         p.targetRadius = isBTC ? GAME_CUE_RADIUS : GAME_BALL_RADIUS;
       } else {
-        let metric = 1;
-        if (mode === 'performance') metric = Math.max(0.000001, sizeMetricPerf(p.coin));
-        else metric = Math.max(1, Number(p.coin.market_cap) || 1);
-
         let targetRadius = 24;
+        
         if (mode === 'performance') {
+          let metric = Math.max(0.000001, sizeMetricPerf(p.coin));
           const t = (metric - minR) / (maxR - minR || 1);
           targetRadius = 15 + clamp(t, 0, 1) * 55;
         } else {
-          const tlog = sizeLogScale(metric, minR, maxR);
-          targetRadius = 16 + tlog * 74;
+          // VALUATION MODE:
+          // Use Power Law scaling (Root) to exaggerate differences at top end.
+          // Area is roughly proportional to value (r^2 ~ value).
+          // We use power 0.55 to make top coins slightly more distinct than pure square root.
+          const metric = Math.max(1, Number(p.coin.market_cap) || 1);
+          const ratio = Math.pow(metric, 0.55) / Math.pow(maxR, 0.55);
+          // Min size 18px, Max size added 90px -> Range 18 to 108px
+          targetRadius = 18 + ratio * 90;
         }
+        
         p.targetRadius = targetRadius;
       }
 
       p.mass = Math.max(1, p.targetRadius);
       p.color = isBTC ? '#ffffff' : baseColor;
     }
-  }, [getCoinPerfPct, sizeMetricPerf, sizeLogScale, isGameMode]);
+  }, [getCoinPerfPct, sizeMetricPerf, isGameMode]);
 
   // ===== Map targets (world coords = "map space") =====
   const computeMapTargets = useCallback(() => {
@@ -1066,7 +1061,7 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     if (detailOpenRef.current) return;
-    if (isGameMode) return;
+    if (isGameMode || isFreeMode) return; // Disable zoom in Free Mode too
 
     const canvas = canvasRef.current; if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
@@ -1215,46 +1210,40 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
       isDarkMode: boolean
     ) => {
       const w = 110 / k;
-      const h = 34 / k;
-      const r = 10 / k;
+      const h = 24 / k;
+      const r = 6 / k;
 
       ctx2.save();
       ctx2.globalAlpha = 0.92;
 
-      ctx2.fillStyle = isDarkMode ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.75)';
-      ctx2.strokeStyle = isDarkMode ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)';
+      ctx2.fillStyle = isDarkMode ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.85)';
+      ctx2.strokeStyle = isDarkMode ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.20)';
       ctx2.lineWidth = 1.5 / k;
 
-      const rx = x - w / 2;
-      const ry = y - h / 2;
-
+      // Draw background
       ctx2.beginPath();
-      ctx2.moveTo(rx + r, ry);
-      ctx2.arcTo(rx + w, ry, rx + w, ry + h, r);
-      ctx2.arcTo(rx + w, ry + h, rx, ry + h, r);
-      ctx2.arcTo(rx, ry + h, rx, ry, r);
-      ctx2.arcTo(rx, ry, rx + w, ry, r);
-      ctx2.closePath();
+      ctx2.roundRect(x - w / 2, y - h / 2, w, h, r);
       ctx2.fill();
       ctx2.stroke();
 
-      const pad = 10 / k;
+      const pad = 4 / k;
       const barW = w - pad * 2;
-      const barH = 8 / k;
-      const barX = rx + pad;
-      const barY = ry + h - pad - barH;
+      const barH = h - pad * 2;
+      const barX = x - w / 2 + pad;
+      const barY = y - h / 2 + pad;
 
-      ctx2.fillStyle = isDarkMode ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)';
+      ctx2.fillStyle = isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)';
       ctx2.fillRect(barX, barY, barW, barH);
 
-      ctx2.fillStyle = '#dd9933';
-      ctx2.fillRect(barX, barY, barW * clamp(pct, 0, 1), barH);
+      const fillW = barW * clamp(pct, 0, 1);
+      ctx2.fillStyle = pct > 0.8 ? '#ef4444' : pct > 0.5 ? '#eab308' : '#22c55e';
+      ctx2.fillRect(barX, barY, fillW, barH);
 
-      ctx2.fillStyle = isDarkMode ? 'rgba(255,255,255,0.90)' : 'rgba(0,0,0,0.85)';
-      ctx2.font = `800 ${12 / k}px Inter`;
+      ctx2.fillStyle = isDarkMode ? 'rgba(255,255,255,0.95)' : 'rgba(0,0,0,0.9)';
+      ctx2.font = `800 ${10 / k}px Inter`;
       ctx2.textAlign = 'center';
       ctx2.textBaseline = 'middle';
-      ctx2.fillText(`${Math.round(pct * 100)}%`, rx + w / 2, ry + (h * 0.42));
+      ctx2.fillText(`${Math.round(pct * 100)}%`, x, y);
 
       ctx2.restore();
     };
@@ -1795,45 +1784,81 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
           const tipX = cx - ux * (cueBall.radius + contactGap + pull + bob);
           const tipY = cy - uy * (cueBall.radius + contactGap + pull + bob);
 
-          const stickLen = Math.max(260, cueBall.radius * 7.5);
+          const stickLen = Math.max(300, cueBall.radius * 9);
           const buttX = tipX - ux * stickLen;
           const buttY = tipY - uy * stickLen;
 
-          const thick = Math.max(8, cueBall.radius * 0.40);
-          const tipThick = Math.max(5, thick * 0.55);
-
+          // CUE STICK DESIGN - DRAWN AS POLYGON
           ctx.save();
-          ctx.globalAlpha = 0.92;
+          ctx.globalAlpha = 0.95;
           ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
 
+          // Vectors perpendicular to aim direction for width
+          const perpX = -uy;
+          const perpY = ux;
+
+          const tipW = 6 / k;
+          const buttW = 14 / k;
+
+          // Stick body (Wood)
           ctx.beginPath();
-          ctx.moveTo(buttX, buttY);
-          ctx.lineTo(tipX, tipY);
-          ctx.strokeStyle = rs.isDark ? 'rgba(210,170,120,0.78)' : 'rgba(120,85,45,0.72)';
-          ctx.lineWidth = thick / k;
+          ctx.moveTo(buttX + perpX * buttW, buttY + perpY * buttW); // Butt Top
+          ctx.lineTo(tipX + perpX * tipW, tipY + perpY * tipW); // Tip Top
+          ctx.lineTo(tipX - perpX * tipW, tipY - perpY * tipW); // Tip Bottom
+          ctx.lineTo(buttX - perpX * buttW, buttY - perpY * buttW); // Butt Bottom
+          ctx.closePath();
+          
+          const grad = ctx.createLinearGradient(buttX, buttY, tipX, tipY);
+          grad.addColorStop(0, '#5D4037'); // Dark wood
+          grad.addColorStop(1, '#A1887F'); // Light wood
+          ctx.fillStyle = grad;
+          ctx.fill();
+          ctx.strokeStyle = rs.isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.2)';
+          ctx.lineWidth = 1.5 / k;
           ctx.stroke();
 
-          const tipLen = Math.min(30, stickLen * 0.12);
+          // Ferrule (White tip part)
+          const ferruleLen = 12 / k;
+          const ferruleStartX = tipX - ux * ferruleLen;
+          const ferruleStartY = tipY - uy * ferruleLen;
+          
           ctx.beginPath();
-          ctx.moveTo(tipX - ux * tipLen, tipY - uy * tipLen);
-          ctx.lineTo(tipX, tipY);
-          ctx.strokeStyle = rs.isDark ? 'rgba(255,255,255,0.62)' : 'rgba(255,255,255,0.78)';
-          ctx.lineWidth = tipThick / k;
-          ctx.stroke();
+          ctx.moveTo(ferruleStartX + perpX * (tipW * 1.1), ferruleStartY + perpY * (tipW * 1.1));
+          ctx.lineTo(tipX + perpX * tipW, tipY + perpY * tipW);
+          ctx.lineTo(tipX - perpX * tipW, tipY - perpY * tipW);
+          ctx.lineTo(ferruleStartX - perpX * (tipW * 1.1), ferruleStartY - perpY * (tipW * 1.1));
+          ctx.closePath();
+          ctx.fillStyle = '#f5f5f5';
+          ctx.fill();
+
+          // Tip (Blue/Leather)
+          const tipCapLen = 4 / k;
+          ctx.beginPath();
+          ctx.moveTo(tipX + perpX * tipW, tipY + perpY * tipW);
+          ctx.lineTo(tipX + ux * tipCapLen + perpX * tipW, tipY + uy * tipCapLen + perpY * tipW);
+          ctx.lineTo(tipX + ux * tipCapLen - perpX * tipW, tipY + uy * tipCapLen - perpY * tipW);
+          ctx.lineTo(tipX - perpX * tipW, tipY - perpY * tipW);
+          ctx.closePath();
+          ctx.fillStyle = '#0284c7'; // Sky blue tip
+          ctx.fill();
 
           ctx.restore();
 
           // aim marker
           drawAimMarker(ctx, aimTx, aimTy, k, gameCtlRef.current.phase === 2 || gameCtlRef.current.phase === 3, rs.isDark);
 
-          // power meter
+          // power meter (FIXED ABOVE BALL)
           if (gameCtlRef.current.phase === 2 || gameCtlRef.current.phase === 3) {
             const pct = clamp((gameCtlRef.current.phase === 3 ? gameCtlRef.current.powerPull : 0) / 220, 0.01, 1);
-            const perpX = -uy;
-            const perpY = ux;
-            const meterX = (buttX + tipX) / 2 + perpX * (26 / k);
-            const meterY = (buttY + tipY) / 2 + perpY * (26 / k);
-            drawPowerMeter(ctx, meterX, meterY, pct, k, rs.isDark);
+            
+            // Fixed position above cue ball
+            const barW = 80 / k;
+            const barH = 8 / k;
+            const barX = cx; // center X
+            const barY = cy - cueBall.radius - (30 / k); // center Y above ball
+
+            drawPowerMeter(ctx, barX, barY, pct, k, rs.isDark);
           }
         }
       }

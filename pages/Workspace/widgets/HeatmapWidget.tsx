@@ -75,7 +75,9 @@ const CustomTreemapContent = (props: any) => {
           pointerEvents: 'all', 
           cursor: 'default'
         }}
-        onMouseEnter={onMouseEnter}
+        // FIX: Explicitly pass 'props' (which is the node data) to Recharts event handlers
+        // Recharts requires the data object to correctly activate the Tooltip.
+        onMouseEnter={() => onMouseEnter && onMouseEnter(props)}
         onMouseLeave={onMouseLeave}
         onClick={onClick}
       />
