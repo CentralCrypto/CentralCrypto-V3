@@ -623,8 +623,8 @@ catIds: uniqueCatIds,
 
 const dir = catSortConfig.direction === 'asc' ? 1 : -1;
 rows.sort((a: any, b: any) => {
-const av = a[catSortConfig.key];
-const bv = b[catSortConfig.key];
+const av = (a as any)[catSortConfig.key];
+const bv = (b as any)[catSortConfig.key];
 
 if (typeof av === 'string' || typeof bv === 'string') {
 const r = String(av ?? '').localeCompare(String(bv ?? ''));
@@ -985,20 +985,22 @@ const SortIcon = ({ active }: { active: boolean }) => (
 <ChevronsUpDown size={12} className={`text-gray-400 group-hover:text-[#dd9933] ${active ? 'text-[#dd9933]' : ''}`} />
 );
 
-const SortableThGeneric = ({
+interface SortableThProps {
+  colId: string;
+  label: React.ReactNode;
+  sortKey?: string;
+  activeKey: string;
+  onSort: (k: string) => void;
+  className?: string;
+}
+
+const SortableThGeneric: React.FC<SortableThProps> = ({
 colId,
 label,
 sortKey,
 activeKey,
 onSort,
 className,
-}: {
-colId: string;
-label: React.ReactNode;
-sortKey?: string;
-activeKey: string;
-onSort: (k: string) => void;
-className?: string;
 }) => {
 const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: colId });
 const style: React.CSSProperties = {

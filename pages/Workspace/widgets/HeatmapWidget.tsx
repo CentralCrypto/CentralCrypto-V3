@@ -1,8 +1,8 @@
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { ResponsiveContainer, Treemap, Tooltip } from 'recharts';
 import { createPortal } from 'react-dom';
-import { Loader2, Maximize2, RefreshCw, AlertTriangle, BarChart2, PieChart, Minimize2, TrendingUp, TrendingDown, Layers, X as CloseIcon } from 'lucide-react';
+import { Loader2, Maximize2, RefreshCw, AlertTriangle, BarChart2, PieChart, Minimize2, TrendingUp, TrendingDown, Layers, X as CloseIcon, ZoomOut } from 'lucide-react';
 import { fetchWithFallback } from '../services/api';
 import { DashboardItem } from '../../../types';
 
@@ -234,6 +234,62 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
   const [isFullscreen, setIsFullscreen] = useState(item?.isMaximized || false);
   const [refreshKey, setRefreshKey] = useState(0);
 
+  // Zoom & Pan State
+  const [transform, setTransform] = useState({ k: 1, x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStart = useRef<{ x: number, y: number, ix: number, iy: number } | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Reset zoom on data reload or view change
+  useEffect(() => {
+      setTransform({ k: 1, x: 0, y: 0 });
+  }, [metric, data, isFullscreen]);
+
+  const handleWheel = (e: React.WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const sensitivity = 0.001;
+      const delta = -e.deltaY * sensitivity;
+      const oldK = transform.k;
+      const newK = Math.min(Math.max(1, oldK + delta), 8); // 1x to 8x
+
+      if (newK === oldK) return;
+
+      if (!containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+
+      // Pivot math:
+      const worldX = (mx - transform.x) / oldK;
+      const worldY = (my - transform.y) / oldK;
+
+      const newX = mx - worldX * newK;
+      const newY = my - worldY * newK;
+
+      setTransform({ k: newK, x: newX, y: newY });
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+      if (transform.k <= 1) return;
+      e.preventDefault(); // Prevent text selection
+      setIsDragging(true);
+      dragStart.current = { x: e.clientX, y: e.clientY, ix: transform.x, iy: transform.y };
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+      if (!isDragging || !dragStart.current) return;
+      const dx = e.clientX - dragStart.current.x;
+      const dy = e.clientY - dragStart.current.y;
+      setTransform(prev => ({ ...prev, x: dragStart.current!.ix + dx, y: dragStart.current!.iy + dy }));
+  };
+
+  const handleMouseUp = () => {
+      setIsDragging(false);
+      dragStart.current = null;
+  };
+
   useEffect(() => {
     const load = async () => {
       setLoading(true);
@@ -361,7 +417,14 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
             </div>
         </div>
 
-        <div className="flex-1 w-full min-h-0 relative bg-[#0f1011]">
+        <div className="flex-1 w-full min-h-0 relative bg-[#0f1011] overflow-hidden" 
+             ref={containerRef}
+             onWheel={handleWheel}
+             onMouseDown={handleMouseDown}
+             onMouseMove={handleMouseMove}
+             onMouseUp={handleMouseUp}
+             onMouseLeave={handleMouseUp}
+        >
             {loading ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
                     <Loader2 className="animate-spin text-[#dd9933]" size={40} />
@@ -374,31 +437,49 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
                     <button onClick={() => setRefreshKey(k => k + 1)} className="px-3 py-1 bg-red-900/20 rounded text-xs hover:bg-red-900/30 transition-colors">Tentar Novamente</button>
                 </div>
             ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                    <Treemap
-                        data={treeData}
-                        dataKey="size"
-                        stroke="#0f1011" 
-                        fill="#1a1c1e"
-                        content={<CustomTreemapContent />}
-                        animationDuration={600}
-                        aspectRatio={1.6} 
-                    >
-                        {/* Tooltip with robust positioning */}
-                        <Tooltip 
-                            content={<CustomTooltip />} 
-                            cursor={true} 
-                            allowEscapeViewBox={{ x: true, y: true }} 
-                            isAnimationActive={false} 
-                            offset={0}
-                        />
-                    </Treemap>
-                </ResponsiveContainer>
+                <div style={{ 
+                    width: '100%', 
+                    height: '100%', 
+                    transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.k})`, 
+                    transformOrigin: '0 0',
+                    cursor: transform.k > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
+                    transition: isDragging ? 'none' : 'transform 0.1s ease-out'
+                }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                        <Treemap
+                            data={treeData}
+                            dataKey="size"
+                            stroke="#0f1011" 
+                            fill="#1a1c1e"
+                            content={<CustomTreemapContent />}
+                            animationDuration={600}
+                            aspectRatio={1.6} 
+                        >
+                            {/* Tooltip with robust positioning */}
+                            <Tooltip 
+                                content={<CustomTooltip />} 
+                                cursor={true} 
+                                allowEscapeViewBox={{ x: true, y: true }} 
+                                isAnimationActive={false} 
+                                offset={0}
+                            />
+                        </Treemap>
+                    </ResponsiveContainer>
+                </div>
+            )}
+
+            {transform.k > 1 && (
+                <button 
+                    onClick={() => setTransform({ k: 1, x: 0, y: 0 })}
+                    className="absolute bottom-4 right-4 z-50 bg-[#dd9933] text-black px-3 py-1.5 rounded-lg shadow-xl font-bold text-xs flex items-center gap-2 hover:scale-105 transition-transform"
+                >
+                    <ZoomOut size={14} /> Reset Zoom
+                </button>
             )}
         </div>
         
         {/* Barra de Legenda */}
-        <div className="h-8 bg-[#121416] border-t border-gray-800 flex items-center justify-center gap-1 px-4 shrink-0 overflow-hidden">
+        <div className="h-8 bg-[#121416] border-t border-gray-800 flex items-center justify-center gap-1 px-4 shrink-0 overflow-hidden z-20">
             <span className="text-[9px] text-gray-500 font-bold mr-2">-20%</span>
             <div className="w-8 h-3 bg-[#b93c3c] rounded-sm" title="<= -20%"></div>
             <div className="w-8 h-3 bg-[#e0524e] rounded-sm" title="-7% to -20%"></div>
