@@ -206,7 +206,8 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
   const [gameOver, setGameOver] = useState(false);
   const [showGameIntro, setShowGameIntro] = useState(false);
 
-  const [numCoins, setNumCoins] = useState(50);
+  // START DEFAULT AT 100
+  const [numCoins, setNumCoins] = useState(100);
 
   // START FLOAT AT 20%
   const [floatStrengthRaw, setFloatStrengthRaw] = useState(0.2);
@@ -277,8 +278,8 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
   const cueHideUntilRef = useRef<number>(0);
   const pointerDownRef = useRef(false);
 
-  // remember normal coins count (to restore when leaving game)
-  const prevNormalNumCoinsRef = useRef<number>(50);
+  // remember normal coins count (to restore when leaving game) - DEFAULT 100
+  const prevNormalNumCoinsRef = useRef<number>(100);
 
   // ===== Helpers: coordinate transforms =====
   const screenToWorld = (clientX: number, clientY: number) => {
@@ -456,25 +457,29 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
       const baseColor = pct >= 0 ? '#089981' : '#f23645';
       const isBTC = String(p.coin.id).toLowerCase() === 'bitcoin';
 
-      let metric = 1;
-      if (mode === 'performance') metric = Math.max(0.000001, sizeMetricPerf(p.coin));
-      else metric = Math.max(1, Number(p.coin.market_cap) || 1);
-
-      let targetRadius = 24;
-      if (mode === 'performance') {
-        const t = (metric - minR) / (maxR - minR || 1);
-        targetRadius = 15 + clamp(t, 0, 1) * 55;
+      if (isGameMode) {
+        // Fix: Force standard sizes in game mode, ignoring market data
+        p.targetRadius = isBTC ? GAME_CUE_RADIUS : GAME_BALL_RADIUS;
       } else {
-        const tlog = sizeLogScale(metric, minR, maxR);
-        targetRadius = 16 + tlog * 74;
+        let metric = 1;
+        if (mode === 'performance') metric = Math.max(0.000001, sizeMetricPerf(p.coin));
+        else metric = Math.max(1, Number(p.coin.market_cap) || 1);
+
+        let targetRadius = 24;
+        if (mode === 'performance') {
+          const t = (metric - minR) / (maxR - minR || 1);
+          targetRadius = 15 + clamp(t, 0, 1) * 55;
+        } else {
+          const tlog = sizeLogScale(metric, minR, maxR);
+          targetRadius = 16 + tlog * 74;
+        }
+        p.targetRadius = targetRadius;
       }
 
-      p.targetRadius = targetRadius;
       p.mass = Math.max(1, p.targetRadius);
-
       p.color = isBTC ? '#ffffff' : baseColor;
     }
-  }, [getCoinPerfPct, sizeMetricPerf, sizeLogScale]);
+  }, [getCoinPerfPct, sizeMetricPerf, sizeLogScale, isGameMode]);
 
   // ===== Map targets (world coords = "map space") =====
   const computeMapTargets = useCallback(() => {
@@ -636,7 +641,7 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
     }
 
     if (isGameMode) {
-      setNumCoins(12);
+      setNumCoins(16);
       setTimeout(() => {
         setupGameLayout();
       }, 0);
@@ -721,7 +726,7 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
 
   // ===== Build particles (rebuild allowed entering game / before first shot; locked after first shot) =====
   const getEffectiveCount = useCallback(() => {
-    if (isGameMode) return clamp(numCoins, 12, 24);
+    if (isGameMode) return clamp(numCoins, 16, 32);
     return numCoins;
   }, [isGameMode, numCoins]);
 
@@ -803,7 +808,7 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
   useEffect(() => {
     if (isGameMode) {
       prevNormalNumCoinsRef.current = numCoins;
-      setNumCoins(12);
+      setNumCoins(16);
       setGameHasShot(false);
 
       setDetailOpen(false);
@@ -838,7 +843,7 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
         draggedParticleRef.current = null;
       }
 
-      setNumCoins(prevNormalNumCoinsRef.current || 50);
+      setNumCoins(prevNormalNumCoinsRef.current || 100);
 
       setTimeout(() => {
         computeMapTargets();
@@ -1130,7 +1135,7 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
 
   const effectiveNumCoins = useMemo(() => getEffectiveCount(), [getEffectiveCount]);
 
-  const gameCoinOptions = useMemo(() => [12, 18, 24], []);
+  const gameCoinOptions = useMemo(() => [16, 24, 32], []);
   const normalCoinOptions = useMemo(() => [50, 100, 150, 200, 250], []);
 
   const siteSocials = useMemo(() => ([

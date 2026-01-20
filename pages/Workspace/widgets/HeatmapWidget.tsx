@@ -47,7 +47,7 @@ const formatPrice = (price: number | undefined | null) => {
 };
 
 const CustomTreemapContent = (props: any) => {
-  const { x, y, width, height, name, change, image, symbol, price } = props;
+  const { x, y, width, height, name, change, image, symbol, price, onMouseEnter, onMouseLeave, onClick } = props;
   
   // Guard clause
   if (!width || !height || width < 5 || height < 5 || !symbol) return null;
@@ -61,12 +61,6 @@ const CustomTreemapContent = (props: any) => {
 
   return (
     <g>
-      {/* 
-         CRITICAL FIX: 
-         Rect has pointerEvents="all" to capture hover everywhere within the box.
-         ForeignObject has pointerEvents="none" so it doesn't block the rect's events.
-         This ensures the tooltip works whether you hover the background, the logo, or the text.
-      */}
       <rect
         x={x}
         y={y}
@@ -81,6 +75,9 @@ const CustomTreemapContent = (props: any) => {
           pointerEvents: 'all', 
           cursor: 'default'
         }}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
+        onClick={onClick}
       />
       {!isTiny && (
         <foreignObject 
