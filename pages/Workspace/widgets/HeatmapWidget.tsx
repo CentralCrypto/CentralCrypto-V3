@@ -133,16 +133,18 @@ const CustomTooltip = ({ active, payload, coordinate, viewBox }: any) => {
     const x = coordinate?.x || 0;
     const y = coordinate?.y || 0;
     const w = viewBox?.width || 0;
-    const h = viewBox?.height || 0;
+    // const h = viewBox?.height || 0;
 
-    // Determine quadrants to prevent overflow
+    // Compact Logic for positioning:
+    // Check if we have enough space ABOVE the cursor to render the tooltip (approx 200px height)
+    // If y < 220, force render BELOW to avoid clipping at top.
     const isRightHalf = x > w / 2;
-    const isBottomHalf = y > h / 2;
+    const isBottomHalf = y > 220; 
 
     const xTranslate = isRightHalf ? '-100%' : '0%';
     const yTranslate = isBottomHalf ? '-100%' : '0%';
-    const xOffset = isRightHalf ? -12 : 12;
-    const yOffset = isBottomHalf ? -12 : 12;
+    const xOffset = isRightHalf ? -10 : 10;
+    const yOffset = isBottomHalf ? -10 : 10;
 
     return (
       <div 
@@ -153,65 +155,57 @@ const CustomTooltip = ({ active, payload, coordinate, viewBox }: any) => {
             transform: `translate(calc(${xTranslate} + ${xOffset}px), calc(${yTranslate} + ${yOffset}px))`
         }} 
       >
-          <div className="bg-[#121314]/95 backdrop-blur-xl border border-gray-700/50 p-0 rounded-2xl shadow-2xl min-w-[280px] overflow-hidden">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-gray-800 to-gray-900 p-4 border-b border-gray-700 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    {data.image && <img src={data.image} className="w-10 h-10 rounded-full border-2 border-white/10 shadow-lg bg-white" alt="" onError={(e) => (e.currentTarget.style.display = 'none')} />}
+          <div className="bg-[#121314]/95 backdrop-blur-xl border border-gray-700/50 rounded-xl shadow-2xl min-w-[220px] overflow-hidden flex flex-col">
+            {/* Header Compact */}
+            <div className="bg-white/5 p-3 flex items-center justify-between border-b border-white/5">
+                <div className="flex items-center gap-2">
+                    {data.image && <img src={data.image} className="w-8 h-8 rounded-full border border-white/10 bg-white" alt="" onError={(e) => (e.currentTarget.style.display = 'none')} />}
                     <div>
-                        <h4 className="text-lg font-black text-white leading-none">{data.fullName}</h4>
-                        <div className="flex items-center gap-2 mt-1">
-                            <span className="text-xs font-bold text-gray-400 bg-black/30 px-1.5 py-0.5 rounded">Rank #{data.rank}</span>
-                            <span className="text-xs font-bold text-blue-400 uppercase">{data.symbol}</span>
+                        <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-black text-white leading-none">{data.symbol}</span>
+                            <span className="text-[9px] font-bold text-gray-400 bg-white/10 px-1 py-0.5 rounded">#{data.rank}</span>
                         </div>
+                        <span className="text-[10px] font-medium text-gray-400 truncate max-w-[100px] block">{data.fullName}</span>
                     </div>
                 </div>
                 <div className="text-right">
-                    <div className="text-xl font-mono font-black text-white">{formatPrice(data.price)}</div>
-                    <div className={`text-xs font-black flex items-center justify-end gap-1 ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
-                        {isPositive ? <TrendingUp size={12}/> : <TrendingDown size={12}/>}
+                    <div className="text-base font-mono font-bold text-white">{formatPrice(data.price)}</div>
+                    <div className={`text-[10px] font-black ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
                         {isPositive ? '+' : ''}{Number(data.change || 0).toFixed(2)}%
                     </div>
                 </div>
             </div>
 
-            {/* Body Stats */}
-            <div className="p-4 grid grid-cols-2 gap-4 text-xs">
-                <div className="space-y-1">
-                    <span className="text-gray-500 font-bold uppercase text-[9px] tracking-wider">Market Cap</span>
-                    <div className="font-mono font-bold text-gray-200 text-sm">{formatCompact(data.mcap)}</div>
+            {/* Body Compact Stats */}
+            <div className="p-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[10px]">
+                <div className="flex flex-col">
+                    <span className="text-gray-500 font-bold uppercase">Mkt Cap</span>
+                    <span className="font-mono font-medium text-gray-300">{formatCompact(data.mcap)}</span>
                 </div>
-                <div className="space-y-1 text-right">
-                    <span className="text-gray-500 font-bold uppercase text-[9px] tracking-wider">Volume 24h</span>
-                    <div className="font-mono font-bold text-[#dd9933] text-sm">{formatCompact(data.vol)}</div>
+                <div className="flex flex-col text-right">
+                    <span className="text-gray-500 font-bold uppercase">Vol 24h</span>
+                    <span className="font-mono font-medium text-[#dd9933]">{formatCompact(data.vol)}</span>
                 </div>
                 
-                <div className="col-span-2 h-px bg-gray-800 my-1"></div>
+                <div className="col-span-2 border-t border-white/5 my-0.5"></div>
 
-                <div className="space-y-1">
-                    <span className="text-gray-500 font-bold uppercase text-[9px] tracking-wider">High 24h</span>
-                    <div className="font-mono font-medium text-green-400">{formatPrice(data.high24)}</div>
+                <div className="flex justify-between items-center col-span-2">
+                    <span className="text-gray-500 font-bold uppercase">High 24h</span>
+                    <span className="font-mono font-medium text-green-400">{formatPrice(data.high24)}</span>
                 </div>
-                <div className="space-y-1 text-right">
-                    <span className="text-gray-500 font-bold uppercase text-[9px] tracking-wider">Low 24h</span>
-                    <div className="font-mono font-medium text-red-400">{formatPrice(data.low24)}</div>
+                <div className="flex justify-between items-center col-span-2">
+                    <span className="text-gray-500 font-bold uppercase">Low 24h</span>
+                    <span className="font-mono font-medium text-red-400">{formatPrice(data.low24)}</span>
                 </div>
+                
+                <div className="col-span-2 border-t border-white/5 my-0.5"></div>
 
-                <div className="col-span-2 h-px bg-gray-800 my-1"></div>
-
-                <div className="space-y-1">
-                    <span className="text-gray-500 font-bold uppercase text-[9px] tracking-wider">All Time High (ATH)</span>
-                    <div className="flex justify-between items-center">
+                <div className="flex justify-between items-center col-span-2">
+                    <span className="text-gray-500 font-bold uppercase">ATH</span>
+                    <div className="flex items-center gap-1">
                         <span className="font-mono font-medium text-gray-300">{formatPrice(data.ath)}</span>
-                        <span className="text-[10px] text-red-500 font-bold">{data.ath_p?.toFixed(1)}%</span>
+                        <span className="text-[9px] text-red-500 font-bold">({data.ath_p?.toFixed(0)}%)</span>
                     </div>
-                    <div className="text-[9px] text-gray-600">{data.ath_date ? new Date(data.ath_date).toLocaleDateString() : '-'}</div>
-                </div>
-                
-                <div className="space-y-1 text-right">
-                    <span className="text-gray-500 font-bold uppercase text-[9px] tracking-wider">Supply Circulante</span>
-                    <div className="font-mono font-medium text-gray-300">{formatCompact(data.supply)}</div>
-                    <div className="text-[9px] text-gray-600">Max: {data.max_supply ? formatCompact(data.max_supply) : '∞'}</div>
                 </div>
             </div>
           </div>

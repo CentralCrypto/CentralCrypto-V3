@@ -82,10 +82,50 @@ const formatPrice = (v?: number) => {
   return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
+// FIX: Real calculation based on Timeframe
 const computeSparkChange = (coin: any, tf: Timeframe) => {
-  const fallback = Number(coin?.price_change_percentage_24h);
-  const pct = isFinite(fallback) ? fallback : 0;
-  return { pct, absPct: Math.abs(pct), series: null as number[] | null, inferredMinutesPerPoint: null as number | null };
+  let pct = 0;
+  
+  if (tf === '24h') {
+      // Use direct API field for 24h to be precise
+      pct = Number(coin?.price_change_percentage_24h);
+  } else {
+      // Calculate from Sparkline for 1h and 7d
+      const prices = coin?.sparkline_in_7d?.price;
+      if (Array.isArray(prices) && prices.length > 1) {
+          const last = prices[prices.length - 1];
+          let start = prices[0];
+
+          if (tf === '1h') {
+              // Assuming ~168 points for 7 days (hourly resolution from CoinGecko)
+              // We take the second to last point as approx 1h ago
+              const idx = Math.max(0, prices.length - 2); 
+              start = prices[idx];
+          } else if (tf === '7d') {
+              start = prices[0];
+          }
+
+          if (start !== 0 && isFinite(start) && isFinite(last)) {
+              pct = ((last - start) / start) * 100;
+          } else {
+              // Fallback if sparkline is weird
+              pct = Number(coin?.price_change_percentage_24h); 
+          }
+      } else {
+          // Fallback if no sparkline
+          pct = Number(coin?.price_change_percentage_24h);
+      }
+  }
+
+  // Safety check
+  if (!isFinite(pct)) pct = 0;
+
+  return { 
+      pct, 
+      absPct: Math.abs(pct), 
+      series: null as number[] | null, 
+      inferredMinutesPerPoint: null as number | null 
+  };
 };
 
 // --- WATERMARK URL (Logo Central Crypto) ---
@@ -101,9 +141,9 @@ const drawWatermark = (
 ) => {
   if (!img || !img.complete || img.naturalWidth <= 0 || img.naturalHeight <= 0) return;
 
-  // Tamanho relativo: 60% da menor dimensão do container
+  // Tamanho relativo: 50% da menor dimensão do container (ajustado para melhor visibilidade)
   const minDim = Math.min(width, height);
-  const targetW = minDim * 0.6;
+  const targetW = minDim * 0.5;
   
   const scale = targetW / img.naturalWidth;
   const w = img.naturalWidth * scale;
@@ -112,9 +152,9 @@ const drawWatermark = (
   const x = (width - w) / 2;
   const y = (height - h) / 2;
 
-  // Opacidade ajustada para ser sutil mas visível
-  const alphaBase = isDark ? 0.08 : 0.06;
-  const alpha = isGameMode ? alphaBase * 0.85 : alphaBase;
+  // Opacidade ajustada (aumentada para garantir visibilidade)
+  const alphaBase = isDark ? 0.12 : 0.08;
+  const alpha = isGameMode ? alphaBase * 0.6 : alphaBase;
 
   ctx.save();
   ctx.globalAlpha = alpha;
@@ -158,6 +198,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const settingsPanelRef = useRef<HTMLDivElement>(null);
+  const settingsBtnRef = useRef<HTMLButtonElement>(null); // FIX: Ref for button
 
   const particlesRef = useRef<Particle[]>([]);
   const imageCache = useRef(new Map<string, HTMLImageElement>());
@@ -290,7 +331,13 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   // ===== Click outside settings to close =====
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-        if (settingsOpen && settingsPanelRef.current && !settingsPanelRef.current.contains(event.target as Node)) {
+        if (
+            settingsOpen && 
+            settingsPanelRef.current && 
+            !settingsPanelRef.current.contains(event.target as Node) &&
+            settingsBtnRef.current && // Check if click is NOT on the button
+            !settingsBtnRef.current.contains(event.target as Node)
+        ) {
             setSettingsOpen(false);
         }
     };
@@ -338,7 +385,8 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     const tryLoad = (src: string, onOk: () => void, onFail: () => void) => {
       if (!src) { onFail(); return; }
       const img = new Image();
-      img.crossOrigin = 'anonymous';
+      // REMOVIDO crossOrigin para evitar bloqueio se o servidor não enviar header
+      // img.crossOrigin = 'anonymous'; 
       img.onload = () => { watermarkRef.current = img; onOk(); };
       img.onerror = () => onFail();
       img.src = src;
@@ -1974,7 +2022,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                     className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'valuation' ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500 dark:text-gray-300'}`}
                     disabled={isGameMode}
                 >
-                    Mkt Cap
+                    MarketCap
                 </button>
                 </div>
 
@@ -2016,6 +2064,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
             </button>
 
             <button
+                ref={settingsBtnRef}
                 onClick={() => setSettingsOpen(v => !v)}
                 className={`p-3 rounded-lg border transition-colors backdrop-blur-sm ${settingsOpen ? 'bg-[#dd9933] text-black border-[#dd9933]' : 'bg-gray-100 dark:bg-black/50 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10'}`}
                 title="Settings"
