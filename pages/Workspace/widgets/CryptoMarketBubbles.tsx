@@ -12,14 +12,20 @@ import {
   Maximize,
   Wind,
   Info,
-  Globe,
-  Rss,
   ChevronLeft,
   ChevronRight,
   Play,
   AlertTriangle,
   RefreshCw
 } from 'lucide-react';
+import { 
+  Twitter, 
+  Instagram, 
+  Youtube, 
+  Send, 
+  TikTok, 
+  Spotify 
+} from '../../../components/Icons';
 import { fetchTopCoins } from '../services/api';
 
 // --- INTERFACES ---
@@ -302,6 +308,15 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   const pointerDownRef = useRef(false);
 
   const prevNormalNumCoinsRef = useRef<number>(100);
+
+  const centralSocials = useMemo(() => ([
+    { icon: Twitter, href: "https://x.com/TradersCentral" },
+    { icon: Instagram, href: "https://www.instagram.com/centralcrypto72/" },
+    { icon: Youtube, href: "https://www.youtube.com/@centralcryptotraders" },
+    { icon: Send, href: "https://t.me/+80XjLzFScH0yMWQx" },
+    { icon: TikTok, href: "https://www.tiktok.com/@centralcrypto323" },
+    { icon: Spotify, href: "https://open.spotify.com/show/1FurXwMBQIJOBKEBXDUiGb" }
+  ]), []);
 
   // ===== Helpers: coordinate transforms =====
   const screenToWorld = (clientX: number, clientY: number) => {
@@ -1208,11 +1223,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
   const gameCoinOptions = useMemo(() => [16, 24, 32], []);
   const normalCoinOptions = useMemo(() => [25, 50, 100, 150, 200, 250], []);
-
-  const siteSocials = useMemo(() => ([
-    { name: 'Site', icon: Globe, href: 'https://centralcrypto.com.br' },
-    { name: 'RSS', icon: Rss, href: 'https://centralcrypto.com.br/2/feed/' }
-  ]), []);
 
   const magSlides = useMemo(() => {
     const out: MagazinePost[][] = [];
@@ -2303,22 +2313,21 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                 <div className="flex justify-between gap-4"><span className="font-bold text-gray-500 dark:text-gray-400">24h</span><span className="font-black" style={{ color: perfColor(detailPerf24?.pct) }}>{(detailPerf24?.pct ?? 0).toFixed(2)}%</span></div>
                 <div className="flex justify-between gap-4"><span className="font-bold text-gray-500 dark:text-gray-400">7d</span><span className="font-black" style={{ color: perfColor(detailPerf7d?.pct) }}>{(detailPerf7d?.pct ?? 0).toFixed(2)}%</span></div>
 
-                <div className="pt-2 flex items-center gap-2">
-                  {siteSocials.map(s => {
-                    const Icon = s.icon;
-                    return (
-                      <a
-                        key={s.name}
-                        href={s.href}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 transition-colors text-xs font-black"
-                      >
-                        <Icon size={14} />
-                        <span>{s.name}</span>
-                      </a>
-                    );
-                  })}
+                <div className="pt-2 flex items-center gap-2 flex-wrap justify-end">
+                    {centralSocials.map((s, i) => {
+                        const Icon = s.icon;
+                        return (
+                            <a
+                                key={i}
+                                href={s.href}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-white/5 hover:bg-[#dd9933] hover:text-white dark:hover:bg-[#dd9933] dark:hover:text-white transition-all shadow-sm"
+                            >
+                                <Icon size={16} />
+                            </a>
+                        );
+                    })}
                 </div>
               </div>
             </div>

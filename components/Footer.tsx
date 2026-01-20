@@ -6,7 +6,8 @@ import {
   Youtube, 
   Mail, 
   Send, 
-  TikTok 
+  TikTok,
+  Spotify 
 } from './Icons';
 import { getTranslations } from '../locales';
 import { Language } from '../types';
@@ -75,6 +76,9 @@ const Footer: React.FC<FooterProps> = ({ onTermsClick, onPrivacyClick, onAnalyst
               </a>
               <a href="https://x.com/TradersCentral" target="_blank" rel="noreferrer" className="w-10 h-10 rounded-full bg-tech-800 flex items-center justify-center text-[#dd9933] hover:bg-[#dd9933] hover:text-white transition-all duration-300 shadow-lg hover:scale-110">
                 <Twitter size={18} />
+              </a>
+              <a href="https://open.spotify.com/show/1FurXwMBQIJOBKEBXDUiGb" target="_blank" rel="noreferrer" className="w-10 h-10 rounded-full bg-tech-800 flex items-center justify-center text-[#dd9933] hover:bg-[#dd9933] hover:text-white transition-all duration-300 shadow-lg hover:scale-110">
+                <Spotify size={18} />
               </a>
             </div>
 

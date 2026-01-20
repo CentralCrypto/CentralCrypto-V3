@@ -11,6 +11,7 @@ import {
   Twitter, 
   LogIn,
   TikTok,
+  Spotify,
   Activity,
   BarChart3,
   Globe,
@@ -204,6 +205,7 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
     { href: "https://www.youtube.com/@centralcryptotraders", icon: <Youtube size={18} /> },
     { href: "https://t.me/+80XjLzFScH0yMWQx", icon: <Send size={18} /> },
     { href: "https://www.tiktok.com/@centralcrypto323", icon: <TikTok size={18} /> },
+    { href: "https://open.spotify.com/show/1FurXwMBQIJOBKEBXDUiGb", icon: <Spotify size={18} /> },
   ];
 
   const TickerList = () => (
