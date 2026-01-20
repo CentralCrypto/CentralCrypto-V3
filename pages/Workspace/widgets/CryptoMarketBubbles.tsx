@@ -1,6 +1,6 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ApiCoin, Language } from '../../../types';
+import { ApiCoin, Language, DashboardItem } from '../../../types';
 import {
   Search,
   XCircle,
@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { fetchTopCoins } from '../services/api';
 
+// --- INTERFACES ---
 interface Particle {
   id: string;
   x: number; y: number;
@@ -53,7 +54,13 @@ type ChartMode = 'performance' | 'valuation';
 type Status = 'loading' | 'running' | 'demo' | 'error';
 type Timeframe = '1h' | '24h' | '7d';
 
-interface CryptoMarketBubblesProps { language: Language; onClose: () => void; }
+interface CryptoMarketBubblesProps { 
+    language: Language; 
+    onClose?: () => void;
+    // Widget Props
+    isWidget?: boolean;
+    item?: DashboardItem;
+}
 
 const clamp = (val: number, min: number, max: number) => Math.max(min, Math.min(val, max));
 
@@ -75,43 +82,14 @@ const formatPrice = (v?: number) => {
   return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
-const getSpark = (coin: any): number[] | null => {
-  const arr = coin?.sparkline_in_7d?.price;
-  if (!Array.isArray(arr) || arr.length < 2) return null;
-  return arr.map((x: any) => Number(x)).filter((x: number) => isFinite(x));
-};
-
 const computeSparkChange = (coin: any, tf: Timeframe) => {
-  const spark = getSpark(coin);
-  if (!spark || spark.length < 2) {
-    const fallback = Number(coin?.price_change_percentage_24h);
-    const pct = isFinite(fallback) ? fallback : 0;
-    return { pct, absPct: Math.abs(pct), series: null as number[] | null, inferredMinutesPerPoint: null as number | null };
-  }
-
-  const len = spark.length;
-  const totalMinutes = 7 * 24 * 60;
-  const minutesPerPoint = totalMinutes / Math.max(1, (len - 1));
-
-  const hours = tf === '1h' ? 1 : tf === '24h' ? 24 : 7 * 24;
-  const points = Math.max(2, Math.min(len, Math.round((hours * 60) / minutesPerPoint)));
-
-  const slice = spark.slice(len - points);
-  const first = slice[0];
-  const last = slice[slice.length - 1];
-
-  const pct = first > 0 ? ((last - first) / first) * 100 : 0;
-  return {
-    pct: isFinite(pct) ? pct : 0,
-    absPct: isFinite(pct) ? Math.abs(pct) : 0,
-    series: spark,
-    inferredMinutesPerPoint: minutesPerPoint
-  };
+  const fallback = Number(coin?.price_change_percentage_24h);
+  const pct = isFinite(fallback) ? fallback : 0;
+  return { pct, absPct: Math.abs(pct), series: null as number[] | null, inferredMinutesPerPoint: null as number | null };
 };
 
-// watermark
-const WATERMARK_LOCAL = '/logo2-transp.png';
-const WATERMARK_REMOTE = '';
+// --- WATERMARK URL (Logo Central Crypto) ---
+const WATERMARK_URL = 'https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png';
 
 const drawWatermark = (
   ctx: CanvasRenderingContext2D,
@@ -123,17 +101,19 @@ const drawWatermark = (
 ) => {
   if (!img || !img.complete || img.naturalWidth <= 0 || img.naturalHeight <= 0) return;
 
-  const maxW = width * 0.78;
-  const maxH = height * 0.78;
-  const scale = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight);
-
+  // Tamanho relativo: 60% da menor dimensão do container
+  const minDim = Math.min(width, height);
+  const targetW = minDim * 0.6;
+  
+  const scale = targetW / img.naturalWidth;
   const w = img.naturalWidth * scale;
   const h = img.naturalHeight * scale;
 
   const x = (width - w) / 2;
   const y = (height - h) / 2;
 
-  const alphaBase = isDark ? 0.055 : 0.035;
+  // Opacidade ajustada para ser sutil mas visível
+  const alphaBase = isDark ? 0.08 : 0.06;
   const alpha = isGameMode ? alphaBase * 0.85 : alphaBase;
 
   ctx.save();
@@ -150,11 +130,8 @@ const SFX_POCKET = '/widgets/sfx-pocket.wav';
 
 // GAME CONFIG
 const GAME_BALL_RADIUS = 26;
-// ajuste: bola branca (BTC) um pouco maior
 const GAME_CUE_RADIUS = 32;
 const GAME_WALL_PAD = 14;
-
-// ajuste: bem menos atrito e sem “bola pesando 500kg”
 const GAME_LINEAR_DAMP = 0.994;
 const GAME_STOP_EPS = 0.6;
 
@@ -176,10 +153,11 @@ type MagazinePost = {
   image?: string;
 };
 
-const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) => {
+const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: CryptoMarketBubblesProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const settingsPanelRef = useRef<HTMLDivElement>(null);
 
   const particlesRef = useRef<Particle[]>([]);
   const imageCache = useRef(new Map<string, HTMLImageElement>());
@@ -200,20 +178,21 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
   const [legendTipOpen, setLegendTipOpen] = useState(false);
 
   const [isGameMode, setIsGameMode] = useState(false);
-  const [isFreeMode, setIsFreeMode] = useState(false);
+  // Default to Free Mode if it's a widget, otherwise start in Map Mode
+  const [isFreeMode, setIsFreeMode] = useState(isWidget); 
   
   // Game states
   const [gameOver, setGameOver] = useState(false);
   const [showGameIntro, setShowGameIntro] = useState(false);
 
-  // START DEFAULT AT 100
-  const [numCoins, setNumCoins] = useState(100);
+  // Widget specific: Fewer coins when minimized
+  const isMaximized = item?.isMaximized ?? !isWidget;
+  const defaultCoins = isWidget && !isMaximized ? 25 : 100;
 
-  // START FLOAT AT 20%
+  const [numCoins, setNumCoins] = useState(defaultCoins);
   const [floatStrengthRaw, setFloatStrengthRaw] = useState(0.2);
   const [trailLength, setTrailLength] = useState(25);
 
-  // game selector lock after first shot
   const [gameHasShot, setGameHasShot] = useState(false);
   const gameHasShotRef = useRef(false);
   useEffect(() => { gameHasShotRef.current = gameHasShot; }, [gameHasShot]);
@@ -278,7 +257,6 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
   const cueHideUntilRef = useRef<number>(0);
   const pointerDownRef = useRef(false);
 
-  // remember normal coins count (to restore when leaving game) - DEFAULT 100
   const prevNormalNumCoinsRef = useRef<number>(100);
 
   // ===== Helpers: coordinate transforms =====
@@ -297,6 +275,28 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
       my
     };
   };
+
+  // ===== Update Coins Count when Maximized Changes =====
+  useEffect(() => {
+      if (isWidget) {
+          // Update coin count based on maximize state
+          setNumCoins(isMaximized ? 100 : 25);
+          
+          // Reset transform to fit new size
+          animateTransformTo({ k: 1, x: 0, y: 0 }, 0.5);
+      }
+  }, [isMaximized, isWidget]);
+
+  // ===== Click outside settings to close =====
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+        if (settingsOpen && settingsPanelRef.current && !settingsPanelRef.current.contains(event.target as Node)) {
+            setSettingsOpen(false);
+        }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [settingsOpen]);
 
   // ===== audio =====
   useEffect(() => {
@@ -320,7 +320,9 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
     try { a.currentTime = 0; void a.play(); } catch {}
   }, []);
 
+  // Prevent Body Scroll only in Full Page Mode
   useEffect(() => {
+    if (isWidget) return;
     const prevBody = document.body.style.overflow;
     const prevHtml = document.documentElement.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -329,8 +331,9 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
       document.body.style.overflow = prevBody;
       document.documentElement.style.overflow = prevHtml;
     };
-  }, []);
+  }, [isWidget]);
 
+  // Load Watermark
   useEffect(() => {
     const tryLoad = (src: string, onOk: () => void, onFail: () => void) => {
       if (!src) { onFail(); return; }
@@ -340,11 +343,7 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
       img.onerror = () => onFail();
       img.src = src;
     };
-    tryLoad(
-      WATERMARK_LOCAL,
-      () => {},
-      () => { if (WATERMARK_REMOTE) tryLoad(WATERMARK_REMOTE, () => {}, () => {}); }
-    );
+    tryLoad(WATERMARK_URL, () => {}, () => {});
   }, []);
 
   useEffect(() => {
@@ -409,6 +408,9 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
     const yData: number[] = [];
     const rData: number[] = [];
 
+    // FORCE VALUATION MODE IN FREE MODE FOR SIZING
+    const sizingMode = isFreeMode ? 'valuation' : mode;
+
     for (const c of topCoins) {
       const vol = Math.max(1, Number(c.total_volume) || 1);
       yData.push(vol);
@@ -453,28 +455,35 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
       } else {
         let targetRadius = 24;
         
-        if (mode === 'performance') {
+        if (sizingMode === 'performance') {
           let metric = Math.max(0.000001, sizeMetricPerf(p.coin));
           const t = (metric - minR) / (maxR - minR || 1);
           targetRadius = 15 + clamp(t, 0, 1) * 55;
         } else {
-          // VALUATION MODE:
-          // Use Power Law scaling (Root) to exaggerate differences at top end.
-          // Area is roughly proportional to value (r^2 ~ value).
-          // We use power 0.55 to make top coins slightly more distinct than pure square root.
+          // VALUATION MODE (Power Law scaling for Mkt Cap)
           const metric = Math.max(1, Number(p.coin.market_cap) || 1);
-          const ratio = Math.pow(metric, 0.55) / Math.pow(maxR, 0.55);
-          // Min size 18px, Max size added 90px -> Range 18 to 108px
+          // Recalculate maxR for valuation specifically if we are forcing valuation sizing in perf mode
+          let valMaxR = maxR;
+          if (mode === 'performance') {
+             const mcaps = topCoins.map(c => Math.max(1, Number(c.market_cap) || 1));
+             valMaxR = Math.max(...mcaps);
+          }
+          const ratio = Math.pow(metric, 0.55) / Math.pow(valMaxR, 0.55);
           targetRadius = 18 + ratio * 90;
         }
         
+        // Widget Mini Mode scaling
+        if (isWidget && !isMaximized) {
+            targetRadius *= 0.7; // Reduce size for mini widget
+        }
+
         p.targetRadius = targetRadius;
       }
 
       p.mass = Math.max(1, p.targetRadius);
       p.color = isBTC ? '#ffffff' : baseColor;
     }
-  }, [getCoinPerfPct, sizeMetricPerf, isGameMode]);
+  }, [getCoinPerfPct, sizeMetricPerf, isGameMode, isFreeMode, isWidget, isMaximized]);
 
   // ===== Map targets (world coords = "map space") =====
   const computeMapTargets = useCallback(() => {
@@ -629,10 +638,12 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
     animateTransformTo({ k: 1, x: 0, y: 0 }, 0.35);
 
     if (isFreeMode) {
-      setIsFreeMode(false);
-      setTimeout(() => {
-        computeMapTargets();
-      }, 0);
+      if (!isWidget) { // Only force map mode reset in Full Page
+          setIsFreeMode(false);
+          setTimeout(() => {
+            computeMapTargets();
+          }, 0);
+      }
     }
 
     if (isGameMode) {
@@ -643,7 +654,7 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
       setGameOver(false);
       setShowGameIntro(true);
     }
-  }, [animateTransformTo, isFreeMode, computeMapTargets, isGameMode, setupGameLayout]);
+  }, [animateTransformTo, isFreeMode, computeMapTargets, isGameMode, setupGameLayout, isWidget]);
 
   // ===== Magazine fetch =====
   const fetchMagazine = useCallback(async () => {
@@ -1131,7 +1142,7 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
   const effectiveNumCoins = useMemo(() => getEffectiveCount(), [getEffectiveCount]);
 
   const gameCoinOptions = useMemo(() => [16, 24, 32], []);
-  const normalCoinOptions = useMemo(() => [50, 100, 150, 200, 250], []);
+  const normalCoinOptions = useMemo(() => [25, 50, 100, 150, 200, 250], []);
 
   const siteSocials = useMemo(() => ([
     { name: 'Site', icon: Globe, href: 'https://centralcrypto.com.br' },
@@ -1275,7 +1286,12 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
       // clear background
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalAlpha = 1;
-      ctx.fillStyle = rs.isGameMode ? (rs.isDark ? '#08110c' : '#e8f3ea') : (rs.isDark ? '#0b0f14' : '#ffffff');
+      // Is Widget Mode Background? Use standard bg color
+      if (isWidget) {
+          ctx.fillStyle = rs.isDark ? '#0b0f14' : '#ffffff';
+      } else {
+          ctx.fillStyle = rs.isGameMode ? (rs.isDark ? '#08110c' : '#e8f3ea') : (rs.isDark ? '#0b0f14' : '#ffffff');
+      }
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.scale(dpr, dpr);
 
@@ -1290,8 +1306,11 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
 
       // update radii
       for (const p of particles) {
-        // ajuste: no game, raio não herda escala/visual do mapa
-        const viewRadius = rs.isGameMode ? p.targetRadius : (p.targetRadius * Math.pow(k, 0.25));
+        // Zoom-independent size logic: 
+        // In Game Mode: constant target.
+        // In Chart Mode (zooming enabled): divide by k to counteract context scale -> effectively constant visual size.
+        // In Free Mode (zoom disabled): k is 1, so regular scaling applies.
+        const viewRadius = rs.isGameMode ? p.targetRadius : (p.targetRadius / k);
         p.radius += (viewRadius - p.radius) * 0.15;
         p.mass = Math.max(1, p.radius);
       }
@@ -1872,140 +1891,154 @@ const CryptoMarketBubbles = ({ language, onClose }: CryptoMarketBubblesProps) =>
     return () => cancelAnimationFrame(reqIdRef.current);
   }, [playPocket]);
 
+  const containerClassName = isWidget 
+        ? "w-full h-full relative flex flex-col bg-white dark:bg-[#0b0f14] overflow-hidden" 
+        : "fixed inset-0 z-[2000] bg-white dark:bg-[#0b0f14] text-gray-900 dark:text-white flex flex-col overflow-hidden touch-none select-none overscroll-none h-[100dvh]";
+
+  // If minimized widget, hide header complex controls
+  const showControls = !isWidget || (isWidget && isMaximized);
+
   return (
     <div
       ref={containerRef}
-      className="fixed inset-0 z-[2000] bg-white dark:bg-[#0b0f14] text-gray-900 dark:text-white flex flex-col overflow-hidden touch-none select-none overscroll-none h-[100dvh]"
+      className={containerClassName}
     >
-      {/* HEADER (reorganizado: esquerda info, meio busca+qtdd, direita botões) */}
-      <div className="flex items-center p-4 z-20 bg-white/80 dark:bg-black/50 backdrop-blur-sm border-b border-gray-200 dark:border-white/10 shrink-0">
-        {/* LEFT */}
-        <div className="flex items-center gap-4 shrink-0">
-          <Coins size={28} className="text-[#dd9933]" />
-          <div>
-            <h3 className="text-xl font-black uppercase tracking-wider">Crypto Bubbles</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 font-bold">
-              {status === 'demo' ? 'MODO DEMO' : isGameMode ? 'MODO GAME' : isFreeMode ? 'MODO LIVRE' : 'MODO MAPA'}
-            </p>
-          </div>
-
-          {isGameMode && (
-            <div className="ml-2 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5">
-              <div className="text-[11px] font-black text-gray-500 dark:text-gray-400">Bolas fora</div>
-              <div className="text-sm font-black">{pocketedUI.count}/{pocketedUI.max}</div>
+      {/* HEADER */}
+      {showControls && (
+        <div className="flex items-center p-4 z-20 bg-white/80 dark:bg-black/50 backdrop-blur-sm border-b border-gray-200 dark:border-white/10 shrink-0">
+            {/* LEFT */}
+            <div className="flex items-center gap-4 shrink-0">
+            {!isWidget && <Coins size={28} className="text-[#dd9933]" />}
+            <div>
+                <h3 className="text-xl font-black uppercase tracking-wider hidden sm:block">Crypto Bubbles</h3>
+                {!isWidget && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 font-bold">
+                    {status === 'demo' ? 'MODO DEMO' : isGameMode ? 'MODO GAME' : isFreeMode ? 'MODO LIVRE' : 'MODO MAPA'}
+                    </p>
+                )}
             </div>
-          )}
-        </div>
 
-        {/* CENTER: qtdd + busca */}
-        <div className="flex-1 flex items-center justify-center gap-3 px-4">
-          <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/50 p-2 rounded-lg border border-gray-200 dark:border-white/10">
-            <Coins size={16} className="text-gray-400" />
-            <select
-              value={effectiveNumCoins}
-              onChange={e => {
-                const v = parseInt(e.target.value);
-                if (isGameMode && gameHasShotRef.current) return;
-                setNumCoins(v);
-              }}
-              className="bg-white dark:bg-[#2f3032] text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs font-black border border-gray-200 dark:border-white/10 outline-none"
-              disabled={isGameMode && gameHasShot}
-              title={isGameMode && gameHasShot ? 'Travado após a 1ª tacada' : ''}
-            >
-              {(isGameMode ? gameCoinOptions : normalCoinOptions).map(n => (
-                <option key={n} value={n}>{isGameMode ? `${n} bolas` : `${n} moedas`}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/50 p-2 rounded-lg border border-gray-200 dark:border-white/10">
-            <Search size={16} className="text-gray-400" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar ativo..."
-              className="bg-transparent outline-none text-sm w-56 text-gray-900 dark:text-white"
-              disabled={false}
-            />
-            {searchTerm && (
-              <button onClick={() => { setSearchTerm(''); setSelectedParticle(null); }}>
-                <XCircle size={16} className="text-gray-500 hover:text-white" />
-              </button>
+            {isGameMode && (
+                <div className="ml-2 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5">
+                <div className="text-[11px] font-black text-gray-500 dark:text-gray-400">Bolas fora</div>
+                <div className="text-sm font-black">{pocketedUI.count}/{pocketedUI.max}</div>
+                </div>
             )}
-          </div>
-        </div>
-
-        {/* RIGHT: botões + controles */}
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="flex bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10">
-              <button
-                onClick={() => setChartMode('valuation')}
-                className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'valuation' ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500 dark:text-gray-300'}`}
-                disabled={isGameMode}
-              >
-                Market Cap
-              </button>
             </div>
 
-            <div className="flex items-center bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10">
-              <button
-                onClick={() => setChartMode('performance')}
-                className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'performance' ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500 dark:text-gray-300'}`}
-                disabled={isGameMode}
-              >
-                Variação:
-              </button>
-
-              <div className="w-px h-5 bg-gray-200 dark:bg-white/10 mx-1"></div>
-
-              <div className="flex items-center gap-2 px-2 py-1">
-                <Wind size={14} className="text-gray-400" />
+            {/* CENTER: qtdd + busca */}
+            <div className="flex-1 flex items-center justify-center gap-3 px-4">
+            <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/50 p-2 rounded-lg border border-gray-200 dark:border-white/10">
+                <Coins size={16} className="text-gray-400" />
                 <select
-                  value={timeframe}
-                  onChange={(e) => setTimeframe(e.target.value as Timeframe)}
-                  className="bg-white dark:bg-[#2f3032] text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs font-black border border-gray-200 dark:border-white/10 outline-none"
-                  disabled={isGameMode}
+                value={getEffectiveCount()}
+                onChange={e => {
+                    const v = parseInt(e.target.value);
+                    if (isGameMode && gameHasShotRef.current) return;
+                    setNumCoins(v);
+                }}
+                className="bg-white dark:bg-[#2f3032] text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs font-black border border-gray-200 dark:border-white/10 outline-none"
+                disabled={isGameMode && gameHasShot}
+                title={isGameMode && gameHasShot ? 'Travado após a 1ª tacada' : ''}
                 >
-                  <option value="1h">1h</option>
-                  <option value="24h">24h</option>
-                  <option value="7d">7d</option>
+                {(isGameMode ? [16, 24, 32] : [25, 50, 100, 150, 200, 250]).map(n => (
+                    <option key={n} value={n}>{isGameMode ? `${n} bolas` : `${n} moedas`}</option>
+                ))}
                 </select>
-              </div>
             </div>
-          </div>
 
-          <div className="w-px h-7 bg-gray-200 dark:bg-white/10 mx-2"></div>
+            <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/50 p-2 rounded-lg border border-gray-200 dark:border-white/10">
+                <Search size={16} className="text-gray-400" />
+                <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar..."
+                className="bg-transparent outline-none text-sm w-24 sm:w-56 text-gray-900 dark:text-white"
+                disabled={false}
+                />
+                {searchTerm && (
+                <button onClick={() => { setSearchTerm(''); setSelectedParticle(null); }}>
+                    <XCircle size={16} className="text-gray-500 hover:text-white" />
+                </button>
+                )}
+            </div>
+            </div>
 
-          <button
-            onClick={hardResetView}
-            className="p-3 bg-[#dd9933]/10 hover:bg-[#dd9933]/20 text-[#dd9933] rounded-lg border border-[#dd9933]/30 transition-colors"
-            title="Reset (zoom + sair do modo livre + reset game)"
-          >
-            <Maximize size={20} />
-          </button>
+            {/* RIGHT: botões + controles */}
+            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 hidden sm:flex">
+                <div className="flex bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10">
+                <button
+                    onClick={() => setChartMode('valuation')}
+                    className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'valuation' ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500 dark:text-gray-300'}`}
+                    disabled={isGameMode}
+                >
+                    Mkt Cap
+                </button>
+                </div>
 
-          <button
-            onClick={() => setSettingsOpen(v => !v)}
-            className={`p-3 rounded-lg border transition-colors backdrop-blur-sm ${settingsOpen ? 'bg-[#dd9933] text-black border-[#dd9933]' : 'bg-gray-100 dark:bg-black/50 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10'}`}
-            title="Settings"
-          >
-            <Settings size={20} />
-          </button>
+                <div className="flex items-center bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10">
+                <button
+                    onClick={() => setChartMode('performance')}
+                    className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'performance' ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500 dark:text-gray-300'}`}
+                    disabled={isGameMode}
+                >
+                    Var %
+                </button>
 
-          <button
-            onClick={() => onClose()}
-            className="p-3 bg-gray-100 dark:bg-black/50 rounded-lg border border-gray-200 dark:border-white/10 hover:bg-red-500/10 text-gray-600 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
-            title="Close"
-          >
-            <CloseIcon size={20} />
-          </button>
+                <div className="w-px h-5 bg-gray-200 dark:bg-white/10 mx-1"></div>
+
+                <div className="flex items-center gap-2 px-2 py-1">
+                    <Wind size={14} className="text-gray-400" />
+                    <select
+                    value={timeframe}
+                    onChange={(e) => setTimeframe(e.target.value as Timeframe)}
+                    className="bg-white dark:bg-[#2f3032] text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs font-black border border-gray-200 dark:border-white/10 outline-none"
+                    disabled={isGameMode}
+                    >
+                    <option value="1h">1h</option>
+                    <option value="24h">24h</option>
+                    <option value="7d">7d</option>
+                    </select>
+                </div>
+                </div>
+            </div>
+
+            <div className="w-px h-7 bg-gray-200 dark:bg-white/10 mx-2 hidden sm:block"></div>
+
+            <button
+                onClick={hardResetView}
+                className="p-3 bg-[#dd9933]/10 hover:bg-[#dd9933]/20 text-[#dd9933] rounded-lg border border-[#dd9933]/30 transition-colors"
+                title="Reset View"
+            >
+                <RefreshCw size={20} />
+            </button>
+
+            <button
+                onClick={() => setSettingsOpen(v => !v)}
+                className={`p-3 rounded-lg border transition-colors backdrop-blur-sm ${settingsOpen ? 'bg-[#dd9933] text-black border-[#dd9933]' : 'bg-gray-100 dark:bg-black/50 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10'}`}
+                title="Settings"
+            >
+                <Settings size={20} />
+            </button>
+
+            {!isWidget && (
+                <button
+                    onClick={() => onClose && onClose()}
+                    className="p-3 bg-gray-100 dark:bg-black/50 rounded-lg border border-gray-200 dark:border-white/10 hover:bg-red-500/10 text-gray-600 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                    title="Close"
+                >
+                    <CloseIcon size={20} />
+                </button>
+            )}
+            </div>
         </div>
-      </div>
+      )}
 
       {settingsOpen && (
         <div
+          ref={settingsPanelRef}
           className="absolute top-24 right-4 bg-white/90 dark:bg-black/80 p-4 rounded-lg border border-gray-200 dark:border-white/10 backdrop-blur-md w-80 z-30 shadow-xl"
           onWheel={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}

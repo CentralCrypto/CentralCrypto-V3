@@ -4,6 +4,7 @@ import { Suspense, useMemo } from 'react';
 import { WidgetType, DashboardItem, Language } from '../../../types';
 import WidgetErrorBoundary from '../widgets/WidgetErrorBoundary';
 import { Loader2 } from 'lucide-react';
+import CryptoMarketBubbles from '../widgets/CryptoMarketBubbles';
 
 // Lazy load widgets to ensure the shell loads even if a widget fails to import (e.g. Highcharts issues)
 // Casting to any to avoid IntrinsicAttributes errors during lazy load type inference
@@ -68,6 +69,10 @@ const CryptoWidget: React.FC<Props> = (props) => {
         return <CalendarWidget item={item} language={language} />;
       case WidgetType.HEATMAP:
         return <HeatmapWidget item={item} language={language} />;
+      
+      // REPLACED HIGHCHARTS BUBBLES WITH PHYSICS BUBBLES (CryptoMarketBubbles)
+      case WidgetType.BUBBLE_HEATMAP:
+        return <CryptoMarketBubbles language={language} isWidget={true} item={item} />;
       
       // --- "BOARD 2" WIDGETS ---
       case WidgetType.PRICE:

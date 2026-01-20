@@ -73,10 +73,8 @@ const CustomTreemapContent = (props: any) => {
           stroke: '#1a1c1e',
           strokeWidth: 2,
           pointerEvents: 'all', 
-          cursor: 'default'
+          cursor: 'pointer'
         }}
-        // FIX: Explicitly pass 'props' (which is the node data) to Recharts event handlers
-        // Recharts requires the data object to correctly activate the Tooltip.
         onMouseEnter={() => onMouseEnter && onMouseEnter(props)}
         onMouseLeave={onMouseLeave}
         onClick={onClick}
@@ -123,44 +121,43 @@ const CustomTreemapContent = (props: any) => {
   );
 };
 
-// Smart Tooltip to prevent overflow
+// Fixed Tooltip to actually position based on coordinates
 const CustomTooltip = ({ active, payload, coordinate, viewBox }: any) => {
-  if (active && payload && payload.length && coordinate && viewBox) {
-    const data = payload[0].payload;
+  if (active && payload && payload.length) {
+    const data = payload[0].payload || payload[0];
     if (!data || !data.symbol) return null;
 
-    const isPositive = data.change >= 0;
+    const isPositive = (data.change || 0) >= 0;
 
     // Detect edges relative to the chart container
-    const x = coordinate.x || 0;
-    const y = coordinate.y || 0;
-    const w = viewBox.width || 0;
-    const h = viewBox.height || 0;
+    const x = coordinate?.x || 0;
+    const y = coordinate?.y || 0;
+    const w = viewBox?.width || 0;
+    const h = viewBox?.height || 0;
 
-    // Determine quadrants
-    // If we are in the right half (x > w/2), render tooltip to the left
-    // If we are in the bottom half (y > h/2), render tooltip to the top
+    // Determine quadrants to prevent overflow
     const isRightHalf = x > w / 2;
     const isBottomHalf = y > h / 2;
 
-    // Construct transform logic
-    // Default: Translate X + 15px, Translate Y + 15px
-    // Flipped X: Translate X - 100% - 15px
-    // Flipped Y: Translate Y - 100% - 15px
-    
-    const xClass = isRightHalf ? '-translate-x-[104%]' : 'translate-x-4';
-    const yClass = isBottomHalf ? '-translate-y-[104%]' : 'translate-y-4';
+    const xTranslate = isRightHalf ? '-100%' : '0%';
+    const yTranslate = isBottomHalf ? '-100%' : '0%';
+    const xOffset = isRightHalf ? -12 : 12;
+    const yOffset = isBottomHalf ? -12 : 12;
 
     return (
       <div 
-        className={`absolute z-[9999] pointer-events-none transition-transform duration-75 ${xClass} ${yClass}`}
-        style={{ left: 0, top: 0 }} 
+        className="absolute z-[9999] pointer-events-none transition-all duration-75 ease-out"
+        style={{ 
+            left: x, 
+            top: y,
+            transform: `translate(calc(${xTranslate} + ${xOffset}px), calc(${yTranslate} + ${yOffset}px))`
+        }} 
       >
           <div className="bg-[#121314]/95 backdrop-blur-xl border border-gray-700/50 p-0 rounded-2xl shadow-2xl min-w-[280px] overflow-hidden">
             {/* Header */}
             <div className="bg-gradient-to-r from-gray-800 to-gray-900 p-4 border-b border-gray-700 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <img src={data.image} className="w-10 h-10 rounded-full border-2 border-white/10 shadow-lg bg-white" alt="" onError={(e) => (e.currentTarget.style.display = 'none')} />
+                    {data.image && <img src={data.image} className="w-10 h-10 rounded-full border-2 border-white/10 shadow-lg bg-white" alt="" onError={(e) => (e.currentTarget.style.display = 'none')} />}
                     <div>
                         <h4 className="text-lg font-black text-white leading-none">{data.fullName}</h4>
                         <div className="flex items-center gap-2 mt-1">
@@ -173,7 +170,7 @@ const CustomTooltip = ({ active, payload, coordinate, viewBox }: any) => {
                     <div className="text-xl font-mono font-black text-white">{formatPrice(data.price)}</div>
                     <div className={`text-xs font-black flex items-center justify-end gap-1 ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
                         {isPositive ? <TrendingUp size={12}/> : <TrendingDown size={12}/>}
-                        {isPositive ? '+' : ''}{data.change?.toFixed(2)}%
+                        {isPositive ? '+' : ''}{Number(data.change || 0).toFixed(2)}%
                     </div>
                 </div>
             </div>
@@ -382,13 +379,20 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
                         animationDuration={600}
                         aspectRatio={1.6} 
                     >
-                        <Tooltip content={<CustomTooltip />} cursor={true} allowEscapeViewBox={{ x: true, y: true }} isAnimationActive={false} />
+                        {/* Tooltip with robust positioning */}
+                        <Tooltip 
+                            content={<CustomTooltip />} 
+                            cursor={true} 
+                            allowEscapeViewBox={{ x: true, y: true }} 
+                            isAnimationActive={false} 
+                            offset={0}
+                        />
                     </Treemap>
                 </ResponsiveContainer>
             )}
         </div>
         
-        {/* Barra de Legenda - Cores baseadas nas escolhas do user (#ff6961 red / #548F3F green) */}
+        {/* Barra de Legenda */}
         <div className="h-8 bg-[#121416] border-t border-gray-800 flex items-center justify-center gap-1 px-4 shrink-0 overflow-hidden">
             <span className="text-[9px] text-gray-500 font-bold mr-2">-20%</span>
             <div className="w-8 h-3 bg-[#b93c3c] rounded-sm" title="<= -20%"></div>
