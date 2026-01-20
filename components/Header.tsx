@@ -28,6 +28,7 @@ import { ViewMode, Language } from '../types';
 import { UserData } from '../services/auth';
 import { getTranslations, LANGUAGES_CONFIG } from '../locales';
 import { fetchTopCoins } from '../pages/Workspace/services/api';
+import { useBinanceWS } from '../services/BinanceWebSocketContext';
 
 const TICKER_COINS = [
   'BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'DOGE', 'ADA', 'AVAX', 'SHIB', 'DOT', 
@@ -69,6 +70,8 @@ const TickerItem: React.FC<{ symbol: string; data: TickerData; meta: CoinMeta; o
 
   if (!p || p === '---' || p === '$0.00' || p === '0') return null;
   const isPositive = c >= 0;
+  
+  // UNIFIED CDN: CoinCap
   const iconUrl = `https://assets.coincap.io/assets/icons/${symbol.toLowerCase()}@2x.png`;
   
   return (
@@ -97,7 +100,9 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
   const t = getTranslations(language).header;
   const common = getTranslations(language).common;
 
-  const [tickers, setTickers] = useState<Record<string, TickerData>>({});
+  // Use Global WebSocket Context
+  const { tickers: globalTickers } = useBinanceWS();
+
   const [coinMeta, setCoinMeta] = useState<Record<string, CoinMeta>>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -147,34 +152,6 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
     });
   }, []);
 
-  useEffect(() => {
-    const ws = new WebSocket('wss://stream.binance.com:9443/ws/!miniTicker@arr');
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (Array.isArray(data)) {
-          const updates: Record<string, TickerData> = {};
-          data.forEach((t: any) => {
-            if (t.s.endsWith('USDT')) {
-              const symbol = t.s.replace('USDT', '');
-              if (TICKER_COINS.includes(symbol)) {
-                const close = parseFloat(t.c), open = parseFloat(t.o);
-                updates[symbol] = { 
-                    p: close < 1 ? close.toFixed(4) : close.toLocaleString('en-US', { style: 'currency', currency: 'USD' }), 
-                    rawPrice: close, 
-                    c: open > 0 ? ((close - open) / open) * 100 : 0, 
-                    v: '$' + (parseFloat(t.q) / 1e6).toFixed(1) + 'M' 
-                };
-              }
-            }
-          });
-          setTickers(prev => ({ ...prev, ...updates }));
-        }
-      } catch (e) {}
-    };
-    return () => ws.close();
-  }, []);
-
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && searchTerm.trim()) { onSearch(searchTerm.trim()); setIsMenuOpen(false); }
   };
@@ -210,16 +187,38 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
 
   const TickerList = () => (
     <div className="flex items-center">
-      {TICKER_COINS.map(s => (
-        <TickerItem 
-          key={s} 
-          symbol={s} 
-          data={tickers[s] || { p: '---', c: 0, v: '-', rawPrice: 0 }} 
-          meta={coinMeta[s] || { name: s, mcap: 0, rank: 0 }} 
-          onHover={handleTickerHover} 
-          onLeave={hideTooltip} 
-        />
-      ))}
+      {TICKER_COINS.map(s => {
+        const binanceSymbol = `${s}USDT`;
+        const liveData = globalTickers[binanceSymbol];
+        
+        // Compute derived view data
+        let displayData: TickerData = { p: '---', c: 0, v: '-', rawPrice: 0 };
+        
+        if (liveData) {
+            const close = parseFloat(liveData.c);
+            const open = parseFloat(liveData.o);
+            const changePct = open > 0 ? ((close - open) / open) * 100 : 0;
+            const vol = parseFloat(liveData.q); // Quote volume is USD volume approx
+
+            displayData = {
+                p: close < 1 ? close.toFixed(4) : close.toLocaleString('en-US', { style: 'currency', currency: 'USD' }),
+                rawPrice: close,
+                c: changePct,
+                v: '$' + (vol / 1e6).toFixed(1) + 'M'
+            };
+        }
+
+        return (
+            <TickerItem 
+              key={s} 
+              symbol={s} 
+              data={displayData} 
+              meta={coinMeta[s] || { name: s, mcap: 0, rank: 0 }} 
+              onHover={handleTickerHover} 
+              onLeave={hideTooltip} 
+            />
+        );
+      })}
     </div>
   );
 
@@ -237,7 +236,7 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
             <div className="w-68 bg-white dark:bg-[#1e2022] backdrop-blur-xl border border-gray-100 dark:border-white/5 shadow-[0_20px_50px_rgba(0,0,0,0.3)] rounded-2xl p-5 overflow-hidden">
                 <div className="flex items-center gap-4 mb-4 border-b border-gray-100 dark:border-white/5 pb-4">
                     <div className="relative">
-                        <img src={`https://assets.coincap.io/assets/icons/${tooltip.symbol.toLowerCase()}@2x.png`} className="w-12 h-12 rounded-full bg-white p-1 shadow-md" alt="" />
+                        <img src={`https://assets.coincap.io/assets/icons/${tooltip.symbol.toLowerCase()}@2x.png`} className="w-12 h-12 rounded-full bg-white p-1 shadow-md" alt="" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                     </div>
                     <div className="flex flex-col">
                         <div className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-tighter leading-none">{tooltip.meta?.name || tooltip.symbol}</div>

@@ -622,9 +622,11 @@ catIds: uniqueCatIds,
 .filter(r => Number(r.coinsCount || 0) > 0);
 
 const dir = catSortConfig.direction === 'asc' ? 1 : -1;
+const sortKey = catSortConfig.key as string;
+
 rows.sort((a: any, b: any) => {
-const av = (a as any)[catSortConfig.key];
-const bv = (b as any)[catSortConfig.key];
+const av = (a as any)[sortKey];
+const bv = (b as any)[sortKey];
 
 if (typeof av === 'string' || typeof bv === 'string') {
 const r = String(av ?? '').localeCompare(String(bv ?? ''));
@@ -707,9 +709,11 @@ if (key === 'change_7d_est') return pct7dFromSpark(prices);
 return c[key];
 };
 
+const sortKey = sortConfig.key as string;
+
 items.sort((a: any, b: any) => {
-const aVal = getVal(a, sortConfig.key);
-const bVal = getVal(b, sortConfig.key);
+const aVal = getVal(a, sortKey);
+const bVal = getVal(b, sortKey);
 
 if (typeof aVal === 'string' || typeof bVal === 'string') {
 const as = String(aVal ?? '');
