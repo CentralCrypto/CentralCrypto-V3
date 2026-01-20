@@ -59,14 +59,14 @@ const CustomTreemapContent = (props: any) => {
   const isSmall = !isTiny && (width < 90 || height < 80); // Small -> Logo Only
   const isLarge = !isTiny && !isSmall;        // Large -> Full info
 
-  // Logic for Tooltip Trigger
-  // Small/Tiny squares: Tooltip triggers on entire box
-  // Large squares: Tooltip triggers ONLY on the content
-  const rectPointerEvents = isLarge ? 'none' : 'all';
-  const contentPointerEvents = isLarge ? 'all' : 'none'; 
-
   return (
     <g>
+      {/* 
+         CRITICAL FIX: 
+         Rect has pointerEvents="all" to capture hover everywhere within the box.
+         ForeignObject has pointerEvents="none" so it doesn't block the rect's events.
+         This ensures the tooltip works whether you hover the background, the logo, or the text.
+      */}
       <rect
         x={x}
         y={y}
@@ -78,7 +78,7 @@ const CustomTreemapContent = (props: any) => {
           fill: color,
           stroke: '#1a1c1e',
           strokeWidth: 2,
-          pointerEvents: rectPointerEvents, 
+          pointerEvents: 'all', 
           cursor: 'default'
         }}
       />
@@ -91,8 +91,7 @@ const CustomTreemapContent = (props: any) => {
             style={{ pointerEvents: 'none' }} 
         >
             <div 
-                className="w-full h-full flex flex-col items-center justify-center p-1 overflow-hidden text-center transition-opacity hover:opacity-90"
-                style={{ pointerEvents: contentPointerEvents, cursor: 'default' }}
+                className="w-full h-full flex flex-col items-center justify-center p-1 overflow-hidden text-center"
             >
                 {/* Logo Logic */}
                 {image && (
@@ -104,7 +103,7 @@ const CustomTreemapContent = (props: any) => {
                     />
                 )}
 
-                {/* Text Logic - Only for Large - FONTS INCREASED */}
+                {/* Text Logic - Only for Large */}
                 {isLarge && (
                     <>
                         <span className="font-black text-white drop-shadow-md text-lg leading-tight mt-0.5">
@@ -133,35 +132,30 @@ const CustomTooltip = ({ active, payload, coordinate, viewBox }: any) => {
 
     const isPositive = data.change >= 0;
 
-    // Detect edges to flip tooltip
-    // coordinate.x/y is the mouse position relative to the chart container
-    // viewBox.width/height is the chart container size
+    // Detect edges relative to the chart container
     const x = coordinate.x || 0;
     const y = coordinate.y || 0;
     const w = viewBox.width || 0;
     const h = viewBox.height || 0;
 
-    // Thresholds (pixels from edge)
-    const isRightEdge = x > w - 300; 
-    const isBottomEdge = y > h - 250; 
+    // Determine quadrants
+    // If we are in the right half (x > w/2), render tooltip to the left
+    // If we are in the bottom half (y > h/2), render tooltip to the top
+    const isRightHalf = x > w / 2;
+    const isBottomHalf = y > h / 2;
 
-    // Dynamic classes for positioning
-    // If Right Edge: translate-x-full (move left) + negative margin
-    // If Bottom Edge: translate-y-full (move up) + negative margin
-    let transformClass = "translate-x-4 translate-y-4"; // Default: Right-Down from cursor
+    // Construct transform logic
+    // Default: Translate X + 15px, Translate Y + 15px
+    // Flipped X: Translate X - 100% - 15px
+    // Flipped Y: Translate Y - 100% - 15px
     
-    if (isRightEdge && isBottomEdge) {
-        transformClass = "-translate-x-[102%] -translate-y-[102%]"; // Top-Left
-    } else if (isRightEdge) {
-        transformClass = "-translate-x-[102%] translate-y-4"; // Left-Down
-    } else if (isBottomEdge) {
-        transformClass = "translate-x-4 -translate-y-[102%]"; // Right-Up
-    }
+    const xClass = isRightHalf ? '-translate-x-[104%]' : 'translate-x-4';
+    const yClass = isBottomHalf ? '-translate-y-[104%]' : 'translate-y-4';
 
     return (
       <div 
-        className={`absolute z-[9999] pointer-events-none transition-transform duration-75 ${transformClass}`}
-        style={{ left: 0, top: 0 }} // Recharts wrapper handles x/y translate, we adjust relative to that
+        className={`absolute z-[9999] pointer-events-none transition-transform duration-75 ${xClass} ${yClass}`}
+        style={{ left: 0, top: 0 }} 
       >
           <div className="bg-[#121314]/95 backdrop-blur-xl border border-gray-700/50 p-0 rounded-2xl shadow-2xl min-w-[280px] overflow-hidden">
             {/* Header */}
