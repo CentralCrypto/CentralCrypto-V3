@@ -59,6 +59,10 @@ const CustomTreemapContent = (props: any) => {
   const isSmall = !isTiny && (width < 90 || height < 80); // Small -> Logo Only
   const isLarge = !isTiny && !isSmall;        // Large -> Full info
 
+  // Se for "Tiny", não renderiza conteúdo, então o próprio retângulo precisa disparar o tooltip.
+  // Caso contrário, apenas o conteúdo interno disparará.
+  const triggerOnRect = isTiny;
+
   return (
     <g>
       <rect
@@ -75,8 +79,9 @@ const CustomTreemapContent = (props: any) => {
           pointerEvents: 'all', 
           cursor: 'pointer'
         }}
-        onMouseEnter={() => onMouseEnter && onMouseEnter(props)}
-        onMouseLeave={onMouseLeave}
+        // Tooltip apenas no rect se for muito pequeno
+        onMouseEnter={triggerOnRect ? () => onMouseEnter && onMouseEnter(props) : undefined}
+        onMouseLeave={triggerOnRect ? onMouseLeave : undefined}
         onClick={onClick}
       />
       {!isTiny && (
@@ -85,35 +90,41 @@ const CustomTreemapContent = (props: any) => {
             y={y} 
             width={width} 
             height={height} 
-            style={{ pointerEvents: 'none' }} 
+            style={{ pointerEvents: 'none' }} // Permite clicar no rect atrás se o mouse estiver no vazio
         >
-            <div 
-                className="w-full h-full flex flex-col items-center justify-center p-1 overflow-hidden text-center"
-            >
-                {/* Logo Logic */}
-                {image && (
-                    <img 
-                        src={image} 
-                        alt={name} 
-                        className={`rounded-full shadow-sm drop-shadow-md mb-0.5 object-cover ${isSmall ? 'w-full h-full max-w-[28px] max-h-[28px] object-contain' : 'w-9 h-9 mb-1'}`}
-                        onError={(e) => (e.currentTarget.style.display = 'none')}
-                    />
-                )}
+            <div className="w-full h-full flex items-center justify-center overflow-hidden">
+                {/* Container de CONTEÚDO REAL - Tooltip dispara AQUI */}
+                <div 
+                    className="flex flex-col items-center justify-center p-1.5 rounded-lg transition-colors hover:bg-black/10 pointer-events-auto cursor-help"
+                    onMouseEnter={() => onMouseEnter && onMouseEnter(props)}
+                    onMouseLeave={onMouseLeave}
+                    onClick={onClick}
+                >
+                    {/* Logo Logic */}
+                    {image && (
+                        <img 
+                            src={image} 
+                            alt={name} 
+                            className={`rounded-full shadow-sm drop-shadow-md mb-0.5 object-cover ${isSmall ? 'w-full h-full max-w-[28px] max-h-[28px] object-contain' : 'w-9 h-9 mb-1'}`}
+                            onError={(e) => (e.currentTarget.style.display = 'none')}
+                        />
+                    )}
 
-                {/* Text Logic - Only for Large */}
-                {isLarge && (
-                    <>
-                        <span className="font-black text-white drop-shadow-md text-lg leading-tight mt-0.5">
-                            {symbol}
-                        </span>
-                        <span className="text-sm font-bold text-white/95 drop-shadow-sm mt-0.5">
-                            {formatPrice(price)}
-                        </span>
-                        <span className={`text-xs font-black drop-shadow-sm mt-0.5 ${(change || 0) >= 0 ? 'text-green-50' : 'text-red-50'}`}>
-                            {(change || 0) > 0 ? '+' : ''}{(change || 0).toFixed(2)}%
-                        </span>
-                    </>
-                )}
+                    {/* Text Logic - Only for Large */}
+                    {isLarge && (
+                        <>
+                            <span className="font-black text-white drop-shadow-md text-lg leading-tight mt-0.5 text-center">
+                                {symbol}
+                            </span>
+                            <span className="text-sm font-bold text-white/95 drop-shadow-sm mt-0.5 text-center">
+                                {formatPrice(price)}
+                            </span>
+                            <span className={`text-xs font-black drop-shadow-sm mt-0.5 text-center ${(change || 0) >= 0 ? 'text-green-50' : 'text-red-50'}`}>
+                                {(change || 0) > 0 ? '+' : ''}{(change || 0).toFixed(2)}%
+                            </span>
+                        </>
+                    )}
+                </div>
             </div>
         </foreignObject>
       )}

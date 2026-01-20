@@ -218,6 +218,9 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [legendTipOpen, setLegendTipOpen] = useState(false);
 
+  // Timer para fechar settings
+  const settingsCloseTimerRef = useRef<number | null>(null);
+
   const [isGameMode, setIsGameMode] = useState(false);
   // Default to Free Mode if it's a widget, otherwise start in Map Mode
   const [isFreeMode, setIsFreeMode] = useState(isWidget); 
@@ -344,6 +347,20 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [settingsOpen]);
+
+  // ===== Auto Close Settings on Mouse Leave Logic =====
+  const handleSettingsEnter = () => {
+    if (settingsCloseTimerRef.current) {
+        clearTimeout(settingsCloseTimerRef.current);
+        settingsCloseTimerRef.current = null;
+    }
+  };
+
+  const handleSettingsLeave = () => {
+    settingsCloseTimerRef.current = window.setTimeout(() => {
+        setSettingsOpen(false);
+    }, 3000);
+  };
 
   // ===== audio =====
   useEffect(() => {
@@ -2066,6 +2083,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
             <button
                 ref={settingsBtnRef}
                 onClick={() => setSettingsOpen(v => !v)}
+                onMouseEnter={handleSettingsEnter}
                 className={`p-3 rounded-lg border transition-colors backdrop-blur-sm ${settingsOpen ? 'bg-[#dd9933] text-black border-[#dd9933]' : 'bg-gray-100 dark:bg-black/50 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10'}`}
                 title="Settings"
             >
@@ -2089,6 +2107,8 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         <div
           ref={settingsPanelRef}
           className="absolute top-24 right-4 bg-white/90 dark:bg-black/80 p-4 rounded-lg border border-gray-200 dark:border-white/10 backdrop-blur-md w-80 z-30 shadow-xl"
+          onMouseEnter={handleSettingsEnter}
+          onMouseLeave={handleSettingsLeave}
           onWheel={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
         >
