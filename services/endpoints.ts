@@ -17,7 +17,8 @@ export const ENDPOINTS = {
       main: "/cachecko.json",
       fng: "/fearandgreed_data.json",
       rsiAvg: "/rsiavg.json", 
-      rsiTracker: "/rsitrackerhist.json",
+      rsiTrackerHist: "/rsitrackerhist.json", // Scatter Plot Data
+      rsiTable: "/rsitracker.json",           // Table Data
       macdAvg: "/macdavg.json",
       macdTracker: "/macdtracker.json",
       trump: "/trumpometer.json",

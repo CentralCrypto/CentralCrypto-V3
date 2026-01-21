@@ -148,6 +148,7 @@ export interface MacdTrackerPoint {
 
 export interface RsiAvgData { averageRsi: number; yesterday: number; days7Ago: number; days30Ago: number; }
 
+// Scatter Data
 export interface RsiTrackerPoint {
   symbol: string;
   name: string;
@@ -158,6 +159,22 @@ export interface RsiTrackerPoint {
   rsi: Record<string, number>;
   currentRsi?: number;
   lastRsi?: number;
+}
+
+// Table Data (List)
+export interface RsiTableItem {
+  symbol: string;
+  name?: string;
+  price: number;
+  rsi: {
+      "15m": number;
+      "1h": number;
+      "4h": number;
+      "24h": number; // or "1d"
+      "7d": number;  // or "1w"
+  };
+  change?: number;
+  logo?: string;
 }
 
 export interface EconEvent {
@@ -231,9 +248,17 @@ export const fetchRsiAverage = async (): Promise<RsiAvgData | null> => {
   return data || null;
 };
 
-export const fetchRsiTracker = async (): Promise<RsiTrackerPoint[]> => {
-  const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTracker));
+// Use explicit file for Scatter
+export const fetchRsiTrackerHist = async (): Promise<RsiTrackerPoint[]> => {
+  const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTrackerHist));
   return Array.isArray(data) ? data : [];
+};
+
+// Use explicit file for Table
+export const fetchRsiTable = async (): Promise<RsiTableItem[]> => {
+  const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTable));
+  const items = Array.isArray(data) ? data : (data?.data || []);
+  return Array.isArray(items) ? items : [];
 };
 
 export const fetchMacdAverage = async (): Promise<MacdAvgData | null> => {

@@ -1,4 +1,3 @@
-
 import { ApiCoin } from '../../../types';
 import { httpGetJson } from '../../../services/http';
 import { getCacheckoUrl, ENDPOINTS } from '../../../services/endpoints';
@@ -163,6 +162,21 @@ export interface RsiTrackerPoint {
   lastRsi?: number;
 }
 
+export interface RsiTableItem {
+  symbol: string;
+  name?: string;
+  price: number;
+  rsi: {
+      "15m": number;
+      "1h": number;
+      "4h": number;
+      "24h": number; // or "1d"
+      "7d": number;  // or "1w"
+  };
+  change?: number;
+  logo?: string;
+}
+
 export interface EconEvent {
   date: string;
   title: string;
@@ -234,9 +248,15 @@ export const fetchRsiAverage = async (): Promise<RsiAvgData | null> => {
   return data || null;
 };
 
-export const fetchRsiTracker = async (): Promise<RsiTrackerPoint[]> => {
-  const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTracker));
+export const fetchRsiTrackerHist = async (): Promise<RsiTrackerPoint[]> => {
+  const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTrackerHist));
   return Array.isArray(data) ? data : [];
+};
+
+export const fetchRsiTable = async (): Promise<RsiTableItem[]> => {
+  const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTable));
+  const items = Array.isArray(data) ? data : (data?.data || []);
+  return Array.isArray(items) ? items : [];
 };
 
 export const fetchMacdAverage = async (): Promise<MacdAvgData | null> => {

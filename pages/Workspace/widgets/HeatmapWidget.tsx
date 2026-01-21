@@ -47,20 +47,25 @@ const formatPrice = (price: number | undefined | null) => {
 };
 
 const CustomTreemapContent = (props: any) => {
-  const { x, y, width, height, name, change, image, symbol, price, onMouseEnter, onMouseLeave, onClick } = props;
+  const { x, y, width, height, name, change, image, symbol, price, onMouseEnter, onMouseLeave, onClick, zoomLevel = 1 } = props;
   
   // Guard clause
-  if (!width || !height || width < 5 || height < 5 || !symbol) return null;
+  if (!width || !height || width < 0 || height < 0 || !symbol) return null;
 
   const color = getColorForChange(change || 0);
   
-  // Logic for display density based on size
-  const isTiny = width < 35 || height < 35;   // Too small -> Empty
-  const isSmall = !isTiny && (width < 90 || height < 80); // Small -> Logo Only
-  const isLarge = !isTiny && !isSmall;        // Large -> Full info
+  // LÓGICA DE ZOOM SEMÂNTICO:
+  // Calculamos o tamanho VISUAL (multiplicado pelo zoom).
+  // Se eu dou zoom 4x, um quadrado de 10px vira 40px visualmente, então deve mostrar o logo.
+  const visualW = width * zoomLevel;
+  const visualH = height * zoomLevel;
 
-  // Se for "Tiny", não renderiza conteúdo, então o próprio retângulo precisa disparar o tooltip.
-  // Caso contrário, apenas o conteúdo interno disparará.
+  const isTiny = visualW < 30 || visualH < 30;   // Muito pequeno -> Vazio (só cor)
+  const isSmall = !isTiny && (visualW < 80 || visualH < 70); // Pequeno -> Só Logo
+  const isLarge = !isTiny && !isSmall;        // Grande -> Info Completa
+
+  // Se for "Tiny", não renderiza conteúdo complexo para performance
+  // O rect captura os eventos
   const triggerOnRect = isTiny;
 
   return (
@@ -70,16 +75,15 @@ const CustomTreemapContent = (props: any) => {
         y={y}
         width={width}
         height={height}
-        rx={6} 
-        ry={6}
+        rx={4} 
+        ry={4}
         style={{
           fill: color,
           stroke: '#1a1c1e',
-          strokeWidth: 2,
+          strokeWidth: 2 / zoomLevel, // Mantém a borda fina mesmo com zoom
           pointerEvents: 'all', 
           cursor: 'pointer'
         }}
-        // Tooltip apenas no rect se for muito pequeno
         onMouseEnter={triggerOnRect ? () => onMouseEnter && onMouseEnter(props) : undefined}
         onMouseLeave={triggerOnRect ? onMouseLeave : undefined}
         onClick={onClick}
@@ -90,39 +94,51 @@ const CustomTreemapContent = (props: any) => {
             y={y} 
             width={width} 
             height={height} 
-            style={{ pointerEvents: 'none' }} // Permite clicar no rect atrás se o mouse estiver no vazio
+            style={{ pointerEvents: 'none' }}
         >
             <div className="w-full h-full flex items-center justify-center overflow-hidden">
-                {/* Container de CONTEÚDO REAL - Tooltip dispara AQUI */}
                 <div 
-                    className="flex flex-col items-center justify-center p-1.5 rounded-lg transition-colors hover:bg-black/10 pointer-events-auto cursor-help"
+                    className="flex flex-col items-center justify-center p-0.5 pointer-events-auto cursor-help w-full h-full"
                     onMouseEnter={() => onMouseEnter && onMouseEnter(props)}
                     onMouseLeave={onMouseLeave}
                     onClick={onClick}
                 >
-                    {/* Logo Logic */}
+                    {/* Logo Logic - escala inversa ao zoom para manter nitidez se necessário, mas aqui deixamos o browser cuidar do scaling */}
                     {image && (
                         <img 
                             src={image} 
                             alt={name} 
-                            className={`rounded-full shadow-sm drop-shadow-md mb-0.5 object-cover ${isSmall ? 'w-full h-full max-w-[28px] max-h-[28px] object-contain' : 'w-9 h-9 mb-1'}`}
+                            className={`rounded-full shadow-sm drop-shadow-md object-cover ${isSmall ? 'w-full h-full max-w-[80%] max-h-[80%] object-contain opacity-90' : 'w-[30%] max-w-[40px] aspect-square mb-[2%]'}`}
+                            style={{ 
+                                // Otimização para não borrar tanto no zoom
+                                imageRendering: '-webkit-optimize-contrast' 
+                            }}
                             onError={(e) => (e.currentTarget.style.display = 'none')}
                         />
                     )}
 
-                    {/* Text Logic - Only for Large */}
+                    {/* Text Logic - Only for Large (Visible) Blocks */}
                     {isLarge && (
-                        <>
-                            <span className="font-black text-white drop-shadow-md text-lg leading-tight mt-0.5 text-center">
+                        <div className="flex flex-col items-center justify-center text-center w-full">
+                            <span 
+                                className="font-black text-white drop-shadow-md leading-tight"
+                                style={{ fontSize: `${Math.min(width/4, height/6, 14)}px` }}
+                            >
                                 {symbol}
                             </span>
-                            <span className="text-sm font-bold text-white/95 drop-shadow-sm mt-0.5 text-center">
+                            <span 
+                                className="font-bold text-white/95 drop-shadow-sm mt-[2%]"
+                                style={{ fontSize: `${Math.min(width/5, height/7, 11)}px` }}
+                            >
                                 {formatPrice(price)}
                             </span>
-                            <span className={`text-xs font-black drop-shadow-sm mt-0.5 text-center ${(change || 0) >= 0 ? 'text-green-50' : 'text-red-50'}`}>
+                            <span 
+                                className={`font-black drop-shadow-sm mt-[2%] ${(change || 0) >= 0 ? 'text-green-50' : 'text-red-50'}`}
+                                style={{ fontSize: `${Math.min(width/6, height/8, 10)}px` }}
+                            >
                                 {(change || 0) > 0 ? '+' : ''}{(change || 0).toFixed(2)}%
                             </span>
-                        </>
+                        </div>
                     )}
                 </div>
             </div>
@@ -147,8 +163,6 @@ const CustomTooltip = ({ active, payload, coordinate, viewBox }: any) => {
     // const h = viewBox?.height || 0;
 
     // Compact Logic for positioning:
-    // Check if we have enough space ABOVE the cursor to render the tooltip (approx 200px height)
-    // If y < 220, force render BELOW to avoid clipping at top.
     const isRightHalf = x > w / 2;
     const isBottomHalf = y > 220; 
 
@@ -252,7 +266,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
       const sensitivity = 0.001;
       const delta = -e.deltaY * sensitivity;
       const oldK = transform.k;
-      const newK = Math.min(Math.max(1, oldK + delta), 8); // 1x to 8x
+      const newK = Math.min(Math.max(1, oldK + delta), 20); // Zoom máximo aumentado para 20x
 
       if (newK === oldK) return;
 
@@ -346,8 +360,8 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
   const treeData = useMemo(() => {
     if (!data.length) return [];
 
-    // Increase limit to 250 for deeper market view without killing the DOM
-    const limit = 250;
+    // 🔥 LIMITE AUMENTADO PARA 1000 MOEDAS
+    const limit = 1000;
     const sorted = [...data].sort((a, b) => b.mcap - a.mcap).slice(0, limit);
 
     const leaves = sorted.map((coin, index) => {
@@ -400,7 +414,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
             <div className="flex items-center gap-2">
                 <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-gray-800/50 rounded text-[10px] font-bold text-gray-400">
                     <Layers size={12} />
-                    {data.length > 0 ? `250 de ${data.length} moedas` : '0 moedas'}
+                    {data.length > 0 ? `Top 1000 de ${data.length} moedas` : '0 moedas'}
                 </div>
                 <button 
                     onClick={() => setRefreshKey(k => k + 1)} 
@@ -451,11 +465,11 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
                             dataKey="size"
                             stroke="#0f1011" 
                             fill="#1a1c1e"
-                            content={<CustomTreemapContent />}
+                            // 🔥 Passamos o zoomLevel para o conteúdo poder reagir
+                            content={<CustomTreemapContent zoomLevel={transform.k} />}
                             animationDuration={600}
                             aspectRatio={1.6} 
                         >
-                            {/* Tooltip with robust positioning */}
                             <Tooltip 
                                 content={<CustomTooltip />} 
                                 cursor={true} 
