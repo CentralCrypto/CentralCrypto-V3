@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { ResponsiveContainer, Treemap } from 'recharts';
 import { createPortal } from 'react-dom';
@@ -20,7 +21,7 @@ const getColorForChange = (change: number) => {
     if (change <= -20) return '#b93c3c';
     if (change <= -7)  return '#e0524e';
     if (change < 0)    return '#ff6961';
-    return '#2d3748';
+    return '#2d3748'; // Neutro
 };
 
 const formatCompact = (num: number) => {
@@ -128,39 +129,44 @@ const ManualTooltip = ({ data, x, y }: { data: any, x: number, y: number }) => {
     );
 };
 
-// Conteúdo Otimizado - Tooltip SOMENTE no conteúdo interno
 const CustomTreemapContent = (props: any) => {
   const { 
       x, y, width, height, 
       change, image, symbol, price, 
       onClick, zoomLevel = 1,
-      // Custom handler passed from parent
       onContentHover, 
-      onContentLeave 
+      onContentLeave,
+      metric 
   } = props;
   
   if (!width || !height || width < 0 || height < 0 || !symbol) return null;
 
+  // Cor baseada na variação (padrão Coin360)
   const color = getColorForChange(change || 0);
   
-  // Zoom visual calculation
   const visualW = width * zoomLevel;
   const visualH = height * zoomLevel;
 
   const isTiny = visualW < 45 || visualH < 45;
   const isLarge = !isTiny && (visualW > 110 && visualH > 90);
 
-  // Font scaling adjusted: Reduced max visual size to prevent "giant text"
-  // Previous: 24 / zoomLevel -> Now: 14 / zoomLevel (Visual clamp)
+  // Font scaling logic
   const baseFontSize = Math.min(width / 3.8, height / 3.8, 20); 
   const maxFontSizeSVG = 14 / zoomLevel; 
   const finalFontSize = Math.min(baseFontSize, maxFontSizeSVG);
   
   const maxLogoSizeSVG = 40 / zoomLevel; 
 
+  const [imgError, setImgError] = useState(false);
+
+  // Determine o que mostrar como valor secundário
+  const secondaryValue = metric === 'mcap' 
+      ? formatPrice(price)
+      : `${(change || 0) > 0 ? '+' : ''}${(change || 0).toFixed(2)}%`;
+
   return (
     <g>
-      {/* BACKGROUND (Passive) - No Tooltip triggers here */}
+      {/* Background (Tile) */}
       <rect
         x={x}
         y={y}
@@ -176,7 +182,7 @@ const CustomTreemapContent = (props: any) => {
         }}
       />
       
-      {/* HIT AREA (Background Interactivity only, CLOSE TOOLTIP) */}
+      {/* Hit Area (Close Tooltip on hover blank space) */}
       <rect
         x={x}
         y={y}
@@ -184,7 +190,7 @@ const CustomTreemapContent = (props: any) => {
         height={height}
         style={{ fill: 'transparent', cursor: 'grab' }}
         onClick={onClick}
-        onMouseEnter={onContentLeave} // Important: Moving to empty space closes tooltip
+        onMouseEnter={onContentLeave} 
       />
 
       {!isTiny && (
@@ -196,12 +202,6 @@ const CustomTreemapContent = (props: any) => {
             style={{ pointerEvents: 'none', overflow: 'visible' }}
         >
             <div className="w-full h-full flex items-center justify-center p-0.5">
-                {/* 
-                    CONTENT CONTAINER (Active Tooltip Trigger) 
-                    - pointer-events: auto 
-                    - onMouseEnter triggers parent state
-                    - w-fit / h-fit to ensure tight wrapping
-                */}
                 <div 
                     className="flex flex-col items-center justify-center bg-black/10 hover:bg-black/30 rounded-lg transition-colors p-1 overflow-hidden cursor-default pointer-events-auto"
                     style={{ 
@@ -211,13 +211,12 @@ const CustomTreemapContent = (props: any) => {
                     }}
                     onMouseEnter={(e) => {
                         e.stopPropagation();
-                        // Call parent handler to show tooltip at mouse pos
                         onContentHover(props, e.clientX, e.clientY);
                     }}
                     onMouseLeave={onContentLeave}
                     onClick={onClick}
                 >
-                    {image && (
+                    {image && !imgError && (
                         <div style={{ 
                             width: 'auto', 
                             height: 'auto', 
@@ -236,7 +235,7 @@ const CustomTreemapContent = (props: any) => {
                                     height: '100%',
                                     imageRendering: '-webkit-optimize-contrast' 
                                 }}
-                                onError={(e) => (e.currentTarget.style.display = 'none')}
+                                onError={() => setImgError(true)}
                             />
                         </div>
                     )}
@@ -251,15 +250,9 @@ const CustomTreemapContent = (props: any) => {
                             </span>
                             <span 
                                 className="font-bold text-white/90 drop-shadow-sm truncate max-w-[95%] mt-[2%]"
-                                style={{ fontSize: `${finalFontSize * 0.75}px`, lineHeight: 1.1 }}
+                                style={{ fontSize: `${finalFontSize * 0.8}px`, lineHeight: 1.1 }}
                             >
-                                {formatPrice(price)}
-                            </span>
-                            <span 
-                                className={`font-black drop-shadow-sm mt-[2%] truncate max-w-[95%] ${(change || 0) >= 0 ? 'text-green-50' : 'text-red-50'}`}
-                                style={{ fontSize: `${finalFontSize * 0.65}px`, lineHeight: 1.1 }}
-                            >
-                                {(change || 0) > 0 ? '+' : ''}{(change || 0).toFixed(2)}%
+                                {secondaryValue}
                             </span>
                         </div>
                     )}
@@ -279,72 +272,127 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
   const [isFullscreen, setIsFullscreen] = useState(item?.isMaximized || false);
   const [refreshKey, setRefreshKey] = useState(0);
 
+  // Transform State (React state for render sync)
   const [transform, setTransform] = useState({ k: 1, x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
-  const dragStart = useRef<{ x: number, y: number, ix: number, iy: number } | null>(null);
+  
+  // Refs for High Performance Dragging (Avoid React Render Loop)
   const containerRef = useRef<HTMLDivElement>(null);
+  const dragStart = useRef<{ x: number, y: number, ix: number, iy: number } | null>(null);
+  const transformRef = useRef({ k: 1, x: 0, y: 0 });
 
-  // Manual Tooltip State
+  // Tooltip State
   const [tooltipState, setTooltipState] = useState<{ visible: boolean, data: any, x: number, y: number }>({ 
       visible: false, data: null, x: 0, y: 0 
   });
 
   const handleContentHover = useCallback((data: any, clientX: number, clientY: number) => {
+      if (isDragging) return; // Don't show tooltip while dragging
       setTooltipState({
           visible: true,
           data: data,
           x: clientX,
           y: clientY
       });
-  }, []);
+  }, [isDragging]);
 
   const handleContentLeave = useCallback(() => {
       setTooltipState(prev => ({ ...prev, visible: false }));
   }, []);
 
+  // Sync transformRef when state changes (e.g. zoom buttons)
   useEffect(() => {
-      setTransform({ k: 1, x: 0, y: 0 });
-  }, [metric, data, isFullscreen]);
+      transformRef.current = transform;
+      if (containerRef.current) {
+          containerRef.current.style.transform = `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.k})`;
+      }
+  }, [transform]);
+
+  const applyDirectTransform = (k: number, x: number, y: number) => {
+      if (containerRef.current) {
+          containerRef.current.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${k})`;
+      }
+      transformRef.current = { k, x, y };
+  };
 
   const handleWheel = (e: React.WheelEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      setTooltipState(prev => ({ ...prev, visible: false })); // Hide tooltip on zoom
+      setTooltipState(prev => ({ ...prev, visible: false }));
 
       const sensitivity = 0.001;
       const delta = -e.deltaY * sensitivity;
-      const oldK = transform.k;
+      const oldK = transformRef.current.k;
       const newK = Math.min(Math.max(1, oldK + delta), 20); 
-      if (newK === oldK) return;
-      if (!containerRef.current) return;
+      
+      if (newK === oldK || !containerRef.current) return;
+      
       const rect = containerRef.current.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-      const worldX = (mx - transform.x) / oldK;
-      const worldY = (my - transform.y) / oldK;
+      const parentRect = containerRef.current.parentElement?.getBoundingClientRect() || rect;
+      
+      const mx = e.clientX - parentRect.left;
+      const my = e.clientY - parentRect.top;
+      
+      const worldX = (mx - transformRef.current.x) / oldK;
+      const worldY = (my - transformRef.current.y) / oldK;
+      
       const newX = mx - worldX * newK;
       const newY = my - worldY * newK;
+      
+      // Update DOM directly for smoothness
+      applyDirectTransform(newK, newX, newY);
+      
+      // Debounce state update to prevent lag
+      // (Optional: can just update state on mouse up/end of zoom if needed)
       setTransform({ k: newK, x: newX, y: newY });
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
-      if (transform.k <= 1) return;
+      if (transformRef.current.k <= 1) return;
       e.preventDefault(); 
       setIsDragging(true);
-      setTooltipState(prev => ({ ...prev, visible: false })); // Hide tooltip on drag
-      dragStart.current = { x: e.clientX, y: e.clientY, ix: transform.x, iy: transform.y };
+      setTooltipState(prev => ({ ...prev, visible: false }));
+      
+      dragStart.current = { 
+          x: e.clientX, 
+          y: e.clientY, 
+          ix: transformRef.current.x, 
+          iy: transformRef.current.y 
+      };
+      
+      if (containerRef.current) {
+          containerRef.current.style.cursor = 'grabbing';
+          containerRef.current.style.transition = 'none'; // Disable transition for drag
+      }
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
+      // Fix: Strict null check to prevent crash "reading 'ix'"
       if (!isDragging || !dragStart.current) return;
+      
       const dx = e.clientX - dragStart.current.x;
       const dy = e.clientY - dragStart.current.y;
-      setTransform(prev => ({ ...prev, x: dragStart.current!.ix + dx, y: dragStart.current!.iy + dy }));
+      
+      const newX = dragStart.current.ix + dx;
+      const newY = dragStart.current.iy + dy;
+      
+      // Direct DOM manipulation for zero-lag dragging
+      applyDirectTransform(transformRef.current.k, newX, newY);
   };
 
   const handleMouseUp = () => {
+      if (!isDragging) return;
+      
       setIsDragging(false);
       dragStart.current = null;
+      
+      if (containerRef.current) {
+          containerRef.current.style.cursor = 'grab';
+          containerRef.current.style.transition = 'transform 0.1s ease-out';
+      }
+      
+      // Sync React state at the end of drag
+      setTransform({ ...transformRef.current });
   };
 
   useEffect(() => {
@@ -412,27 +460,27 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
     const limit = 1000;
     const sorted = [...data].sort((a, b) => b.mcap - a.mcap).slice(0, limit);
 
+    // FIX: Always use Market Cap for Size to prevent "columns" layout
+    // Even in "Change" mode, standard heatmaps use Mcap for size and Change for color.
     const leaves = sorted.map((coin, index) => {
-        let sizeValue = 0;
-        if (metric === 'mcap') {
-            sizeValue = coin.mcap;
-        } else {
-            sizeValue = Math.pow(Math.abs(coin.change) + 1, 2) * (Math.log10(coin.mcap || 1000));
-        }
-
         return {
             ...coin,
-            size: sizeValue,
+            size: coin.mcap, // Always Mcap for Size
             rank: index + 1
         };
     });
 
     return [{ name: 'Market', children: leaves }];
-  }, [data, metric]);
+  }, [data]); // Removed metric dep since size is constant
 
   const toggleFullscreen = () => {
       if (item?.isMaximized && onClose) onClose();
       else setIsFullscreen(!isFullscreen);
+  };
+
+  const resetZoom = () => {
+      setTransform({ k: 1, x: 0, y: 0 });
+      applyDirectTransform(1, 0, 0);
   };
 
   const renderContent = () => (
@@ -465,7 +513,6 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
         </div>
 
         <div className="flex-1 w-full min-h-0 relative bg-[#0f1011] overflow-hidden" 
-             ref={containerRef}
              onWheel={handleWheel}
              onMouseDown={handleMouseDown}
              onMouseMove={handleMouseMove}
@@ -477,15 +524,17 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
             ) : error ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-red-500 gap-2"><AlertTriangle size={24} /><span className="text-xs font-bold">{error}</span><button onClick={() => setRefreshKey(k => k + 1)} className="px-3 py-1 bg-red-900/20 rounded text-xs hover:bg-red-900/30 transition-colors">Tentar Novamente</button></div>
             ) : (
-                <div style={{ 
-                    width: '100%', 
-                    height: '100%', 
-                    transform: `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.k})`, 
-                    transformOrigin: '0 0',
-                    cursor: transform.k > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
-                    willChange: isDragging ? 'transform' : 'auto',
-                    transition: isDragging ? 'none' : 'transform 0.1s ease-out'
-                }}>
+                <div 
+                    ref={containerRef}
+                    style={{ 
+                        width: '100%', 
+                        height: '100%', 
+                        transformOrigin: '0 0',
+                        cursor: transform.k > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
+                        willChange: 'transform',
+                        // Initial transform set via effect
+                    }}
+                >
                     <ResponsiveContainer width="100%" height="100%">
                         <Treemap
                             data={treeData}
@@ -497,6 +546,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
                                     zoomLevel={transform.k}
                                     onContentHover={handleContentHover}
                                     onContentLeave={handleContentLeave}
+                                    metric={metric}
                                 />
                             }
                             animationDuration={600}
@@ -507,7 +557,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
                 </div>
             )}
             {transform.k > 1 && (
-                <button onClick={() => setTransform({ k: 1, x: 0, y: 0 })} className="absolute bottom-4 right-4 z-50 bg-[#dd9933] text-black px-3 py-1.5 rounded-lg shadow-xl font-bold text-xs flex items-center gap-2 hover:scale-105 transition-transform"><ZoomOut size={14} /> Reset Zoom</button>
+                <button onClick={resetZoom} className="absolute bottom-4 right-4 z-50 bg-[#dd9933] text-black px-3 py-1.5 rounded-lg shadow-xl font-bold text-xs flex items-center gap-2 hover:scale-105 transition-transform"><ZoomOut size={14} /> Reset Zoom</button>
             )}
         </div>
         
