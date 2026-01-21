@@ -44,7 +44,6 @@ const ManualTooltip = ({ data, x, y }: { data: any, x: number, y: number }) => {
     const tooltipRef = useRef<HTMLDivElement>(null);
     const [pos, setPos] = useState({ top: y, left: x });
 
-    // Adjust position to prevent overflow
     useEffect(() => {
         if (tooltipRef.current) {
             const rect = tooltipRef.current.getBoundingClientRect();
@@ -54,18 +53,9 @@ const ManualTooltip = ({ data, x, y }: { data: any, x: number, y: number }) => {
             let newTop = y + 10; 
             let newLeft = x + 10;
 
-            // Check Bottom Overflow
-            if (newTop + rect.height > winH - 20) {
-                newTop = y - rect.height - 10;
-            }
-            
-            // Check Top Overflow (Clamp if it goes off screen after flipping)
+            if (newTop + rect.height > winH - 20) newTop = y - rect.height - 10;
             newTop = Math.max(10, newTop);
-
-            // Check Right Overflow
-            if (newLeft + rect.width > winW - 20) {
-                newLeft = x - rect.width - 10;
-            }
+            if (newLeft + rect.width > winW - 20) newLeft = x - rect.width - 10;
 
             setPos({ top: newTop, left: newLeft });
         }
@@ -78,11 +68,7 @@ const ManualTooltip = ({ data, x, y }: { data: any, x: number, y: number }) => {
         <div 
             ref={tooltipRef}
             className="fixed z-[9999] pointer-events-none animate-in fade-in zoom-in-95 duration-100"
-            style={{ 
-                top: pos.top, 
-                left: pos.left,
-                maxWidth: '240px'
-            }} 
+            style={{ top: pos.top, left: pos.left, maxWidth: '240px' }} 
         >
             <div className="bg-[#121314]/95 backdrop-blur-xl border border-gray-700/50 rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.5)] overflow-hidden flex flex-col">
                 <div className="bg-white/5 p-2.5 flex items-center justify-between border-b border-white/5">
@@ -103,25 +89,9 @@ const ManualTooltip = ({ data, x, y }: { data: any, x: number, y: number }) => {
                         </div>
                     </div>
                 </div>
-
                 <div className="p-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[10px]">
-                    <div className="flex flex-col">
-                        <span className="text-gray-500 font-bold uppercase tracking-wide">Mkt Cap</span>
-                        <span className="font-mono font-medium text-gray-200 text-xs">{formatCompact(data.mcap)}</span>
-                    </div>
-                    <div className="flex flex-col text-right">
-                        <span className="text-gray-500 font-bold uppercase tracking-wide">Vol 24h</span>
-                        <span className="font-mono font-medium text-[#dd9933] text-xs">{formatCompact(data.vol)}</span>
-                    </div>
-                    <div className="col-span-2 border-t border-white/5 my-0.5"></div>
-                    <div className="flex justify-between items-center col-span-2">
-                        <span className="text-gray-500 font-bold uppercase">High 24h</span>
-                        <span className="font-mono font-medium text-green-400">{formatPrice(data.high24)}</span>
-                    </div>
-                    <div className="flex justify-between items-center col-span-2">
-                        <span className="text-gray-500 font-bold uppercase">Low 24h</span>
-                        <span className="font-mono font-medium text-red-400">{formatPrice(data.low24)}</span>
-                    </div>
+                    <div className="flex flex-col"><span className="text-gray-500 font-bold uppercase tracking-wide">Mkt Cap</span><span className="font-mono font-medium text-gray-200 text-xs">{formatCompact(data.mcap)}</span></div>
+                    <div className="flex flex-col text-right"><span className="text-gray-500 font-bold uppercase tracking-wide">Vol 24h</span><span className="font-mono font-medium text-[#dd9933] text-xs">{formatCompact(data.vol)}</span></div>
                 </div>
             </div>
         </div>,
@@ -136,35 +106,60 @@ const CustomTreemapContent = (props: any) => {
       onClick, zoomLevel = 1,
       onContentHover, 
       onContentLeave,
-      metric 
+      metric,
+      // Pass transformation context to cull invisible tiles
+      containerTransform = { k: 1, x: 0, y: 0 },
+      containerSize = { w: 1000, h: 800 }
   } = props;
   
   if (!width || !height || width < 0 || height < 0 || !symbol) return null;
 
-  // Cor baseada na variação
+  // VIEWPORT CULLING (PERFORMANCE OPTIMIZATION)
+  // Calculate world coordinates
+  const worldX = x * containerTransform.k + containerTransform.x;
+  const worldY = y * containerTransform.k + containerTransform.y;
+  const worldW = width * containerTransform.k;
+  const worldH = height * containerTransform.k;
+
+  // Check if tile is visible in viewport
+  // Give a small buffer (50px) to prevent pop-in at edges
+  const isVisible = (
+      worldX + worldW > -50 && 
+      worldX < containerSize.w + 50 &&
+      worldY + worldH > -50 && 
+      worldY < containerSize.h + 50
+  );
+
+  // Background color (always render bg, but simplier if culled)
   const color = getColorForChange(change || 0);
-  
+
+  if (!isVisible) {
+      // Just render a simple rect if offscreen (needed for structure, but cheap)
+      return <rect x={x} y={y} width={width} height={height} fill={color} stroke="#1a1c1e" strokeWidth={2/zoomLevel} />;
+  }
+
   const visualW = width * zoomLevel;
   const visualH = height * zoomLevel;
 
-  const isTiny = visualW < 45 || visualH < 45;
-  const isLarge = !isTiny && (visualW > 110 && visualH > 80);
+  const isTiny = visualW < 50 || visualH < 40;
+  const isSmall = !isTiny && (visualW < 100 || visualH < 70);
 
-  // Font Scaling (Reduced to prevent text overflow)
-  const baseFontSize = Math.min(width / 4, height / 4, 18); 
-  const maxFontSizeSVG = 14 / zoomLevel; 
-  const finalFontSize = Math.min(baseFontSize, maxFontSizeSVG);
-  
-  const maxLogoSizeSVG = 36 / zoomLevel; 
+  // Font Scaling Logic
+  // Scale base size by zoom, but cap it so giant tiles don't have giant text
+  const baseScale = Math.min(width, height) / 5; 
+  const zoomedFontSize = Math.min(16, baseScale) / zoomLevel; 
+  // Ensure font isn't too small to read when zoomed out
+  const finalSymbolSize = Math.max(zoomedFontSize, 12 / zoomLevel); 
+  const finalPriceSize = Math.max(zoomedFontSize * 0.85, 10 / zoomLevel);
 
-  // Determine o que mostrar como valor secundário
+  const maxLogoSizeSVG = Math.min(width * 0.5, height * 0.5); 
+
   const secondaryValue = metric === 'mcap' 
       ? formatPrice(price)
       : `${(change || 0) > 0 ? '+' : ''}${(change || 0).toFixed(2)}%`;
 
   return (
     <g>
-      {/* Background (Tile) */}
       <rect
         x={x}
         y={y}
@@ -172,93 +167,61 @@ const CustomTreemapContent = (props: any) => {
         height={height}
         rx={4 / zoomLevel} 
         ry={4 / zoomLevel}
-        style={{
-          fill: color,
-          stroke: '#1a1c1e',
-          strokeWidth: 2 / zoomLevel,
-          pointerEvents: 'none'
-        }}
+        style={{ fill: color, stroke: '#1a1c1e', strokeWidth: 2 / zoomLevel }}
       />
-      
-      {/* Hit Area (Close Tooltip on hover blank space) */}
-      <rect
-        x={x}
-        y={y}
-        width={width}
-        height={height}
-        style={{ fill: 'transparent', cursor: 'grab' }}
-        onClick={onClick}
-        onMouseEnter={onContentLeave} 
-      />
+      <rect x={x} y={y} width={width} height={height} style={{ fill: 'transparent', cursor: 'grab' }} onClick={onClick} onMouseEnter={onContentLeave} />
 
       {!isTiny && (
-        <foreignObject 
-            x={x} 
-            y={y} 
-            width={width} 
-            height={height} 
-            style={{ pointerEvents: 'none', overflow: 'visible' }}
-        >
-            <div className="w-full h-full flex items-center justify-center p-[1px]">
+        <foreignObject x={x} y={y} width={width} height={height} style={{ pointerEvents: 'none', overflow: 'visible' }}>
+            <div className="w-full h-full flex items-center justify-center p-[2px]">
+                {/* 
+                    TIGHT CONTAINER CARD 
+                    Auto width/height but constrained by tile size.
+                    Dark background for readability.
+                */}
                 <div 
-                    className="flex flex-col items-center justify-center bg-black/10 hover:bg-black/30 rounded-lg transition-colors p-0.5 overflow-hidden cursor-default pointer-events-auto border border-white/5"
+                    className="flex flex-col items-center justify-center bg-black/40 hover:bg-black/60 rounded-lg transition-colors overflow-hidden cursor-default pointer-events-auto shadow-sm backdrop-blur-[1px] border border-white/10"
                     style={{ 
-                        backdropFilter: 'blur(2px)',
-                        width: '92%',
-                        height: '92%',
-                        maxWidth: '92%',
-                        maxHeight: '92%'
+                        width: 'auto',
+                        height: 'auto',
+                        maxWidth: '96%',
+                        maxHeight: '96%',
+                        padding: `${4/zoomLevel}px`,
+                        gap: `${2/zoomLevel}px`
                     }}
-                    onMouseEnter={(e) => {
-                        e.stopPropagation();
-                        onContentHover(props, e.clientX, e.clientY);
-                    }}
+                    onMouseEnter={(e) => { e.stopPropagation(); onContentHover(props, e.clientX, e.clientY); }}
                     onMouseLeave={onContentLeave}
                     onClick={onClick}
                 >
-                    {image && (
-                        <div style={{ 
-                            width: 'auto', 
-                            height: 'auto', 
-                            maxWidth: `${maxLogoSizeSVG}px`, 
-                            maxHeight: `${maxLogoSizeSVG}px`,
-                            marginBottom: isLarge ? '2%' : '0',
-                            display: 'flex', 
-                            justifyContent: 'center',
-                            flexShrink: 0
-                        }}>
-                            <img 
-                                src={image} 
-                                alt={symbol} 
-                                className="rounded-full shadow-sm drop-shadow-md object-contain aspect-square bg-white/10"
-                                style={{ 
-                                    width: '100%', 
-                                    height: '100%',
-                                    imageRendering: '-webkit-optimize-contrast' 
-                                }}
-                                onError={(e) => {
-                                    (e.currentTarget as HTMLImageElement).style.display = 'none';
-                                }}
-                            />
-                        </div>
+                    {image && !isSmall && (
+                        <img 
+                            src={image} 
+                            alt={symbol} 
+                            className="rounded-full shadow-sm object-contain bg-white/10"
+                            style={{ 
+                                width: `${maxLogoSizeSVG}px`, 
+                                height: `${maxLogoSizeSVG}px`,
+                                maxHeight: `${40/zoomLevel}px`,
+                                maxWidth: `${40/zoomLevel}px`
+                            }}
+                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                        />
                     )}
 
-                    {isLarge && (
-                        <div className="flex flex-col items-center justify-center text-center w-full leading-none mt-[1%] min-w-0">
-                            <span 
-                                className="font-black text-white drop-shadow-md truncate w-full"
-                                style={{ fontSize: `${finalFontSize}px`, lineHeight: 1.1 }}
-                            >
-                                {symbol}
-                            </span>
-                            <span 
-                                className="font-bold text-white/90 drop-shadow-sm truncate w-full mt-[1%]"
-                                style={{ fontSize: `${finalFontSize * 0.85}px`, lineHeight: 1.1 }}
-                            >
-                                {secondaryValue}
-                            </span>
-                        </div>
-                    )}
+                    <div className="flex flex-col items-center justify-center text-center w-full min-w-0">
+                        <span 
+                            className="font-black text-white drop-shadow-md truncate w-full px-1"
+                            style={{ fontSize: `${finalSymbolSize}px`, lineHeight: 1.1 }}
+                        >
+                            {symbol}
+                        </span>
+                        <span 
+                            className="font-bold text-white/90 drop-shadow-sm truncate w-full px-1"
+                            style={{ fontSize: `${finalPriceSize}px`, lineHeight: 1.1, whiteSpace: 'nowrap' }}
+                        >
+                            {secondaryValue}
+                        </span>
+                    </div>
                 </div>
             </div>
         </foreignObject>
@@ -275,36 +238,39 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
   const [isFullscreen, setIsFullscreen] = useState(item?.isMaximized || false);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Transform State (React state for render sync)
   const [transform, setTransform] = useState({ k: 1, x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
-  
-  // Refs for High Performance Dragging (Avoid React Render Loop)
   const containerRef = useRef<HTMLDivElement>(null);
   const dragStart = useRef<{ x: number, y: number, ix: number, iy: number } | null>(null);
   const transformRef = useRef({ k: 1, x: 0, y: 0 });
   const rafRef = useRef<number | null>(null);
+  const [containerSize, setContainerSize] = useState({ w: 1000, h: 800 });
 
-  // Tooltip State
-  const [tooltipState, setTooltipState] = useState<{ visible: boolean, data: any, x: number, y: number }>({ 
-      visible: false, data: null, x: 0, y: 0 
-  });
+  const [tooltipState, setTooltipState] = useState<{ visible: boolean, data: any, x: number, y: number }>({ visible: false, data: null, x: 0, y: 0 });
+
+  // Update container size for culling
+  useEffect(() => {
+      if (containerRef.current) {
+          setContainerSize({ w: containerRef.current.clientWidth, h: containerRef.current.clientHeight });
+      }
+      const ro = new ResizeObserver(entries => {
+          for (let entry of entries) {
+              setContainerSize({ w: entry.contentRect.width, h: entry.contentRect.height });
+          }
+      });
+      if (containerRef.current) ro.observe(containerRef.current);
+      return () => ro.disconnect();
+  }, []);
 
   const handleContentHover = useCallback((data: any, clientX: number, clientY: number) => {
-      if (isDragging) return; // Don't show tooltip while dragging
-      setTooltipState({
-          visible: true,
-          data: data,
-          x: clientX,
-          y: clientY
-      });
+      if (isDragging) return;
+      setTooltipState({ visible: true, data: data, x: clientX, y: clientY });
   }, [isDragging]);
 
   const handleContentLeave = useCallback(() => {
       setTooltipState(prev => ({ ...prev, visible: false }));
   }, []);
 
-  // Sync transformRef when state changes (e.g. zoom buttons)
   useEffect(() => {
       transformRef.current = transform;
       if (containerRef.current) {
@@ -320,34 +286,24 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
   };
 
   const handleWheel = (e: React.WheelEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
+      e.preventDefault(); e.stopPropagation();
       setTooltipState(prev => ({ ...prev, visible: false }));
-
       const sensitivity = 0.001;
       const delta = -e.deltaY * sensitivity;
       const oldK = transformRef.current.k;
       const newK = Math.min(Math.max(1, oldK + delta), 20); 
-      
       if (newK === oldK || !containerRef.current) return;
       
       const rect = containerRef.current.getBoundingClientRect();
       const parentRect = containerRef.current.parentElement?.getBoundingClientRect() || rect;
-      
       const mx = e.clientX - parentRect.left;
       const my = e.clientY - parentRect.top;
-      
       const worldX = (mx - transformRef.current.x) / oldK;
       const worldY = (my - transformRef.current.y) / oldK;
-      
       const newX = mx - worldX * newK;
       const newY = my - worldY * newK;
       
-      // Update DOM directly for smoothness
       applyDirectTransform(newK, newX, newY);
-      
-      // Debounce state update to prevent lag
-      // (Optional: can just update state on mouse up/end of zoom if needed)
       setTransform({ k: newK, x: newX, y: newY });
   };
 
@@ -356,83 +312,42 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
       e.preventDefault(); 
       setIsDragging(true);
       setTooltipState(prev => ({ ...prev, visible: false }));
-      
-      dragStart.current = { 
-          x: e.clientX, 
-          y: e.clientY, 
-          ix: transformRef.current.x, 
-          iy: transformRef.current.y 
-      };
-      
-      if (containerRef.current) {
-          containerRef.current.style.cursor = 'grabbing';
-          containerRef.current.style.transition = 'none'; // Disable transition for drag
-      }
+      dragStart.current = { x: e.clientX, y: e.clientY, ix: transformRef.current.x, iy: transformRef.current.y };
+      if (containerRef.current) { containerRef.current.style.cursor = 'grabbing'; containerRef.current.style.transition = 'none'; }
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-      // Fix: Strict null check to prevent crash "reading 'ix'"
       if (!isDragging || !dragStart.current) return;
-      
-      const clientX = e.clientX;
-      const clientY = e.clientY;
-
-      if (rafRef.current) return; // Prevent stacking frames
-
+      if (rafRef.current) return; 
+      const cx = e.clientX; const cy = e.clientY;
       rafRef.current = requestAnimationFrame(() => {
           if (!dragStart.current) return;
-          const dx = clientX - dragStart.current.x;
-          const dy = clientY - dragStart.current.y;
-          
-          const newX = dragStart.current.ix + dx;
-          const newY = dragStart.current.iy + dy;
-          
-          // Direct DOM manipulation for zero-lag dragging
-          applyDirectTransform(transformRef.current.k, newX, newY);
+          const dx = cx - dragStart.current.x;
+          const dy = cy - dragStart.current.y;
+          applyDirectTransform(transformRef.current.k, dragStart.current.ix + dx, dragStart.current.iy + dy);
           rafRef.current = null;
       });
   };
 
   const handleMouseUp = () => {
       if (!isDragging) return;
-      
-      setIsDragging(false);
-      dragStart.current = null;
-      if (rafRef.current) {
-          cancelAnimationFrame(rafRef.current);
-          rafRef.current = null;
-      }
-      
-      if (containerRef.current) {
-          containerRef.current.style.cursor = 'grab';
-          containerRef.current.style.transition = 'transform 0.1s ease-out';
-      }
-      
-      // Sync React state at the end of drag
+      setIsDragging(false); dragStart.current = null;
+      if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+      if (containerRef.current) { containerRef.current.style.cursor = 'grab'; containerRef.current.style.transition = 'transform 0.1s ease-out'; }
       setTransform({ ...transformRef.current });
   };
 
   useEffect(() => {
     const load = async () => {
-      setLoading(true);
-      setError('');
+      setLoading(true); setError('');
       try {
         const response = await fetchWithFallback('/cachecko/cachecko_lite.json');
-        
         let rawList: any[] = [];
-        if (Array.isArray(response)) {
-            if (response[0] && response[0].data && Array.isArray(response[0].data)) {
-                rawList = response[0].data;
-            } else {
-                rawList = response;
-            }
-        } else if (response && response.data && Array.isArray(response.data)) {
-            rawList = response.data;
-        }
+        if (Array.isArray(response)) rawList = (response[0]?.data && Array.isArray(response[0].data)) ? response[0].data : response;
+        else if (response?.data && Array.isArray(response.data)) rawList = response.data;
 
         if (rawList.length > 0) {
           const uniqueMap = new Map();
-          
           rawList.forEach((coin: any) => {
               if (!coin || !coin.symbol) return;
               const sym = coin.symbol.toUpperCase();
@@ -450,36 +365,17 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
                       rank: coin.market_cap_rank || coin.r || 0,
                       high24: Number(coin.h24 ?? coin.high_24h ?? 0),
                       low24: Number(coin.l24 ?? coin.low_24h ?? 0),
-                      ath: Number(coin.ath ?? 0),
-                      ath_p: Number(coin.ath_p ?? coin.ath_change_percentage ?? 0),
-                      supply: Number(coin.cs ?? coin.circulating_supply ?? 0)
                   });
               }
           });
-
           const mapped = Array.from(uniqueMap.values()).filter(c => c.mcap > 0);
           setData(mapped);
-
-          // IMAGE PRELOADER BUFFERING
+          
           if (mapped.length > 0) {
-              const topCoins = mapped.slice(0, 100); // Preload top 100
-              topCoins.forEach(coin => {
-                  if (coin.image) {
-                      const img = new Image();
-                      img.src = coin.image;
-                  }
-              });
+              mapped.slice(0, 100).forEach(coin => { if (coin.image) { const img = new Image(); img.src = coin.image; } });
           }
-
-        } else {
-          setError('Sem dados.');
-        }
-      } catch (e) {
-        console.error(e);
-        setError('Erro ao carregar.');
-      } finally {
-        setLoading(false);
-      }
+        } else setError('Sem dados.');
+      } catch (e) { setError('Erro ao carregar.'); } finally { setLoading(false); }
     };
     load();
   }, [refreshKey]);
@@ -492,45 +388,28 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
     const leaves = sorted.map((coin, index) => {
         let sizeValue = coin.mcap;
         
-        // Se métrica for 'change', use valor absoluto da variação para tamanho
-        // EXPONENCIAL para forçar diferença de tamanho e evitar colunas
         if (metric === 'change') {
             const absChange = Math.abs(coin.change);
+            // OUTLIER CAP: Cap at 15% absolute change for SIZING purposes.
+            // This prevents a 2000% shitcoin from taking 99% of the map.
+            const cappedChange = Math.min(absChange, 15);
+            
             // Power 3 creates strong variance: 1% -> 1, 5% -> 125, 10% -> 1000
-            // Adding a tiny base to ensure very small movers are visible but tiny
-            sizeValue = Math.pow(absChange + 0.5, 3) * 1000; 
+            sizeValue = Math.pow(cappedChange + 0.5, 3) * 1000; 
         }
 
-        return {
-            ...coin,
-            size: sizeValue,
-            rank: index + 1
-        };
+        return { ...coin, size: sizeValue, rank: index + 1 };
     });
 
     return [{ name: 'Market', children: leaves }];
-  }, [data, metric]); // Added metric back as dependency
+  }, [data, metric]);
 
-  const toggleFullscreen = () => {
-      if (item?.isMaximized && onClose) onClose();
-      else setIsFullscreen(!isFullscreen);
-  };
-
-  const resetZoom = () => {
-      setTransform({ k: 1, x: 0, y: 0 });
-      applyDirectTransform(1, 0, 0);
-  };
+  const toggleFullscreen = () => { if (item?.isMaximized && onClose) onClose(); else setIsFullscreen(!isFullscreen); };
+  const resetZoom = () => { setTransform({ k: 1, x: 0, y: 0 }); applyDirectTransform(1, 0, 0); };
 
   const renderContent = () => (
     <div className="flex flex-col w-full h-full bg-[#1a1c1e] text-white overflow-hidden relative font-sans">
-        {/* Custom Tooltip Portal */}
-        {tooltipState.visible && tooltipState.data && (
-            <ManualTooltip 
-                data={tooltipState.data} 
-                x={tooltipState.x} 
-                y={tooltipState.y} 
-            />
-        )}
+        {tooltipState.visible && tooltipState.data && <ManualTooltip data={tooltipState.data} x={tooltipState.x} y={tooltipState.y} />}
 
         <div className="flex justify-between items-center px-4 py-2 border-b border-gray-800 bg-[#1a1c1e] shrink-0 z-10">
             <div className="flex items-center gap-4">
@@ -551,28 +430,14 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
         </div>
 
         <div className="flex-1 w-full min-h-0 relative bg-[#0f1011] overflow-hidden" 
-             onWheel={handleWheel}
-             onMouseDown={handleMouseDown}
-             onMouseMove={handleMouseMove}
-             onMouseUp={handleMouseUp}
-             onMouseLeave={handleMouseUp}
+             onWheel={handleWheel} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}
         >
             {loading ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-3"><Loader2 className="animate-spin text-[#dd9933]" size={40} /><span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Carregando Mercado...</span></div>
             ) : error ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-red-500 gap-2"><AlertTriangle size={24} /><span className="text-xs font-bold">{error}</span><button onClick={() => setRefreshKey(k => k + 1)} className="px-3 py-1 bg-red-900/20 rounded text-xs hover:bg-red-900/30 transition-colors">Tentar Novamente</button></div>
             ) : (
-                <div 
-                    ref={containerRef}
-                    style={{ 
-                        width: '100%', 
-                        height: '100%', 
-                        transformOrigin: '0 0',
-                        cursor: transform.k > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
-                        willChange: 'transform',
-                        // Initial transform set via effect
-                    }}
-                >
+                <div ref={containerRef} style={{ width: '100%', height: '100%', transformOrigin: '0 0', cursor: transform.k > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default', willChange: 'transform' }}>
                     <ResponsiveContainer width="100%" height="100%">
                         <Treemap
                             data={treeData}
@@ -585,6 +450,8 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
                                     onContentHover={handleContentHover}
                                     onContentLeave={handleContentLeave}
                                     metric={metric}
+                                    containerTransform={transform}
+                                    containerSize={containerSize}
                                 />
                             }
                             animationDuration={600}
@@ -614,10 +481,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
   );
 
   if (isFullscreen) {
-    return createPortal(
-        <div className="fixed inset-0 z-[9999] w-screen h-screen bg-[#1a1c1e]">{renderContent()}</div>,
-        document.body
-    );
+    return createPortal(<div className="fixed inset-0 z-[9999] w-screen h-screen bg-[#1a1c1e]">{renderContent()}</div>, document.body);
   }
 
   return (
