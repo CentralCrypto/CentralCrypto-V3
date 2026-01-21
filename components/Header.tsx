@@ -41,7 +41,7 @@ interface DisplayTickerData { p: string; rawPrice: number; c: number; v: string;
 interface CoinMeta { name: string; mcap: number; rank: number; }
 interface TooltipData { visible: boolean; x: number; y: number; symbol: string; data: DisplayTickerData | null; meta: CoinMeta | null; }
 
-// Cores de flash padronizadas
+// Cores de flash padronizadas com o MarketCapTable
 const FLASH_GREEN_BG = '#122A21';
 const FLASH_RED_BG = '#C33B4080';
 
@@ -53,26 +53,24 @@ const formatUSD = (val: number) => {
     return `$${val.toLocaleString()}`;
 };
 
-// Componente extraído e memoizado para evitar re-renders desnecessários
 const TickerItem: React.FC<{ symbol: string; data: DisplayTickerData; meta: CoinMeta; onHover: any; onLeave: any; }> = React.memo(({ symbol, data, meta, onHover, onLeave }) => {
   const { p, c, rawPrice } = data;
   const [flashBg, setFlashBg] = useState('transparent');
   const prevPriceRef = useRef(rawPrice);
 
   useEffect(() => {
+    // Se o preço mudou, aplica o flash
     if (rawPrice !== prevPriceRef.current) {
-        // Ignora a inicialização (quando prev é 0 ou undefined se preferir)
-        if (prevPriceRef.current > 0) {
-            if (rawPrice > prevPriceRef.current) {
-                setFlashBg(FLASH_GREEN_BG);
-            } else if (rawPrice < prevPriceRef.current) {
-                setFlashBg(FLASH_RED_BG);
-            }
-            
-            const timer = setTimeout(() => setFlashBg('transparent'), 500);
-            return () => clearTimeout(timer);
+        if (rawPrice > prevPriceRef.current) {
+            setFlashBg(FLASH_GREEN_BG);
+        } else if (rawPrice < prevPriceRef.current) {
+            setFlashBg(FLASH_RED_BG);
         }
+        
         prevPriceRef.current = rawPrice;
+
+        const timer = setTimeout(() => setFlashBg('transparent'), 350);
+        return () => clearTimeout(timer);
     }
   }, [rawPrice]);
 
@@ -94,7 +92,7 @@ const TickerItem: React.FC<{ symbol: string; data: DisplayTickerData; meta: Coin
         </div>
         <div className="ml-3">
             <span 
-                className={`${isPositive ? 'text-tech-success' : 'text-tech-danger'} text-base font-mono font-bold whitespace-nowrap px-1.5 py-0.5 rounded transition-colors duration-300`}
+                className={`${isPositive ? 'text-tech-success' : 'text-tech-danger'} text-base font-mono font-bold whitespace-nowrap px-1.5 py-0.5 rounded transition-colors duration-200`}
                 style={{ backgroundColor: flashBg }}
             >
                 {isPositive ? '▲' : '▼'}{Math.abs(c).toFixed(2)}%
@@ -102,12 +100,9 @@ const TickerItem: React.FC<{ symbol: string; data: DisplayTickerData; meta: Coin
         </div>
     </div>
   );
-}, (prev, next) => {
-    // Custom comparison para performance extrema: só renderiza se dados mudarem
-    return prev.data.rawPrice === next.data.rawPrice && prev.data.c === next.data.c && prev.symbol === next.symbol;
 });
 
-// Lista memoizada
+// Componente separado para evitar remounts no Header
 const TickerList: React.FC<{ 
     tickers: Record<string, any>, 
     coinMeta: Record<string, CoinMeta>, 
@@ -157,10 +152,11 @@ const Flag: React.FC<{ lang: Language }> = ({ lang }) => {
   return <img src={config.flag} className="w-5 h-5 rounded-full object-cover shadow-sm" alt={lang} />;
 };
 
-export const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; theme: 'dark' | 'light'; toggleTheme: () => void; user: UserData | null; language: Language; onLanguageChange: (lang: Language) => void; onLoginClick: () => void; onLogoutClick: () => void; onSearch: (q: string) => void; }> = ({ currentView, setView, theme, toggleTheme, user, language, onLanguageChange, onLoginClick, onLogoutClick, onSearch }) => {
+const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; theme: 'dark' | 'light'; toggleTheme: () => void; user: UserData | null; language: Language; onLanguageChange: (lang: Language) => void; onLoginClick: () => void; onLogoutClick: () => void; onSearch: (q: string) => void; }> = ({ currentView, setView, theme, toggleTheme, user, language, onLanguageChange, onLoginClick, onLogoutClick, onSearch }) => {
   const t = getTranslations(language).header;
   const common = getTranslations(language).common;
 
+  // Use Global WebSocket Context
   const { tickers: globalTickers } = useBinanceWS();
 
   const [coinMeta, setCoinMeta] = useState<Record<string, CoinMeta>>({});
@@ -216,7 +212,6 @@ export const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) =>
     if (e.key === 'Enter' && searchTerm.trim()) { onSearch(searchTerm.trim()); setIsMenuOpen(false); }
   };
 
-  // useCallback vital para não quebrar a memoização do TickerItem/TickerList
   const handleTickerHover = useCallback((e: React.MouseEvent, symbol: string, data: DisplayTickerData, meta: CoinMeta) => {
     setTooltip({
         visible: true,
@@ -248,6 +243,7 @@ export const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) =>
 
   return (
     <>
+      {/* TOOLTIP */}
       {tooltip.visible && tooltip.data && (
         <div 
             className="fixed z-[9999] pointer-events-none animate-in fade-in zoom-in-95 duration-150" 
@@ -292,6 +288,7 @@ export const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) =>
         </div>
       )}
 
+      {/* MOBILE DRAWER */}
       {isMenuOpen && (
         <div className="fixed inset-0 z-[2000] xl:hidden flex">
            <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsMenuOpen(false)}></div>
@@ -305,221 +302,162 @@ export const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) =>
                   ) : (
                       <button onClick={() => { onLoginClick(); setIsMenuOpen(false); }} className="px-3 py-1.5 bg-[#dd9933] text-black font-black uppercase tracking-widest text-[9px] rounded-lg shadow-md flex items-center gap-1.5 active:scale-95 transition-transform"><LogIn size={14}/> {t.login}</button>
                   )}
-                  <button onClick={() => setIsMenuOpen(false)} className="p-2 text-gray-500 hover:text-red-500 bg-white dark:bg-tech-800 rounded-lg shadow-sm border border-gray-100 dark:border-tech-700 transition-colors"><CloseIcon size={18}/></button>
+                  <button onClick={() => setIsMenuOpen(false)} className="p-2 text-gray-500 hover:text-black dark:hover:text-white"><CloseIcon size={22}/></button>
                </div>
-               
-               <div className="p-4 overflow-y-auto flex-1">
-                   <div className="mb-6 relative">
-                       <Search size={16} className="absolute left-3 top-3 text-gray-400" />
-                       <input 
-                           type="text" 
-                           placeholder={common.search} 
-                           className="w-full bg-gray-100 dark:bg-tech-800 border-none rounded-xl py-2.5 pl-10 pr-4 text-sm focus:ring-2 focus:ring-[#dd9933] transition-all"
-                           onKeyDown={handleSearchKeyDown}
-                           onChange={(e) => setSearchTerm(e.target.value)}
-                           value={searchTerm}
-                       />
-                   </div>
-
-                   <nav className="space-y-1">
-                        <button 
-                            onClick={() => { setView(ViewMode.DASHBOARD); setIsMenuOpen(false); }}
-                            className={`w-full text-left px-4 py-3 rounded-xl font-bold flex items-center gap-3 transition-all ${currentView === ViewMode.DASHBOARD ? 'bg-[#dd9933] text-black shadow-lg shadow-orange-500/20' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-tech-800'}`}
-                        >
-                            <Activity size={18} /> Dashboard
+               <div className="flex-1 overflow-y-auto p-6 space-y-8">
+                  <div className="space-y-4">
+                     <button onClick={() => { setView(ViewMode.DASHBOARD); setIsMenuOpen(false); }} className="w-full text-left text-2xl font-black text-gray-800 dark:text-gray-200 hover:text-[#dd9933] flex items-center gap-3 transition-colors"><Globe size={24}/> Home</button>
+                     <div className="space-y-2">
+                        <button onClick={() => setAnalysisExpanded(!analysisExpanded)} className="w-full text-left text-2xl font-black text-gray-800 dark:text-gray-200 flex justify-between items-center group">
+                           <div className="flex items-center gap-3"><Activity size={24}/> {t.analysisCenter}</div>
+                           <ChevronDown size={22} className={`transition-transform duration-300 ${analysisExpanded ? 'rotate-180 text-tech-accent' : ''}`} />
                         </button>
-                        
-                        <div className="pt-2">
-                            <button 
-                                onClick={() => setAnalysisExpanded(!analysisExpanded)}
-                                className="w-full text-left px-4 py-3 rounded-xl font-bold flex items-center justify-between text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-tech-800 transition-colors"
-                            >
-                                <span className="flex items-center gap-3"><BarChart3 size={18} /> {t.analysisCenter}</span>
-                                <ChevronDown size={16} className={`transition-transform duration-300 ${analysisExpanded ? 'rotate-180' : ''}`} />
-                            </button>
-                            
-                            {analysisExpanded && (
-                                <div className="mt-2 ml-4 space-y-2 border-l-2 border-gray-200 dark:border-tech-700 pl-4 animate-in slide-in-from-left-2 duration-300">
-                                    {menuAnalysis.map(item => (
-                                        <button 
-                                            key={item.mode}
-                                            onClick={() => { setView(item.mode); setIsMenuOpen(false); }}
-                                            className={`w-full text-left px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors ${currentView === item.mode ? 'text-[#dd9933] bg-[#dd9933]/10' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}`}
-                                        >
-                                            {item.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-
-                        <button 
-                            onClick={() => { setView(ViewMode.ACADEMY); setIsMenuOpen(false); }}
-                            className={`w-full text-left px-4 py-3 rounded-xl font-bold flex items-center gap-3 transition-all ${currentView === ViewMode.ACADEMY ? 'bg-[#dd9933] text-black shadow-lg shadow-orange-500/20' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-tech-800'}`}
-                        >
-                            <Globe size={18} /> {t.academy}
-                        </button>
-                   </nav>
-               </div>
-
-               <div className="p-4 border-t border-gray-200 dark:border-tech-800 bg-gray-50 dark:bg-tech-950/30">
-                   <div className="flex justify-center gap-4 mb-4">
-                       <button onClick={toggleTheme} className="p-2 rounded-full bg-white dark:bg-tech-800 text-gray-600 dark:text-gray-300 shadow-sm border border-gray-100 dark:border-tech-700">
-                           {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-                       </button>
-                       {user && (
-                           <button onClick={() => { onLogoutClick(); setIsMenuOpen(false); }} className="p-2 rounded-full bg-red-100 dark:bg-red-900/20 text-red-500 hover:bg-red-200 transition-colors">
-                               <Power size={18} />
-                           </button>
-                       )}
-                   </div>
-                   <div className="flex justify-center gap-3">
-                       {socialLinks.map((s, i) => (
-                           <a key={i} href={s.href} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-[#dd9933] transition-colors">{s.icon}</a>
-                       ))}
-                   </div>
+                        {analysisExpanded && (
+                           <div className="grid grid-cols-1 gap-2 pl-9 animate-in slide-in-from-top-2">
+                              {menuAnalysis.map(item => (
+                                 <button key={item.mode} onClick={() => { setView(item.mode); setIsMenuOpen(false); }} className="w-full text-left py-2 text-gray-500 hover:text-[#dd9933] font-black text-xs uppercase tracking-[0.2em] transition-colors">{item.label}</button>
+                              ))}
+                           </div>
+                        )}
+                     </div>
+                     <button onClick={() => { setView(ViewMode.ACADEMY); setIsMenuOpen(false); }} className="w-full text-left text-2xl font-black text-gray-800 dark:text-gray-200 hover:text-[#dd9933] flex items-center gap-3 transition-colors"><BarChart3 size={24}/> {t.academy}</button>
+                  </div>
                </div>
            </div>
         </div>
       )}
 
       {/* DESKTOP HEADER */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-white dark:bg-tech-900 border-b border-gray-200 dark:border-tech-800 transition-colors h-[152px]">
-         {/* TOP ROW: Logo, Search, User, Theme */}
-         <div className="h-[60px] flex items-center justify-between px-6 border-b border-gray-100 dark:border-tech-800/50">
-             <div className="flex items-center gap-8">
-                 {/* Logo */}
-                 <div onClick={() => setView(ViewMode.DASHBOARD)} className="flex items-center gap-3 cursor-pointer group">
-                     <img src="https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png" className="h-9 w-auto" alt="Logo" />
-                     <div className="flex flex-col leading-none">
-                         <span className="text-gray-800 dark:text-white font-bold text-lg uppercase tracking-tight group-hover:text-[#dd9933] transition-colors">Central</span>
-                         <span className="text-[#dd9933] font-bold text-lg uppercase tracking-widest text-[10px]">CryptoTraders</span>
-                     </div>
-                 </div>
+      <header className="fixed top-0 left-0 right-0 z-[1000] w-full flex flex-col shadow-lg transition-all duration-700">
+        <div className="bg-white dark:bg-tech-950 border-b border-transparent dark:border-white/5 h-14 flex items-center overflow-hidden w-full relative transition-colors duration-700 shadow-sm" onMouseLeave={hideTooltip}>
+          <div className="animate-scroll flex items-center w-max will-change-transform">
+              <TickerList tickers={globalTickers} coinMeta={coinMeta} onHover={handleTickerHover} onLeave={hideTooltip} />
+              <TickerList tickers={globalTickers} coinMeta={coinMeta} onHover={handleTickerHover} onLeave={hideTooltip} />
+          </div>
+          <div className="absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-white dark:from-tech-950 to-transparent z-10 pointer-events-none"></div>
+          <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-white dark:from-tech-950 to-transparent z-10 pointer-events-none"></div>
+        </div>
 
-                 {/* Search Bar (Desktop) */}
-                 <div className="hidden md:flex items-center relative group">
-                     <Search size={16} className="absolute left-3 text-gray-400 group-focus-within:text-[#dd9933] transition-colors" />
-                     <input 
-                        type="text" 
-                        placeholder={common.search}
-                        className="bg-gray-100 dark:bg-tech-800 text-sm py-2 pl-10 pr-4 rounded-full w-64 focus:w-80 transition-all border-none focus:ring-2 focus:ring-[#dd9933] outline-none text-gray-700 dark:text-gray-200"
-                        onKeyDown={(e) => { if(e.key === 'Enter') onSearch(e.currentTarget.value); }}
-                     />
-                 </div>
-             </div>
-
-             <div className="flex items-center gap-4">
-                 {/* Lang Switcher */}
-                 <div className="relative" ref={langMenuRef}>
-                     <button onClick={() => setIsLangMenuOpen(!isLangMenuOpen)} className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-tech-800 transition-colors">
-                         <Flag lang={language} />
-                         <ChevronDown size={12} className="text-gray-400" />
+        <div className="bg-[#f3f4f6] dark:bg-tech-900 relative z-20 transition-colors duration-700 h-24" onMouseEnter={hideTooltip}>
+          <div className="max-w-[90%] mx-auto px-4 h-full flex items-center justify-between relative">
+            <div className="flex items-center z-30 md:absolute md:left-1/2 md:-translate-x-1/2 xl:relative xl:left-0 xl:translate-x-0">
+              <div className="flex items-center cursor-pointer group" onClick={() => setView(ViewMode.DASHBOARD)}>
+                <img src="https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png" alt="Central Crypto" className="h-14 md:h-16 w-auto object-contain drop-shadow-[0_0_15px_rgba(221,153,51,0.2)]" />
+                <div className="flex flex-col leading-tight ml-3">
+                   <span className="text-gray-900 dark:text-gray-200 font-black text-lg md:text-xl tracking-tighter uppercase">Central</span>
+                   <span className="text-tech-accent font-black text-lg md:text-xl tracking-tighter uppercase -mt-1.5">CryptoTraders</span>
+                </div>
+              </div>
+              <div className="hidden xl:flex items-center ml-8 gap-4">
+                  <div className="h-12 w-px bg-gray-300 dark:bg-tech-800 mx-2"></div>
+                  {/* FAN MENU */}
+                  <div className="relative group z-50 w-12 h-12 flex items-center justify-center">
+                     <div className="fan-bridge"></div>
+                     <button className="w-11 h-11 bg-white dark:bg-tech-800 rounded-full flex items-center justify-center text-tech-accent hover:bg-yellow-400 dark:hover:bg-tech-700 transition-all duration-300 z-20 relative shadow-lg">
+                        <Share2 size={22} />
                      </button>
-                     {isLangMenuOpen && (
-                         <div className="absolute top-full right-0 mt-2 w-32 bg-white dark:bg-tech-900 rounded-xl shadow-xl border border-gray-100 dark:border-tech-800 overflow-hidden py-1 animate-in fade-in zoom-in-95">
-                             {LANGUAGES_CONFIG.map(l => (
-                                 <button 
-                                    key={l.code} 
-                                    onClick={() => { onLanguageChange(l.code); setIsLangMenuOpen(false); }}
-                                    className={`w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-tech-800 transition-colors ${language === l.code ? 'bg-gray-50 dark:bg-tech-800 font-bold text-[#dd9933]' : 'text-gray-600 dark:text-gray-300'}`}
-                                 >
-                                     <img src={l.flag} className="w-4 h-4 rounded-full object-cover" /> {l.label}
-                                 </button>
-                             ))}
-                         </div>
-                     )}
-                 </div>
-
-                 {/* Theme Toggle */}
-                 <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-tech-800 text-gray-500 dark:text-gray-400 transition-colors">
-                     {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
-                 </button>
-
-                 {/* User Menu */}
-                 {user ? (
-                     <div className="relative" ref={userMenuRef}>
-                         <button onClick={() => setUserMenuOpen(!isUserMenuOpen)} className="flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-tech-800 p-1 pr-3 rounded-full transition-colors border border-transparent hover:border-gray-200 dark:hover:border-tech-700">
-                             <div className="w-8 h-8 rounded-full border border-[#dd9933] overflow-hidden"><img src={user.avatar_url || `https://ui-avatars.com/api/?name=${user.user_display_name}`} className="w-full h-full object-cover" /></div>
-                             <div className="hidden md:flex flex-col items-start">
-                                 <span className="text-xs font-bold text-gray-800 dark:text-white leading-none max-w-[100px] truncate">{user.user_display_name}</span>
-                                 <span className="text-[9px] font-bold text-[#dd9933] uppercase tracking-widest">{t.profile}</span>
-                             </div>
-                             <ChevronDown size={14} className="text-gray-400" />
+                     {socialLinks.map((link, index) => (
+                        <a key={index} href={link.href} target="_blank" rel="noopener noreferrer" className="fan-item bg-white dark:bg-tech-900 text-tech-accent hover:bg-yellow-400 dark:hover:bg-[#2f3032] flex items-center justify-center shadow-xl w-10 h-10 rounded-full hover:scale-110 border border-transparent dark:border-tech-700/50">
+                           {link.icon}
+                        </a>
+                     ))}
+                  </div>
+              </div>
+            </div>
+            <div className="xl:hidden flex items-center z-40">
+                <button onClick={() => setIsMenuOpen(true)} className="p-3.5 bg-white dark:bg-tech-800 rounded-2xl text-tech-accent shadow-xl border border-gray-200 dark:border-tech-700 active:scale-90 transition-transform"><Menu size={26} /></button>
+            </div>
+            <nav className="hidden xl:flex items-center absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 h-full z-10">
+              <div className="relative group h-full flex items-center px-6 cursor-pointer">
+                  <div onClick={() => setView(ViewMode.DASHBOARD)} className="flex items-center gap-2 text-xl font-black text-gray-800 dark:text-gray-300 hover:text-tech-accent transition-all tracking-widest uppercase">
+                    {t.analysisCenter} <ChevronDown size={14} className="group-hover:rotate-180 transition-transform duration-300" />
+                  </div>
+                  <div className="absolute top-[80%] left-1/2 -translate-x-1/2 w-[600px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-500 transform translate-y-4 group-hover:translate-y-0 z-50 pt-4">
+                    <div className="relative rounded-2xl overflow-hidden shadow-[0_30px_70px_rgba(0,0,0,0.4)] border border-gray-100 dark:border-white/5 bg-white dark:bg-[#1a1c1e] p-6">
+                      <div className="grid grid-cols-2 gap-4">
+                        {menuAnalysis.map((item, idx) => (
+                          <div key={idx} onClick={() => setView(item.mode)} className="relative h-28 rounded-xl border border-gray-100 dark:border-tech-800 hover:border-tech-accent overflow-hidden cursor-pointer group/box transition-all bg-white dark:bg-black shadow-md">
+                            <div className="absolute inset-0 grayscale group-hover/box:grayscale-0 opacity-20 group-hover/box:opacity-60 transition-all"><img src={item.img} className="w-full h-full object-cover group-hover/box:scale-105 transition-transform duration-1000" /></div>
+                            <div className="absolute inset-0 flex items-center justify-center"><div className="font-black uppercase text-lg tracking-widest text-gray-900 dark:text-white group-hover/box:text-[#dd9933] transition-colors">{item.label}</div></div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+              </div>
+              <div onClick={() => setView(ViewMode.ACADEMY)} className="relative group h-full flex items-center px-6 cursor-pointer transition-all hover:scale-105"><div className="text-xl font-black text-gray-800 dark:text-gray-300 hover:text-tech-accent transition-all tracking-widest uppercase">{t.academy}</div></div>
+            </nav>
+            <div className="hidden xl:flex items-center gap-5 z-30">
+               <div className="group/search flex items-center bg-gray-200/50 dark:bg-tech-800/80 border border-transparent dark:border-tech-700 rounded-full px-3 py-2 transition-all duration-500 shadow-inner hover:ring-2 hover:ring-[#dd9933]/20">
+                 <input type="text" placeholder={common.search.toUpperCase()} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onKeyDown={handleSearchKeyDown} className="bg-transparent border-none outline-none text-sm w-0 opacity-0 group-hover/search:w-48 group-hover/search:opacity-100 group-hover/search:ml-2 focus:w-48 focus:opacity-100 focus:ml-2 transition-all duration-500 font-mono font-bold uppercase text-gray-800 dark:text-gray-200 order-1" />
+                 <Search size={18} className="text-[#dd9933] cursor-pointer group-hover/search:scale-110 transition-transform order-2" onClick={() => onSearch(searchTerm)} />
+               </div>
+                <div className="relative" ref={langMenuRef}>
+                    <button 
+                        onClick={() => setIsLangMenuOpen(!isLangMenuOpen)}
+                        className="flex items-center gap-2 bg-white dark:bg-tech-800 p-2.5 rounded-full border border-transparent dark:border-tech-700 shadow-md hover:scale-110 transition-transform"
+                    >
+                        <Flag lang={language} />
+                        <ChevronDown size={14} className={`text-gray-500 transition-transform duration-300 ${isLangMenuOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {isLangMenuOpen && (
+                        <div className="absolute top-full right-0 mt-3 w-56 bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-white/5 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 p-2">
+                        {LANGUAGES_CONFIG.map((lang) => (
+                            <div key={lang.code} className="relative group/langitem">
+                            <button
+                                onClick={() => {
+                                onLanguageChange(lang.code);
+                                setIsLangMenuOpen(false);
+                                }}
+                                className="w-full text-left flex items-center gap-4 px-4 py-3 text-xs font-black text-gray-700 dark:text-gray-300 hover:bg-[#dd9933]/10 hover:text-[#dd9933] rounded-xl transition-all uppercase tracking-[0.15em]"
+                            >
+                                <Flag lang={lang.code} />
+                                <span>{lang.label}</span>
+                            </button>
+                            {(lang.code === 'en' || lang.code === 'es') && (
+                                <div className="absolute right-full mr-3 top-1/2 -translate-y-1/2 bg-gray-800 text-white text-[10px] font-bold rounded-lg py-1.5 px-3 opacity-0 group-hover/langitem:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-lg">
+                                Os posts estão disponíveis apenas em Português.
+                                <div className="absolute top-1/2 -translate-y-1/2 left-full w-2 h-2 bg-gray-800 transform rotate-45 -ml-1"></div>
+                                </div>
+                            )}
+                            </div>
+                        ))}
+                        </div>
+                    )}
+                </div>
+               <button onClick={toggleTheme} className="bg-white dark:bg-tech-800 text-tech-accent p-2.5 rounded-full border border-transparent dark:border-tech-700 shadow-md hover:scale-110 transition-transform">{theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}</button>
+               <div className="flex items-center gap-3 border-l border-gray-300 dark:border-tech-800 pl-5">
+                  {user ? (
+                    <div className="relative" ref={userMenuRef}>
+                         <button onClick={() => setUserMenuOpen(!isUserMenuOpen)} className="flex items-center gap-3 bg-white dark:bg-tech-800 border border-transparent dark:border-tech-700 rounded-full pl-1 pr-5 py-1 shadow-md hover:shadow-lg transition-all active:scale-95">
+                            <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-tech-950 flex items-center justify-center overflow-hidden border-2 border-tech-accent shadow-sm"><img src={user.avatar_url || `https://ui-avatars.com/api/?name=${user.user_display_name}`} className="w-full h-full object-cover" /></div>
+                            <div className="flex flex-col items-start"><span className="text-[9px] text-gray-500 uppercase font-black tracking-tighter leading-none mb-0.5">{t.welcome}</span><span className="text-xs text-gray-900 dark:text-gray-200 font-black truncate max-w-[90px]">{user.user_display_name}</span></div>
+                            <ChevronDown size={14} className={`text-gray-500 transition-transform duration-300 ${isUserMenuOpen ? 'rotate-180' : ''}`} />
                          </button>
-                         
                          {isUserMenuOpen && (
-                             <div className="absolute top-full right-0 mt-2 w-56 bg-white dark:bg-tech-900 rounded-xl shadow-xl border border-gray-100 dark:border-tech-800 overflow-hidden py-1 animate-in fade-in zoom-in-95">
-                                 <div className="px-4 py-3 border-b border-gray-100 dark:border-tech-800 mb-1">
-                                     <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{user.user_display_name}</p>
-                                     <p className="text-xs text-gray-500 truncate">{user.user_email}</p>
+                             <div className="absolute top-full right-0 mt-3 w-64 bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-white/5 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2">
+                                 <div className="p-5 border-b border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-[#1e2022] flex items-center gap-4">
+                                     <div className="w-11 h-11 rounded-full bg-gray-200 dark:bg-tech-950 flex items-center justify-center border-2 border-tech-accent overflow-hidden shadow-sm">{user.avatar_url ? <img src={user.avatar_url} className="w-full h-full object-cover" /> : <span className="text-tech-accent font-bold text-xs">{user.user_display_name?.substring(0,2).toUpperCase()}</span>}</div>
+                                     <div className="flex flex-col min-w-0"><p className="text-gray-900 dark:text-white font-black text-sm truncate">{user.user_display_name}</p><p className="text-gray-500 text-[10px] truncate">{user.user_email}</p></div>
                                  </div>
-                                 <button onClick={() => { setView(ViewMode.PROFILE); setUserMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-tech-800 flex items-center gap-2"><User size={16}/> {t.profile}</button>
-                                 <button className="w-full text-left px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-tech-800 flex items-center gap-2"><CreditCard size={16}/> {t.subscription}</button>
-                                 <div className="border-t border-gray-100 dark:border-tech-800 my-1"></div>
-                                 <button onClick={() => { onLogoutClick(); setUserMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 flex items-center gap-2"><Power size={16}/> {t.logout}</button>
+                                 <div className="p-2.5">
+                                     <button onClick={() => { setView(ViewMode.PROFILE); setUserMenuOpen(false); }} className="w-full text-left flex items-center gap-4 px-4 py-3 text-xs font-black text-gray-700 dark:text-gray-300 hover:bg-[#dd9933]/10 hover:text-[#dd9933] rounded-xl transition-all uppercase tracking-[0.15em]"><User size={18}/> {t.profile}</button>
+                                     <button onClick={() => { setView(ViewMode.PROFILE); setUserMenuOpen(false); }} className="w-full text-left flex items-center gap-4 px-4 py-3 text-xs font-black text-gray-700 dark:text-gray-300 hover:bg-[#dd9933]/10 hover:text-[#dd9933] rounded-xl transition-all uppercase tracking-[0.15em]"><CreditCard size={18}/> {t.subscription}</button>
+                                 </div>
+                                 <div className="p-2.5 border-t border-gray-100 dark:border-white/5"><button onClick={() => { setUserMenuOpen(false); onLogoutClick(); }} className="w-full text-left flex items-center gap-4 px-4 py-3 text-xs font-black text-red-500 hover:bg-red-500/10 rounded-xl transition-all uppercase tracking-[0.2em]"><Power size={18}/> {t.logout}</button></div>
                              </div>
                          )}
-                     </div>
-                 ) : (
-                     <button onClick={onLoginClick} className="bg-[#dd9933] hover:bg-amber-600 text-black text-xs font-bold uppercase tracking-widest px-5 py-2 rounded-full shadow-lg transition-all flex items-center gap-2 transform active:scale-95">
-                         <LogIn size={16} /> {t.login}
-                     </button>
-                 )}
-
-                 {/* Mobile Menu Toggle */}
-                 <button onClick={() => setIsMenuOpen(true)} className="md:hidden p-2 text-gray-600 dark:text-gray-300">
-                     <Menu size={24} />
-                 </button>
-             </div>
-         </div>
-
-         {/* TICKER ROW */}
-         <div className="h-[40px] bg-gray-50 dark:bg-black/20 border-b border-gray-100 dark:border-tech-800/50 flex items-center overflow-hidden relative">
-             <div className="animate-ticker flex items-center whitespace-nowrap hover:pause">
-                 {/* Duplicado para loop infinito suave */}
-                 <TickerList tickers={globalTickers} coinMeta={coinMeta} onHover={handleTickerHover} onLeave={hideTooltip} />
-                 <TickerList tickers={globalTickers} coinMeta={coinMeta} onHover={handleTickerHover} onLeave={hideTooltip} />
-             </div>
-             {/* Fade masks */}
-             <div className="absolute left-0 top-0 bottom-0 w-16 bg-gradient-to-r from-gray-50 dark:from-tech-900 to-transparent pointer-events-none"></div>
-             <div className="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-gray-50 dark:from-tech-900 to-transparent pointer-events-none"></div>
-         </div>
-
-         {/* NAVIGATION ROW */}
-         <div className="h-[52px] flex items-center justify-center px-4 overflow-x-auto scrollbar-hide">
-             <nav className="flex items-center gap-1">
-                 <button onClick={() => setView(ViewMode.DASHBOARD)} className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${currentView === ViewMode.DASHBOARD ? 'bg-gray-100 dark:bg-tech-800 text-[#dd9933]' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-tech-800/50'}`}>
-                     <Activity size={14} /> Dashboard
-                 </button>
-                 
-                 {/* Analysis Dropdown */}
-                 <div className="relative group" onMouseEnter={() => setAnalysisExpanded(true)} onMouseLeave={() => setAnalysisExpanded(false)}>
-                     <button className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${[ViewMode.COCKPIT, ViewMode.WORKSPACE, ViewMode.INDICATORS, ViewMode.MARKET].includes(currentView) ? 'bg-gray-100 dark:bg-tech-800 text-[#dd9933]' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-tech-800/50'}`}>
-                         <BarChart3 size={14} /> {t.analysisCenter} <ChevronDown size={10} />
-                     </button>
-                     
-                     <div className={`absolute top-full left-1/2 -translate-x-1/2 pt-2 w-48 transition-all duration-200 ${analysisExpanded ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible -translate-y-2'}`}>
-                         <div className="bg-white dark:bg-tech-900 rounded-xl shadow-xl border border-gray-100 dark:border-tech-800 overflow-hidden py-1">
-                             {menuAnalysis.map(item => (
-                                 <button 
-                                     key={item.mode}
-                                     onClick={() => { setView(item.mode); setAnalysisExpanded(false); }}
-                                     className={`w-full text-left px-4 py-2.5 text-xs font-bold uppercase tracking-wider hover:bg-gray-50 dark:hover:bg-tech-800 transition-colors flex items-center gap-2 ${currentView === item.mode ? 'text-[#dd9933] bg-[#dd9933]/5' : 'text-gray-600 dark:text-gray-300'}`}
-                                 >
-                                     <div className="w-1 h-1 rounded-full bg-current opacity-50"></div> {item.label}
-                                 </button>
-                             ))}
-                         </div>
-                     </div>
-                 </div>
-
-                 <button onClick={() => setView(ViewMode.ACADEMY)} className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${currentView === ViewMode.ACADEMY ? 'bg-gray-100 dark:bg-tech-800 text-[#dd9933]' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-tech-800/50'}`}>
-                     <Globe size={14} /> {t.academy}
-                 </button>
-             </nav>
-         </div>
+                    </div>
+                  ) : (
+                    <button onClick={onLoginClick} className="bg-[#dd9933] text-black font-black uppercase tracking-widest text-xs px-8 py-3 rounded-xl shadow-lg hover:bg-amber-600 transition-all active:scale-95">{t.login}</button>
+                  )}
+               </div>
+            </div>
+          </div>
+        </div>
       </header>
     </>
   );
 };
+
+export default Header;
