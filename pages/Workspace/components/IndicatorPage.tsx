@@ -5,8 +5,9 @@ import { ApiCoin, Language, WidgetType, UserTier } from '../../../types';
 import { getTranslations } from '../../../locales';
 import CryptoWidget from './CryptoWidget';
 import CryptoMarketBubbles from '../widgets/CryptoMarketBubbles';
-// Corrected import path
 import MarketCapTable from '../widgets/MarketCapTable';
+// Import specific RSI components
+import { RsiGauge, RsiScatterChart, RsiTableList } from '../widgets/RsiWidget';
 
 import {
   Activity,
@@ -112,6 +113,38 @@ function PageFaq({ language, pageType }: { language: Language; pageType: string 
     </div>
   );
 }
+
+// --- RSI CUSTOM PAGE LAYOUT ---
+const RsiPageLayout = ({ language }: { language: Language }) => {
+    return (
+        <div className="flex flex-col gap-6">
+            {/* TOP: Gauge */}
+            <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-100 dark:border-slate-800 shadow-lg p-6 flex justify-center">
+                <div className="w-full max-w-md h-64">
+                    <RsiGauge language={language} />
+                </div>
+            </div>
+
+            {/* MIDDLE: Scatter Chart */}
+            <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-100 dark:border-slate-800 shadow-lg overflow-hidden min-h-[550px]">
+                <div className="p-4 border-b border-gray-100 dark:border-slate-800">
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">RSI Tracker Scatter</h3>
+                </div>
+                <div className="p-2">
+                    <RsiScatterChart />
+                </div>
+            </div>
+
+            {/* BOTTOM: Table */}
+            <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-100 dark:border-slate-800 shadow-lg overflow-hidden min-h-[500px]">
+                <div className="p-4 border-b border-gray-100 dark:border-slate-800">
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">RSI Data Table</h3>
+                </div>
+                <RsiTableList />
+            </div>
+        </div>
+    );
+};
 
 // --- MAIN PAGE WRAPPER ---
 
@@ -240,7 +273,9 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
             
             {activePage === 'ETF' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'etf-page', type: WidgetType.ETF_NET_FLOW, title: 'ETF Net Flow', symbol: 'GLOBAL', isMaximized: true }} language={language} /></div>}
             
-            {activePage === 'RSI' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'rsi-page', type: WidgetType.RSI_AVG, title: 'RSI Average Tracker', symbol: 'MARKET', isMaximized: true }} language={language} /></div>}
+            {/* Custom Layout for RSI Page */}
+            {activePage === 'RSI' && <RsiPageLayout language={language} />}
+
             {activePage === 'MACD' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'macd-page', type: WidgetType.MACD_AVG, title: 'MACD Average Tracker', symbol: 'MARKET', isMaximized: true }} language={language} /></div>}
             {activePage === 'CCT_INDEX' && <PlaceholderPage title="CCT Index" />}
 

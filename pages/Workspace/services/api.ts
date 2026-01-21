@@ -1,3 +1,4 @@
+
 import { ApiCoin } from '../../../types';
 import { httpGetJson } from '../../../services/http';
 import { getCacheckoUrl, ENDPOINTS } from '../../../services/endpoints';
@@ -163,6 +164,7 @@ export interface RsiTrackerPoint {
 }
 
 export interface RsiTableItem {
+  id: string;
   symbol: string;
   name?: string;
   price: number;
@@ -170,11 +172,14 @@ export interface RsiTableItem {
       "15m": number;
       "1h": number;
       "4h": number;
-      "24h": number; // or "1d"
-      "7d": number;  // or "1w"
+      "24h": number; 
+      "7d": number; 
   };
   change?: number;
   logo?: string;
+  marketCap?: number;
+  volume24h?: number;
+  rank?: number;
 }
 
 export interface EconEvent {
@@ -248,15 +253,57 @@ export const fetchRsiAverage = async (): Promise<RsiAvgData | null> => {
   return data || null;
 };
 
+// SCATTER CHART DATA
 export const fetchRsiTrackerHist = async (): Promise<RsiTrackerPoint[]> => {
   const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTrackerHist));
-  return Array.isArray(data) ? data : [];
+  // Structure: { data: { points: [...] } }
+  const points = data?.data?.points;
+  if (!Array.isArray(points)) return [];
+
+  return points.map((p: any) => ({
+      symbol: p.symbol,
+      name: p.name,
+      price: Number(p.price || 0),
+      change24h: Number(p.price24h || 0),
+      marketCap: Number(p.marketCap || 0),
+      // logo is not in the json example, might need fallback
+      logo: `https://assets.coincap.io/assets/icons/${(p.symbol||'').toLowerCase()}@2x.png`, 
+      rsi: {
+          "15m": p.rsiOverall?.rsi15m,
+          "1h": p.rsiOverall?.rsi1h,
+          "4h": p.rsiOverall?.rsi4h,
+          "24h": p.rsiOverall?.rsi24h,
+          "7d": p.rsiOverall?.rsi7d,
+      },
+      currentRsi: p.currentRsi,
+      lastRsi: p.lastRsi
+  }));
 };
 
+// TABLE DATA
 export const fetchRsiTable = async (): Promise<RsiTableItem[]> => {
   const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTable));
-  const items = Array.isArray(data) ? data : (data?.data || []);
-  return Array.isArray(items) ? items : [];
+  // Structure: { data: [...] }
+  const items = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
+  
+  return items.map((p: any) => ({
+      id: p.id,
+      symbol: p.symbol,
+      name: p.name,
+      price: Number(p.price || 0),
+      change: Number(p.price24h || 0), // Mapped from price24h
+      marketCap: Number(p.marketCap || 0),
+      volume24h: Number(p.volume24h || 0),
+      rank: p.rank,
+      logo: `https://assets.coincap.io/assets/icons/${(p.symbol||'').toLowerCase()}@2x.png`,
+      rsi: {
+          "15m": p.rsi?.rsi15m,
+          "1h": p.rsi?.rsi1h,
+          "4h": p.rsi?.rsi4h,
+          "24h": p.rsi?.rsi24h,
+          "7d": p.rsi?.rsi7d
+      }
+  }));
 };
 
 export const fetchMacdAverage = async (): Promise<MacdAvgData | null> => {

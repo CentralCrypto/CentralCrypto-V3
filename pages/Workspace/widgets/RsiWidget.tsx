@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Loader2, LayoutList, Activity } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { RsiAvgData, RsiTrackerPoint, RsiTableItem, fetchRsiAverage, fetchRsiTrackerHist, fetchRsiTable } from '../services/api';
 import { DashboardItem, Language } from '../../../types';
 import { getTranslations } from '../../../locales';
@@ -9,7 +9,6 @@ import Highcharts from 'highcharts';
 const TIMEFRAMES = ['15m', '1h', '4h', '24h', '7d'];
 const LIMIT_OPTIONS = [50, 100, 150, 200, 300];
 type XMode = 'marketCap' | 'change';
-type ViewMode = 'chart' | 'table';
 
 const formatCompactNumber = (number: number) => {
   if (!number || number === 0) return "---";
@@ -40,8 +39,19 @@ const useIsDark = () => {
     return isDark;
 };
 
-// --- TABLE COMPONENT ---
-const RsiTable: React.FC<{ data: RsiTableItem[], filterText?: string }> = ({ data, filterText }) => {
+// --- COMPONENT 1: RSI TABLE ---
+export const RsiTableList: React.FC<{ filterText?: string }> = ({ filterText }) => {
+    const [data, setData] = useState<RsiTableItem[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        setLoading(true);
+        fetchRsiTable().then(d => {
+            setData(d);
+            setLoading(false);
+        });
+    }, []);
+
     const filtered = useMemo(() => {
         if (!filterText) return data;
         const q = filterText.toLowerCase();
@@ -50,6 +60,8 @@ const RsiTable: React.FC<{ data: RsiTableItem[], filterText?: string }> = ({ dat
             (i.name || '').toLowerCase().includes(q)
         );
     }, [data, filterText]);
+
+    if (loading) return <div className="h-60 flex items-center justify-center"><Loader2 className="animate-spin text-gray-400" /></div>;
 
     return (
         <div className="flex flex-col h-full overflow-hidden bg-white dark:bg-[#1a1c1e] rounded-b-xl border-t border-gray-100 dark:border-slate-800">
@@ -62,10 +74,11 @@ const RsiTable: React.FC<{ data: RsiTableItem[], filterText?: string }> = ({ dat
                 <span className="text-center">24h</span>
                 <span className="text-center">7d</span>
             </div>
-            <div className="flex-1 overflow-y-auto custom-scrollbar">
+            <div className="flex-1 overflow-y-auto custom-scrollbar min-h-[400px]">
                 {filtered.map((item, i) => (
-                    <div key={i} className="grid grid-cols-[1.5fr_1fr_0.8fr_0.8fr_0.8fr_0.8fr_0.8fr] gap-2 px-4 py-3 border-b border-gray-50 dark:border-slate-800 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors items-center text-sm">
+                    <div key={item.id + i} className="grid grid-cols-[1.5fr_1fr_0.8fr_0.8fr_0.8fr_0.8fr_0.8fr] gap-2 px-4 py-3 border-b border-gray-50 dark:border-slate-800 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors items-center text-sm">
                         <div className="flex items-center gap-3">
+                            {item.logo && <img src={item.logo} className="w-5 h-5 rounded-full" onError={(e) => (e.target as HTMLImageElement).style.display = 'none'} />}
                             <span className="font-black text-gray-900 dark:text-white">{item.symbol}</span>
                         </div>
                         <div className="text-right font-mono text-gray-700 dark:text-slate-300 font-bold">
@@ -80,11 +93,11 @@ const RsiTable: React.FC<{ data: RsiTableItem[], filterText?: string }> = ({ dat
                         <div className={`text-center font-bold font-mono ${getRsiColor(item.rsi?.["4h"], true)}`}>
                             {item.rsi?.["4h"]?.toFixed(0) || '-'}
                         </div>
-                        <div className={`text-center font-bold font-mono ${getRsiColor(item.rsi?.["24h"] || item.rsi?.["1d"] as any, true)}`}>
-                            {(item.rsi?.["24h"] || item.rsi?.["1d"] as any)?.toFixed(0) || '-'}
+                        <div className={`text-center font-bold font-mono ${getRsiColor(item.rsi?.["24h"], true)}`}>
+                            {item.rsi?.["24h"]?.toFixed(0) || '-'}
                         </div>
-                        <div className={`text-center font-bold font-mono ${getRsiColor(item.rsi?.["7d"] || item.rsi?.["1w"] as any, true)}`}>
-                            {(item.rsi?.["7d"] || item.rsi?.["1w"] as any)?.toFixed(0) || '-'}
+                        <div className={`text-center font-bold font-mono ${getRsiColor(item.rsi?.["7d"], true)}`}>
+                            {item.rsi?.["7d"]?.toFixed(0) || '-'}
                         </div>
                     </div>
                 ))}
@@ -93,69 +106,65 @@ const RsiTable: React.FC<{ data: RsiTableItem[], filterText?: string }> = ({ dat
     );
 };
 
-const HighchartsRsiTracker: React.FC<{ data: RsiTrackerPoint[], timeframe: string, xMode: XMode }> = ({ data, timeframe, xMode }) => {
+// --- COMPONENT 2: SCATTER CHART ---
+export const RsiScatterChart: React.FC = () => {
+    const [data, setData] = useState<RsiTrackerPoint[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [timeframe, setTimeframe] = useState('4h');
+    const [xMode, setXMode] = useState<XMode>('marketCap');
+    const [limit, setLimit] = useState(150);
+
     const chartRef = useRef<HTMLDivElement>(null);
     const isDark = useIsDark();
 
     useEffect(() => {
-        if (!chartRef.current) return;
+        setLoading(true);
+        fetchRsiTrackerHist().then(d => {
+            setData(d);
+            setLoading(false);
+        });
+    }, []);
+
+    useEffect(() => {
+        if (!chartRef.current || loading || data.length === 0) return;
         
         const textColor = isDark ? '#94a3b8' : '#475569';
         const gridColor = isDark ? '#334155' : '#e2e8f0';
         const tooltipBg = isDark ? '#1a1c1e' : '#ffffff';
         
-        const seriesData = data.map(p => {
-            let xVal = p.marketCap;
-            if (xMode === 'change') xVal = p.change24h;
-            if (xMode === 'marketCap' && (!xVal || xVal <= 0)) return null;
+        // Filter and limit data
+        const seriesData = data
+            .slice(0, limit)
+            .map(p => {
+                let xVal = p.marketCap;
+                if (xMode === 'change') xVal = p.change24h;
+                if (xMode === 'marketCap' && (!xVal || xVal <= 0)) return null;
 
-            const rsiVal = p.rsi?.[timeframe] || 50;
-            const isUp = (p.currentRsi || 0) >= (p.lastRsi || 0);
+                const rsiVal = p.rsi?.[timeframe] || 50;
+                const isUp = (p.currentRsi || 0) >= (p.lastRsi || 0);
 
-            return {
-                x: xVal, 
-                y: rsiVal, 
-                name: p.symbol, 
-                price: p.price, 
-                change24h: p.change24h,
-                rsiValues: p.rsi, 
-                currentRsi: p.currentRsi, 
-                lastRsi: p.lastRsi,
-                marketCap: p.marketCap, 
-                isTrendUp: isUp,
-                marker: {
-                    symbol: p.logo ? `url(${p.logo})` : 'circle',
-                    width: 24,
-                    height: 24
-                }
-            };
-        }).filter(p => p !== null);
+                return {
+                    x: xVal, 
+                    y: rsiVal, 
+                    name: p.symbol, 
+                    price: p.price, 
+                    change24h: p.change24h,
+                    rsiValues: p.rsi, 
+                    currentRsi: p.currentRsi, 
+                    lastRsi: p.lastRsi,
+                    marketCap: p.marketCap, 
+                    isTrendUp: isUp,
+                    marker: {
+                        symbol: p.logo ? `url(${p.logo})` : 'circle',
+                        width: 24,
+                        height: 24
+                    }
+                };
+            }).filter(p => p !== null);
 
         const overbought = seriesData.filter(p => p!.y >= 70);
         const neutral = seriesData.filter(p => p!.y > 30 && p!.y < 70);
         const oversold = seriesData.filter(p => p!.y <= 30);
-
-        const resetBtnTheme = {
-            theme: {
-                fill: isDark ? '#1a1c1e' : '#ffffff',
-                stroke: '#dd9933',
-                strokeWidth: 2,
-                r: 6,
-                padding: 10,
-                style: {
-                    color: isDark ? '#ffffff' : '#dd9933',
-                    fontSize: '11px',
-                    fontWeight: '900',
-                    textTransform: 'uppercase'
-                },
-                states: {
-                    hover: {
-                        fill: '#dd9933',
-                        style: { color: isDark ? '#000000' : '#ffffff' }
-                    }
-                }
-            }
-        };
 
         Highcharts.chart(chartRef.current, {
             chart: { 
@@ -164,8 +173,7 @@ const HighchartsRsiTracker: React.FC<{ data: RsiTrackerPoint[], timeframe: strin
                 zoomType: 'xy', 
                 style: { fontFamily: 'Inter, sans-serif' }, 
                 marginTop: 60,
-                height: chartRef.current.clientHeight || 400,
-                resetZoomButton: resetBtnTheme
+                height: 500, // Fixed height for page/maximized
             },
             title: { text: null }, 
             credits: { enabled: false }, 
@@ -201,10 +209,6 @@ const HighchartsRsiTracker: React.FC<{ data: RsiTrackerPoint[], timeframe: strin
                 borderRadius: 12,
                 shadow: true,
                 padding: 0,
-                hideDelay: 50,
-                distance: 40, 
-                anchorX: 'center',
-                anchorY: 'middle',
                 formatter: function(this: any) {
                     const p = this.point;
                     const isUp = p.isTrendUp;
@@ -242,229 +246,112 @@ const HighchartsRsiTracker: React.FC<{ data: RsiTrackerPoint[], timeframe: strin
                     </div>`;
                 }
             },
-            plotOptions: { 
-                scatter: { 
-                    stickyTracking: false,
-                    findNearestPointBy: 'xy',
-                    states: {
-                        hover: {
-                            halo: { size: 0 } 
-                        }
-                    },
-                    dataLabels: {
-                        enabled: true,
-                        useHTML: true,
-                        allowOverlap: true,
-                        overflow: 'allow',
-                        crop: false,
-                        padding: 0,
-                        zIndex: 1,
-                        align: 'center',
-                        verticalAlign: 'middle',
-                        x: 0,
-                        y: 0,
-                        style: { pointerEvents: 'none' }, 
-                        formatter: function(this: any) {
-                            const p = this.point;
-                            const isUp = p.isTrendUp;
-                            const arrowColor = isUp ? '#4ade80' : '#f87171';
-                            const arrowIcon = isUp ? '▲' : '▼';
-                            const arrowPos = isUp ? 'top: -5px; right: -5px;' : 'bottom: -5px; right: -5px;';
-                            
-                            return `
-                            <div style="width: 26px; height: 26px; position: relative; pointer-events: none;">
-                                <div style="position: absolute; ${arrowPos} font-size: 11px; font-weight: 900; color: ${arrowColor}; text-shadow: 0 0 3px rgba(0,0,0,1); z-index: 2;">
-                                    ${arrowIcon}
-                                </div>
-                            </div>`;
-                        }
-                    }
-                } 
-            },
             series: [
                 { name: 'Overbought (>70)', data: overbought, color: '#f87171' }, 
                 { name: 'Neutral', data: neutral, color: '#94a3b8' }, 
                 { name: 'Oversold (<30)', data: oversold, color: '#4ade80' }
             ]
         } as any);
-    }, [data, timeframe, xMode, isDark]);
+    }, [data, loading, timeframe, xMode, limit, isDark]);
+
+    if (loading) return <div className="h-96 flex items-center justify-center"><Loader2 className="animate-spin text-gray-400" /></div>;
 
     return (
-        <>
-            <style>{`
-                .highcharts-tooltip-container { z-index: 10001 !important; }
-                .highcharts-tooltip { pointer-events: none !important; }
-                .highcharts-button { cursor: pointer !important; }
-                .highcharts-data-label { pointer-events: none !important; border: none !important; outline: none !important; }
-                .highcharts-point { stroke-width: 0 !important; outline: none !important; }
-                .highcharts-halo { display: none !important; }
-            `}</style>
-            <div ref={chartRef} style={{ width: '100%', height: '100%', minHeight: '350px' }} />
-        </>
+        <div className="relative w-full h-full bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-100 dark:border-slate-800 p-4">
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.03] z-0 overflow-hidden">
+                <img src="https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png" className="w-1/2 opacity-20 filter grayscale" alt="" />
+            </div>
+            
+            <div className="flex justify-end gap-2 relative z-10 mb-4">
+                <div className="flex flex-col items-end">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase">Período</span>
+                    <select value={timeframe} onChange={(e) => setTimeframe(e.target.value)} className="bg-gray-100 dark:bg-[#2f3032] text-xs font-bold p-1 rounded border-none outline-none text-gray-900 dark:text-white cursor-pointer">
+                        {TIMEFRAMES.map(tf => <option key={tf} value={tf}>{tf.toUpperCase()}</option>)}
+                    </select>
+                </div>
+                <div className="flex flex-col items-end">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase">Moedas</span>
+                    <select value={limit} onChange={(e) => setLimit(parseInt(e.target.value))} className="bg-gray-100 dark:bg-[#2f3032] text-xs font-bold p-1 rounded border-none outline-none text-gray-900 dark:text-white cursor-pointer">
+                        {LIMIT_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                    </select>
+                </div>
+                <div className="flex items-end pt-4 gap-1">
+                    <button onClick={() => setXMode('marketCap')} className={`px-2 py-1 text-[10px] font-bold rounded ${xMode === 'marketCap' ? 'bg-[#dd9933] text-black' : 'bg-gray-100 dark:bg-slate-700 text-gray-500'}`}>Mkt Cap</button>
+                    <button onClick={() => setXMode('change')} className={`px-2 py-1 text-[10px] font-bold rounded ${xMode === 'change' ? 'bg-[#dd9933] text-black' : 'bg-gray-100 dark:bg-slate-700 text-gray-500'}`}>24h %</button>
+                </div>
+            </div>
+
+            <div ref={chartRef} className="relative z-10" />
+        </div>
     );
 };
 
-const RsiWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ item, language = 'pt' }) => {
-    // Shared State
-    const [rsiAvgData, setRsiAvgData] = useState<RsiAvgData | null>(null);
-    const [isLoadingAvg, setIsLoadingAvg] = useState(true);
-    
-    // View State (Maximized)
-    const [viewMode, setViewMode] = useState<ViewMode>('chart');
-    
-    // Chart State
-    const [rsiTrackerData, setRsiTrackerData] = useState<RsiTrackerPoint[]>([]);
-    const [rsiTrackerLoading, setRsiTrackerLoading] = useState(false);
-    const [rsiTimeframe, setRsiTimeframe] = useState('7d');
-    const [coinLimit, setCoinLimit] = useState(100);
-    const [xMode, setXMode] = useState<XMode>('marketCap');
-
-    // Table State
-    const [rsiTableData, setRsiTableData] = useState<RsiTableItem[]>([]);
-    const [rsiTableLoading, setRsiTableLoading] = useState(false);
-
+// --- COMPONENT 3: GAUGE (MINIMIZED VIEW) ---
+export const RsiGauge: React.FC<{ language?: Language }> = ({ language = 'pt' }) => {
+    const [data, setData] = useState({ averageRsi: 50, yesterday: 50, days7Ago: 50, days30Ago: 50 });
+    const [loading, setLoading] = useState(true);
     const t = getTranslations(language as Language).dashboard.widgets.rsi;
 
-    // Derived Logic for Chart
-    const currentRsiPoints = useMemo(() => {
-        return rsiTrackerData
-            .filter(p => p.rsi && p.rsi[rsiTimeframe] > 0)
-            .slice(0, coinLimit);
-    }, [rsiTrackerData, rsiTimeframe, coinLimit]);
-
-    const dynamicRsiAvg = useMemo(() => currentRsiPoints.length === 0 ? 50 : currentRsiPoints.reduce((acc, p) => acc + p.rsi[rsiTimeframe], 0) / currentRsiPoints.length, [currentRsiPoints, rsiTimeframe]);
-
-    // Initial Load - Gauge Data
     useEffect(() => {
-        setIsLoadingAvg(true);
-        fetchRsiAverage().then(data => {
-            setRsiAvgData(data);
-            setIsLoadingAvg(false);
-        }).catch(() => {
-            setIsLoadingAvg(false);
+        fetchRsiAverage().then(d => {
+            if (d) setData(d);
+            setLoading(false);
         });
     }, []);
 
-    // Maximized Data Fetching Logic
-    useEffect(() => {
-        if (!item.isMaximized) return;
+    if (loading) return <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-slate-500" /></div>;
 
-        if (viewMode === 'chart' && rsiTrackerData.length === 0) {
-            setRsiTrackerLoading(true);
-            fetchRsiTrackerHist().then(data => { 
-                setRsiTrackerData(data); 
-                setRsiTrackerLoading(false); 
-            });
-        }
+    const rsiVal = data.averageRsi || 50;
+    const label = rsiVal < 30 ? t.oversold : rsiVal > 70 ? t.overbought : t.neutral;
+    const rotation = -90 + (Math.max(0, Math.min(100, rsiVal)) / 100) * 180;
 
-        if (viewMode === 'table' && rsiTableData.length === 0) {
-            setRsiTableLoading(true);
-            fetchRsiTable().then(data => {
-                setRsiTableData(data);
-                setRsiTableLoading(false);
-            });
-        }
-    }, [item.isMaximized, viewMode]);
+    return (
+        <div className="h-full flex flex-col justify-center p-4 relative text-center bg-white dark:bg-[#2f3032]">
+            <div className="w-[85%] mx-auto overflow-visible relative">
+                <svg viewBox="0 0 200 110" className="overflow-visible">
+                    <defs>
+                        <linearGradient id="rsiGrad" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0%" stopColor="#4ade80" />
+                            <stop offset="50%" stopColor="#facc15" />
+                            <stop offset="100%" stopColor="#ef4444" />
+                        </linearGradient>
+                    </defs>
+                    <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" className="stroke-[#eeeeee] dark:stroke-[#333]" strokeWidth="18" strokeLinecap="round"/>
+                    <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" stroke="url(#rsiGrad)" strokeWidth="18" strokeDasharray={`${(rsiVal/100)*283} 283`} strokeLinecap="round" />
+                    <g transform={`rotate(${rotation} 100 100)`}><path d="M 100 100 L 100 20" className="stroke-gray-800 dark:stroke-white" strokeWidth="3" /><circle cx={100} cy={100} r="5" className="fill-gray-800 dark:fill-white" /></g>
+                </svg>
+            </div>
+            <div className="mt-4">
+                <div className="text-[24px] font-black text-[#dd9933]">{data.averageRsi.toFixed(0)}</div>
+                <div className="text-[8px] font-black text-gray-900 dark:text-white uppercase tracking-widest mt-1">{label}</div>
+            </div>
+            <div className="flex justify-around mt-4 pt-2 border-t border-gray-100 dark:border-slate-700">
+                <div><div className="text-[10px] text-gray-400 uppercase">Ontem</div><div className="font-bold text-sm text-gray-900 dark:text-white">{data.yesterday.toFixed(0)}</div></div>
+                <div><div className="text-[10px] text-gray-400 uppercase">7D</div><div className="font-bold text-sm text-gray-900 dark:text-white">{data.days7Ago.toFixed(0)}</div></div>
+                <div><div className="text-[10px] text-gray-400 uppercase">30D</div><div className="font-bold text-sm text-gray-900 dark:text-white">{data.days30Ago.toFixed(0)}</div></div>
+            </div>
+        </div>
+    );
+};
+
+// --- MAIN WIDGET EXPORT ---
+const RsiWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ item, language = 'pt' }) => {
+    // Logic: 
+    // Minimized = Gauge
+    // Maximized (Dashboard) = Scatter Chart (with controls inside)
     
-    // Minimized View (Gauge)
-    if (!item.isMaximized) {
-        if (isLoadingAvg && !rsiAvgData) return <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-slate-500" /></div>;
-        if (!rsiAvgData) return <div className="flex items-center justify-center h-full text-xs text-slate-500">Sem dados</div>;
-
-        const rsiVal = rsiAvgData.averageRsi || 50;
-        const label = rsiVal < 30 ? t.oversold : rsiVal > 70 ? t.overbought : t.neutral;
-        const rotation = -90 + (Math.max(0, Math.min(100, rsiVal)) / 100) * 180;
-
+    if (item.isMaximized) {
         return (
-            <div className="h-full flex flex-col justify-center p-4 relative text-center bg-white dark:bg-[#2f3032]">
-                <div className="w-[85%] mx-auto overflow-visible relative">
-                    <svg viewBox="0 0 200 110" className="overflow-visible">
-                        <defs>
-                            <linearGradient id="rsiGrad" x1="0" y1="0" x2="1" y2="0">
-                                <stop offset="0%" stopColor="#4ade80" />
-                                <stop offset="50%" stopColor="#facc15" />
-                                <stop offset="100%" stopColor="#ef4444" />
-                            </linearGradient>
-                        </defs>
-                        <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" className="stroke-[#eeeeee] dark:stroke-[#333]" strokeWidth="18" strokeLinecap="round"/>
-                        <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" stroke="url(#rsiGrad)" strokeWidth="18" strokeDasharray={`${(rsiVal/100)*283} 283`} strokeLinecap="round" />
-                        <g transform={`rotate(${rotation} 100 100)`}><path d="M 100 100 L 100 20" className="stroke-gray-800 dark:stroke-white" strokeWidth="3" /><circle cx={100} cy={100} r="5" className="fill-gray-800 dark:fill-white" /></g>
-                    </svg>
-                </div>
-                <div className="mt-4">
-                    <div className="text-[24px] font-black text-[#dd9933]">{rsiAvgData.averageRsi.toFixed(0)}</div>
-                    <div className="text-[8px] font-black text-gray-900 dark:text-white uppercase tracking-widest mt-1">{label}</div>
-                </div>
-                <div className="flex justify-around mt-4 pt-2 border-t border-gray-100 dark:border-slate-700">
-                    <div><div className="text-[10px] text-gray-400 uppercase">Ontem</div><div className="font-bold text-sm text-gray-900 dark:text-white">{rsiAvgData.yesterday.toFixed(0)}</div></div>
-                    <div><div className="text-[10px] text-gray-400 uppercase">7D</div><div className="font-bold text-sm text-gray-900 dark:text-white">{rsiAvgData.days7Ago.toFixed(0)}</div></div>
-                    <div><div className="text-[10px] text-gray-400 uppercase">30D</div><div className="font-bold text-sm text-gray-900 dark:text-white">{rsiAvgData.days30Ago.toFixed(0)}</div></div>
+            <div className="h-full flex flex-col p-4 bg-white dark:bg-[#1a1c1e] relative">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4 px-2">RSI Tracker (Scatter Analysis)</h3>
+                <div className="flex-1 overflow-hidden">
+                    <RsiScatterChart />
                 </div>
             </div>
         );
     }
 
-    // Maximized View
-    const rsiVal = viewMode === 'chart' ? dynamicRsiAvg : (rsiAvgData?.averageRsi || 50);
-    const label = rsiVal < 30 ? t.oversold : rsiVal > 70 ? t.overbought : t.neutral;
-
-    return (
-        <div className="h-full flex flex-col p-4 relative bg-white dark:bg-[#2f3032]">
-            <div className="z-10 flex justify-between items-start mb-4">
-                <div>
-                    <div className="text-[10px] text-gray-500 dark:text-slate-400 font-bold uppercase tracking-wider">Média Global RSI</div>
-                    <div className="text-[24px] font-black text-[#dd9933]">{rsiVal.toFixed(1)}</div>
-                    <div className="text-[8px] font-black text-gray-900 dark:text-white uppercase tracking-widest">{label}</div>
-                </div>
-                
-                <div className="flex flex-col items-end gap-2">
-                    <div className="flex bg-gray-100 dark:bg-black/20 p-1 rounded-lg gap-1">
-                        <button 
-                            onClick={() => setViewMode('chart')} 
-                            className={`px-3 py-1.5 text-xs font-black uppercase rounded transition-all flex items-center gap-2 ${viewMode === 'chart' ? 'bg-white dark:bg-[#2f3032] text-[#dd9933] shadow-sm' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}
-                        >
-                            <Activity size={14} /> Chart
-                        </button>
-                        <button 
-                            onClick={() => setViewMode('table')} 
-                            className={`px-3 py-1.5 text-xs font-black uppercase rounded transition-all flex items-center gap-2 ${viewMode === 'table' ? 'bg-white dark:bg-[#2f3032] text-[#dd9933] shadow-sm' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}
-                        >
-                            <LayoutList size={14} /> Table
-                        </button>
-                    </div>
-
-                    {viewMode === 'chart' && (
-                        <div className="flex gap-2">
-                            <div className="flex flex-col items-end">
-                                <span className="text-[10px] font-bold text-gray-400 uppercase">Período</span>
-                                <select value={rsiTimeframe} onChange={(e) => setRsiTimeframe(e.target.value)} className="bg-gray-100 dark:bg-[#1a1c1e] text-xs font-bold p-1 rounded border-none outline-none text-gray-900 dark:text-white cursor-pointer">
-                                    {TIMEFRAMES.map(tf => <option key={tf} value={tf}>{tf.toUpperCase()}</option>)}
-                                </select>
-                            </div>
-                            <div className="flex flex-col items-end">
-                                <span className="text-[10px] font-bold text-gray-400 uppercase">Moedas</span>
-                                <select value={coinLimit} onChange={(e) => setCoinLimit(parseInt(e.target.value))} className="bg-gray-100 dark:bg-[#1a1c1e] text-xs font-bold p-1 rounded border-none outline-none text-gray-900 dark:text-white cursor-pointer">
-                                    {LIMIT_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                </select>
-                            </div>
-                            <div className="flex items-end pt-4 gap-1">
-                                <button onClick={() => setXMode('marketCap')} className={`px-2 py-1 text-[10px] font-bold rounded ${xMode === 'marketCap' ? 'bg-[#dd9933] text-black' : 'bg-gray-100 dark:bg-slate-700 text-gray-500'}`}>Mkt Cap</button>
-                                <button onClick={() => setXMode('change')} className={`px-2 py-1 text-[10px] font-bold rounded ${xMode === 'change' ? 'bg-[#dd9933] text-black' : 'bg-gray-100 dark:bg-slate-700 text-gray-500'}`}>24h %</button>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </div>
-            
-            <div className="flex-1 min-h-0 relative">
-                {viewMode === 'chart' ? (
-                    rsiTrackerLoading ? <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-slate-500" /></div> : <HighchartsRsiTracker data={currentRsiPoints} timeframe={rsiTimeframe} xMode={xMode} />
-                ) : (
-                    rsiTableLoading ? <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-slate-500" /></div> : <RsiTable data={rsiTableData} />
-                )}
-            </div>
-        </div>
-    );
+    return <RsiGauge language={language} />;
 };
 
 export default RsiWidget;
