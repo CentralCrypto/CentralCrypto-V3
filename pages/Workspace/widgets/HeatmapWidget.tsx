@@ -54,18 +54,30 @@ const CustomTreemapContent = (props: any) => {
 
   const color = getColorForChange(change || 0);
   
-  // LÓGICA DE ZOOM SEMÂNTICO:
-  // Calculamos o tamanho VISUAL (multiplicado pelo zoom).
-  // Se eu dou zoom 4x, um quadrado de 10px vira 40px visualmente, então deve mostrar o logo.
+  // LÓGICA DE ZOOM SEMÂNTICO (VISUAL SIZING):
   const visualW = width * zoomLevel;
   const visualH = height * zoomLevel;
 
-  const isTiny = visualW < 30 || visualH < 30;   // Muito pequeno -> Vazio (só cor)
-  const isSmall = !isTiny && (visualW < 80 || visualH < 70); // Pequeno -> Só Logo
+  const isTiny = visualW < 40 || visualH < 40;   // Muito pequeno -> Vazio
+  const isSmall = !isTiny && (visualW < 100 || visualH < 80); // Pequeno -> Só Logo
   const isLarge = !isTiny && !isSmall;        // Grande -> Info Completa
 
-  // Se for "Tiny", não renderiza conteúdo complexo para performance
-  // O rect captura os eventos
+  // CONSTANTES DE ESCALA VISUAL
+  // O objetivo é: texto cresce até um limite legível, depois para de crescer para não ficar "gigante".
+  // maxVisualPx define o tamanho máximo em pixels NA TELA que o elemento deve ter.
+  // Dividimos pelo zoomLevel para converter de volta para unidades SVG.
+  
+  // Tamanho do texto base (sem zoom): aumentado para ser mais legível inicialmente
+  const baseFontSize = Math.min(width / 2.8, height / 4, 24); 
+  // Limite máximo visual: O texto nunca parecerá maior que 24px na tela
+  const maxFontSizeSVG = 24 / zoomLevel; 
+  // O tamanho final é o menor entre o tamanho proporcional ao box e o limite visual
+  const finalFontSize = Math.min(baseFontSize, maxFontSizeSVG);
+
+  // Mesmo conceito para o logo
+  // Limite visual do logo: 60px na tela
+  const maxLogoSizeSVG = 60 / zoomLevel; 
+
   const triggerOnRect = isTiny;
 
   return (
@@ -75,12 +87,12 @@ const CustomTreemapContent = (props: any) => {
         y={y}
         width={width}
         height={height}
-        rx={4} 
-        ry={4}
+        rx={4 / zoomLevel} 
+        ry={4 / zoomLevel}
         style={{
           fill: color,
           stroke: '#1a1c1e',
-          strokeWidth: 2 / zoomLevel, // Mantém a borda fina mesmo com zoom
+          strokeWidth: 2 / zoomLevel, // Borda fica fina no zoom
           pointerEvents: 'all', 
           cursor: 'pointer'
         }}
@@ -103,38 +115,46 @@ const CustomTreemapContent = (props: any) => {
                     onMouseLeave={onMouseLeave}
                     onClick={onClick}
                 >
-                    {/* Logo Logic - escala inversa ao zoom para manter nitidez se necessário, mas aqui deixamos o browser cuidar do scaling */}
+                    {/* Logo Logic - escala inversa ao zoom para manter limite visual */}
                     {image && (
-                        <img 
-                            src={image} 
-                            alt={name} 
-                            className={`rounded-full shadow-sm drop-shadow-md object-cover ${isSmall ? 'w-full h-full max-w-[80%] max-h-[80%] object-contain opacity-90' : 'w-[30%] max-w-[40px] aspect-square mb-[2%]'}`}
-                            style={{ 
-                                // Otimização para não borrar tanto no zoom
-                                imageRendering: '-webkit-optimize-contrast' 
-                            }}
-                            onError={(e) => (e.currentTarget.style.display = 'none')}
-                        />
+                        <div style={{ 
+                            width: '40%', 
+                            height: 'auto', 
+                            maxWidth: `${maxLogoSizeSVG}px`, 
+                            maxHeight: `${maxLogoSizeSVG}px`,
+                            marginBottom: isLarge ? '4%' : '0',
+                            display: 'flex',
+                            justifyContent: 'center',
+                            alignItems: 'center'
+                        }}>
+                            <img 
+                                src={image} 
+                                alt={name} 
+                                className="rounded-full shadow-sm drop-shadow-md object-contain w-full h-full"
+                                style={{ imageRendering: '-webkit-optimize-contrast' }}
+                                onError={(e) => (e.currentTarget.style.display = 'none')}
+                            />
+                        </div>
                     )}
 
-                    {/* Text Logic - Only for Large (Visible) Blocks */}
+                    {/* Text Logic - Inverse Scale Clamping */}
                     {isLarge && (
-                        <div className="flex flex-col items-center justify-center text-center w-full">
+                        <div className="flex flex-col items-center justify-center text-center w-full leading-tight">
                             <span 
-                                className="font-black text-white drop-shadow-md leading-tight"
-                                style={{ fontSize: `${Math.min(width/4, height/6, 14)}px` }}
+                                className="font-black text-white drop-shadow-md"
+                                style={{ fontSize: `${finalFontSize}px` }}
                             >
                                 {symbol}
                             </span>
                             <span 
-                                className="font-bold text-white/95 drop-shadow-sm mt-[2%]"
-                                style={{ fontSize: `${Math.min(width/5, height/7, 11)}px` }}
+                                className="font-bold text-white/90 drop-shadow-sm mt-[2%]"
+                                style={{ fontSize: `${finalFontSize * 0.75}px` }}
                             >
                                 {formatPrice(price)}
                             </span>
                             <span 
                                 className={`font-black drop-shadow-sm mt-[2%] ${(change || 0) >= 0 ? 'text-green-50' : 'text-red-50'}`}
-                                style={{ fontSize: `${Math.min(width/6, height/8, 10)}px` }}
+                                style={{ fontSize: `${finalFontSize * 0.65}px` }}
                             >
                                 {(change || 0) > 0 ? '+' : ''}{(change || 0).toFixed(2)}%
                             </span>
@@ -148,71 +168,74 @@ const CustomTreemapContent = (props: any) => {
   );
 };
 
-// Fixed Tooltip to actually position based on coordinates
-const CustomTooltip = ({ active, payload, coordinate, viewBox }: any) => {
+// Tooltip now receives zoomLevel to counter-scale itself
+const CustomTooltip = ({ active, payload, coordinate, viewBox, zoomLevel = 1 }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload || payload[0];
     if (!data || !data.symbol) return null;
 
     const isPositive = (data.change || 0) >= 0;
 
-    // Detect edges relative to the chart container
     const x = coordinate?.x || 0;
     const y = coordinate?.y || 0;
-    const w = viewBox?.width || 0;
-    // const h = viewBox?.height || 0;
-
-    // Compact Logic for positioning:
-    const isRightHalf = x > w / 2;
+    
+    // Tooltip offset logic to keep it on screen
+    const isRightHalf = x > (viewBox?.width || 0) / 2;
     const isBottomHalf = y > 220; 
 
     const xTranslate = isRightHalf ? '-100%' : '0%';
     const yTranslate = isBottomHalf ? '-100%' : '0%';
-    const xOffset = isRightHalf ? -10 : 10;
-    const yOffset = isBottomHalf ? -10 : 10;
+    
+    // Scale offset by 1/zoomLevel so the distance feels constant on screen
+    const offsetPx = 15 / zoomLevel; 
+    const xOffset = isRightHalf ? -offsetPx : offsetPx;
+    const yOffset = isBottomHalf ? -offsetPx : offsetPx;
 
     return (
       <div 
-        className="absolute z-[9999] pointer-events-none transition-all duration-75 ease-out"
+        className="absolute z-[9999] pointer-events-none"
         style={{ 
-            left: x, 
-            top: y,
-            transform: `translate(calc(${xTranslate} + ${xOffset}px), calc(${yTranslate} + ${yOffset}px))`
+            left: 0, 
+            top: 0,
+            // CRITICAL: Translate to position, THEN Scale down inversely to zoom
+            // This keeps the tooltip visually constant size (1x) regardless of chart zoom
+            transform: `translate(${x + xOffset}px, ${y + yOffset}px) translate(${xTranslate}, ${yTranslate}) scale(${1 / zoomLevel})`,
+            transformOrigin: isRightHalf ? (isBottomHalf ? 'bottom right' : 'top right') : (isBottomHalf ? 'bottom left' : 'top left')
         }} 
       >
-          <div className="bg-[#121314]/95 backdrop-blur-xl border border-gray-700/50 rounded-xl shadow-2xl min-w-[220px] overflow-hidden flex flex-col">
+          <div className="bg-[#121314]/95 backdrop-blur-xl border border-gray-700/50 rounded-xl shadow-2xl min-w-[240px] overflow-hidden flex flex-col">
             {/* Header Compact */}
             <div className="bg-white/5 p-3 flex items-center justify-between border-b border-white/5">
-                <div className="flex items-center gap-2">
-                    {data.image && <img src={data.image} className="w-8 h-8 rounded-full border border-white/10 bg-white" alt="" onError={(e) => (e.currentTarget.style.display = 'none')} />}
+                <div className="flex items-center gap-3">
+                    {data.image && <img src={data.image} className="w-10 h-10 rounded-full border border-white/10 bg-white p-0.5" alt="" onError={(e) => (e.currentTarget.style.display = 'none')} />}
                     <div>
                         <div className="flex items-center gap-1.5">
-                            <span className="text-sm font-black text-white leading-none">{data.symbol}</span>
-                            <span className="text-[9px] font-bold text-gray-400 bg-white/10 px-1 py-0.5 rounded">#{data.rank}</span>
+                            <span className="text-base font-black text-white leading-none">{data.symbol}</span>
+                            <span className="text-[10px] font-bold text-gray-400 bg-white/10 px-1.5 py-0.5 rounded">#{data.rank}</span>
                         </div>
-                        <span className="text-[10px] font-medium text-gray-400 truncate max-w-[100px] block">{data.fullName}</span>
+                        <span className="text-[11px] font-medium text-gray-400 truncate max-w-[120px] block mt-0.5">{data.fullName}</span>
                     </div>
                 </div>
                 <div className="text-right">
-                    <div className="text-base font-mono font-bold text-white">{formatPrice(data.price)}</div>
-                    <div className={`text-[10px] font-black ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+                    <div className="text-lg font-mono font-bold text-white">{formatPrice(data.price)}</div>
+                    <div className={`text-[11px] font-black ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
                         {isPositive ? '+' : ''}{Number(data.change || 0).toFixed(2)}%
                     </div>
                 </div>
             </div>
 
             {/* Body Compact Stats */}
-            <div className="p-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[10px]">
+            <div className="p-4 grid grid-cols-2 gap-x-6 gap-y-3 text-[11px]">
                 <div className="flex flex-col">
-                    <span className="text-gray-500 font-bold uppercase">Mkt Cap</span>
-                    <span className="font-mono font-medium text-gray-300">{formatCompact(data.mcap)}</span>
+                    <span className="text-gray-500 font-bold uppercase tracking-wide">Mkt Cap</span>
+                    <span className="font-mono font-medium text-gray-200 text-sm">{formatCompact(data.mcap)}</span>
                 </div>
                 <div className="flex flex-col text-right">
-                    <span className="text-gray-500 font-bold uppercase">Vol 24h</span>
-                    <span className="font-mono font-medium text-[#dd9933]">{formatCompact(data.vol)}</span>
+                    <span className="text-gray-500 font-bold uppercase tracking-wide">Vol 24h</span>
+                    <span className="font-mono font-medium text-[#dd9933] text-sm">{formatCompact(data.vol)}</span>
                 </div>
                 
-                <div className="col-span-2 border-t border-white/5 my-0.5"></div>
+                <div className="col-span-2 border-t border-white/5"></div>
 
                 <div className="flex justify-between items-center col-span-2">
                     <span className="text-gray-500 font-bold uppercase">High 24h</span>
@@ -223,13 +246,13 @@ const CustomTooltip = ({ active, payload, coordinate, viewBox }: any) => {
                     <span className="font-mono font-medium text-red-400">{formatPrice(data.low24)}</span>
                 </div>
                 
-                <div className="col-span-2 border-t border-white/5 my-0.5"></div>
+                <div className="col-span-2 border-t border-white/5"></div>
 
                 <div className="flex justify-between items-center col-span-2">
                     <span className="text-gray-500 font-bold uppercase">ATH</span>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                         <span className="font-mono font-medium text-gray-300">{formatPrice(data.ath)}</span>
-                        <span className="text-[9px] text-red-500 font-bold">({data.ath_p?.toFixed(0)}%)</span>
+                        <span className="text-[10px] text-red-500 font-bold bg-red-900/20 px-1 rounded">({data.ath_p?.toFixed(0)}%)</span>
                     </div>
                 </div>
             </div>
@@ -471,7 +494,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
                             aspectRatio={1.6} 
                         >
                             <Tooltip 
-                                content={<CustomTooltip />} 
+                                content={<CustomTooltip zoomLevel={transform.k} />} 
                                 cursor={true} 
                                 allowEscapeViewBox={{ x: true, y: true }} 
                                 isAnimationActive={false} 
