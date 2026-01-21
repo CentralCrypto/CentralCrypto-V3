@@ -6,7 +6,6 @@ import { getTranslations } from '../../../locales';
 import CryptoWidget from './CryptoWidget';
 import CryptoMarketBubbles from '../widgets/CryptoMarketBubbles';
 import MarketCapTable from '../widgets/MarketCapTable';
-// Import specific RSI components
 import { RsiGauge, RsiScatterChart, RsiTableList } from '../widgets/RsiWidget';
 
 import {
@@ -21,7 +20,6 @@ import {
   Lock,
   PieChart,
   User,
-  // New icons
   Layers,
   TrendingUp,
   Map,
@@ -41,7 +39,7 @@ function LockOverlay() {
 
 function PageHeader({ title, description }: { title: string; description: string }) {
   return (
-    <div className="bg-white dark:bg-[#1a1c1e] p-6 rounded-xl border border-gray-100 dark:border-slate-800 shadow-sm transition-colors mb-4 shrink-0">
+    <div className="bg-white dark:bg-[#1a1c1e] p-6 rounded-xl border border-gray-100 dark:border-slate-800 shadow-sm transition-colors mb-6 shrink-0">
       <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{title}</h2>
       <p className="text-gray-500 dark:text-slate-400 mt-1 text-sm">{description}</p>
     </div>
@@ -59,8 +57,6 @@ function PlaceholderPage({ title }: { title: string }) {
     </div>
   );
 }
-
-// --- FAQ COMPONENT ---
 
 function PageFaq({ language, pageType }: { language: Language; pageType: string }) {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
@@ -114,39 +110,27 @@ function PageFaq({ language, pageType }: { language: Language; pageType: string 
   );
 }
 
-// --- RSI CUSTOM PAGE LAYOUT ---
+// --- RSI CUSTOM PAGE LAYOUT (DASHBOARD STYLE) ---
 const RsiPageLayout = ({ language }: { language: Language }) => {
     return (
-        <div className="flex flex-col gap-6">
-            {/* TOP: Gauge */}
-            <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-100 dark:border-slate-800 shadow-lg p-6 flex justify-center">
-                <div className="w-full max-w-md h-64">
+        <div className="flex flex-col gap-6 w-full">
+            {/* Top Row: Gauge (1/3) + Heatmap (2/3) */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[420px]">
+                <div className="col-span-1 h-full">
                     <RsiGauge language={language} />
                 </div>
-            </div>
-
-            {/* MIDDLE: Scatter Chart */}
-            <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-100 dark:border-slate-800 shadow-lg overflow-hidden min-h-[550px]">
-                <div className="p-4 border-b border-gray-100 dark:border-slate-800">
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">RSI Tracker Scatter</h3>
-                </div>
-                <div className="p-2">
+                <div className="col-span-1 lg:col-span-2 h-full">
                     <RsiScatterChart />
                 </div>
             </div>
 
-            {/* BOTTOM: Table */}
-            <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-100 dark:border-slate-800 shadow-lg overflow-hidden min-h-[500px]">
-                <div className="p-4 border-b border-gray-100 dark:border-slate-800">
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">RSI Data Table</h3>
-                </div>
+            {/* Bottom Row: Table (Full) */}
+            <div className="min-h-[500px]">
                 <RsiTableList />
             </div>
         </div>
     );
 };
-
-// --- MAIN PAGE WRAPPER ---
 
 interface IndicatorPageProps {
   language: Language;
@@ -175,9 +159,6 @@ type PageType =
 
 function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageProps) {
   const [activePage, setActivePage] = useState<PageType>('MARKETCAP');
-  const tPages = getTranslations(language).workspace.pages;
-
-  // ✅ Ref do container que realmente rola (fix “abre lá embaixo”)
   const mainScrollRef = useRef<HTMLDivElement | null>(null);
 
   const GROUPS = [
@@ -265,7 +246,16 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
           ref={mainScrollRef}
           className={`flex-1 flex-col min-w-0 h-full overflow-y-auto custom-scrollbar pr-1 ${activePage === 'BUBBLES' ? 'hidden' : 'flex'}`}
         >
-          <PageHeader title={currentPage.label} description="Dados analíticos e ferramentas de mercado em tempo real." />
+          {activePage === 'RSI' ? (
+              <div className="bg-[#1a1c1e] p-6 rounded-xl border border-slate-800 shadow-sm transition-colors mb-6 shrink-0">
+                  <h2 className="text-2xl font-bold text-white">Crypto Relative Strength Index (RSI)</h2>
+                  <p className="text-slate-400 mt-1 text-sm">
+                      Este painel mostra o mapa de calor e os dados do Índice de Força Relativa do mercado de criptomoedas atual.
+                  </p>
+              </div>
+          ) : (
+              <PageHeader title={currentPage.label} description="Dados analíticos e ferramentas de mercado em tempo real." />
+          )}
 
           <div className="flex-1 min-h-[600px] relative">
             {activePage === 'MARKETCAP' && <MarketCapTable language={language} scrollContainerRef={mainScrollRef} />}
@@ -273,7 +263,6 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
             
             {activePage === 'ETF' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'etf-page', type: WidgetType.ETF_NET_FLOW, title: 'ETF Net Flow', symbol: 'GLOBAL', isMaximized: true }} language={language} /></div>}
             
-            {/* Custom Layout for RSI Page */}
             {activePage === 'RSI' && <RsiPageLayout language={language} />}
 
             {activePage === 'MACD' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'macd-page', type: WidgetType.MACD_AVG, title: 'MACD Average Tracker', symbol: 'MARKET', isMaximized: true }} language={language} /></div>}
@@ -303,7 +292,6 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
           <PageFaq language={language} pageType={activePage} />
         </div>
 
-        {/* Fullscreen Bubbles modal */}
         {activePage === 'BUBBLES' && (
           <CryptoMarketBubbles language={language} onClose={() => setActivePage('MARKETCAP')} />
         )}
