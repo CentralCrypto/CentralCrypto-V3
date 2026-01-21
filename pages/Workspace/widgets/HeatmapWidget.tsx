@@ -199,11 +199,15 @@ const CustomTreemapContent = (props: any) => {
             height={height} 
             style={{ pointerEvents: 'none', overflow: 'visible' }}
         >
-            <div className="w-full h-full flex items-center justify-center p-[2px]">
+            <div className="w-full h-full flex items-center justify-center p-[1px]">
                 <div 
-                    className="flex flex-col items-center justify-center bg-black/10 hover:bg-black/30 rounded-lg transition-colors p-0.5 overflow-hidden cursor-default pointer-events-auto w-full h-full"
+                    className="flex flex-col items-center justify-center bg-black/10 hover:bg-black/30 rounded-lg transition-colors p-0.5 overflow-hidden cursor-default pointer-events-auto border border-white/5"
                     style={{ 
-                        backdropFilter: 'blur(2px)'
+                        backdropFilter: 'blur(2px)',
+                        width: '92%',
+                        height: '92%',
+                        maxWidth: '92%',
+                        maxHeight: '92%'
                     }}
                     onMouseEnter={(e) => {
                         e.stopPropagation();
@@ -458,7 +462,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
 
           // IMAGE PRELOADER BUFFERING
           if (mapped.length > 0) {
-              const topCoins = mapped.slice(0, 50); // Preload top 50
+              const topCoins = mapped.slice(0, 100); // Preload top 100
               topCoins.forEach(coin => {
                   if (coin.image) {
                       const img = new Image();
