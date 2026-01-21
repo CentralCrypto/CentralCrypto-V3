@@ -163,6 +163,7 @@ export interface RsiTrackerPoint {
 
 // Table Data (List)
 export interface RsiTableItem {
+  id: string;
   symbol: string;
   name?: string;
   price: number;
@@ -175,6 +176,9 @@ export interface RsiTableItem {
   };
   change?: number;
   logo?: string;
+  marketCap?: number;
+  volume24h?: number;
+  rank?: number;
 }
 
 export interface EconEvent {
@@ -244,21 +248,72 @@ export const fetchFearAndGreed = async (): Promise<FngData[]> => {
 };
 
 export const fetchRsiAverage = async (): Promise<RsiAvgData | null> => {
-  const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiAvg));
-  return data || null;
+  const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiAvg));
+  // Robust unwrapping for [{ data: ... }] or { data: ... } or direct object
+  if (Array.isArray(raw) && raw[0]) return raw[0]?.data?.overall || raw[0]?.overall || raw[0];
+  if (raw?.data?.overall) return raw.data.overall;
+  if (raw?.overall) return raw.overall;
+  return raw || null;
 };
 
 // Use explicit file for Scatter
 export const fetchRsiTrackerHist = async (): Promise<RsiTrackerPoint[]> => {
-  const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTrackerHist));
-  return Array.isArray(data) ? data : [];
+  const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTrackerHist));
+  
+  // Robust unwrapping
+  let root = raw;
+  if (Array.isArray(raw)) root = raw[0];
+  
+  const points = root?.data?.points || root?.points || [];
+  if (!Array.isArray(points)) return [];
+
+  return points.map((p: any) => ({
+      symbol: p.symbol,
+      name: p.name,
+      price: Number(p.price || 0),
+      change24h: Number(p.price24h || 0),
+      marketCap: Number(p.marketCap || 0),
+      logo: `https://assets.coincap.io/assets/icons/${(p.symbol||'').toLowerCase()}@2x.png`, 
+      rsi: {
+          "15m": p.rsiOverall?.rsi15m,
+          "1h": p.rsiOverall?.rsi1h,
+          "4h": p.rsiOverall?.rsi4h,
+          "24h": p.rsiOverall?.rsi24h,
+          "7d": p.rsiOverall?.rsi7d,
+      },
+      currentRsi: p.currentRsi,
+      lastRsi: p.lastRsi
+  }));
 };
 
 // Use explicit file for Table
 export const fetchRsiTable = async (): Promise<RsiTableItem[]> => {
-  const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTable));
-  const items = Array.isArray(data) ? data : (data?.data || []);
-  return Array.isArray(items) ? items : [];
+  const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTable));
+  
+  // Robust unwrapping
+  let root = raw;
+  if (Array.isArray(raw)) root = raw[0];
+
+  const items = Array.isArray(root?.data) ? root.data : (Array.isArray(root) ? root : []);
+  
+  return items.map((p: any) => ({
+      id: p.id,
+      symbol: p.symbol,
+      name: p.name,
+      price: Number(p.price || 0),
+      change: Number(p.price24h || 0),
+      marketCap: Number(p.marketCap || 0),
+      volume24h: Number(p.volume24h || 0),
+      rank: p.rank,
+      logo: `https://assets.coincap.io/assets/icons/${(p.symbol||'').toLowerCase()}@2x.png`,
+      rsi: {
+          "15m": p.rsi?.rsi15m,
+          "1h": p.rsi?.rsi1h,
+          "4h": p.rsi?.rsi4h,
+          "24h": p.rsi?.rsi24h,
+          "7d": p.rsi?.rsi7d
+      }
+  }));
 };
 
 export const fetchMacdAverage = async (): Promise<MacdAvgData | null> => {

@@ -203,11 +203,19 @@ export const RsiScatterChart: React.FC = () => {
     );
 };
 
-// --- COMPONENT 3: GAUGE (MINIMIZED VIEW) ---
+// --- COMPONENT 3: GAUGE (SPEEDOMETER) ---
 export const RsiGauge: React.FC<{ language?: Language }> = ({ language = 'pt' }) => {
     const [data, setData] = useState({ averageRsi: 50, yesterday: 50, days7Ago: 50, days30Ago: 50 });
     const [loading, setLoading] = useState(true);
     const t = getTranslations(language as Language).dashboard.widgets.rsi;
+
+    const GAUGE_CX = 100;
+    const GAUGE_CY = 75;
+    const GAUGE_R = 65;
+    const GAUGE_RY = 65;
+    const GAUGE_STROKE = 10;
+    const TEXT_VAL_Y = 104;
+    const TEXT_LBL_Y = 122;
 
     useEffect(() => {
         fetchRsiAverage().then(d => {
@@ -218,13 +226,9 @@ export const RsiGauge: React.FC<{ language?: Language }> = ({ language = 'pt' })
 
     if (loading) return <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-slate-500" /></div>;
 
-    // Safety check with ?? fallback to prevent crash if data is undefined
     const rsiVal = data?.averageRsi ?? 50;
     const label = rsiVal < 30 ? t.oversold : rsiVal > 70 ? t.overbought : t.neutral;
     const rotation = -90 + (Math.max(0, Math.min(100, rsiVal)) / 100) * 180;
-
-    // Calculate percentage width for the progress bar style gauge in the reference image
-    const percentage = Math.max(0, Math.min(100, rsiVal));
 
     return (
         <div className="h-full flex flex-col p-6 bg-[#15191c] rounded-xl border border-slate-800 shadow-xl relative overflow-hidden">
@@ -235,19 +239,67 @@ export const RsiGauge: React.FC<{ language?: Language }> = ({ language = 'pt' })
                 </span>
             </div>
 
-            <div className="flex-1 flex flex-col justify-center">
-                <div className="text-5xl font-black text-white mb-1">{(rsiVal).toFixed(2)}</div>
-                <div className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-6">{label}</div>
+            <div className="flex-1 flex flex-col justify-center items-center">
+                <svg viewBox="0 0 200 135" className="w-full h-full max-h-[180px] overflow-visible" preserveAspectRatio="xMidYMax meet">
+                    <defs>
+                        <linearGradient id="rsiGradient" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0%" stopColor="#548f3f" />
+                            <stop offset="50%" stopColor="#FFD700" />
+                            <stop offset="100%" stopColor="#CD534B" />
+                        </linearGradient>
+                    </defs>
 
-                {/* Linear Gauge Bar */}
-                <div className="relative h-2 bg-[#2a2e32] rounded-full overflow-hidden mb-1">
-                    <div className="absolute top-0 bottom-0 left-0 bg-gradient-to-r from-green-500 via-yellow-500 to-red-500 transition-all duration-1000" style={{ width: '100%' }}></div>
-                    <div className="absolute top-0 bottom-0 right-0 bg-[#2a2e32] transition-all duration-1000" style={{ width: `${100 - percentage}%` }}></div>
-                </div>
-                <div className="flex justify-between text-[9px] font-bold text-gray-500 uppercase">
-                    <span>Oversold</span>
-                    <span>Overbought</span>
-                </div>
+                    <path
+                        d={`M ${GAUGE_CX - GAUGE_R} ${GAUGE_CY} A ${GAUGE_R} ${GAUGE_RY} 0 0 1 ${GAUGE_CX + GAUGE_R} ${GAUGE_CY}`}
+                        fill="none"
+                        stroke="currentColor"
+                        className="text-gray-200 dark:text-slate-800"
+                        strokeWidth={GAUGE_STROKE}
+                        strokeLinecap="round"
+                    />
+                    <path
+                        d={`M ${GAUGE_CX - GAUGE_R} ${GAUGE_CY} A ${GAUGE_R} ${GAUGE_RY} 0 0 1 ${GAUGE_CX + GAUGE_R} ${GAUGE_CY}`}
+                        fill="none"
+                        stroke="url(#rsiGradient)"
+                        strokeWidth={GAUGE_STROKE}
+                        strokeLinecap="round"
+                    />
+
+                    <g transform={`rotate(${rotation} ${GAUGE_CX} ${GAUGE_CY})`}>
+                        <path
+                            d={`M ${GAUGE_CX} ${GAUGE_CY} L ${GAUGE_CX} ${GAUGE_CY - GAUGE_RY + 2}`}
+                            stroke="white"
+                            strokeWidth="4"
+                            strokeLinecap="round"
+                        />
+                        <circle cx={GAUGE_CX} cy={GAUGE_CY} r="5" fill="white" />
+                    </g>
+
+                    <text
+                        x={GAUGE_CX}
+                        y={TEXT_VAL_Y}
+                        textAnchor="middle"
+                        fill="#dd9933"
+                        fontSize="24"
+                        fontWeight="900"
+                        fontFamily="monospace"
+                    >
+                        {rsiVal.toFixed(2)}
+                    </text>
+
+                    <text
+                        x={GAUGE_CX}
+                        y={TEXT_LBL_Y}
+                        textAnchor="middle"
+                        fill="#ccc"
+                        fontSize="12"
+                        fontWeight="900"
+                        letterSpacing="1"
+                        style={{ textTransform: 'uppercase' }}
+                    >
+                        {label}
+                    </text>
+                </svg>
             </div>
 
             <div className="mt-6 pt-4 border-t border-white/5 space-y-2">

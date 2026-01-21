@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { ResponsiveContainer, Treemap } from 'recharts';
 import { createPortal } from 'react-dom';
@@ -51,20 +50,18 @@ const ManualTooltip = ({ data, x, y }: { data: any, x: number, y: number }) => {
             const winW = window.innerWidth;
             const winH = window.innerHeight;
             
-            let newTop = y + 10; // Default offset
+            let newTop = y + 10; 
             let newLeft = x + 10;
 
-            // Check Bottom
+            // Check Bottom Overflow
             if (newTop + rect.height > winH - 20) {
                 newTop = y - rect.height - 10;
             }
             
-            // Check Top (if flipped up goes off screen)
-            if (newTop < 10) {
-                newTop = 10; // Stick to top edge
-            }
+            // Check Top Overflow (Clamp if it goes off screen after flipping)
+            newTop = Math.max(10, newTop);
 
-            // Check Right
+            // Check Right Overflow
             if (newLeft + rect.width > winW - 20) {
                 newLeft = x - rect.width - 10;
             }
@@ -154,16 +151,16 @@ const CustomTreemapContent = (props: any) => {
   const isLarge = !isTiny && (visualW > 110 && visualH > 90);
 
   // Font scaling adjusted: Reduced max visual size to prevent "giant text"
-  // Previous: 24 / zoomLevel -> Now: 16 / zoomLevel
-  const baseFontSize = Math.min(width / 3.5, height / 3.5, 24); 
-  const maxFontSizeSVG = 16 / zoomLevel; 
+  // Previous: 24 / zoomLevel -> Now: 14 / zoomLevel (Visual clamp)
+  const baseFontSize = Math.min(width / 3.8, height / 3.8, 20); 
+  const maxFontSizeSVG = 14 / zoomLevel; 
   const finalFontSize = Math.min(baseFontSize, maxFontSizeSVG);
   
-  const maxLogoSizeSVG = 45 / zoomLevel; 
+  const maxLogoSizeSVG = 40 / zoomLevel; 
 
   return (
     <g>
-      {/* BACKGROUND (Passive) */}
+      {/* BACKGROUND (Passive) - No Tooltip triggers here */}
       <rect
         x={x}
         y={y}
@@ -179,7 +176,7 @@ const CustomTreemapContent = (props: any) => {
         }}
       />
       
-      {/* HIT AREA (Background Interactivity only, NO TOOLTIP) */}
+      {/* HIT AREA (Background Interactivity only, CLOSE TOOLTIP) */}
       <rect
         x={x}
         y={y}
@@ -187,7 +184,7 @@ const CustomTreemapContent = (props: any) => {
         height={height}
         style={{ fill: 'transparent', cursor: 'grab' }}
         onClick={onClick}
-        onMouseEnter={onContentLeave} // Close tooltip if moved to empty space
+        onMouseEnter={onContentLeave} // Important: Moving to empty space closes tooltip
       />
 
       {!isTiny && (
@@ -203,12 +200,14 @@ const CustomTreemapContent = (props: any) => {
                     CONTENT CONTAINER (Active Tooltip Trigger) 
                     - pointer-events: auto 
                     - onMouseEnter triggers parent state
+                    - w-fit / h-fit to ensure tight wrapping
                 */}
                 <div 
-                    className="flex flex-col items-center justify-center bg-black/10 hover:bg-black/30 rounded-lg transition-colors p-1 max-w-full max-h-full overflow-hidden cursor-default"
+                    className="flex flex-col items-center justify-center bg-black/10 hover:bg-black/30 rounded-lg transition-colors p-1 overflow-hidden cursor-default pointer-events-auto"
                     style={{ 
                         backdropFilter: 'blur(2px)',
-                        pointerEvents: 'auto'
+                        maxWidth: '95%',
+                        maxHeight: '95%'
                     }}
                     onMouseEnter={(e) => {
                         e.stopPropagation();
