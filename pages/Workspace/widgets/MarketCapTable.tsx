@@ -29,7 +29,6 @@ import {
   useSortable
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Area, AreaChart, ResponsiveContainer, YAxis } from 'recharts';
 
 import { ApiCoin, Language } from '../../../types';
 import { fetchTopCoins } from '../services/api';
@@ -117,6 +116,57 @@ const COIN_COL_WIDTH: Record<string, string> = {
   spark7d: '21%',
 };
 
+// --- COMPONENTE SVG LEVE PARA SPARKLINES ---
+// Substitui o Recharts pesado por SVGs nativos
+const SimpleSparkline = React.memo(({ data, color, id }: { data: number[], color: string, id: string }) => {
+  if (!data || data.length < 2) {
+    return (
+      <div className="w-full h-full flex items-center justify-center text-xs font-bold text-gray-400 dark:text-slate-500">
+        —
+      </div>
+    );
+  }
+
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  
+  // ViewBox fixo de alta resolução para garantir precisão
+  const W = 300;
+  const H = 100;
+
+  let dStroke = '';
+  const len = data.length;
+  
+  // Construção do path SVG
+  for (let i = 0; i < len; i++) {
+    const val = data[i];
+    const x = (i / (len - 1)) * W;
+    const norm = (val - min) / range;
+    const y = H - (norm * H); // Invert Y (SVG 0 is top)
+    
+    dStroke += `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)} `;
+  }
+
+  // Fechar a área para o gradiente
+  const dFill = `${dStroke} L ${W} ${H} L 0 ${H} Z`;
+  const gradId = `g_svg_${id}`;
+
+  return (
+    <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="overflow-visible block">
+       <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity={0.55} />
+          <stop offset="75%" stopColor={color} stopOpacity={0.18} />
+          <stop offset="100%" stopColor={color} stopOpacity={0.02} />
+        </linearGradient>
+      </defs>
+      <path d={dFill} fill={`url(#${gradId})`} stroke="none" />
+      <path d={dStroke} fill="none" stroke={color} strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+});
+
 // --- COMPONENTE DE LINHA ISOLADO PARA PERFORMANCE ---
 const LiveRow = React.memo(({ coin, colOrder, favorites, toggleFav }: any) => {
   const { tickers } = useBinanceWS();
@@ -136,21 +186,23 @@ const LiveRow = React.memo(({ coin, colOrder, favorites, toggleFav }: any) => {
   }
 
   const isPos24 = Number(change24 || 0) >= 0;
-  const prices = coin.sparkline_in_7d?.price;
+  const prices = coin.sparkline_in_7d?.price || [];
   const c1h = pctFromSpark(prices, 1);
   const c7d = pct7dFromSpark(prices);
-  const sparkData = Array.isArray(prices) ? prices.map((v: number, i: number) => ({ i, v })) : [];
   const isFav = !!favorites[coin.id];
 
-  // Flash Logic Local
-  const [flash, setFlash] = useState<'up' | 'down' | null>(null);
+  // Flash Logic Local (Smoother Transition)
+  const [rowBg, setRowBg] = useState('transparent');
   const prevPriceRef = useRef(livePrice);
 
   useEffect(() => {
     if (livePrice !== prevPriceRef.current) {
         if (prevPriceRef.current > 0) {
-            setFlash(livePrice > prevPriceRef.current ? 'up' : 'down');
-            const timer = setTimeout(() => setFlash(null), 520);
+            const color = livePrice > prevPriceRef.current ? FLASH_GREEN_BG : FLASH_RED_BG;
+            setRowBg(color);
+            
+            const timer = setTimeout(() => setRowBg('transparent'), 600);
+            prevPriceRef.current = livePrice;
             return () => clearTimeout(timer);
         }
         prevPriceRef.current = livePrice;
@@ -207,21 +259,14 @@ const LiveRow = React.memo(({ coin, colOrder, favorites, toggleFav }: any) => {
         }
 
         if (cid === 'price') {
-          const flashBg =
-            flash === 'up'
-              ? FLASH_GREEN_BG
-              : flash === 'down'
-                ? FLASH_RED_BG
-                : 'transparent';
-
           return (
             <td
               key={cid}
               className="p-2 text-right font-mono text-[15px] font-black text-gray-900 dark:text-slate-200 transition-colors"
             >
               <span
-                className="inline-block rounded-md px-2 py-1 transition-colors duration-300"
-                style={flash ? { backgroundColor: flashBg } : undefined}
+                className="inline-block rounded-md px-2 py-1 transition-colors duration-500"
+                style={{ backgroundColor: rowBg }}
               >
                 {formatUSD(livePrice)}
               </span>
@@ -295,34 +340,11 @@ const LiveRow = React.memo(({ coin, colOrder, favorites, toggleFav }: any) => {
           return (
             <td key={cid} className="p-2 overflow-hidden">
               <div className="w-full h-12 min-w-[320px] overflow-hidden">
-                {sparkData.length > 1 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={sparkData}>
-                      <defs>
-                        <linearGradient id={`g_${coin.id}`} x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor={isPos24 ? GREEN : RED} stopOpacity={0.55} />
-                          <stop offset="75%" stopColor={isPos24 ? GREEN : RED} stopOpacity={0.18} />
-                          <stop offset="100%" stopColor={isPos24 ? GREEN : RED} stopOpacity={0.02} />
-                        </linearGradient>
-                      </defs>
-                      <Area
-                        type="monotone"
-                        dataKey="v"
-                        stroke={isPos24 ? GREEN : RED}
-                        strokeWidth={2}
-                        fill={`url(#g_${coin.id})`}
-                        fillOpacity={1}
-                        isAnimationActive={false}
-                        dot={false}
-                      />
-                      <YAxis domain={['auto', 'auto']} hide />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-xs font-bold text-gray-400 dark:text-slate-500">
-                    —
-                  </div>
-                )}
+                <SimpleSparkline 
+                    data={prices} 
+                    color={isPos24 ? GREEN : RED} 
+                    id={coin.id}
+                />
               </div>
             </td>
           );
@@ -671,6 +693,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     return pct7dFromSpark(c.sparkline_in_7d?.price);
   };
 
+  // Sparkline data builder for Categories (array of {v})
   const buildCategorySpark = (members: ApiCoin[]) => {
     const valid = members.filter(c => Array.isArray(c.sparkline_in_7d?.price) && c.sparkline_in_7d!.price!.length > 10);
     if (valid.length < 2) return null;
@@ -682,7 +705,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
     const wSum = weights.reduce((a, b) => a + b, 0) || 0;
     const useWeighted = wSum > 0;
 
-    const series: { i: number; v: number }[] = [];
+    const series: number[] = [];
     for (let i = 0; i < N; i++) {
       let acc = 0;
       let accW = 0;
@@ -702,7 +725,7 @@ const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) =
       }
 
       if (accW <= 0) return null;
-      series.push({ i, v: acc / accW });
+      series.push(acc / accW);
     }
     return series;
   };
@@ -1289,34 +1312,7 @@ ${isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                             return (
                               <td key={cid} className="p-2 overflow-hidden">
                                 <div className="w-full h-12 overflow-hidden">
-                                  {Array.isArray(r.spark) && r.spark.length > 5 ? (
-                                    <ResponsiveContainer width="100%" height="100%">
-                                      <AreaChart data={r.spark}>
-                                        <defs>
-                                          <linearGradient id={`cg_${r.id}`} x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="0%" stopColor={pos24 ? GREEN : RED} stopOpacity={0.55} />
-                                            <stop offset="75%" stopColor={pos24 ? GREEN : RED} stopOpacity={0.18} />
-                                            <stop offset="100%" stopColor={pos24 ? GREEN : RED} stopOpacity={0.02} />
-                                          </linearGradient>
-                                        </defs>
-                                        <Area
-                                          type="monotone"
-                                          dataKey="v"
-                                          stroke={pos24 ? GREEN : RED}
-                                          strokeWidth={2}
-                                          fill={`url(#cg_${r.id})`}
-                                          fillOpacity={1}
-                                          isAnimationActive={false}
-                                          dot={false}
-                                        />
-                                        <YAxis domain={['auto', 'auto']} hide />
-                                      </AreaChart>
-                                    </ResponsiveContainer>
-                                  ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-xs font-bold text-gray-400 dark:text-slate-500">
-                                      —
-                                    </div>
-                                  )}
+                                  <SimpleSparkline data={r.spark} color={pos24 ? GREEN : RED} id={r.id} />
                                 </div>
                               </td>
                             );
