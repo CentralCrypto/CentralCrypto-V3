@@ -1,6 +1,6 @@
 
-import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { ResponsiveContainer, Treemap, Tooltip } from 'recharts';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import { ResponsiveContainer, Treemap } from 'recharts';
 import { createPortal } from 'react-dom';
 import { Loader2, Maximize2, RefreshCw, AlertTriangle, BarChart2, PieChart, Minimize2, Layers, ZoomOut } from 'lucide-react';
 import { fetchWithFallback } from '../services/api';
@@ -39,35 +39,131 @@ const formatPrice = (price: number | undefined | null) => {
     return `$${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
+// === MANUAL TOOLTIP COMPONENT ===
+const ManualTooltip = ({ data, x, y }: { data: any, x: number, y: number }) => {
+    const tooltipRef = useRef<HTMLDivElement>(null);
+    const [pos, setPos] = useState({ top: y, left: x });
+
+    // Adjust position to prevent overflow
+    useEffect(() => {
+        if (tooltipRef.current) {
+            const rect = tooltipRef.current.getBoundingClientRect();
+            const winW = window.innerWidth;
+            const winH = window.innerHeight;
+            
+            let newTop = y + 10; // Default offset
+            let newLeft = x + 10;
+
+            // Check Bottom
+            if (newTop + rect.height > winH - 20) {
+                newTop = y - rect.height - 10;
+            }
+            
+            // Check Top (if flipped up goes off screen)
+            if (newTop < 10) {
+                newTop = 10; // Stick to top edge
+            }
+
+            // Check Right
+            if (newLeft + rect.width > winW - 20) {
+                newLeft = x - rect.width - 10;
+            }
+
+            setPos({ top: newTop, left: newLeft });
+        }
+    }, [x, y]);
+
+    if (!data) return null;
+    const isPositive = (data.change || 0) >= 0;
+
+    return createPortal(
+        <div 
+            ref={tooltipRef}
+            className="fixed z-[9999] pointer-events-none animate-in fade-in zoom-in-95 duration-100"
+            style={{ 
+                top: pos.top, 
+                left: pos.left,
+                maxWidth: '240px'
+            }} 
+        >
+            <div className="bg-[#121314]/95 backdrop-blur-xl border border-gray-700/50 rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.5)] overflow-hidden flex flex-col">
+                <div className="bg-white/5 p-2.5 flex items-center justify-between border-b border-white/5">
+                    <div className="flex items-center gap-2.5">
+                        {data.image && <img src={data.image} className="w-8 h-8 rounded-full border border-white/10 bg-white p-0.5" alt="" onError={(e) => (e.currentTarget.style.display = 'none')} />}
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-sm font-black text-white leading-none truncate">{data.symbol}</span>
+                                <span className="text-[9px] font-bold text-gray-400 bg-white/10 px-1 py-0.5 rounded">#{data.rank}</span>
+                            </div>
+                            <span className="text-[9px] font-medium text-gray-400 truncate max-w-[100px] block mt-0.5">{data.fullName}</span>
+                        </div>
+                    </div>
+                    <div className="text-right whitespace-nowrap ml-2">
+                        <div className="text-base font-mono font-bold text-white">{formatPrice(data.price)}</div>
+                        <div className={`text-[10px] font-black ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+                            {isPositive ? '+' : ''}{Number(data.change || 0).toFixed(2)}%
+                        </div>
+                    </div>
+                </div>
+
+                <div className="p-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[10px]">
+                    <div className="flex flex-col">
+                        <span className="text-gray-500 font-bold uppercase tracking-wide">Mkt Cap</span>
+                        <span className="font-mono font-medium text-gray-200 text-xs">{formatCompact(data.mcap)}</span>
+                    </div>
+                    <div className="flex flex-col text-right">
+                        <span className="text-gray-500 font-bold uppercase tracking-wide">Vol 24h</span>
+                        <span className="font-mono font-medium text-[#dd9933] text-xs">{formatCompact(data.vol)}</span>
+                    </div>
+                    <div className="col-span-2 border-t border-white/5 my-0.5"></div>
+                    <div className="flex justify-between items-center col-span-2">
+                        <span className="text-gray-500 font-bold uppercase">High 24h</span>
+                        <span className="font-mono font-medium text-green-400">{formatPrice(data.high24)}</span>
+                    </div>
+                    <div className="flex justify-between items-center col-span-2">
+                        <span className="text-gray-500 font-bold uppercase">Low 24h</span>
+                        <span className="font-mono font-medium text-red-400">{formatPrice(data.low24)}</span>
+                    </div>
+                </div>
+            </div>
+        </div>,
+        document.body
+    );
+};
+
 // Conteúdo Otimizado - Tooltip SOMENTE no conteúdo interno
 const CustomTreemapContent = (props: any) => {
-  const { x, y, width, height, name, change, image, symbol, price, onMouseEnter, onMouseLeave, onClick, zoomLevel = 1 } = props;
+  const { 
+      x, y, width, height, 
+      change, image, symbol, price, 
+      onClick, zoomLevel = 1,
+      // Custom handler passed from parent
+      onContentHover, 
+      onContentLeave 
+  } = props;
   
   if (!width || !height || width < 0 || height < 0 || !symbol) return null;
 
   const color = getColorForChange(change || 0);
   
-  // Zoom visual logic
+  // Zoom visual calculation
   const visualW = width * zoomLevel;
   const visualH = height * zoomLevel;
 
   const isTiny = visualW < 45 || visualH < 45;
   const isLarge = !isTiny && (visualW > 110 && visualH > 90);
 
-  // Font scaling with clamping
-  const baseFontSize = Math.min(width / 3.2, height / 3.5, 28); 
-  const maxFontSizeSVG = 24 / zoomLevel; 
+  // Font scaling adjusted: Reduced max visual size to prevent "giant text"
+  // Previous: 24 / zoomLevel -> Now: 16 / zoomLevel
+  const baseFontSize = Math.min(width / 3.5, height / 3.5, 24); 
+  const maxFontSizeSVG = 16 / zoomLevel; 
   const finalFontSize = Math.min(baseFontSize, maxFontSizeSVG);
   
-  const maxLogoSizeSVG = 55 / zoomLevel; 
+  const maxLogoSizeSVG = 45 / zoomLevel; 
 
   return (
     <g>
-      {/* 
-          BACKGROUND RECT 
-          - SEM eventos de mouse para o tooltip (onMouseEnter).
-          - Apenas visualização de cor e borda.
-      */}
+      {/* BACKGROUND (Passive) */}
       <rect
         x={x}
         y={y}
@@ -79,15 +175,11 @@ const CustomTreemapContent = (props: any) => {
           fill: color,
           stroke: '#1a1c1e',
           strokeWidth: 2 / zoomLevel,
-          pointerEvents: 'none' // Importante: deixa o mouse "passar" para elementos abaixo se necessário, mas aqui controlamos via DIV
+          pointerEvents: 'none'
         }}
       />
       
-      {/* 
-         HIT AREA RECT 
-         - Usado apenas para interações de clique/zoom no espaço vazio se necessário, 
-         - mas NÃO dispara o tooltip.
-      */}
+      {/* HIT AREA (Background Interactivity only, NO TOOLTIP) */}
       <rect
         x={x}
         y={y}
@@ -95,7 +187,7 @@ const CustomTreemapContent = (props: any) => {
         height={height}
         style={{ fill: 'transparent', cursor: 'grab' }}
         onClick={onClick}
-        // NÃO ADICIONAR onMouseEnter AQUI
+        onMouseEnter={onContentLeave} // Close tooltip if moved to empty space
       />
 
       {!isTiny && (
@@ -104,25 +196,26 @@ const CustomTreemapContent = (props: any) => {
             y={y} 
             width={width} 
             height={height} 
-            style={{ pointerEvents: 'none', overflow: 'hidden' }}
+            style={{ pointerEvents: 'none', overflow: 'visible' }}
         >
             <div className="w-full h-full flex items-center justify-center p-0.5">
                 {/* 
-                    CONTENT CONTAINER 
-                    - Este é o ÚNICO lugar que dispara onMouseEnter para o tooltip.
-                    - pointer-events-auto reabilita o mouse nesta área específica.
+                    CONTENT CONTAINER (Active Tooltip Trigger) 
+                    - pointer-events: auto 
+                    - onMouseEnter triggers parent state
                 */}
                 <div 
-                    className="flex flex-col items-center justify-center bg-black/10 hover:bg-black/30 rounded-lg transition-colors p-1 max-w-full max-h-full overflow-hidden cursor-help"
+                    className="flex flex-col items-center justify-center bg-black/10 hover:bg-black/30 rounded-lg transition-colors p-1 max-w-full max-h-full overflow-hidden cursor-default"
                     style={{ 
                         backdropFilter: 'blur(2px)',
-                        pointerEvents: 'auto' // REABILITA EVENTOS AQUI
+                        pointerEvents: 'auto'
                     }}
                     onMouseEnter={(e) => {
-                        e.stopPropagation(); // Evita borbulhar
-                        if (onMouseEnter) onMouseEnter(props, e);
+                        e.stopPropagation();
+                        // Call parent handler to show tooltip at mouse pos
+                        onContentHover(props, e.clientX, e.clientY);
                     }}
-                    onMouseLeave={onMouseLeave}
+                    onMouseLeave={onContentLeave}
                     onClick={onClick}
                 >
                     {image && (
@@ -137,7 +230,7 @@ const CustomTreemapContent = (props: any) => {
                         }}>
                             <img 
                                 src={image} 
-                                alt={name} 
+                                alt={symbol} 
                                 className="rounded-full shadow-sm drop-shadow-md object-contain aspect-square"
                                 style={{ 
                                     width: '100%', 
@@ -153,19 +246,19 @@ const CustomTreemapContent = (props: any) => {
                         <div className="flex flex-col items-center justify-center text-center w-full leading-none mt-[1%]">
                             <span 
                                 className="font-black text-white drop-shadow-md truncate max-w-[95%]"
-                                style={{ fontSize: `${finalFontSize}px`, lineHeight: 1 }}
+                                style={{ fontSize: `${finalFontSize}px`, lineHeight: 1.1 }}
                             >
                                 {symbol}
                             </span>
                             <span 
                                 className="font-bold text-white/90 drop-shadow-sm truncate max-w-[95%] mt-[2%]"
-                                style={{ fontSize: `${finalFontSize * 0.75}px`, lineHeight: 1 }}
+                                style={{ fontSize: `${finalFontSize * 0.75}px`, lineHeight: 1.1 }}
                             >
                                 {formatPrice(price)}
                             </span>
                             <span 
                                 className={`font-black drop-shadow-sm mt-[2%] truncate max-w-[95%] ${(change || 0) >= 0 ? 'text-green-50' : 'text-red-50'}`}
-                                style={{ fontSize: `${finalFontSize * 0.65}px`, lineHeight: 1 }}
+                                style={{ fontSize: `${finalFontSize * 0.65}px`, lineHeight: 1.1 }}
                             >
                                 {(change || 0) > 0 ? '+' : ''}{(change || 0).toFixed(2)}%
                             </span>
@@ -177,96 +270,6 @@ const CustomTreemapContent = (props: any) => {
       )}
     </g>
   );
-};
-
-// Tooltip com detecção de borda da janela
-const CustomTooltip = ({ active, payload, coordinate, viewBox, zoomLevel = 1 }: any) => {
-  if (active && payload && payload.length) {
-    const data = payload[0].payload || payload[0];
-    if (!data || !data.symbol) return null;
-
-    const isPositive = (data.change || 0) >= 0;
-
-    const x = coordinate?.x || 0;
-    const y = coordinate?.y || 0;
-    
-    // Dimensões estimadas do tooltip
-    const tooltipW = 220;
-    const tooltipH = 180;
-
-    // Viewport do navegador
-    const winW = window.innerWidth;
-    const winH = window.innerHeight;
-
-    // Coordenadas absolutas na tela (aproximadas, pois 'x' e 'y' são relativos ao SVG)
-    // Precisamos garantir que não vaze.
-    // Lógica simples de quadrante dentro do SVG já ajuda muito.
-    const vw = viewBox?.width || 0;
-    const vh = viewBox?.height || 0;
-
-    const isRightSide = x > vw * 0.6;
-    const isBottomSide = y > vh * 0.6;
-
-    const xTranslate = isRightSide ? '-105%' : '5%';
-    const yTranslate = isBottomSide ? '-105%' : '5%';
-    
-    const invScale = 1 / zoomLevel;
-
-    return (
-      <div 
-        className="absolute z-[9999] pointer-events-none"
-        style={{ 
-            left: 0, 
-            top: 0,
-            transform: `translate3d(${x}px, ${y}px, 0) scale(${invScale}) translate(${xTranslate}, ${yTranslate})`,
-            transformOrigin: `${isRightSide ? '100%' : '0%'} ${isBottomSide ? '100%' : '0%'}`,
-            willChange: 'transform'
-        }} 
-      >
-          <div className="bg-[#121314]/95 backdrop-blur-xl border border-gray-700/50 rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.5)] min-w-[220px] overflow-hidden flex flex-col">
-            <div className="bg-white/5 p-2.5 flex items-center justify-between border-b border-white/5">
-                <div className="flex items-center gap-2.5">
-                    {data.image && <img src={data.image} className="w-8 h-8 rounded-full border border-white/10 bg-white p-0.5" alt="" onError={(e) => (e.currentTarget.style.display = 'none')} />}
-                    <div>
-                        <div className="flex items-center gap-1.5">
-                            <span className="text-sm font-black text-white leading-none">{data.symbol}</span>
-                            <span className="text-[9px] font-bold text-gray-400 bg-white/10 px-1 py-0.5 rounded">#{data.rank}</span>
-                        </div>
-                        <span className="text-[9px] font-medium text-gray-400 truncate max-w-[100px] block mt-0.5">{data.fullName}</span>
-                    </div>
-                </div>
-                <div className="text-right">
-                    <div className="text-base font-mono font-bold text-white">{formatPrice(data.price)}</div>
-                    <div className={`text-[10px] font-black ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
-                        {isPositive ? '+' : ''}{Number(data.change || 0).toFixed(2)}%
-                    </div>
-                </div>
-            </div>
-
-            <div className="p-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[10px]">
-                <div className="flex flex-col">
-                    <span className="text-gray-500 font-bold uppercase tracking-wide">Mkt Cap</span>
-                    <span className="font-mono font-medium text-gray-200 text-xs">{formatCompact(data.mcap)}</span>
-                </div>
-                <div className="flex flex-col text-right">
-                    <span className="text-gray-500 font-bold uppercase tracking-wide">Vol 24h</span>
-                    <span className="font-mono font-medium text-[#dd9933] text-xs">{formatCompact(data.vol)}</span>
-                </div>
-                <div className="col-span-2 border-t border-white/5 my-0.5"></div>
-                <div className="flex justify-between items-center col-span-2">
-                    <span className="text-gray-500 font-bold uppercase">High 24h</span>
-                    <span className="font-mono font-medium text-green-400">{formatPrice(data.high24)}</span>
-                </div>
-                <div className="flex justify-between items-center col-span-2">
-                    <span className="text-gray-500 font-bold uppercase">Low 24h</span>
-                    <span className="font-mono font-medium text-red-400">{formatPrice(data.low24)}</span>
-                </div>
-            </div>
-          </div>
-      </div>
-    );
-  }
-  return null;
 };
 
 const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClose }) => {
@@ -282,6 +285,24 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
   const dragStart = useRef<{ x: number, y: number, ix: number, iy: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Manual Tooltip State
+  const [tooltipState, setTooltipState] = useState<{ visible: boolean, data: any, x: number, y: number }>({ 
+      visible: false, data: null, x: 0, y: 0 
+  });
+
+  const handleContentHover = useCallback((data: any, clientX: number, clientY: number) => {
+      setTooltipState({
+          visible: true,
+          data: data,
+          x: clientX,
+          y: clientY
+      });
+  }, []);
+
+  const handleContentLeave = useCallback(() => {
+      setTooltipState(prev => ({ ...prev, visible: false }));
+  }, []);
+
   useEffect(() => {
       setTransform({ k: 1, x: 0, y: 0 });
   }, [metric, data, isFullscreen]);
@@ -289,6 +310,8 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
   const handleWheel = (e: React.WheelEvent) => {
       e.preventDefault();
       e.stopPropagation();
+      setTooltipState(prev => ({ ...prev, visible: false })); // Hide tooltip on zoom
+
       const sensitivity = 0.001;
       const delta = -e.deltaY * sensitivity;
       const oldK = transform.k;
@@ -309,11 +332,11 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
       if (transform.k <= 1) return;
       e.preventDefault(); 
       setIsDragging(true);
+      setTooltipState(prev => ({ ...prev, visible: false })); // Hide tooltip on drag
       dragStart.current = { x: e.clientX, y: e.clientY, ix: transform.x, iy: transform.y };
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-      // Fix: Check for null dragStart to prevent crash
       if (!isDragging || !dragStart.current) return;
       const dx = e.clientX - dragStart.current.x;
       const dy = e.clientY - dragStart.current.y;
@@ -344,7 +367,6 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
         }
 
         if (rawList.length > 0) {
-          // Fix: Deduplicate by Symbol using a Map to avoid "same key" error in Treemap
           const uniqueMap = new Map();
           
           rawList.forEach((coin: any) => {
@@ -352,7 +374,6 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
               const sym = coin.symbol.toUpperCase();
               if (!uniqueMap.has(sym)) {
                   uniqueMap.set(sym, {
-                      // Generate a unique ID fallback just in case
                       id: coin.id || sym, 
                       name: (coin.s || coin.symbol || '').toUpperCase(),
                       fullName: coin.n || coin.name,
@@ -417,6 +438,15 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
 
   const renderContent = () => (
     <div className="flex flex-col w-full h-full bg-[#1a1c1e] text-white overflow-hidden relative font-sans">
+        {/* Custom Tooltip Portal */}
+        {tooltipState.visible && tooltipState.data && (
+            <ManualTooltip 
+                data={tooltipState.data} 
+                x={tooltipState.x} 
+                y={tooltipState.y} 
+            />
+        )}
+
         <div className="flex justify-between items-center px-4 py-2 border-b border-gray-800 bg-[#1a1c1e] shrink-0 z-10">
             <div className="flex items-center gap-4">
                 <span className="text-sm font-black uppercase tracking-wider hidden sm:inline text-gray-300">{title}</span>
@@ -463,12 +493,17 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
                             dataKey="size"
                             stroke="#0f1011" 
                             fill="#1a1c1e"
-                            content={<CustomTreemapContent zoomLevel={transform.k} />}
+                            content={
+                                <CustomTreemapContent 
+                                    zoomLevel={transform.k}
+                                    onContentHover={handleContentHover}
+                                    onContentLeave={handleContentLeave}
+                                />
+                            }
                             animationDuration={600}
                             aspectRatio={1.6} 
-                        >
-                            <Tooltip content={<CustomTooltip zoomLevel={transform.k} />} cursor={true} allowEscapeViewBox={{ x: true, y: true }} isAnimationActive={false} offset={0} />
-                        </Treemap>
+                            isAnimationActive={false}
+                        />
                     </ResponsiveContainer>
                 </div>
             )}
