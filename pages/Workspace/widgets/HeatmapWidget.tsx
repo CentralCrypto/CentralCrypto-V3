@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { ResponsiveContainer, Treemap, Tooltip } from 'recharts';
 import { createPortal } from 'react-dom';
-import { Loader2, Maximize2, RefreshCw, AlertTriangle, BarChart2, PieChart, Minimize2, TrendingUp, TrendingDown, Layers, X as CloseIcon, ZoomOut } from 'lucide-react';
+import { Loader2, Maximize2, RefreshCw, AlertTriangle, BarChart2, PieChart, Minimize2, Layers, ZoomOut } from 'lucide-react';
 import { fetchWithFallback } from '../services/api';
 import { DashboardItem } from '../../../types';
 
@@ -14,21 +14,14 @@ interface Props {
 }
 
 // === PALETA DE CORES AJUSTADA (User Request) ===
-// GREEN BASE: #548F3F
-// RED BASE: #ff6961
-
 const getColorForChange = (change: number) => {
-    // Escala de Verdes
-    if (change >= 20) return '#345e2a'; // Darker/Stronger Forest
-    if (change >= 7)  return '#467a33'; // Mid Strong
-    if (change >= 0)  return '#548F3F'; // **USER GREEN BASE**
-    
-    // Escala de Vermelhos
-    if (change <= -20) return '#b93c3c'; // Darker Red
-    if (change <= -7)  return '#e0524e'; // Mid Red
-    if (change < 0)    return '#ff6961'; // **USER RED BASE**
-    
-    return '#2d3748'; // Zero/Neutral (Dark Slate)
+    if (change >= 20) return '#345e2a';
+    if (change >= 7)  return '#467a33';
+    if (change >= 0)  return '#548F3F';
+    if (change <= -20) return '#b93c3c';
+    if (change <= -7)  return '#e0524e';
+    if (change < 0)    return '#ff6961';
+    return '#2d3748';
 };
 
 const formatCompact = (num: number) => {
@@ -46,42 +39,34 @@ const formatPrice = (price: number | undefined | null) => {
     return `$${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
+// Conteúdo de cada Bloco (Otimizado)
 const CustomTreemapContent = (props: any) => {
   const { x, y, width, height, name, change, image, symbol, price, onMouseEnter, onMouseLeave, onClick, zoomLevel = 1 } = props;
   
-  // Guard clause
   if (!width || !height || width < 0 || height < 0 || !symbol) return null;
 
   const color = getColorForChange(change || 0);
   
-  // LÓGICA DE ZOOM SEMÂNTICO (VISUAL SIZING):
+  // Visual calculation
   const visualW = width * zoomLevel;
   const visualH = height * zoomLevel;
 
-  const isTiny = visualW < 40 || visualH < 40;   // Muito pequeno -> Vazio
-  const isSmall = !isTiny && (visualW < 100 || visualH < 80); // Pequeno -> Só Logo
-  const isLarge = !isTiny && !isSmall;        // Grande -> Info Completa
+  const isTiny = visualW < 45 || visualH < 45;
+  const isSmall = !isTiny && (visualW < 110 || visualH < 90);
+  const isLarge = !isTiny && !isSmall;
 
-  // CONSTANTES DE ESCALA VISUAL
-  // O objetivo é: texto cresce até um limite legível, depois para de crescer para não ficar "gigante".
-  // maxVisualPx define o tamanho máximo em pixels NA TELA que o elemento deve ter.
-  // Dividimos pelo zoomLevel para converter de volta para unidades SVG.
-  
-  // Tamanho do texto base (sem zoom): aumentado para ser mais legível inicialmente
-  const baseFontSize = Math.min(width / 2.8, height / 4, 24); 
-  // Limite máximo visual: O texto nunca parecerá maior que 24px na tela
-  const maxFontSizeSVG = 24 / zoomLevel; 
-  // O tamanho final é o menor entre o tamanho proporcional ao box e o limite visual
+  // Font Scaling Logic - Compacted
+  // Base text is larger initially, but capped strictly
+  const baseFontSize = Math.min(width / 3.2, height / 3.5, 28); 
+  const maxFontSizeSVG = 22 / zoomLevel; 
   const finalFontSize = Math.min(baseFontSize, maxFontSizeSVG);
-
-  // Mesmo conceito para o logo
-  // Limite visual do logo: 60px na tela
-  const maxLogoSizeSVG = 60 / zoomLevel; 
-
-  const triggerOnRect = isTiny;
+  
+  // Logo Scaling
+  const maxLogoSizeSVG = 55 / zoomLevel; 
 
   return (
     <g>
+      {/* Background Rect - NO TOOLTIP EVENTS HERE */}
       <rect
         x={x}
         y={y}
@@ -92,69 +77,82 @@ const CustomTreemapContent = (props: any) => {
         style={{
           fill: color,
           stroke: '#1a1c1e',
-          strokeWidth: 2 / zoomLevel, // Borda fica fina no zoom
-          pointerEvents: 'all', 
-          cursor: 'pointer'
+          strokeWidth: 2 / zoomLevel,
+          pointerEvents: 'none', // Allow clicking through to underlying elements if needed, but mainly visual
         }}
-        onMouseEnter={triggerOnRect ? () => onMouseEnter && onMouseEnter(props) : undefined}
-        onMouseLeave={triggerOnRect ? onMouseLeave : undefined}
+      />
+      {/* Click handler on a transparent rect to allow zoom/pan interaction on empty space without triggering tooltip */}
+      <rect
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        style={{ fill: 'transparent', cursor: 'grab' }}
         onClick={onClick}
       />
+
       {!isTiny && (
         <foreignObject 
             x={x} 
             y={y} 
             width={width} 
             height={height} 
-            style={{ pointerEvents: 'none' }}
+            style={{ pointerEvents: 'none', overflow: 'hidden' }} // Ensure content clips
         >
-            <div className="w-full h-full flex items-center justify-center overflow-hidden">
+            <div className="w-full h-full flex items-center justify-center p-0.5">
+                {/* 
+                    CONTENT CONTAINER 
+                    - Events attached HERE (User Request: "Tooltip só no mouseover do conjunto")
+                    - Compact layout 
+                */}
                 <div 
-                    className="flex flex-col items-center justify-center p-0.5 pointer-events-auto cursor-help w-full h-full"
-                    onMouseEnter={() => onMouseEnter && onMouseEnter(props)}
+                    className="flex flex-col items-center justify-center pointer-events-auto cursor-help bg-black/10 hover:bg-black/20 rounded-lg transition-colors p-1 max-w-full max-h-full overflow-hidden"
+                    style={{ backdropFilter: 'blur(2px)' }}
+                    onMouseEnter={(e) => onMouseEnter && onMouseEnter(props, e)}
                     onMouseLeave={onMouseLeave}
                     onClick={onClick}
                 >
-                    {/* Logo Logic - escala inversa ao zoom para manter limite visual */}
                     {image && (
                         <div style={{ 
-                            width: '40%', 
+                            width: 'auto', 
                             height: 'auto', 
                             maxWidth: `${maxLogoSizeSVG}px`, 
                             maxHeight: `${maxLogoSizeSVG}px`,
-                            marginBottom: isLarge ? '4%' : '0',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
+                            marginBottom: isLarge ? '2%' : '0',
+                            display: 'flex', 
+                            justifyContent: 'center'
                         }}>
                             <img 
                                 src={image} 
                                 alt={name} 
-                                className="rounded-full shadow-sm drop-shadow-md object-contain w-full h-full"
-                                style={{ imageRendering: '-webkit-optimize-contrast' }}
+                                className="rounded-full shadow-sm drop-shadow-md object-contain aspect-square"
+                                style={{ 
+                                    width: '100%', 
+                                    height: '100%',
+                                    imageRendering: '-webkit-optimize-contrast' 
+                                }}
                                 onError={(e) => (e.currentTarget.style.display = 'none')}
                             />
                         </div>
                     )}
 
-                    {/* Text Logic - Inverse Scale Clamping */}
                     {isLarge && (
-                        <div className="flex flex-col items-center justify-center text-center w-full leading-tight">
+                        <div className="flex flex-col items-center justify-center text-center w-full leading-none mt-[1%]">
                             <span 
-                                className="font-black text-white drop-shadow-md"
-                                style={{ fontSize: `${finalFontSize}px` }}
+                                className="font-black text-white drop-shadow-md truncate max-w-[95%]"
+                                style={{ fontSize: `${finalFontSize}px`, lineHeight: 1 }}
                             >
                                 {symbol}
                             </span>
                             <span 
-                                className="font-bold text-white/90 drop-shadow-sm mt-[2%]"
-                                style={{ fontSize: `${finalFontSize * 0.75}px` }}
+                                className="font-bold text-white/90 drop-shadow-sm truncate max-w-[95%] mt-[2%]"
+                                style={{ fontSize: `${finalFontSize * 0.75}px`, lineHeight: 1 }}
                             >
                                 {formatPrice(price)}
                             </span>
                             <span 
-                                className={`font-black drop-shadow-sm mt-[2%] ${(change || 0) >= 0 ? 'text-green-50' : 'text-red-50'}`}
-                                style={{ fontSize: `${finalFontSize * 0.65}px` }}
+                                className={`font-black drop-shadow-sm mt-[2%] truncate max-w-[95%] ${(change || 0) >= 0 ? 'text-green-50' : 'text-red-50'}`}
+                                style={{ fontSize: `${finalFontSize * 0.65}px`, lineHeight: 1 }}
                             >
                                 {(change || 0) > 0 ? '+' : ''}{(change || 0).toFixed(2)}%
                             </span>
@@ -168,7 +166,7 @@ const CustomTreemapContent = (props: any) => {
   );
 };
 
-// Tooltip now receives zoomLevel to counter-scale itself
+// Optimized Tooltip with Boundary Detection
 const CustomTooltip = ({ active, payload, coordinate, viewBox, zoomLevel = 1 }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload || payload[0];
@@ -176,20 +174,28 @@ const CustomTooltip = ({ active, payload, coordinate, viewBox, zoomLevel = 1 }: 
 
     const isPositive = (data.change || 0) >= 0;
 
+    // Current mouse/coordinate position relative to the chart SVG
     const x = coordinate?.x || 0;
     const y = coordinate?.y || 0;
     
-    // Tooltip offset logic to keep it on screen
-    const isRightHalf = x > (viewBox?.width || 0) / 2;
-    const isBottomHalf = y > 220; 
+    // Viewbox dimensions (visible area of the chart)
+    const vw = viewBox?.width || 0;
+    const vh = viewBox?.height || 0;
 
-    const xTranslate = isRightHalf ? '-100%' : '0%';
-    const yTranslate = isBottomHalf ? '-100%' : '0%';
+    // Detect collision with edges based on visual quadrants
+    // Using 240px as approx tooltip width and 180px as height for calculation
+    // Note: Coordinates from Recharts are pre-transform in some versions, but here we treat them as SVG coords.
     
-    // Scale offset by 1/zoomLevel so the distance feels constant on screen
-    const offsetPx = 15 / zoomLevel; 
-    const xOffset = isRightHalf ? -offsetPx : offsetPx;
-    const yOffset = isBottomHalf ? -offsetPx : offsetPx;
+    // Logic: If on the right 40% of screen, anchor right. Else anchor left.
+    const isRightSide = x > vw * 0.6;
+    // Logic: If on bottom 40% of screen, anchor bottom. Else anchor top.
+    const isBottomSide = y > vh * 0.6;
+
+    const xTranslate = isRightSide ? '-105%' : '5%';
+    const yTranslate = isBottomSide ? '-105%' : '5%';
+    
+    // Inverse scale calculation to keep tooltip size constant on screen
+    const invScale = 1 / zoomLevel;
 
     return (
       <div 
@@ -197,45 +203,48 @@ const CustomTooltip = ({ active, payload, coordinate, viewBox, zoomLevel = 1 }: 
         style={{ 
             left: 0, 
             top: 0,
-            // CRITICAL: Translate to position, THEN Scale down inversely to zoom
-            // This keeps the tooltip visually constant size (1x) regardless of chart zoom
-            transform: `translate(${x + xOffset}px, ${y + yOffset}px) translate(${xTranslate}, ${yTranslate}) scale(${1 / zoomLevel})`,
-            transformOrigin: isRightHalf ? (isBottomHalf ? 'bottom right' : 'top right') : (isBottomHalf ? 'bottom left' : 'top left')
+            // Combine translations: 
+            // 1. Move to point (x,y)
+            // 2. Scale down to counteract zoom (invScale)
+            // 3. Offset based on quadrant (translate %)
+            transform: `translate3d(${x}px, ${y}px, 0) scale(${invScale}) translate(${xTranslate}, ${yTranslate})`,
+            transformOrigin: `${isRightSide ? '100%' : '0%'} ${isBottomSide ? '100%' : '0%'}`,
+            willChange: 'transform' // Optimize rendering
         }} 
       >
-          <div className="bg-[#121314]/95 backdrop-blur-xl border border-gray-700/50 rounded-xl shadow-2xl min-w-[240px] overflow-hidden flex flex-col">
-            {/* Header Compact */}
-            <div className="bg-white/5 p-3 flex items-center justify-between border-b border-white/5">
-                <div className="flex items-center gap-3">
-                    {data.image && <img src={data.image} className="w-10 h-10 rounded-full border border-white/10 bg-white p-0.5" alt="" onError={(e) => (e.currentTarget.style.display = 'none')} />}
+          <div className="bg-[#121314]/95 backdrop-blur-xl border border-gray-700/50 rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.5)] min-w-[220px] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="bg-white/5 p-2.5 flex items-center justify-between border-b border-white/5">
+                <div className="flex items-center gap-2.5">
+                    {data.image && <img src={data.image} className="w-8 h-8 rounded-full border border-white/10 bg-white p-0.5" alt="" onError={(e) => (e.currentTarget.style.display = 'none')} />}
                     <div>
                         <div className="flex items-center gap-1.5">
-                            <span className="text-base font-black text-white leading-none">{data.symbol}</span>
-                            <span className="text-[10px] font-bold text-gray-400 bg-white/10 px-1.5 py-0.5 rounded">#{data.rank}</span>
+                            <span className="text-sm font-black text-white leading-none">{data.symbol}</span>
+                            <span className="text-[9px] font-bold text-gray-400 bg-white/10 px-1 py-0.5 rounded">#{data.rank}</span>
                         </div>
-                        <span className="text-[11px] font-medium text-gray-400 truncate max-w-[120px] block mt-0.5">{data.fullName}</span>
+                        <span className="text-[9px] font-medium text-gray-400 truncate max-w-[100px] block mt-0.5">{data.fullName}</span>
                     </div>
                 </div>
                 <div className="text-right">
-                    <div className="text-lg font-mono font-bold text-white">{formatPrice(data.price)}</div>
-                    <div className={`text-[11px] font-black ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+                    <div className="text-base font-mono font-bold text-white">{formatPrice(data.price)}</div>
+                    <div className={`text-[10px] font-black ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
                         {isPositive ? '+' : ''}{Number(data.change || 0).toFixed(2)}%
                     </div>
                 </div>
             </div>
 
-            {/* Body Compact Stats */}
-            <div className="p-4 grid grid-cols-2 gap-x-6 gap-y-3 text-[11px]">
+            {/* Body */}
+            <div className="p-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[10px]">
                 <div className="flex flex-col">
                     <span className="text-gray-500 font-bold uppercase tracking-wide">Mkt Cap</span>
-                    <span className="font-mono font-medium text-gray-200 text-sm">{formatCompact(data.mcap)}</span>
+                    <span className="font-mono font-medium text-gray-200 text-xs">{formatCompact(data.mcap)}</span>
                 </div>
                 <div className="flex flex-col text-right">
                     <span className="text-gray-500 font-bold uppercase tracking-wide">Vol 24h</span>
-                    <span className="font-mono font-medium text-[#dd9933] text-sm">{formatCompact(data.vol)}</span>
+                    <span className="font-mono font-medium text-[#dd9933] text-xs">{formatCompact(data.vol)}</span>
                 </div>
                 
-                <div className="col-span-2 border-t border-white/5"></div>
+                <div className="col-span-2 border-t border-white/5 my-0.5"></div>
 
                 <div className="flex justify-between items-center col-span-2">
                     <span className="text-gray-500 font-bold uppercase">High 24h</span>
@@ -246,13 +255,13 @@ const CustomTooltip = ({ active, payload, coordinate, viewBox, zoomLevel = 1 }: 
                     <span className="font-mono font-medium text-red-400">{formatPrice(data.low24)}</span>
                 </div>
                 
-                <div className="col-span-2 border-t border-white/5"></div>
+                <div className="col-span-2 border-t border-white/5 my-0.5"></div>
 
                 <div className="flex justify-between items-center col-span-2">
                     <span className="text-gray-500 font-bold uppercase">ATH</span>
                     <div className="flex items-center gap-1.5">
                         <span className="font-mono font-medium text-gray-300">{formatPrice(data.ath)}</span>
-                        <span className="text-[10px] text-red-500 font-bold bg-red-900/20 px-1 rounded">({data.ath_p?.toFixed(0)}%)</span>
+                        <span className="text-[9px] text-red-500 font-bold bg-red-900/20 px-1 rounded">({data.ath_p?.toFixed(0)}%)</span>
                     </div>
                 </div>
             </div>
@@ -289,7 +298,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
       const sensitivity = 0.001;
       const delta = -e.deltaY * sensitivity;
       const oldK = transform.k;
-      const newK = Math.min(Math.max(1, oldK + delta), 20); // Zoom máximo aumentado para 20x
+      const newK = Math.min(Math.max(1, oldK + delta), 20); 
 
       if (newK === oldK) return;
 
@@ -298,7 +307,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
 
-      // Pivot math:
+      // Pivot math
       const worldX = (mx - transform.x) / oldK;
       const worldY = (my - transform.y) / oldK;
 
@@ -310,7 +319,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
 
   const handleMouseDown = (e: React.MouseEvent) => {
       if (transform.k <= 1) return;
-      e.preventDefault(); // Prevent text selection
+      e.preventDefault(); 
       setIsDragging(true);
       dragStart.current = { x: e.clientX, y: e.clientY, ix: transform.x, iy: transform.y };
   };
@@ -350,20 +359,17 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
               name: (coin.s || coin.symbol || '').toUpperCase(),
               fullName: coin.n || coin.name,
               symbol: (coin.s || coin.symbol || '').toUpperCase(),
-              image: coin.image || coin.i || '', // Fallback for image key if minimized
+              image: coin.image || coin.i || '', 
               price: Number(coin.p ?? coin.current_price ?? 0),
               change: Number(coin.p24 ?? coin.price_change_percentage_24h ?? 0),
               mcap: Number(coin.mc ?? coin.market_cap ?? 0),
               vol: Number(coin.v ?? coin.total_volume ?? 0),
-              // Extra fields for rich card
               rank: coin.market_cap_rank || coin.r || 0,
               high24: Number(coin.h24 ?? coin.high_24h ?? 0),
               low24: Number(coin.l24 ?? coin.low_24h ?? 0),
               ath: Number(coin.ath ?? 0),
               ath_p: Number(coin.ath_p ?? coin.ath_change_percentage ?? 0),
-              ath_date: coin.ath_d ?? coin.ath_date ?? '',
-              supply: Number(coin.cs ?? coin.circulating_supply ?? 0),
-              max_supply: Number(coin.ms ?? coin.max_supply ?? 0)
+              supply: Number(coin.cs ?? coin.circulating_supply ?? 0)
           })).filter(c => c.mcap > 0 && c.symbol); 
 
           setData(mapped);
@@ -382,8 +388,6 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
 
   const treeData = useMemo(() => {
     if (!data.length) return [];
-
-    // 🔥 LIMITE AUMENTADO PARA 1000 MOEDAS
     const limit = 1000;
     const sorted = [...data].sort((a, b) => b.mcap - a.mcap).slice(0, limit);
 
@@ -392,7 +396,6 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
         if (metric === 'mcap') {
             sizeValue = coin.mcap;
         } else {
-            // Logarithmic scale for volatility to prevent tiny blocks
             sizeValue = Math.pow(Math.abs(coin.change) + 1, 2) * (Math.log10(coin.mcap || 1000));
         }
 
@@ -477,9 +480,10 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
                 <div style={{ 
                     width: '100%', 
                     height: '100%', 
-                    transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.k})`, 
+                    transform: `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.k})`, 
                     transformOrigin: '0 0',
                     cursor: transform.k > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
+                    willChange: isDragging ? 'transform' : 'auto',
                     transition: isDragging ? 'none' : 'transform 0.1s ease-out'
                 }}>
                     <ResponsiveContainer width="100%" height="100%">
