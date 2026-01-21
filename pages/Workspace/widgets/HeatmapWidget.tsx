@@ -141,23 +141,21 @@ const CustomTreemapContent = (props: any) => {
   
   if (!width || !height || width < 0 || height < 0 || !symbol) return null;
 
-  // Cor baseada na variação (padrão Coin360)
+  // Cor baseada na variação
   const color = getColorForChange(change || 0);
   
   const visualW = width * zoomLevel;
   const visualH = height * zoomLevel;
 
   const isTiny = visualW < 45 || visualH < 45;
-  const isLarge = !isTiny && (visualW > 110 && visualH > 90);
+  const isLarge = !isTiny && (visualW > 110 && visualH > 80);
 
-  // Font scaling logic
-  const baseFontSize = Math.min(width / 3.8, height / 3.8, 20); 
+  // Font Scaling (Reduced to prevent text overflow)
+  const baseFontSize = Math.min(width / 4, height / 4, 18); 
   const maxFontSizeSVG = 14 / zoomLevel; 
   const finalFontSize = Math.min(baseFontSize, maxFontSizeSVG);
   
-  const maxLogoSizeSVG = 40 / zoomLevel; 
-
-  const [imgError, setImgError] = useState(false);
+  const maxLogoSizeSVG = 36 / zoomLevel; 
 
   // Determine o que mostrar como valor secundário
   const secondaryValue = metric === 'mcap' 
@@ -201,13 +199,11 @@ const CustomTreemapContent = (props: any) => {
             height={height} 
             style={{ pointerEvents: 'none', overflow: 'visible' }}
         >
-            <div className="w-full h-full flex items-center justify-center p-0.5">
+            <div className="w-full h-full flex items-center justify-center p-[2px]">
                 <div 
-                    className="flex flex-col items-center justify-center bg-black/10 hover:bg-black/30 rounded-lg transition-colors p-1 overflow-hidden cursor-default pointer-events-auto"
+                    className="flex flex-col items-center justify-center bg-black/10 hover:bg-black/30 rounded-lg transition-colors p-0.5 overflow-hidden cursor-default pointer-events-auto w-full h-full"
                     style={{ 
-                        backdropFilter: 'blur(2px)',
-                        maxWidth: '95%',
-                        maxHeight: '95%'
+                        backdropFilter: 'blur(2px)'
                     }}
                     onMouseEnter={(e) => {
                         e.stopPropagation();
@@ -216,7 +212,7 @@ const CustomTreemapContent = (props: any) => {
                     onMouseLeave={onContentLeave}
                     onClick={onClick}
                 >
-                    {image && !imgError && (
+                    {image && (
                         <div style={{ 
                             width: 'auto', 
                             height: 'auto', 
@@ -224,33 +220,36 @@ const CustomTreemapContent = (props: any) => {
                             maxHeight: `${maxLogoSizeSVG}px`,
                             marginBottom: isLarge ? '2%' : '0',
                             display: 'flex', 
-                            justifyContent: 'center'
+                            justifyContent: 'center',
+                            flexShrink: 0
                         }}>
                             <img 
                                 src={image} 
                                 alt={symbol} 
-                                className="rounded-full shadow-sm drop-shadow-md object-contain aspect-square"
+                                className="rounded-full shadow-sm drop-shadow-md object-contain aspect-square bg-white/10"
                                 style={{ 
                                     width: '100%', 
                                     height: '100%',
                                     imageRendering: '-webkit-optimize-contrast' 
                                 }}
-                                onError={() => setImgError(true)}
+                                onError={(e) => {
+                                    (e.currentTarget as HTMLImageElement).style.display = 'none';
+                                }}
                             />
                         </div>
                     )}
 
                     {isLarge && (
-                        <div className="flex flex-col items-center justify-center text-center w-full leading-none mt-[1%]">
+                        <div className="flex flex-col items-center justify-center text-center w-full leading-none mt-[1%] min-w-0">
                             <span 
-                                className="font-black text-white drop-shadow-md truncate max-w-[95%]"
+                                className="font-black text-white drop-shadow-md truncate w-full"
                                 style={{ fontSize: `${finalFontSize}px`, lineHeight: 1.1 }}
                             >
                                 {symbol}
                             </span>
                             <span 
-                                className="font-bold text-white/90 drop-shadow-sm truncate max-w-[95%] mt-[2%]"
-                                style={{ fontSize: `${finalFontSize * 0.8}px`, lineHeight: 1.1 }}
+                                className="font-bold text-white/90 drop-shadow-sm truncate w-full mt-[1%]"
+                                style={{ fontSize: `${finalFontSize * 0.85}px`, lineHeight: 1.1 }}
                             >
                                 {secondaryValue}
                             </span>
@@ -280,6 +279,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
   const containerRef = useRef<HTMLDivElement>(null);
   const dragStart = useRef<{ x: number, y: number, ix: number, iy: number } | null>(null);
   const transformRef = useRef({ k: 1, x: 0, y: 0 });
+  const rafRef = useRef<number | null>(null);
 
   // Tooltip State
   const [tooltipState, setTooltipState] = useState<{ visible: boolean, data: any, x: number, y: number }>({ 
@@ -370,14 +370,23 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
       // Fix: Strict null check to prevent crash "reading 'ix'"
       if (!isDragging || !dragStart.current) return;
       
-      const dx = e.clientX - dragStart.current.x;
-      const dy = e.clientY - dragStart.current.y;
-      
-      const newX = dragStart.current.ix + dx;
-      const newY = dragStart.current.iy + dy;
-      
-      // Direct DOM manipulation for zero-lag dragging
-      applyDirectTransform(transformRef.current.k, newX, newY);
+      const clientX = e.clientX;
+      const clientY = e.clientY;
+
+      if (rafRef.current) return; // Prevent stacking frames
+
+      rafRef.current = requestAnimationFrame(() => {
+          if (!dragStart.current) return;
+          const dx = clientX - dragStart.current.x;
+          const dy = clientY - dragStart.current.y;
+          
+          const newX = dragStart.current.ix + dx;
+          const newY = dragStart.current.iy + dy;
+          
+          // Direct DOM manipulation for zero-lag dragging
+          applyDirectTransform(transformRef.current.k, newX, newY);
+          rafRef.current = null;
+      });
   };
 
   const handleMouseUp = () => {
@@ -385,6 +394,10 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
       
       setIsDragging(false);
       dragStart.current = null;
+      if (rafRef.current) {
+          cancelAnimationFrame(rafRef.current);
+          rafRef.current = null;
+      }
       
       if (containerRef.current) {
           containerRef.current.style.cursor = 'grab';
@@ -442,6 +455,18 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
 
           const mapped = Array.from(uniqueMap.values()).filter(c => c.mcap > 0);
           setData(mapped);
+
+          // IMAGE PRELOADER BUFFERING
+          if (mapped.length > 0) {
+              const topCoins = mapped.slice(0, 50); // Preload top 50
+              topCoins.forEach(coin => {
+                  if (coin.image) {
+                      const img = new Image();
+                      img.src = coin.image;
+                  }
+              });
+          }
+
         } else {
           setError('Sem dados.');
         }
@@ -460,18 +485,27 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
     const limit = 1000;
     const sorted = [...data].sort((a, b) => b.mcap - a.mcap).slice(0, limit);
 
-    // FIX: Always use Market Cap for Size to prevent "columns" layout
-    // Even in "Change" mode, standard heatmaps use Mcap for size and Change for color.
     const leaves = sorted.map((coin, index) => {
+        let sizeValue = coin.mcap;
+        
+        // Se métrica for 'change', use valor absoluto da variação para tamanho
+        // EXPONENCIAL para forçar diferença de tamanho e evitar colunas
+        if (metric === 'change') {
+            const absChange = Math.abs(coin.change);
+            // Power 3 creates strong variance: 1% -> 1, 5% -> 125, 10% -> 1000
+            // Adding a tiny base to ensure very small movers are visible but tiny
+            sizeValue = Math.pow(absChange + 0.5, 3) * 1000; 
+        }
+
         return {
             ...coin,
-            size: coin.mcap, // Always Mcap for Size
+            size: sizeValue,
             rank: index + 1
         };
     });
 
     return [{ name: 'Market', children: leaves }];
-  }, [data]); // Removed metric dep since size is constant
+  }, [data, metric]); // Added metric back as dependency
 
   const toggleFullscreen = () => {
       if (item?.isMaximized && onClose) onClose();

@@ -35,9 +35,9 @@ export const RsiTableList: React.FC<{ filterText?: string }> = ({ filterText }) 
     useEffect(() => {
         setLoading(true);
         fetchRsiTable().then(d => {
-            setData(d);
+            if (d && d.length > 0) setData(d);
             setLoading(false);
-        });
+        }).catch(() => setLoading(false));
     }, []);
 
     const filtered = useMemo(() => {
@@ -50,6 +50,7 @@ export const RsiTableList: React.FC<{ filterText?: string }> = ({ filterText }) 
     }, [data, filterText]);
 
     if (loading) return <div className="h-60 flex items-center justify-center"><Loader2 className="animate-spin text-gray-400" /></div>;
+    if (!data || data.length === 0) return <div className="h-60 flex items-center justify-center text-gray-500 text-xs font-bold uppercase">Sem dados da tabela</div>;
 
     return (
         <div className="flex flex-col h-full overflow-hidden bg-white dark:bg-[#15191c] rounded-xl border border-gray-100 dark:border-slate-800 shadow-xl">
@@ -98,9 +99,9 @@ export const RsiScatterChart: React.FC = () => {
     useEffect(() => {
         setLoading(true);
         fetchRsiTrackerHist().then(d => {
-            setData(d);
+            if (d && d.length > 0) setData(d);
             setLoading(false);
-        });
+        }).catch(() => setLoading(false));
     }, []);
 
     useEffect(() => {
@@ -179,7 +180,6 @@ export const RsiScatterChart: React.FC = () => {
                 data: seriesData, 
                 color: 'rgba(255,255,255,0.5)',
                 colorKey: 'y',
-                // Using color zones to mimic the heatmap gradient
                 zones: [
                     { value: 30, color: '#4ade80' },
                     { value: 70, color: '#94a3b8' },
@@ -190,6 +190,7 @@ export const RsiScatterChart: React.FC = () => {
     }, [data, loading, timeframe]);
 
     if (loading) return <div className="h-96 flex items-center justify-center"><Loader2 className="animate-spin text-gray-400" /></div>;
+    if (data.length === 0) return <div className="h-96 flex items-center justify-center text-gray-500 text-xs font-bold uppercase">Sem dados do gráfico</div>;
 
     return (
         <div className="relative w-full h-full bg-[#15191c] rounded-xl border border-slate-800 p-4 shadow-xl">
@@ -224,6 +225,8 @@ export const RsiGauge: React.FC<{ language?: Language }> = ({ language = 'pt' })
         });
     }, []);
 
+    const Watermark = () => <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden opacity-[0.05] z-0"><img src="https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png" alt="watermark" className="w-3/4 h-auto grayscale filter" /></div>;
+
     if (loading) return <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-slate-500" /></div>;
 
     const rsiVal = data?.averageRsi ?? 50;
@@ -231,16 +234,12 @@ export const RsiGauge: React.FC<{ language?: Language }> = ({ language = 'pt' })
     const rotation = -90 + (Math.max(0, Math.min(100, rsiVal)) / 100) * 180;
 
     return (
-        <div className="h-full flex flex-col p-6 bg-[#15191c] rounded-xl border border-slate-800 shadow-xl relative overflow-hidden">
-            <div className="flex justify-between items-start mb-4">
-                <h3 className="text-base font-bold text-white">Average Crypto RSI <Info size={14} className="inline text-gray-500 ml-1"/></h3>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${rsiVal < 30 ? 'bg-green-500 text-black' : rsiVal > 70 ? 'bg-red-500 text-white' : 'bg-gray-700 text-white'}`}>
-                    {label}
-                </span>
-            </div>
-
-            <div className="flex-1 flex flex-col justify-center items-center">
-                <svg viewBox="0 0 200 135" className="w-full h-full max-h-[180px] overflow-visible" preserveAspectRatio="xMidYMax meet">
+        <div className="h-full flex flex-col justify-center gap-2 p-2 relative text-center bg-white dark:bg-[#2f3032]">
+            <Watermark />
+            
+            {/* GAUGE */}
+            <div className="flex items-center justify-center relative mt-6 z-10">
+                <svg viewBox="0 0 200 135" className="w-[85%] max-w-[280px] overflow-visible">
                     <defs>
                         <linearGradient id="rsiGradient" x1="0" y1="0" x2="1" y2="0">
                             <stop offset="0%" stopColor="#548f3f" />
@@ -268,11 +267,11 @@ export const RsiGauge: React.FC<{ language?: Language }> = ({ language = 'pt' })
                     <g transform={`rotate(${rotation} ${GAUGE_CX} ${GAUGE_CY})`}>
                         <path
                             d={`M ${GAUGE_CX} ${GAUGE_CY} L ${GAUGE_CX} ${GAUGE_CY - GAUGE_RY + 2}`}
-                            stroke="white"
+                            stroke="var(--color-text-main)"
                             strokeWidth="4"
                             strokeLinecap="round"
                         />
-                        <circle cx={GAUGE_CX} cy={GAUGE_CY} r="5" fill="white" />
+                        <circle cx={GAUGE_CX} cy={GAUGE_CY} r="5" fill="var(--color-text-main)" />
                     </g>
 
                     <text
@@ -291,7 +290,7 @@ export const RsiGauge: React.FC<{ language?: Language }> = ({ language = 'pt' })
                         x={GAUGE_CX}
                         y={TEXT_LBL_Y}
                         textAnchor="middle"
-                        fill="#ccc"
+                        fill="var(--color-text-main)"
                         fontSize="12"
                         fontWeight="900"
                         letterSpacing="1"
@@ -302,19 +301,19 @@ export const RsiGauge: React.FC<{ language?: Language }> = ({ language = 'pt' })
                 </svg>
             </div>
 
-            <div className="mt-6 pt-4 border-t border-white/5 space-y-2">
-                <h4 className="text-xs font-bold text-white mb-2">Historical RSI values <Info size={12} className="inline text-gray-500 ml-1"/></h4>
-                <div className="flex justify-between text-xs items-center">
-                    <span className="text-gray-400">Yesterday</span>
-                    <span className="font-mono font-bold bg-[#222] px-2 py-0.5 rounded text-white border border-[#333]">{(data?.yesterday ?? 0).toFixed(2)}</span>
+            {/* HORIZONTAL FOOTER */}
+            <div className="flex justify-around w-full mt-2 text-center z-10 border-t border-gray-200 dark:border-slate-700/30 pt-2 pb-2">
+                <div>
+                    <div className="text-[10px] text-gray-500 dark:text-slate-500 font-bold uppercase">ONTEM</div>
+                    <div className="text-sm font-bold text-gray-800 dark:text-white">{(data?.yesterday ?? 0).toFixed(0)}</div>
                 </div>
-                <div className="flex justify-between text-xs items-center">
-                    <span className="text-gray-400">7 Days Ago</span>
-                    <span className="font-mono font-bold bg-[#222] px-2 py-0.5 rounded text-white border border-[#333]">{(data?.days7Ago ?? 0).toFixed(2)}</span>
+                <div>
+                    <div className="text-[10px] text-gray-500 dark:text-slate-500 font-bold uppercase">SEMANA</div>
+                    <div className="text-sm font-bold text-gray-800 dark:text-white">{(data?.days7Ago ?? 0).toFixed(0)}</div>
                 </div>
-                <div className="flex justify-between text-xs items-center">
-                    <span className="text-gray-400">30 Days Ago</span>
-                    <span className="font-mono font-bold bg-[#222] px-2 py-0.5 rounded text-white border border-[#333]">{(data?.days30Ago ?? 0).toFixed(2)}</span>
+                <div>
+                    <div className="text-[10px] text-gray-500 dark:text-slate-500 font-bold uppercase">MÊS</div>
+                    <div className="text-sm font-bold text-gray-800 dark:text-white">{(data?.days30Ago ?? 0).toFixed(0)}</div>
                 </div>
             </div>
         </div>

@@ -148,7 +148,6 @@ export interface MacdTrackerPoint {
 
 export interface RsiAvgData { averageRsi: number; yesterday: number; days7Ago: number; days30Ago: number; }
 
-// Scatter Data
 export interface RsiTrackerPoint {
   symbol: string;
   name: string;
@@ -161,7 +160,6 @@ export interface RsiTrackerPoint {
   lastRsi?: number;
 }
 
-// Table Data (List)
 export interface RsiTableItem {
   id: string;
   symbol: string;
@@ -171,8 +169,8 @@ export interface RsiTableItem {
       "15m": number;
       "1h": number;
       "4h": number;
-      "24h": number; // or "1d"
-      "7d": number;  // or "1w"
+      "24h": number; 
+      "7d": number; 
   };
   change?: number;
   logo?: string;
