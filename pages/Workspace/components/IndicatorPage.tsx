@@ -7,6 +7,7 @@ import CryptoWidget from './CryptoWidget';
 import CryptoMarketBubbles from '../widgets/CryptoMarketBubbles';
 import MarketCapTable from '../widgets/MarketCapTable';
 import { RsiGauge, RsiScatterChart, RsiTableList, RsiFaq } from '../widgets/RsiWidget';
+import { MacdSidebar, MacdScatterChart, MacdTableList, MacdFaq } from '../widgets/MacdWidget';
 
 import {
   Activity,
@@ -64,11 +65,10 @@ function PageFaq({ language, pageType }: { language: Language; pageType: string 
 
   const faqData = useMemo(() => {
     // Moved check inside hook to prevent "Rendered fewer hooks than expected" error
-    if (pageType === 'RSI') return null;
+    if (pageType === 'RSI' || pageType === 'MACD') return null;
 
     switch (pageType) {
       case 'FNG': return t.fng;
-      case 'MACD': return t.macd;
       case 'ALTSEASON': return t.altseason;
       case 'ETF': return t.etf;
       case 'LSR': return t.lsr;
@@ -134,6 +134,28 @@ const RsiPageLayout = ({ language }: { language: Language }) => {
             
             {/* FAQ Section */}
             <RsiFaq />
+        </div>
+    );
+};
+
+// --- MACD CUSTOM PAGE LAYOUT ---
+const MacdPageLayout = ({ language }: { language: Language }) => {
+    return (
+        <div className="flex flex-col gap-6 w-full pb-10">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[500px]">
+                <div className="col-span-1 h-full min-h-0">
+                    <MacdSidebar language={language} />
+                </div>
+                <div className="col-span-1 lg:col-span-2 h-full min-h-0">
+                    <MacdScatterChart />
+                </div>
+            </div>
+
+            <div className="min-h-[500px]">
+                <MacdTableList />
+            </div>
+            
+            <MacdFaq />
         </div>
     );
 };
@@ -252,11 +274,19 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
           ref={mainScrollRef}
           className={`flex-1 flex-col min-w-0 h-full overflow-y-auto custom-scrollbar pr-1 ${activePage === 'BUBBLES' ? 'hidden' : 'flex'}`}
         >
+          {/* Custom Headers for RSI/MACD pages */}
           {activePage === 'RSI' ? (
               <div className="bg-white dark:bg-[#1a1c1e] p-6 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm transition-colors mb-6 shrink-0">
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Crypto Relative Strength Index (RSI)</h2>
                   <p className="text-gray-500 dark:text-slate-400 mt-1 text-sm">
                       Análise global de momentum, divergências e condições de sobrecompra/sobrevenda.
+                  </p>
+              </div>
+          ) : activePage === 'MACD' ? (
+              <div className="bg-white dark:bg-[#1a1c1e] p-6 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm transition-colors mb-6 shrink-0">
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Moving Average Convergence Divergence (MACD)</h2>
+                  <p className="text-gray-500 dark:text-slate-400 mt-1 text-sm">
+                      Rastreador de tendências globais e momentum normalizado (N-MACD).
                   </p>
               </div>
           ) : (
@@ -270,8 +300,8 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
             {activePage === 'ETF' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'etf-page', type: WidgetType.ETF_NET_FLOW, title: 'ETF Net Flow', symbol: 'GLOBAL', isMaximized: true }} language={language} /></div>}
             
             {activePage === 'RSI' && <RsiPageLayout language={language} />}
+            {activePage === 'MACD' && <MacdPageLayout language={language} />}
 
-            {activePage === 'MACD' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'macd-page', type: WidgetType.MACD_AVG, title: 'MACD Average Tracker', symbol: 'MARKET', isMaximized: true }} language={language} /></div>}
             {activePage === 'CCT_INDEX' && <PlaceholderPage title="CCT Index" />}
 
             {activePage === 'LSR' && (
