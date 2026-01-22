@@ -53,11 +53,11 @@ export const RsiTableList: React.FC<{ filterText?: string }> = ({ filterText }) 
     if (!data || data.length === 0) return <div className="h-60 flex items-center justify-center text-gray-500 text-xs font-bold uppercase">Sem dados da tabela</div>;
 
     return (
-        <div className="flex flex-col h-full overflow-hidden bg-white dark:bg-[#15191c] rounded-xl border border-gray-100 dark:border-slate-800 shadow-xl">
-            <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-800 flex justify-between items-center bg-gray-50 dark:bg-[#15191c]">
+        <div className="flex flex-col h-full overflow-hidden bg-white dark:bg-[#15191c] rounded-xl shadow-xl border-0 dark:border dark:border-slate-800">
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-[#15191c]">
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white">Crypto Market RSI Leaders</h3>
             </div>
-            <div className="grid grid-cols-[1.5fr_1fr_0.8fr_0.8fr_0.8fr_0.8fr_0.8fr] gap-2 px-6 py-3 bg-gray-100 dark:bg-[#111315] text-[10px] font-black text-gray-500 uppercase tracking-widest sticky top-0 z-10 border-b border-gray-200 dark:border-white/5">
+            <div className="grid grid-cols-[1.5fr_1fr_0.8fr_0.8fr_0.8fr_0.8fr_0.8fr] gap-2 px-6 py-3 bg-gray-50 dark:bg-[#111315] text-[10px] font-black text-gray-500 uppercase tracking-widest sticky top-0 z-10 border-b border-gray-100 dark:border-white/5">
                 <span>Asset</span>
                 <span className="text-right">Price</span>
                 <span className="text-center">15m</span>
@@ -68,7 +68,7 @@ export const RsiTableList: React.FC<{ filterText?: string }> = ({ filterText }) 
             </div>
             <div className="flex-1 overflow-y-auto custom-scrollbar min-h-[400px]">
                 {filtered.map((item, i) => (
-                    <div key={item.id + i} className="grid grid-cols-[1.5fr_1fr_0.8fr_0.8fr_0.8fr_0.8fr_0.8fr] gap-2 px-6 py-3 border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors items-center text-sm group">
+                    <div key={item.id + i} className="grid grid-cols-[1.5fr_1fr_0.8fr_0.8fr_0.8fr_0.8fr_0.8fr] gap-2 px-6 py-3 border-b border-gray-50 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors items-center text-sm group">
                         <div className="flex items-center gap-3">
                             <span className="text-xs text-gray-500 font-mono w-4">{item.rank || i+1}</span>
                             {item.logo && <img src={item.logo} className="w-6 h-6 rounded-full grayscale group-hover:grayscale-0 transition-all" onError={(e) => (e.target as HTMLImageElement).style.display = 'none'} />}
@@ -118,8 +118,8 @@ export const RsiScatterChart: React.FC = () => {
         
         const bgColor = isDark ? '#15191c' : '#ffffff';
         const textColor = isDark ? '#ffffff' : '#333333';
-        const gridColor = isDark ? '#222' : '#e5e7eb';
-        const lineColor = isDark ? '#444' : '#d1d5db';
+        const gridColor = isDark ? '#334155' : '#f1f5f9';
+        const lineColor = isDark ? '#444' : '#e2e8f0';
 
         // FILTER: Remove items with invalid MarketCap to prevent chart blanking out on Log Scale
         const validSeriesData = data
@@ -212,7 +212,7 @@ export const RsiScatterChart: React.FC = () => {
     if (data.length === 0) return <div className="h-96 flex items-center justify-center text-gray-500 text-xs font-bold uppercase">Sem dados do gráfico (Offline)</div>;
 
     return (
-        <div className="relative w-full h-full bg-white dark:bg-[#15191c] rounded-xl border border-gray-200 dark:border-slate-800 p-4 shadow-xl">
+        <div className="relative w-full h-full bg-white dark:bg-[#15191c] rounded-xl shadow-xl border-0 dark:border dark:border-slate-800 p-4">
             <div className="absolute top-4 right-4 z-10">
                 <select value={timeframe} onChange={(e) => setTimeframe(e.target.value)} className="bg-gray-100 dark:bg-[#222] text-xs font-bold text-gray-900 dark:text-white p-1 rounded border border-gray-200 dark:border-[#333] outline-none cursor-pointer">
                     {TIMEFRAMES.map(tf => <option key={tf} value={tf}>{tf.toUpperCase()}</option>)}

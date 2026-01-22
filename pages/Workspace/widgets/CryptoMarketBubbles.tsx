@@ -1976,7 +1976,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     >
       {/* HEADER */}
       {showControls && (
-        <div className="flex items-center p-4 z-20 bg-gray-50/80 dark:bg-black/50 backdrop-blur-sm border-b border-gray-100 dark:border-white/10 shrink-0 transition-colors shadow-sm dark:shadow-none">
+        <div className="flex items-center p-4 z-20 bg-white/80 dark:bg-black/50 backdrop-blur-sm border-b border-transparent dark:border-white/10 shrink-0 transition-colors shadow-sm dark:shadow-none">
             {/* LEFT */}
             <div className="flex items-center gap-4 shrink-0">
             {!isWidget && <Coins size={28} className="text-[#dd9933]" />}
@@ -1990,7 +1990,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
             </div>
 
             {isGameMode && (
-                <div className="ml-2 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-100 dark:bg-white/5">
+                <div className="ml-2 px-3 py-1.5 rounded-lg border border-transparent dark:border-white/10 bg-gray-100 dark:bg-white/5">
                 <div className="text-[11px] font-black text-gray-500 dark:text-gray-400">Bolas fora</div>
                 <div className="text-sm font-black text-gray-900 dark:text-white">{pocketedUI.count}/{pocketedUI.max}</div>
                 </div>
@@ -1999,7 +1999,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
             {/* CENTER: qtdd + busca */}
             <div className="flex-1 flex items-center justify-center gap-3 px-4">
-            <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/50 p-2 rounded-lg border border-gray-200 dark:border-white/10">
+            <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/50 p-2 rounded-lg border border-transparent dark:border-white/10">
                 <Coins size={16} className="text-gray-400" />
                 <select
                 value={getEffectiveCount()}
@@ -2018,7 +2018,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                 </select>
             </div>
 
-            <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/50 p-2 rounded-lg border border-gray-200 dark:border-white/10">
+            <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/50 p-2 rounded-lg border border-transparent dark:border-white/10">
                 <Search size={16} className="text-gray-400" />
                 <input
                 type="text"
@@ -2039,7 +2039,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
             {/* RIGHT: botões + controles */}
             <div className="flex items-center gap-2 shrink-0">
             <div className="flex items-center gap-2 hidden sm:flex">
-                <div className="flex bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10">
+                <div className="flex bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-transparent dark:border-white/10">
                 <button
                     onClick={() => setChartMode('valuation')}
                     className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'valuation' ? 'bg-white dark:bg-[#2f3032] shadow-sm text-[#dd9933]' : 'text-gray-500 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'}`}
@@ -2049,7 +2049,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                 </button>
                 </div>
 
-                <div className="flex items-center bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10">
+                <div className="flex items-center bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-transparent dark:border-white/10">
                 <button
                     onClick={() => setChartMode('performance')}
                     className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'performance' ? 'bg-white dark:bg-[#2f3032] shadow-sm text-[#dd9933]' : 'text-gray-500 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'}`}
@@ -2090,7 +2090,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                 ref={settingsBtnRef}
                 onClick={() => setSettingsOpen(v => !v)}
                 onMouseEnter={handleSettingsEnter}
-                className={`p-3 rounded-lg border transition-colors backdrop-blur-sm ${settingsOpen ? 'bg-[#dd9933] text-black border-[#dd9933]' : 'bg-gray-100 dark:bg-black/50 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-600 dark:text-gray-300'}`}
+                className={`p-3 rounded-lg border transition-colors backdrop-blur-sm ${settingsOpen ? 'bg-[#dd9933] text-black border-[#dd9933]' : 'bg-gray-100 dark:bg-black/50 border-transparent dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-600 dark:text-gray-300'}`}
                 title="Settings"
             >
                 <Settings size={20} />
@@ -2099,7 +2099,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
             {!isWidget && (
                 <button
                     onClick={() => onClose && onClose()}
-                    className="p-3 bg-gray-100 dark:bg-black/50 rounded-lg border border-gray-200 dark:border-white/10 hover:bg-red-500/10 text-gray-600 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                    className="p-3 bg-gray-100 dark:bg-black/50 rounded-lg border border-transparent dark:border-white/10 hover:bg-red-500/10 text-gray-600 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
                     title="Close"
                 >
                     <CloseIcon size={20} />
@@ -2286,7 +2286,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
               <button
                 onClick={() => setDetailOpen(false)}
-                className="p-2 rounded-lg bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 border border-gray-200 dark:border-white/10 text-gray-600 dark:text-white"
+                className="p-2 rounded-lg bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 border border-transparent dark:border-white/10 text-gray-600 dark:text-white"
                 title="Fechar"
               >
                 <CloseIcon size={18} />

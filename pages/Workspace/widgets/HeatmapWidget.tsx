@@ -70,10 +70,10 @@ const ManualTooltip = ({ data, x, y }: { data: any, x: number, y: number }) => {
             className="fixed z-[9999] pointer-events-none animate-in fade-in zoom-in-95 duration-100"
             style={{ top: pos.top, left: pos.left, maxWidth: '240px' }} 
         >
-            <div className="bg-white/95 dark:bg-[#121314]/95 backdrop-blur-xl border border-gray-200 dark:border-gray-700/50 rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.5)] overflow-hidden flex flex-col">
-                <div className="bg-gray-50 dark:bg-white/5 p-2.5 flex items-center justify-between border-b border-gray-200 dark:border-white/5">
+            <div className="bg-white/95 dark:bg-[#121314]/95 backdrop-blur-xl rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.15)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.5)] overflow-hidden flex flex-col border border-transparent dark:border-gray-700/50">
+                <div className="bg-gray-50 dark:bg-white/5 p-2.5 flex items-center justify-between border-b border-gray-100 dark:border-white/5">
                     <div className="flex items-center gap-2.5">
-                        {data.image && <img src={data.image} className="w-8 h-8 rounded-full border border-gray-200 dark:border-white/10 bg-white p-0.5" alt="" onError={(e) => (e.currentTarget.style.display = 'none')} />}
+                        {data.image && <img src={data.image} className="w-8 h-8 rounded-full bg-white p-0.5 shadow-sm" alt="" onError={(e) => (e.currentTarget.style.display = 'none')} />}
                         <div className="min-w-0">
                             <div className="flex items-center gap-1.5">
                                 <span className="text-sm font-black text-gray-900 dark:text-white leading-none truncate">{data.symbol}</span>
@@ -132,14 +132,13 @@ const CustomTreemapContent = (props: any) => {
 
   const color = getColorForChange(change || 0);
 
-  // Border logic: At higher zooms, remove stroke completely to avoid gaps
-  const strokeWidth = zoomLevel > 1.5 ? 0 : (1 / zoomLevel);
-  // Dark mode stroke vs Light mode stroke (handled via JS since SVG props)
+  // Border logic: Constant visual 1px width, regardless of zoom level
+  const strokeWidth = (1 / zoomLevel);
+  // Stroke color - white in light mode, dark in dark mode
   const isDark = document.documentElement.classList.contains('dark');
   const strokeColor = isDark ? '#0f1011' : '#ffffff'; 
   
   if (!isVisible) {
-      // Render simple rect placeholder for off-screen items to maintain layout integrity
       return <rect x={x} y={y} width={width} height={height} fill={color} stroke={strokeColor} strokeWidth={strokeWidth} />;
   }
 
@@ -151,25 +150,38 @@ const CustomTreemapContent = (props: any) => {
   const isTiny = visualW < 20 || visualH < 15;
   const isSmall = visualW < 60 || visualH < 50;
   
-  // Font sizes relative to box dimensions (Data Units)
-  const minDim = Math.min(width, height);
-  const logoSize = Math.min(minDim * 0.4, 60); 
-  const symbolFontSize = Math.min(width * 0.25, height * 0.25, 30); 
-  const priceFontSize = Math.min(width * 0.15, height * 0.15, 16);
+  // --- FONT SIZE CALCULATION (PREVENT OVERFLOW) ---
+  const charCount = symbol.length;
+  // Adjusted factors to prevent text from leaking out of the box
+  const maxFontW = (width * 0.70) / (charCount * 0.7); // Reduced width availability
+  const maxFontH = height * 0.20; // Reduced height availability
+  // Clamp max size to 24px (smaller than before)
+  const symbolFontSize = Math.min(Math.max(maxFontW, 4), maxFontH, 24); 
+  
+  // Calculate price font size relative to symbol
+  const priceFontSize = Math.max(symbolFontSize * 0.6, 9);
 
-  // Positioning
+  // Determine logo size
+  const minDim = Math.min(width, height);
+  const logoSize = Math.min(minDim * 0.4, 50);
+  
+  // Layout logic
+  const showLogo = image && !isSmall && (logoSize > 12) && (height > symbolFontSize * 3);
+  const showPrice = !isSmall && (height > symbolFontSize * 2.5);
+
   const centerX = x + width / 2;
   const centerY = y + height / 2;
-  const textGap = symbolFontSize * 0.2;
+  const textGap = symbolFontSize * 0.15;
   const logoGap = logoSize * 0.1;
   
   // Total content height approximation
   let totalContentH = symbolFontSize;
-  if (image && !isSmall) totalContentH += logoSize + logoGap;
-  if (!isSmall) totalContentH += priceFontSize + textGap;
+  if (showLogo) totalContentH += logoSize + logoGap;
+  if (showPrice) totalContentH += priceFontSize + textGap;
   
   // Start Y position (centered)
-  let startY = centerY - totalContentH / 2 + symbolFontSize / 2;
+  let startY = centerY - totalContentH / 2;
+  if (showLogo) startY += logoSize / 2; // Offset start if logo exists
 
   // Unique clip path ID for this cell
   const clipId = `clip-${symbol}-${x}-${y}`;
@@ -201,7 +213,7 @@ const CustomTreemapContent = (props: any) => {
       {!isTiny && (
         <g clipPath={`url(#${clipId})`} style={{ pointerEvents: 'none' }}>
             
-            {image && !isSmall && (
+            {showLogo && (
                 <image
                     x={centerX - logoSize / 2}
                     y={startY}
@@ -214,7 +226,7 @@ const CustomTreemapContent = (props: any) => {
 
             <text
                 x={centerX}
-                y={image && !isSmall ? startY + logoSize + logoGap + symbolFontSize * 0.8 : centerY + symbolFontSize * 0.3}
+                y={showLogo ? startY + logoSize + logoGap + symbolFontSize * 0.8 : centerY + symbolFontSize * 0.3}
                 textAnchor="middle"
                 fill="#ffffff"
                 style={{ 
@@ -227,10 +239,10 @@ const CustomTreemapContent = (props: any) => {
                 {symbol}
             </text>
 
-            {!isSmall && (
+            {showPrice && (
                 <text
                     x={centerX}
-                    y={startY + logoSize + logoGap + symbolFontSize + textGap + priceFontSize * 0.8}
+                    y={showLogo ? startY + logoSize + logoGap + symbolFontSize + textGap + priceFontSize * 0.8 : centerY + symbolFontSize + textGap}
                     textAnchor="middle"
                     fill="rgba(255,255,255,0.9)"
                     style={{ 
@@ -432,13 +444,13 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
     <div className="flex flex-col w-full h-full bg-white dark:bg-[#1a1c1e] text-gray-900 dark:text-white overflow-hidden relative font-sans transition-colors">
         {tooltipState.visible && tooltipState.data && <ManualTooltip data={tooltipState.data} x={tooltipState.x} y={tooltipState.y} />}
 
-        <div className="flex justify-between items-center px-4 py-2 bg-gray-50 dark:bg-[#1a1c1e] border-b border-gray-100 dark:border-gray-800 shrink-0 z-10 shadow-sm dark:shadow-none">
+        <div className="flex justify-between items-center px-4 py-2 bg-white dark:bg-[#1a1c1e] shrink-0 z-10 shadow-sm">
             <div className="flex items-center gap-4">
                 <span className="text-sm font-black uppercase tracking-wider hidden sm:inline text-gray-500 dark:text-gray-300">{title}</span>
                 {!loading && !error && (
-                    <div className="flex bg-gray-200 dark:bg-black/40 p-0.5 rounded-lg border border-gray-300 dark:border-gray-700">
-                        <button onClick={() => { setMetric('mcap'); resetZoom(); }} className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded flex items-center gap-1.5 transition-all ${metric === 'mcap' ? 'bg-white dark:bg-[#dd9933] text-gray-900 dark:text-black shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}><PieChart size={12} /> MarketCap</button>
-                        <button onClick={() => { setMetric('change'); resetZoom(); }} className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded flex items-center gap-1.5 transition-all ${metric === 'change' ? 'bg-white dark:bg-[#dd9933] text-gray-900 dark:text-black shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}><BarChart2 size={12} /> Variação 24h</button>
+                    <div className="flex bg-gray-100 dark:bg-black/40 p-0.5 rounded-lg border border-transparent dark:border-gray-700">
+                        <button onClick={() => { setMetric('mcap'); resetZoom(); }} className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded flex items-center gap-1.5 transition-all ${metric === 'mcap' ? 'bg-white dark:bg-[#dd9933] text-gray-900 dark:text-black shadow-sm' : 'text-gray-400 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}><PieChart size={12} /> MarketCap</button>
+                        <button onClick={() => { setMetric('change'); resetZoom(); }} className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded flex items-center gap-1.5 transition-all ${metric === 'change' ? 'bg-white dark:bg-[#dd9933] text-gray-900 dark:text-black shadow-sm' : 'text-gray-400 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}><BarChart2 size={12} /> Variação 24h</button>
                     </div>
                 )}
             </div>
@@ -500,7 +512,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
             )}
         </div>
         
-        <div className="h-8 bg-gray-50 dark:bg-[#121416] border-t border-gray-100 dark:border-gray-800 flex items-center justify-center gap-1 px-4 shrink-0 overflow-hidden z-20">
+        <div className="h-8 bg-gray-50 dark:bg-[#121416] border-t border-transparent dark:border-gray-800 flex items-center justify-center gap-1 px-4 shrink-0 overflow-hidden z-20">
             <span className="text-[9px] text-gray-500 font-bold mr-2">-20%</span>
             <div className="w-8 h-3 bg-[#b93c3c] rounded-sm" title="<= -20%"></div>
             <div className="w-8 h-3 bg-[#e0524e] rounded-sm" title="-7% to -20%"></div>
@@ -519,7 +531,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
   }
 
   return (
-    <div className="w-full h-full overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800 shadow-xl bg-white dark:bg-[#1a1c1e]">{renderContent()}</div>
+    <div className="w-full h-full overflow-hidden rounded-xl shadow-[0_4px_20px_-2px_rgba(0,0,0,0.1)] dark:border dark:border-gray-800 bg-white dark:bg-[#1a1c1e]">{renderContent()}</div>
   );
 };
 
