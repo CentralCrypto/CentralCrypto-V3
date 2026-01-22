@@ -456,7 +456,7 @@ export const fetchRsiTablePage = async (args: {
     }
 
     if (av === bv) {
-      // desempate estável: marketCap desc
+      // desempate estável: marketCap desc.
       const am = safeNum(a.marketCap, 0);
       const bm = safeNum(b.marketCap, 0);
       return bm - am;
