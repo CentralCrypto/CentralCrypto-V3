@@ -122,13 +122,13 @@ const AltcoinSeasonWidget: React.FC<{ item: DashboardItem, language?: Language }
                     <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" className="stroke-[#eeeeee] dark:stroke-[#333]" strokeWidth="18" strokeLinecap="round" />
                     <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" stroke="url(#grad-alt)" strokeWidth="18" strokeDasharray={`${(asi / 100) * 283} 283`} strokeLinecap="round" />
                     <g transform={`rotate(${(asi / 100) * 180 - 90} 100 100)`}>
-                        <path d="M 100 100 L 100 20" className="stroke-gray-800 dark:stroke-white" strokeWidth="3" /><circle cx="100" cy="100" r="5" className="fill-gray-800 dark:fill-white" />
+                        <path d="M 100 100 L 100 20" className="stroke-gray-800 dark:stroke-white" strokeWidth="3" /><circle cx={100} cy={100} r="5" className="fill-gray-800 dark:fill-white" />
                     </g>
                 </svg>
             </div>
-            {/* Margem negativa para puxar o texto para perto do pivô do ponteiro (100, 100 no SVG) */}
-            <div className="flex flex-col items-center -mt-4 z-10">
-                <div className="text-4xl font-black text-[#dd9933] leading-none font-mono tracking-tighter">{asi}</div>
+            {/* Margem ajustada: -mt-2 para dar mais espaço que o anterior, fonte reduzida para text-3xl */}
+            <div className="flex flex-col items-center -mt-2 z-10">
+                <div className="text-3xl font-black text-[#dd9933] leading-none font-mono tracking-tighter">{asi}</div>
                 <div className="text-sm font-bold text-gray-900 dark:text-white uppercase mt-0.5">{seasonLabel}</div>
             </div>
             <div className="flex justify-around w-full mt-2 text-center z-10 border-t border-gray-200 dark:border-slate-700/30 pt-2 pb-2">

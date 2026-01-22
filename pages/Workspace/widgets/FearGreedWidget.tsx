@@ -159,9 +159,9 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
                     </g>
                 </svg>
             </div>
-            {/* Margem negativa para alinhar com Altcoin Season e evitar vazamento */}
-            <div className="flex flex-col items-center -mt-4 z-10">
-                <div className="text-4xl font-black text-[#dd9933] leading-none font-mono tracking-tighter">{fgValue}</div>
+            {/* Margem ajustada: -mt-2 para dar mais espaço que o anterior, fonte reduzida para text-3xl */}
+            <div className="flex flex-col items-center -mt-2 z-10">
+                <div className="text-3xl font-black text-[#dd9933] leading-none font-mono tracking-tighter">{fgValue}</div>
                 <div className="text-sm font-bold text-gray-900 dark:text-white uppercase mt-0.5">{fgLabel}</div>
             </div>
             <div className="flex justify-around w-full mt-2 text-center z-10 border-t border-gray-200 dark:border-slate-700/30 pt-2 pb-2">
