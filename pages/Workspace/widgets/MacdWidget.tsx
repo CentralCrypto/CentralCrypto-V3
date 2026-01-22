@@ -96,8 +96,8 @@ const MacdGauge: React.FC<{ bullishPct: number, avgNMacd: number }> = ({ bullish
                     </g>
                 </svg>
             </div>
-            {/* Added more margin-top (mt-5) for requested spacing */}
-            <div className="flex flex-col items-center mt-5 z-10">
+            {/* Reduced margin top from mt-5 to mt-0 */}
+            <div className="flex flex-col items-center mt-0 z-10">
                 <div className="text-3xl font-black text-[#dd9933] leading-none font-mono tracking-tighter">{avgNMacd.toFixed(2)}</div>
                 <div className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mt-1 tracking-widest">Avg Normalized MACD</div>
                 <div className={`text-xs font-black uppercase mt-1 ${avgNMacd > 0 ? 'text-green-500' : 'text-red-500'}`}>{label}</div>
@@ -593,12 +593,12 @@ export const MacdTableList: React.FC = () => {
           );
           case 'mcap': return <td key={colId} className="p-3 text-center font-mono text-gray-500 dark:text-slate-400 text-xs">${formatCompactNumber(r.marketCap || 0)}</td>;
           
-          // MACD Columns (Normalized Value) - SAFE ACCESSORS
-          case 'macd15m': return <td key={colId} className={`p-3 text-center font-mono font-bold ${getMacdColor(r.macd?.["15m"]?.nmacd, true)}`}>{r.macd?.["15m"]?.nmacd?.toFixed(3)}</td>;
-          case 'macd1h': return <td key={colId} className={`p-3 text-center font-mono font-bold ${getMacdColor(r.macd?.["1h"]?.nmacd, true)}`}>{r.macd?.["1h"]?.nmacd?.toFixed(3)}</td>;
-          case 'macd4h': return <td key={colId} className={`p-3 text-center font-mono font-bold bg-gray-50 dark:bg-white/5 ${getMacdColor(r.macd?.["4h"]?.nmacd, true)}`}>{r.macd?.["4h"]?.nmacd?.toFixed(3)}</td>;
-          case 'macd24h': return <td key={colId} className={`p-3 text-center font-mono font-bold ${getMacdColor(r.macd?.["24h"]?.nmacd, true)}`}>{r.macd?.["24h"]?.nmacd?.toFixed(3)}</td>;
-          case 'macd7d': return <td key={colId} className={`p-3 text-center font-mono font-bold ${getMacdColor(r.macd?.["7d"]?.nmacd, true)}`}>{r.macd?.["7d"]?.nmacd?.toFixed(3)}</td>;
+          // MACD Columns (Normalized Value) - SAFE ACCESSORS WITH OPTIONAL CHAINING
+          case 'macd15m': return <td key={colId} className={`p-3 text-center font-mono font-bold ${getMacdColor(r.macd?.["15m"]?.nmacd, true)}`}>{r.macd?.["15m"]?.nmacd?.toFixed(3) || '-'}</td>;
+          case 'macd1h': return <td key={colId} className={`p-3 text-center font-mono font-bold ${getMacdColor(r.macd?.["1h"]?.nmacd, true)}`}>{r.macd?.["1h"]?.nmacd?.toFixed(3) || '-'}</td>;
+          case 'macd4h': return <td key={colId} className={`p-3 text-center font-mono font-bold bg-gray-50 dark:bg-white/5 ${getMacdColor(r.macd?.["4h"]?.nmacd, true)}`}>{r.macd?.["4h"]?.nmacd?.toFixed(3) || '-'}</td>;
+          case 'macd24h': return <td key={colId} className={`p-3 text-center font-mono font-bold ${getMacdColor(r.macd?.["24h"]?.nmacd, true)}`}>{r.macd?.["24h"]?.nmacd?.toFixed(3) || '-'}</td>;
+          case 'macd7d': return <td key={colId} className={`p-3 text-center font-mono font-bold ${getMacdColor(r.macd?.["7d"]?.nmacd, true)}`}>{r.macd?.["7d"]?.nmacd?.toFixed(3) || '-'}</td>;
           default: return <td key={colId}></td>;
       }
   };

@@ -126,8 +126,8 @@ const SidebarGauge: React.FC<{ value: number }> = ({ value }) => {
                     </g>
                 </svg>
             </div>
-            {/* Added more margin-top (mt-5) for requested spacing */}
-            <div className="flex flex-col items-center mt-5 z-10">
+            {/* Reduced margin top from mt-5 to mt-0 */}
+            <div className="flex flex-col items-center mt-0 z-10">
                 <div className="text-4xl font-black text-[#dd9933] leading-none font-mono tracking-tighter">{rsiVal.toFixed(2)}</div>
                 <div className="text-sm font-bold text-gray-900 dark:text-white uppercase mt-1 tracking-widest">{label}</div>
             </div>
