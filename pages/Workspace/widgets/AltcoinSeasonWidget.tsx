@@ -114,9 +114,9 @@ const AltcoinSeasonWidget: React.FC<{ item: DashboardItem, language?: Language }
     }
     
     return (
-        <div className="h-full flex flex-col justify-center gap-2 p-2 relative text-center bg-white dark:bg-[#2f3032]">
+        <div className="h-full flex flex-col justify-center gap-1 p-2 relative text-center bg-white dark:bg-[#2f3032]">
             <Watermark />
-            <div className="flex items-center justify-center relative mt-6 z-10">
+            <div className="flex items-center justify-center relative mt-3 z-10">
                 <svg viewBox="0 0 200 110" className="w-[85%] max-w-[280px]">
                     <defs><linearGradient id="grad-alt" x1="0" x2="1" y1="0" y2="0"><stop offset="0%" stopColor="#0ea5e9" /><stop offset="25%" stopColor="#a855f7" /><stop offset="75%" stopColor="#f97316" /><stop offset="100%" stopColor="#ef4444" /></linearGradient></defs>
                     <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" className="stroke-[#eeeeee] dark:stroke-[#333]" strokeWidth="18" strokeLinecap="round" />
@@ -126,9 +126,10 @@ const AltcoinSeasonWidget: React.FC<{ item: DashboardItem, language?: Language }
                     </g>
                 </svg>
             </div>
-            <div className="flex flex-col items-center mt-4 z-10">
-                <div className="text-4xl font-black text-[#dd9933] leading-none">{asi}</div>
-                <div className="text-sm font-bold text-gray-900 dark:text-white uppercase mt-1">{seasonLabel}</div>
+            {/* Margem negativa para puxar o texto para perto do pivô do ponteiro (100, 100 no SVG) */}
+            <div className="flex flex-col items-center -mt-4 z-10">
+                <div className="text-4xl font-black text-[#dd9933] leading-none font-mono tracking-tighter">{asi}</div>
+                <div className="text-sm font-bold text-gray-900 dark:text-white uppercase mt-0.5">{seasonLabel}</div>
             </div>
             <div className="flex justify-around w-full mt-2 text-center z-10 border-t border-gray-200 dark:border-slate-700/30 pt-2 pb-2">
                 <div><div className="text-[10px] text-gray-500 dark:text-slate-500 font-bold uppercase">{t.yesterday}</div><div className="text-sm font-bold text-gray-800 dark:text-white">{altSeason.yesterday}</div></div>

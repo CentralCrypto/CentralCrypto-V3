@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceArea, Brush } from 'recharts';
@@ -140,9 +141,9 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
     }
     
     return (
-        <div className="h-full flex flex-col justify-center gap-2 p-2 relative text-center bg-white dark:bg-[#2f3032]">
+        <div className="h-full flex flex-col justify-center gap-1 p-2 relative text-center bg-white dark:bg-[#2f3032]">
             <Watermark />
-            <div className="flex items-center justify-center relative mt-6 z-10">
+            <div className="flex items-center justify-center relative mt-3 z-10">
                 <svg viewBox="0 0 200 110" className="w-[85%] max-w-[280px]">
                     <defs>
                         <linearGradient id="lsr-grad-main" x1="0" y1="0" x2="1" y2="0">
@@ -158,9 +159,10 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
                     </g>
                 </svg>
             </div>
-            <div className="flex flex-col items-center mt-2 z-10">
-                <div className="text-[24px] font-black text-[#dd9933] leading-none">{fgValue}</div>
-                <div className="text-[8px] font-black text-gray-900 dark:text-white uppercase mt-1 tracking-wider">{fgLabel}</div>
+            {/* Margem negativa para alinhar com Altcoin Season e evitar vazamento */}
+            <div className="flex flex-col items-center -mt-4 z-10">
+                <div className="text-4xl font-black text-[#dd9933] leading-none font-mono tracking-tighter">{fgValue}</div>
+                <div className="text-sm font-bold text-gray-900 dark:text-white uppercase mt-0.5">{fgLabel}</div>
             </div>
             <div className="flex justify-around w-full mt-2 text-center z-10 border-t border-gray-200 dark:border-slate-700/30 pt-2 pb-2">
                 <div><div className="text-[10px] text-gray-500 dark:text-slate-500 font-bold uppercase">{tTime.yesterday}</div><div className="text-sm font-bold text-gray-800 dark:text-white">{fgYesterday}</div></div>
