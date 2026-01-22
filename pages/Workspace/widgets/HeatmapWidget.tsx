@@ -107,28 +107,20 @@ const CustomTreemapContent = (props: any) => {
       onContentHover, 
       onContentLeave,
       metric,
-      // Pass transformation context to cull invisible tiles
       containerTransform = { k: 1, x: 0, y: 0 },
       containerSize = { w: 1000, h: 800 }
   } = props;
   
   if (!width || !height || width < 0 || height < 0 || !symbol) return null;
 
-  // VIEWPORT CULLING (PERFORMANCE OPTIMIZATION)
-  // Disable culling if container size is invalid/zero to prevent hiding everything
+  // Viewport Culling
   const hasValidSize = containerSize.w > 0 && containerSize.h > 0;
-  
   let isVisible = true;
-  
   if (hasValidSize) {
-      // Calculate world coordinates
       const worldX = x * containerTransform.k + containerTransform.x;
       const worldY = y * containerTransform.k + containerTransform.y;
       const worldW = width * containerTransform.k;
       const worldH = height * containerTransform.k;
-
-      // Check if tile is visible in viewport
-      // Give a LARGE buffer (2000px) to prevent pop-in and ensure rendering on load
       const BUFFER = 2000;
       isVisible = (
           worldX + worldW > -BUFFER && 
@@ -138,30 +130,37 @@ const CustomTreemapContent = (props: any) => {
       );
   }
 
-  // Background color (always render bg, but simplier if culled)
   const color = getColorForChange(change || 0);
 
+  // Scaled dimensions for stroke/padding logic
+  // Use inverse scale to keep borders thin visually (1px visual)
+  const strokeWidth = 1 / zoomLevel; 
+  
   if (!isVisible) {
-      // Just render a simple rect if offscreen (needed for structure, but cheap)
-      return <rect x={x} y={y} width={width} height={height} fill={color} stroke="#1a1c1e" strokeWidth={2/zoomLevel} />;
+      return <rect x={x} y={y} width={width} height={height} fill={color} stroke="#1a1c1e" strokeWidth={strokeWidth} />;
   }
 
   const visualW = width * zoomLevel;
   const visualH = height * zoomLevel;
 
-  // Relaxed Tiny Check
-  const isTiny = visualW < 30 || visualH < 30;
-  const isSmall = !isTiny && (visualW < 80 || visualH < 60);
-
-  // Font Scaling Logic
-  // Scale base size by zoom, but cap it so giant tiles don't have giant text
+  // Aggressive rendering: show content if visual dimension is at least 15px
+  const isTiny = visualW < 15 || visualH < 15;
+  
+  // Dynamic internal styling to prevent "exploding borders"
+  const borderRadius = Math.min(4, Math.min(width, height) * 0.1) / zoomLevel; // Max 4px radius visual
+  const padding = 2 / zoomLevel;
+  const gap = 1 / zoomLevel;
+  
+  // Font Scaling
   const baseScale = Math.min(width, height) / 5; 
   const zoomedFontSize = Math.min(16, baseScale) / zoomLevel; 
-  // Ensure font isn't too small to read when zoomed out
-  const finalSymbolSize = Math.max(zoomedFontSize, 12 / zoomLevel); 
-  const finalPriceSize = Math.max(zoomedFontSize * 0.85, 10 / zoomLevel);
+  const finalSymbolSize = Math.max(zoomedFontSize, 10 / zoomLevel); 
+  const finalPriceSize = Math.max(zoomedFontSize * 0.85, 9 / zoomLevel);
 
-  const maxLogoSizeSVG = Math.min(width * 0.5, height * 0.5); 
+  // Logo sizing: generous max width to allow filling small tiles
+  const maxLogoH = Math.min(height * 0.6, 50 / zoomLevel);
+  const maxLogoW = Math.min(width * 0.8, 50 / zoomLevel);
+  const showLogo = !isTiny && maxLogoH > (8 / zoomLevel);
 
   const secondaryValue = metric === 'mcap' 
       ? formatPrice(price)
@@ -174,59 +173,78 @@ const CustomTreemapContent = (props: any) => {
         y={y}
         width={width}
         height={height}
-        rx={4 / zoomLevel} 
-        ry={4 / zoomLevel}
-        style={{ fill: color, stroke: '#1a1c1e', strokeWidth: 2 / zoomLevel }}
+        rx={borderRadius} 
+        ry={borderRadius}
+        style={{ fill: color, stroke: '#1a1c1e', strokeWidth: strokeWidth }}
       />
+      {/* Interactive Layer */}
       <rect x={x} y={y} width={width} height={height} style={{ fill: 'transparent', cursor: 'grab' }} onClick={onClick} onMouseEnter={onContentLeave} />
 
       {!isTiny && (
         <foreignObject x={x} y={y} width={width} height={height} style={{ pointerEvents: 'none', overflow: 'visible' }}>
-            <div className="w-full h-full flex items-center justify-center p-[2px]">
+            <div className="w-full h-full flex items-center justify-center" style={{ padding: `${padding}px` }}>
                 {/* 
-                    TIGHT CONTAINER CARD 
-                    Auto width/height but constrained by tile size.
-                    Dark background for readability.
+                    CONTENT CONTAINER
+                    - No fixed-pixel classes (border, shadow, rounded)
+                    - Uses inline styles with inverse scaling
                 */}
                 <div 
-                    className="flex flex-col items-center justify-center bg-black/40 hover:bg-black/60 rounded-lg transition-colors overflow-hidden cursor-default pointer-events-auto shadow-sm backdrop-blur-[1px] border border-white/10"
+                    className="flex flex-col items-center justify-center transition-colors overflow-hidden cursor-default pointer-events-auto"
                     style={{ 
+                        backgroundColor: 'rgba(0,0,0,0.15)', // Light darkening
                         width: 'auto',
                         height: 'auto',
-                        maxWidth: '96%',
-                        maxHeight: '96%',
-                        padding: `${4/zoomLevel}px`,
-                        gap: `${2/zoomLevel}px`
+                        maxWidth: '100%',
+                        maxHeight: '100%',
+                        borderRadius: `${borderRadius}px`,
+                        padding: `${padding}px`,
+                        gap: `${gap}px`
                     }}
                     onMouseEnter={(e) => { e.stopPropagation(); onContentHover(props, e.clientX, e.clientY); }}
                     onMouseLeave={onContentLeave}
                     onClick={onClick}
                 >
-                    {image && !isSmall && (
-                        <img 
-                            src={image} 
-                            alt={symbol} 
-                            className="rounded-full shadow-sm object-contain bg-white/10"
-                            style={{ 
-                                width: `${maxLogoSizeSVG}px`, 
-                                height: `${maxLogoSizeSVG}px`,
-                                maxHeight: `${40/zoomLevel}px`,
-                                maxWidth: `${40/zoomLevel}px`
-                            }}
-                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-                        />
+                    {image && showLogo && (
+                        <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
+                            <img 
+                                src={image} 
+                                alt={symbol} 
+                                style={{ 
+                                    width: `${maxLogoW}px`, 
+                                    height: `${maxLogoH}px`,
+                                    maxWidth: '100%',
+                                    objectFit: 'contain',
+                                    borderRadius: '50%',
+                                    // Remove borders from image to save space
+                                }}
+                                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                            />
+                        </div>
                     )}
 
-                    <div className="flex flex-col items-center justify-center text-center w-full min-w-0">
+                    <div className="flex flex-col items-center justify-center text-center w-full min-w-0" style={{ flexShrink: 1 }}>
                         <span 
-                            className="font-black text-white drop-shadow-md truncate w-full px-1"
-                            style={{ fontSize: `${finalSymbolSize}px`, lineHeight: 1.1 }}
+                            className="font-black text-white drop-shadow-md truncate w-full"
+                            style={{ 
+                                fontSize: `${finalSymbolSize}px`, 
+                                lineHeight: 1.1,
+                                display: 'block',
+                                paddingLeft: `${1/zoomLevel}px`,
+                                paddingRight: `${1/zoomLevel}px`
+                            }}
                         >
                             {symbol}
                         </span>
                         <span 
-                            className="font-bold text-white/90 drop-shadow-sm truncate w-full px-1"
-                            style={{ fontSize: `${finalPriceSize}px`, lineHeight: 1.1, whiteSpace: 'nowrap' }}
+                            className="font-bold text-white/90 drop-shadow-sm truncate w-full"
+                            style={{ 
+                                fontSize: `${finalPriceSize}px`, 
+                                lineHeight: 1.1, 
+                                whiteSpace: 'nowrap',
+                                display: 'block',
+                                paddingLeft: `${1/zoomLevel}px`,
+                                paddingRight: `${1/zoomLevel}px`
+                            }}
                         >
                             {secondaryValue}
                         </span>
@@ -257,29 +275,21 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
 
   const [tooltipState, setTooltipState] = useState<{ visible: boolean, data: any, x: number, y: number }>({ visible: false, data: null, x: 0, y: 0 });
 
-  // Update container size for culling - MUST DEPEND ON LOADING TO RE-ATTACH
   useEffect(() => {
       const updateSize = () => {
           if (containerRef.current) {
               setContainerSize({ w: containerRef.current.clientWidth, h: containerRef.current.clientHeight });
           }
       };
-
-      // Initial measurement
       updateSize();
-
       const ro = new ResizeObserver(entries => {
           for (let entry of entries) {
               setContainerSize({ w: entry.contentRect.width, h: entry.contentRect.height });
           }
       });
-
-      if (containerRef.current) {
-          ro.observe(containerRef.current);
-      }
-
+      if (containerRef.current) ro.observe(containerRef.current);
       return () => ro.disconnect();
-  }, [loading]); // Re-run when loading finishes and ref becomes available
+  }, [loading]);
 
   const handleContentHover = useCallback((data: any, clientX: number, clientY: number) => {
       if (isDragging) return;
@@ -310,7 +320,8 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
       const sensitivity = 0.001;
       const delta = -e.deltaY * sensitivity;
       const oldK = transformRef.current.k;
-      const newK = Math.min(Math.max(1, oldK + delta), 20); 
+      // Increased max zoom to 50x for deep inspection
+      const newK = Math.min(Math.max(1, oldK + delta), 50); 
       if (newK === oldK || !containerRef.current) return;
       
       const rect = containerRef.current.getBoundingClientRect();
@@ -412,8 +423,10 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
             // OUTLIER CAP: Cap at 8% absolute change for SIZING purposes (more gentle)
             const cappedChange = Math.min(absChange, 8);
             
-            // Power 2 creates variance but not dominance
-            sizeValue = Math.pow(cappedChange + 1, 2) * 1000; 
+            // Adjusted formula to provide a "minimum visual base" for low volatility coins
+            // Previously: Math.pow(cappedChange + 1, 2) -> Ratio ~81 (Tiny tiles for 0%)
+            // New: Math.pow(cappedChange + 3, 2) -> Ratio ~13 (Much larger base tiles)
+            sizeValue = Math.pow(cappedChange + 3, 2) * 100; 
         }
 
         return { ...coin, size: sizeValue, rank: index + 1 };
