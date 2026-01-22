@@ -32,7 +32,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-// Inicializa o módulo de zoom com proteção contra erro "is not a function"
+// Inicializa o módulo de zoom com proteção
 if (typeof addMouseWheelZoom === 'function') {
     addMouseWheelZoom(Highcharts);
 }
@@ -106,7 +106,7 @@ const useIsDark = () => {
 
 // --- COMPONENTS FOR LEFT SIDEBAR ---
 
-// Sidebar Gauge (Tamanho Otimizado e Ajustado)
+// Sidebar Gauge (Tamanho Otimizado e Ajustado para a Barra Lateral)
 const SidebarGauge: React.FC<{ value: number }> = ({ value }) => {
     const rsiVal = clamp(value, 0, 100);
     const rotation = -90 + (rsiVal / 100) * 180;
@@ -115,7 +115,6 @@ const SidebarGauge: React.FC<{ value: number }> = ({ value }) => {
     if (rsiVal >= 70) label = "Sobrecompra";
     if (rsiVal <= 30) label = "Sobrevenda";
 
-    // Geometry Optimization: Center Y raised to 80 (was 95)
     return (
         <div className="flex flex-col items-center justify-center h-full py-2">
             <div className="relative w-full max-w-[240px] -mt-2">
@@ -135,8 +134,8 @@ const SidebarGauge: React.FC<{ value: number }> = ({ value }) => {
                     </g>
                 </svg>
             </div>
-            {/* AGRESSIVE Negative Margin to pull text up */}
-            <div className="flex flex-col items-center -mt-6 z-10">
+            {/* Espaçamento positivo para a Sidebar também, conforme solicitado anteriormente */}
+            <div className="flex flex-col items-center mt-2 z-10">
                 <div className="text-4xl font-black text-[#dd9933] leading-none font-mono tracking-tighter">{rsiVal.toFixed(2)}</div>
                 <div className="text-sm font-bold text-gray-900 dark:text-white uppercase mt-1 tracking-widest">{label}</div>
             </div>
@@ -162,7 +161,9 @@ export const RsiGauge: React.FC<{ language?: Language }> = ({ language = 'pt' })
   }, []);
 
   const timeframe: Timeframe = '4h'; 
-  const avgRsi = useMemo(() => computeAvgRsi(tableData, timeframe), [tableData, timeframe]);
+  // Use avgData directly if available, otherwise compute fallback from table
+  const avgRsi = avgData?.averageRsi ?? computeAvgRsi(tableData, timeframe);
+  
   const counts = useMemo(() => computeCounts(tableData, timeframe), [tableData, timeframe]);
   const total = counts.valid || 1;
   const osPct = (counts.oversold / total) * 100;
@@ -224,7 +225,7 @@ export const RsiGauge: React.FC<{ language?: Language }> = ({ language = 'pt' })
   );
 };
 
-// 2. Scatter Chart (Updated with Trend Arrows and Zoom Reset)
+// 2. Scatter Chart (Updated with Smooth Animation and Fixed Tooltip)
 export const RsiScatterChart: React.FC = () => {
   const isDark = useIsDark();
   const chartRef = useRef<HTMLDivElement>(null);
@@ -270,6 +271,9 @@ export const RsiScatterChart: React.FC = () => {
             
             const symbolShort = (r.symbol || 'UNK').substring(0, 3).toUpperCase();
             
+            // Use logo from API or fallback
+            const logoUrl = r.logo || `https://assets.coincap.io/assets/icons/${r.symbol.toLowerCase()}@2x.png`;
+            
             // Generate fallback SVG for this point using Unicode-safe encoding
             const svgContent = `
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
@@ -279,10 +283,8 @@ export const RsiScatterChart: React.FC = () => {
             `;
             const fallbackSVG = `data:image/svg+xml;base64,${safeEncodeBase64(svgContent)}`;
 
-            // Standardize Logo URL 
-            const logoUrl = `https://assets.coincap.io/assets/icons/${r.symbol.toLowerCase()}@2x.png`;
-
             return {
+                id: r.symbol, // Important for animation mapping
                 x: xVal,
                 y: cur,
                 z: r.volume24h,
@@ -296,6 +298,28 @@ export const RsiScatterChart: React.FC = () => {
             };
         });
 
+    // Sort to keep consistent animation
+    seriesData.sort((a, b) => a.name.localeCompare(b.name));
+
+    // If chart already exists, update data instead of recreating
+    if (chartInstance.current) {
+        chartInstance.current.series[0].setData(seriesData, true, { duration: 1000, easing: 'easeOutQuart' }, true);
+        
+        // Update Axis Titles/Types if mode changed
+        const xAxisType = xMode === 'change' ? 'linear' : 'logarithmic';
+        const xTitle = xMode === 'mcap' ? 'Market Cap (Log)' : xMode === 'volume' ? 'Volume 24h (Log)' : 'Variação 24h (%)';
+        
+        chartInstance.current.xAxis[0].update({
+             type: xAxisType,
+             reversed: xMode === 'mcap',
+             title: { text: xTitle },
+             plotLines: xMode === 'change' ? [{ value: 0, color: textColor, width: 1, dashStyle: 'Dash', zIndex: 2 }] : []
+        });
+        
+        return;
+    }
+
+    // INITIAL CREATE
     const xAxisType = xMode === 'change' ? 'linear' : 'logarithmic';
     const xTitle = xMode === 'mcap' ? 'Market Cap (Log)' : xMode === 'volume' ? 'Volume 24h (Log)' : 'Variação 24h (%)';
 
@@ -316,6 +340,9 @@ export const RsiScatterChart: React.FC = () => {
             zooming: {
                 mouseWheel: { enabled: true },
                 type: 'xy'
+            },
+            animation: {
+                duration: 1000
             }
         },
         title: { text: null },
@@ -365,7 +392,11 @@ export const RsiScatterChart: React.FC = () => {
                 color: isDark ? '#fff' : '#000',
                 zIndex: 9999 
             },
-            outside: true, // Ensure it floats above chart elements
+            outside: true,
+            // Fixed position ABOVE the point to avoid covering logo
+            positioner: function (labelWidth: number, labelHeight: number, point: any) {
+                return { x: point.plotX - labelWidth / 2, y: point.plotY - labelHeight - 15 };
+            },
             formatter: function (this: any) {
                 const p = this.point;
                 return `
@@ -384,7 +415,6 @@ export const RsiScatterChart: React.FC = () => {
         },
         plotOptions: {
             scatter: {
-                // Invisible marker to capture mouse events
                 marker: {
                     radius: 12, // Hit area
                     fillColor: 'rgba(0,0,0,0)',
@@ -406,8 +436,6 @@ export const RsiScatterChart: React.FC = () => {
                         const logo = p.options.logoUrl;
                         const fallback = p.options.fallbackSVG;
 
-                        // HTML Structure: Image with onError fallback + Absolute positioned Triangle
-                        // Added `pointer-events-none` to let clicks pass through if needed, though highcharts handles interaction via the (invisible) marker.
                         return `
                         <div style="position: relative; width: 24px; height: 24px;">
                             <img src="${logo}" 
@@ -662,8 +690,8 @@ export const RsiTableList: React.FC = () => {
                         onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
                         className="bg-transparent text-xs font-bold outline-none text-gray-900 dark:text-white"
                     >
-                        <option value={50}>50</option>
-                        <option value={100}>100</option>
+                        <option value={50} className="bg-white dark:bg-[#2f3032]">50</option>
+                        <option value={100} className="bg-white dark:bg-[#2f3032]">100</option>
                     </select>
                 </div>
 
@@ -810,8 +838,8 @@ const RsiWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ ite
                     </g>
                 </svg>
             </div>
-            {/* AGRESSIVE Negative Margin to pull text up */}
-            <div className="flex flex-col items-center -mt-6 z-10">
+            {/* Espaçamento corrigido para o Mainboard: mt-2 (igual ao MACD), sem margem negativa agressiva */}
+            <div className="flex flex-col items-center mt-2 z-10">
                 <div className="text-3xl font-black text-[#dd9933] leading-none font-mono tracking-tighter">{rsiVal.toFixed(2)}</div>
                 <div className="text-sm font-bold text-gray-900 dark:text-white uppercase mt-0.5">{rsiLabel}</div>
             </div>

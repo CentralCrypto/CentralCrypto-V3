@@ -86,7 +86,6 @@ const MacdGauge: React.FC<{ bullishPct: number, avgNMacd: number }> = ({ bullish
     const rotation = -90 + (clamp(bullishPct, 0, 100) / 100) * 180;
     const label = avgNMacd > 0.5 ? "Strong Buy" : avgNMacd > 0 ? "Buy" : avgNMacd < -0.5 ? "Strong Sell" : "Sell";
     
-    // Geometry Optimization: Center Y raised to 80 (was 95)
     return (
         <div className="flex flex-col items-center justify-center h-full py-2">
             <div className="relative w-full max-w-[240px] -mt-2">
@@ -105,8 +104,8 @@ const MacdGauge: React.FC<{ bullishPct: number, avgNMacd: number }> = ({ bullish
                     </g>
                 </svg>
             </div>
-            {/* AGRESSIVE Negative Margin to pull text up */}
-            <div className="flex flex-col items-center -mt-6 z-10">
+            {/* Added spacing (mt-2 instead of negative margin) to create ~10px gap */}
+            <div className="flex flex-col items-center mt-2 z-10">
                 <div className="text-3xl font-black text-[#dd9933] leading-none font-mono tracking-tighter">{avgNMacd.toFixed(2)}</div>
                 <div className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mt-1 tracking-widest">Avg Normalized MACD</div>
                 <div className={`text-xs font-black uppercase mt-1 ${avgNMacd > 0 ? 'text-green-500' : 'text-red-500'}`}>{label}</div>
@@ -227,6 +226,9 @@ export const MacdScatterChart: React.FC = () => {
             const isBullish = yVal > 0;
             const symbolShort = (r.symbol || 'UNK').substring(0, 3).toUpperCase();
 
+            // Use logo from API or fallback
+            const logoUrl = r.logo || `https://assets.coincap.io/assets/icons/${r.symbol.toLowerCase()}@2x.png`;
+
             // Generate fallback SVG for this point using Unicode-safe encoding
             const svgContent = `
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
@@ -236,10 +238,8 @@ export const MacdScatterChart: React.FC = () => {
             `;
             const fallbackSVG = `data:image/svg+xml;base64,${safeEncodeBase64(svgContent)}`;
             
-            // Standardize Logo URL to avoid errors
-            const logoUrl = r.logo || `https://assets.coincap.io/assets/icons/${r.symbol.toLowerCase()}@2x.png`;
-
             return {
+                id: r.symbol, // Important for animation mapping
                 x: xVal,
                 y: yVal,
                 z: r.marketCap,
@@ -252,7 +252,29 @@ export const MacdScatterChart: React.FC = () => {
                 fallbackSVG: fallbackSVG
             };
         });
+    
+    // Sort to keep consistent animation
+    seriesData.sort((a, b) => a.name.localeCompare(b.name));
 
+    // Update existing chart
+    if (chartInstance.current) {
+        chartInstance.current.series[0].setData(seriesData, true, { duration: 1000, easing: 'easeOutQuart' }, true);
+        
+        // Update X Axis if mode changed
+        const xAxisType = xMode === 'change' ? 'linear' : 'logarithmic';
+        const xTitle = xMode === 'mcap' ? 'Market Cap (Log)' : 'Variação 24h (%)';
+        
+        chartInstance.current.xAxis[0].update({
+             type: xAxisType,
+             reversed: xMode === 'mcap',
+             title: { text: xTitle },
+             plotLines: xMode === 'change' ? [{ value: 0, color: textColor, width: 1, dashStyle: 'Dash', zIndex: 2 }] : []
+        });
+
+        return;
+    }
+
+    // CREATE CHART
     const xAxisType = xMode === 'change' ? 'linear' : 'logarithmic';
     const xTitle = xMode === 'mcap' ? 'Market Cap (Log)' : 'Variação 24h (%)';
 
@@ -274,26 +296,8 @@ export const MacdScatterChart: React.FC = () => {
                 mouseWheel: { enabled: true },
                 type: 'xy'
             },
-            events: {
-                // Resize logic
-                render: function() {
-                    const chart = this;
-                    if (!chart.xAxis[0].dataMin || !chart.xAxis[0].dataMax) return;
-                    const xExtremes = chart.xAxis[0].getExtremes();
-                    const dataRange = chart.xAxis[0].dataMax - chart.xAxis[0].dataMin;
-                    const viewRange = xExtremes.max - xExtremes.min;
-                    let zoomFactor = Math.min(Math.max(dataRange / viewRange, 1), 3);
-                    let newSize = 24 + (zoomFactor - 1) * 8; 
-                    newSize = Math.min(newSize, 48);
-
-                    const currentSize = chart.series[0].options.marker?.width;
-                    if (currentSize && Math.abs(currentSize - newSize) > 2) {
-                        chart.series[0].update({
-                            marker: { width: newSize, height: newSize },
-                            dataLabels: { x: (newSize / 2) + 2, y: 0 } 
-                        }, true, false);
-                    }
-                }
+            animation: {
+                duration: 1000
             }
         },
         title: { text: null },
@@ -336,6 +340,10 @@ export const MacdScatterChart: React.FC = () => {
                 zIndex: 9999 
             },
             outside: true, 
+            // Fixed position ABOVE the point to avoid covering logo
+            positioner: function (labelWidth: number, labelHeight: number, point: any) {
+                return { x: point.plotX - labelWidth / 2, y: point.plotY - labelHeight - 15 };
+            },
             formatter: function (this: any) {
                 const p = this.point;
                 return `
@@ -375,8 +383,6 @@ export const MacdScatterChart: React.FC = () => {
                         const logo = p.options.logoUrl;
                         const fallback = p.options.fallbackSVG;
 
-                        // HTML Structure: Image with onError fallback + Absolute positioned Triangle
-                        // Adjusted position: right -4px, bottom -2px as requested
                         return `
                         <div style="position: relative; width: 24px; height: 24px;">
                             <img src="${logo}" 
@@ -632,8 +638,8 @@ export const MacdTableList: React.FC = () => {
                         onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
                         className="bg-transparent text-xs font-bold outline-none text-gray-900 dark:text-white"
                     >
-                        <option value={50}>50</option>
-                        <option value={100}>100</option>
+                        <option value={50} className="bg-white dark:bg-[#2f3032]">50</option>
+                        <option value={100} className="bg-white dark:bg-[#2f3032]">100</option>
                     </select>
                 </div>
 

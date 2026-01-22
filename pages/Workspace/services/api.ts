@@ -48,7 +48,7 @@ export const fetchWithFallback = async (url: string): Promise<any | null> => {
     const { data } = await httpGetJson(finalUrl, { timeoutMs: 15000, retries: 2 });
     return data;
   } catch (e: any) {
-    console.warn(`[API] Error fetching ${url}`, e);
+    console.warn(`[API] Warn fetching ${url}`, e);
   }
   return null;
 };
@@ -147,16 +147,23 @@ export interface MacdTablePageResult { items: MacdTrackerPoint[]; page: number; 
 export const fetchRsiAverage = async (): Promise<RsiAvgData | null> => {
   const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiAvg));
   if (!raw) return null;
-  const root = Array.isArray(raw) ? raw[0] : raw;
-  const dataNode = root?.data || root;
-  const overall = dataNode?.overall || dataNode;
+  
+  let root = Array.isArray(raw) ? raw[0] : raw;
+  
+  // Try to find the inner data if wrapped by n8n
+  if (root?.data?.overall) root = root.data;
+  else if (root?.overall) root = root; 
+
+  const overall = root?.overall;
+  
+  if (!overall) return null;
 
   return {
-    averageRsi: safeNum(overall?.averageRsi, 50),
-    yesterday: safeNum(overall?.yesterday, 50),
-    days7Ago: safeNum(overall?.days7Ago, 50),
-    days30Ago: safeNum(overall?.days30Ago, 50),
-    days90Ago: safeNum(overall?.days90Ago, undefined)
+    averageRsi: safeNum(overall.averageRsi, 50),
+    yesterday: safeNum(overall.yesterday, 50),
+    days7Ago: safeNum(overall.days7Ago, 50),
+    days30Ago: safeNum(overall.days30Ago, 50),
+    days90Ago: safeNum(overall.days90Ago, undefined)
   };
 };
 
@@ -168,7 +175,7 @@ export const fetchRsiTrackerHist = async (): Promise<RsiTrackerPoint[]> => {
 
   return items.map((p: any) => {
     const rsiNode = p.rsiOverall || p.rsi || {};
-    const symbol = p.symbol || p.s || '';
+    const symbol = String(p.symbol || p.s || '').toUpperCase();
     return {
       symbol,
       name: p.name || p.n || symbol,
@@ -198,7 +205,7 @@ export const fetchRsiTable = async (opts?: { force?: boolean }): Promise<RsiTabl
   if (!items.length) return [];
 
   return items.map((p: any) => {
-    const symbol = p.symbol || '';
+    const symbol = String(p.symbol || '').toUpperCase();
     const rsiNode = p.rsiOverall || p.rsi || p.rsi_overall || {};
 
     return {
@@ -277,7 +284,7 @@ export const fetchMacdTracker = async (opts?: { force?: boolean }): Promise<Macd
   const items = extractDataArray(raw); // Uses robust extractor
 
   return items.map((i: any) => {
-      const symbol = i.symbol || '';
+      const symbol = String(i.symbol || '').toUpperCase();
       const macdNode = i.macd || {};
       
       // Ensure all numbers are safe to prevent sort crashes
@@ -287,7 +294,7 @@ export const fetchMacdTracker = async (opts?: { force?: boolean }): Promise<Macd
           price: safeNum(i.price, 0),
           change24h: safeNum(i.price24h, 0),
           marketCap: safeNum(i.marketCap, 0),
-          logo: `https://assets.coincap.io/assets/icons/${symbol.toLowerCase()}@2x.png`,
+          logo: i.image || i.logo || `https://assets.coincap.io/assets/icons/${symbol.toLowerCase()}@2x.png`,
           macd: {
               "15m": { nmacd: safeNum(macdNode.macd15m?.nmacd, 0), macd: safeNum(macdNode.macd15m?.macd, 0), histogram: safeNum(macdNode.macd15m?.histogram, 0), signalLine: safeNum(macdNode.macd15m?.signalLine, 0) },
               "1h": { nmacd: safeNum(macdNode.macd1h?.nmacd, 0), macd: safeNum(macdNode.macd1h?.macd, 0), histogram: safeNum(macdNode.macd1h?.histogram, 0), signalLine: safeNum(macdNode.macd1h?.signalLine, 0) },
