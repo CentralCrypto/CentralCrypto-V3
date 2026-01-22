@@ -62,10 +62,10 @@ function PageFaq({ language, pageType }: { language: Language; pageType: string 
   const [openIndex, setOpenIndex] = useState<number | null>(null);
   const t = getTranslations(language).workspace.pages.faq;
 
-  // RSI FAQ is handled by its own component now, return null for it here
-  if (pageType === 'RSI') return null;
-
   const faqData = useMemo(() => {
+    // Moved check inside hook to prevent "Rendered fewer hooks than expected" error
+    if (pageType === 'RSI') return null;
+
     switch (pageType) {
       case 'FNG': return t.fng;
       case 'MACD': return t.macd;
@@ -80,6 +80,7 @@ function PageFaq({ language, pageType }: { language: Language; pageType: string 
     }
   }, [pageType, t]);
 
+  // Safe return after all hooks are called
   if (!faqData) return null;
 
   const items = [
