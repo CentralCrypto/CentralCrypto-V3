@@ -13,12 +13,12 @@ export const fetchWithFallback = async (url: string): Promise<any | null> => {
   try {
     const salt = Math.floor(Date.now() / 60000);
     const finalUrl = url.includes('?') ? `${url}&_cb=${salt}` : `${url}?_cb=${salt}`;
-    const { data } = await httpGetJson(finalUrl, { timeoutMs: 10000, retries: 2 });
+    const { data } = await httpGetJson(finalUrl, { timeoutMs: 15000, retries: 2 });
     return data;
-  } catch (e) {
+  } catch (e: any) {
     // Suppress 404 errors to avoid console noise for optional resources
-    if ((e as any).status !== 404) {
-        console.warn(`[API] Warn fetching ${url}:`, (e as any).message || e);
+    if (e.status !== 404) {
+        console.warn(`[API] Warn fetching ${url}:`, e.message || e);
     }
   }
   return null;
@@ -260,30 +260,34 @@ export const fetchRsiAverage = async (): Promise<RsiAvgData | null> => {
 };
 
 // SCATTER CHART DATA (rsitrackerhist.json)
+// Structure: [ { "data": { "heatmap": { "items": [...] } } } ]
 export const fetchRsiTrackerHist = async (): Promise<RsiTrackerPoint[]> => {
   const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTrackerHist));
   
-  // Targeted Path: [0].data.heatmap.items
   let items: any[] = [];
   
   if (raw) {
-      // 1. Try finding 'heatmap.items' in root[0].data
+      // 1. Unpack array root
       const root = Array.isArray(raw) ? raw[0] : raw;
       
-      if (root?.data?.heatmap?.items) {
+      // 2. Navigate deep: data -> heatmap -> items
+      if (root?.data?.heatmap?.items && Array.isArray(root.data.heatmap.items)) {
           items = root.data.heatmap.items;
-      } 
-      // 2. Try 'data.points' legacy path
-      else if (root?.data?.points) {
+      }
+      // 3. Fallback: data -> points
+      else if (root?.data?.points && Array.isArray(root.data.points)) {
           items = root.data.points;
       }
-      // 3. Try direct 'heatmap.items'
-      else if (root?.heatmap?.items) {
+      // 4. Fallback: direct properties
+      else if (root?.heatmap?.items && Array.isArray(root.heatmap.items)) {
           items = root.heatmap.items;
       }
   }
 
-  if (!Array.isArray(items)) return [];
+  if (!items.length) {
+      // console.warn("fetchRsiTrackerHist: No items found in parsed data", raw);
+      return [];
+  }
 
   return items.map((p: any) => ({
       symbol: p.symbol,
@@ -293,11 +297,11 @@ export const fetchRsiTrackerHist = async (): Promise<RsiTrackerPoint[]> => {
       marketCap: Number(p.marketCap || 0),
       logo: `https://assets.coincap.io/assets/icons/${(p.symbol||'').toLowerCase()}@2x.png`, 
       rsi: {
-          "15m": p.rsiOverall?.rsi15m,
-          "1h": p.rsiOverall?.rsi1h,
-          "4h": p.rsiOverall?.rsi4h,
-          "24h": p.rsiOverall?.rsi24h,
-          "7d": p.rsiOverall?.rsi7d,
+          "15m": p.rsiOverall?.rsi15m ?? 50,
+          "1h": p.rsiOverall?.rsi1h ?? 50,
+          "4h": p.rsiOverall?.rsi4h ?? 50,
+          "24h": p.rsiOverall?.rsi24h ?? 50,
+          "7d": p.rsiOverall?.rsi7d ?? 50,
       },
       currentRsi: p.currentRsi,
       lastRsi: p.lastRsi
@@ -305,30 +309,34 @@ export const fetchRsiTrackerHist = async (): Promise<RsiTrackerPoint[]> => {
 };
 
 // TABLE DATA (rsitracker.json)
+// Structure: [ { "data": { "data": [ ... ] } } ]
 export const fetchRsiTable = async (): Promise<RsiTableItem[]> => {
   const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTable));
   
-  // Targeted Path: [0].data.data
   let items: any[] = [];
 
   if (raw) {
+      // 1. Unpack array root
       const root = Array.isArray(raw) ? raw[0] : raw;
       
-      // 1. Try 'data.data' (Nested object in array)
-      if (Array.isArray(root?.data?.data)) {
+      // 2. Navigate deep: data -> data (Array)
+      if (root?.data?.data && Array.isArray(root.data.data)) {
           items = root.data.data;
-      } 
-      // 2. Try 'data' direct array
+      }
+      // 3. Fallback: direct data array
       else if (Array.isArray(root?.data)) {
           items = root.data;
       }
-      // 3. Try root is array
+      // 4. Fallback: root IS array
       else if (Array.isArray(root)) {
           items = root;
       }
   }
   
-  if (!Array.isArray(items)) return [];
+  if (!items.length) {
+      // console.warn("fetchRsiTable: No items found in parsed data", raw);
+      return [];
+  }
 
   return items.map((p: any) => ({
       id: p.id,
@@ -341,11 +349,11 @@ export const fetchRsiTable = async (): Promise<RsiTableItem[]> => {
       rank: p.rank,
       logo: `https://assets.coincap.io/assets/icons/${(p.symbol||'').toLowerCase()}@2x.png`,
       rsi: {
-          "15m": p.rsi?.rsi15m,
-          "1h": p.rsi?.rsi1h,
-          "4h": p.rsi?.rsi4h,
-          "24h": p.rsi?.rsi24h,
-          "7d": p.rsi?.rsi7d
+          "15m": p.rsi?.rsi15m ?? 50,
+          "1h": p.rsi?.rsi1h ?? 50,
+          "4h": p.rsi?.rsi4h ?? 50,
+          "24h": p.rsi?.rsi24h ?? 50,
+          "7d": p.rsi?.rsi7d ?? 50
       }
   }));
 };

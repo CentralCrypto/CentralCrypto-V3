@@ -112,7 +112,8 @@ export const RsiScatterChart: React.FC = () => {
             .map(p => {
                 const xVal = p.marketCap;
                 if (!xVal || xVal <= 0) return null;
-                const rsiVal = p.rsi?.[timeframe] || 50;
+                // Allow explicit timeframe access or default to 50
+                const rsiVal = (p.rsi as any)?.[timeframe] || 50;
                 return {
                     x: xVal, 
                     y: rsiVal, 

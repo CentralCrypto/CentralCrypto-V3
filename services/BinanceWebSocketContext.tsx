@@ -30,7 +30,8 @@ export const BinanceWebSocketProvider: React.FC<{ children: ReactNode }> = ({ ch
   const bufferRef = useRef<Record<string, TickerData>>({});
   const flushTimerRef = useRef<number | null>(null);
 
-  // Throttled update to avoid re-rendering the whole app on every single ticker msg (approx 1s)
+  // Throttled update to avoid re-rendering the whole app on every single ticker msg (approx 2s)
+  // Optimization: Increased throttle to 2000ms to reduce main thread blocking
   const flushBuffer = () => {
     if (Object.keys(bufferRef.current).length > 0) {
       setTickers(prev => ({ ...prev, ...bufferRef.current }));
@@ -75,9 +76,9 @@ export const BinanceWebSocketProvider: React.FC<{ children: ReactNode }> = ({ ch
               };
             }
 
-            // Schedule flush if not scheduled
+            // Schedule flush if not scheduled (Optimized to 2000ms)
             if (!flushTimerRef.current) {
-              flushTimerRef.current = window.setTimeout(flushBuffer, 1000);
+              flushTimerRef.current = window.setTimeout(flushBuffer, 2000);
             }
           }
         } catch (e) {

@@ -113,7 +113,7 @@ const CustomTreemapContent = (props: any) => {
   
   if (!width || !height || width < 0 || height < 0 || !symbol) return null;
 
-  // Viewport Culling
+  // Culling: only calculate visibility if container size is known
   const hasValidSize = containerSize.w > 0 && containerSize.h > 0;
   let isVisible = true;
   if (hasValidSize) {
@@ -121,7 +121,7 @@ const CustomTreemapContent = (props: any) => {
       const worldY = y * containerTransform.k + containerTransform.y;
       const worldW = width * containerTransform.k;
       const worldH = height * containerTransform.k;
-      const BUFFER = 2000;
+      const BUFFER = 1000;
       isVisible = (
           worldX + worldW > -BUFFER && 
           worldX < containerSize.w + BUFFER &&
@@ -132,35 +132,32 @@ const CustomTreemapContent = (props: any) => {
 
   const color = getColorForChange(change || 0);
 
-  // --- REFINEMENT: Thinner borders on zoom ---
-  // Reduced base width to 0.6px visual equivalent
-  const strokeWidth = 0.6 / zoomLevel; 
+  // Borders:
+  // Use the SAME color for stroke to remove black gaps/borders.
+  // Use a relative stroke width to ensure overlap seals the gaps regardless of zoom.
+  const strokeColor = color;
+  const strokeWidth = 2 / zoomLevel; 
   
   if (!isVisible) {
-      return <rect x={x} y={y} width={width} height={height} fill={color} stroke="#1a1c1e" strokeWidth={strokeWidth} shapeRendering="crispEdges" />;
+      return <rect x={x} y={y} width={width} height={height} fill={color} stroke={strokeColor} strokeWidth={strokeWidth} shapeRendering="geometricPrecision" />;
   }
 
+  // Calculate visual size on screen to decide what to render
   const visualW = width * zoomLevel;
   const visualH = height * zoomLevel;
 
-  // Aggressive rendering: show content if visual dimension is at least 15px
-  const isTiny = visualW < 15 || visualH < 15;
+  // Thresholds for rendering content (Optimization)
+  const isTiny = visualW < 20 || visualH < 15;
+  const isSmall = visualW < 50 || visualH < 40;
   
-  // --- REFINEMENT: Tighter padding on zoom ---
-  const borderRadius = Math.min(4, Math.min(width, height) * 0.1) / zoomLevel; 
-  const padding = 1 / zoomLevel; // Reduced from 2
-  const gap = 0.5 / zoomLevel; // Reduced from 1
+  // No border radius when zoomed in to maximize space
+  const borderRadius = zoomLevel > 2 ? 0 : Math.min(4, Math.min(width, height) * 0.1);
   
-  // Font Scaling
-  const baseScale = Math.min(width, height) / 5; 
-  const zoomedFontSize = Math.min(16, baseScale) / zoomLevel; 
-  const finalSymbolSize = Math.max(zoomedFontSize, 10 / zoomLevel); 
-  const finalPriceSize = Math.max(zoomedFontSize * 0.85, 9 / zoomLevel);
-
-  // Logo sizing: generous max width to allow filling small tiles
-  const maxLogoH = Math.min(height * 0.6, 50 / zoomLevel);
-  const maxLogoW = Math.min(width * 0.8, 50 / zoomLevel);
-  const showLogo = !isTiny && maxLogoH > (8 / zoomLevel);
+  // Sizes relative to the box (native SVG coords), NOT divided by zoomLevel.
+  // The CSS transform on the parent will scale these up visually.
+  const maxLogoH = Math.min(height * 0.5, width * 0.5);
+  const fontSizeSymbol = Math.min(width * 0.25, height * 0.25, 24); 
+  const fontSizePrice = Math.min(width * 0.15, height * 0.15, 14);
 
   const secondaryValue = metric === 'mcap' 
       ? formatPrice(price)
@@ -175,75 +172,56 @@ const CustomTreemapContent = (props: any) => {
         height={height}
         rx={borderRadius} 
         ry={borderRadius}
-        style={{ fill: color, stroke: '#1a1c1e', strokeWidth: strokeWidth }}
-        shapeRendering="crispEdges" // Helps with gap issues
+        style={{ fill: color, stroke: strokeColor, strokeWidth: strokeWidth }}
+        shapeRendering="geometricPrecision"
       />
+      
       {/* Interactive Layer */}
       <rect x={x} y={y} width={width} height={height} style={{ fill: 'transparent', cursor: 'grab' }} onClick={onClick} onMouseEnter={onContentLeave} />
 
       {!isTiny && (
         <foreignObject x={x} y={y} width={width} height={height} style={{ pointerEvents: 'none', overflow: 'visible' }}>
-            <div className="w-full h-full flex items-center justify-center" style={{ padding: `${padding}px` }}>
-                <div 
-                    className="flex flex-col items-center justify-center transition-colors overflow-hidden cursor-default pointer-events-auto"
-                    style={{ 
-                        backgroundColor: 'rgba(0,0,0,0.15)', // Light darkening
-                        width: 'auto',
-                        height: 'auto',
-                        maxWidth: '100%',
-                        maxHeight: '100%',
-                        borderRadius: `${borderRadius}px`,
-                        padding: `${padding}px`,
-                        gap: `${gap}px`
-                    }}
-                    onMouseEnter={(e) => { e.stopPropagation(); onContentHover(props, e.clientX, e.clientY); }}
-                    onMouseLeave={onContentLeave}
-                    onClick={onClick}
-                >
-                    {image && showLogo && (
-                        <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
-                            <img 
-                                src={image} 
-                                alt={symbol} 
-                                style={{ 
-                                    width: `${maxLogoW}px`, 
-                                    height: `${maxLogoH}px`,
-                                    maxWidth: '100%',
-                                    objectFit: 'contain',
-                                    borderRadius: '50%',
-                                }}
-                                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-                            />
-                        </div>
-                    )}
+            <div 
+                className="w-full h-full flex flex-col items-center justify-center text-center overflow-hidden" 
+                style={{ 
+                    // Use flex gap relative to box size
+                    gap: `${Math.min(width, height) * 0.05}px`,
+                    padding: '2px'
+                }}
+                onMouseEnter={(e) => { e.stopPropagation(); onContentHover(props, e.clientX, e.clientY); }}
+                onMouseLeave={onContentLeave}
+            >
+                {image && !isSmall && (
+                    <img 
+                        src={image} 
+                        alt={symbol} 
+                        style={{ 
+                            width: `${maxLogoH}px`, 
+                            height: `${maxLogoH}px`,
+                            borderRadius: '50%',
+                            display: 'block',
+                            objectFit: 'contain',
+                            filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.3))'
+                        }}
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                    />
+                )}
 
-                    <div className="flex flex-col items-center justify-center text-center w-full min-w-0" style={{ flexShrink: 1 }}>
+                <div className="flex flex-col items-center justify-center w-full leading-none pointer-events-auto cursor-pointer" onClick={onClick}>
+                    <span 
+                        className="font-black text-white drop-shadow-md truncate w-full px-0.5"
+                        style={{ fontSize: `${Math.max(fontSizeSymbol, 2)}px` }} 
+                    >
+                        {symbol}
+                    </span>
+                    {!isSmall && (
                         <span 
-                            className="font-black text-white drop-shadow-md truncate w-full"
-                            style={{ 
-                                fontSize: `${finalSymbolSize}px`, 
-                                lineHeight: 1.1,
-                                display: 'block',
-                                paddingLeft: `${1/zoomLevel}px`,
-                                paddingRight: `${1/zoomLevel}px`
-                            }}
-                        >
-                            {symbol}
-                        </span>
-                        <span 
-                            className="font-bold text-white/90 drop-shadow-sm truncate w-full"
-                            style={{ 
-                                fontSize: `${finalPriceSize}px`, 
-                                lineHeight: 1.1, 
-                                whiteSpace: 'nowrap',
-                                display: 'block',
-                                paddingLeft: `${1/zoomLevel}px`,
-                                paddingRight: `${1/zoomLevel}px`
-                            }}
+                            className="font-bold text-white/90 drop-shadow-sm truncate w-full px-0.5 mt-[2%]"
+                            style={{ fontSize: `${Math.max(fontSizePrice, 2)}px` }}
                         >
                             {secondaryValue}
                         </span>
-                    </div>
+                    )}
                 </div>
             </div>
         </foreignObject>
@@ -307,6 +285,11 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
           containerRef.current.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${k})`;
       }
       transformRef.current = { k, x, y };
+  };
+
+  const resetZoom = () => { 
+      setTransform({ k: 1, x: 0, y: 0 }); 
+      applyDirectTransform(1, 0, 0); 
   };
 
   const handleWheel = (e: React.WheelEvent) => {
@@ -417,10 +400,6 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
             const absChange = Math.abs(coin.change);
             // OUTLIER CAP: Cap at 8% absolute change for SIZING purposes (more gentle)
             const cappedChange = Math.min(absChange, 8);
-            
-            // Adjusted formula to provide a "minimum visual base" for low volatility coins
-            // Previously: Math.pow(cappedChange + 1, 2) -> Ratio ~81 (Tiny tiles for 0%)
-            // New: Math.pow(cappedChange + 3, 2) -> Ratio ~13 (Much larger base tiles)
             sizeValue = Math.pow(cappedChange + 3, 2) * 100; 
         }
 
@@ -431,7 +410,6 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
   }, [data, metric]);
 
   const toggleFullscreen = () => { if (item?.isMaximized && onClose) onClose(); else setIsFullscreen(!isFullscreen); };
-  const resetZoom = () => { setTransform({ k: 1, x: 0, y: 0 }); applyDirectTransform(1, 0, 0); };
 
   const renderContent = () => (
     <div className="flex flex-col w-full h-full bg-[#1a1c1e] text-white overflow-hidden relative font-sans">
@@ -442,13 +420,20 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
                 <span className="text-sm font-black uppercase tracking-wider hidden sm:inline text-gray-300">{title}</span>
                 {!loading && !error && (
                     <div className="flex bg-black/40 p-0.5 rounded-lg border border-gray-700">
-                        <button onClick={() => setMetric('mcap')} className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded flex items-center gap-1.5 transition-all ${metric === 'mcap' ? 'bg-[#dd9933] text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}><PieChart size={12} /> MarketCap</button>
-                        <button onClick={() => setMetric('change')} className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded flex items-center gap-1.5 transition-all ${metric === 'change' ? 'bg-[#dd9933] text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}><BarChart2 size={12} /> Variação 24h</button>
+                        <button onClick={() => { setMetric('mcap'); resetZoom(); }} className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded flex items-center gap-1.5 transition-all ${metric === 'mcap' ? 'bg-[#dd9933] text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}><PieChart size={12} /> MarketCap</button>
+                        <button onClick={() => { setMetric('change'); resetZoom(); }} className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded flex items-center gap-1.5 transition-all ${metric === 'change' ? 'bg-[#dd9933] text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}><BarChart2 size={12} /> Variação 24h</button>
                     </div>
                 )}
             </div>
             
             <div className="flex items-center gap-2">
+                {/* Reset Zoom Button in Header */}
+                {transform.k > 1 && (
+                    <button onClick={resetZoom} className="p-1.5 bg-[#dd9933]/20 hover:bg-[#dd9933] rounded text-[#dd9933] hover:text-black transition-colors" title="Reset Zoom">
+                        <ZoomOut size={14} />
+                    </button>
+                )}
+                
                 <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-gray-800/50 rounded text-[10px] font-bold text-gray-400"><Layers size={12} />{data.length > 0 ? `Top 1000` : '0 moedas'}</div>
                 <button onClick={() => setRefreshKey(k => k + 1)} className="p-1.5 hover:bg-gray-800 rounded text-gray-400 hover:text-white transition-colors"><RefreshCw size={14} className={loading ? 'animate-spin' : ''} /></button>
                 <button onClick={toggleFullscreen} className="p-1.5 hover:bg-gray-800 rounded text-gray-400 hover:text-white transition-colors">{isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}</button>
@@ -496,9 +481,6 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
                         />
                     </ResponsiveContainer>
                 </div>
-            )}
-            {transform.k > 1 && (
-                <button onClick={resetZoom} className="absolute bottom-4 right-4 z-50 bg-[#dd9933] text-black px-3 py-1.5 rounded-lg shadow-xl font-bold text-xs flex items-center gap-2 hover:scale-105 transition-transform"><ZoomOut size={14} /> Reset Zoom</button>
             )}
         </div>
         
