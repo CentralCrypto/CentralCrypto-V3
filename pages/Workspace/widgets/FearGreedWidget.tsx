@@ -159,8 +159,8 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
                     </g>
                 </svg>
             </div>
-            {/* Margem ajustada: -mt-2 para dar mais espaço que o anterior, fonte reduzida para text-3xl */}
-            <div className="flex flex-col items-center -mt-2 z-10">
+            {/* Margem ajustada: mt-2 para dar "respiro" entre o ponteiro e o número */}
+            <div className="flex flex-col items-center mt-2 z-10">
                 <div className="text-3xl font-black text-[#dd9933] leading-none font-mono tracking-tighter">{fgValue}</div>
                 <div className="text-sm font-bold text-gray-900 dark:text-white uppercase mt-0.5">{fgLabel}</div>
             </div>
