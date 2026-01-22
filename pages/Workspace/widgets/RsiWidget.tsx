@@ -755,7 +755,7 @@ const RsiTrackerPage: React.FC<{ language?: Language }> = ({ language = 'pt' }) 
           )}
         </div>
 
-        {/* RIGHT SCATTER .*/}
+        {/* RIGHT SCATTER */}
         <ScatterCard
           rows={rows}
           timeframe={timeframe}
