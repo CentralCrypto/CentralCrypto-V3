@@ -1,7 +1,8 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, Info, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2, Info, Search, ChevronLeft, ChevronRight, BarChart2, DollarSign, Percent, ChevronDown } from 'lucide-react';
 import Highcharts from 'highcharts';
+import addMouseWheelZoom from 'highcharts/modules/mouse-wheel-zoom';
 import { Language, DashboardItem } from '../../../types';
 import { getTranslations } from '../../../locales';
 import {
@@ -12,8 +13,14 @@ import {
   fetchRsiTablePage
 } from '../services/api';
 
+// Inicializa o módulo de zoom com proteção contra erro "is not a function"
+if (typeof addMouseWheelZoom === 'function') {
+    addMouseWheelZoom(Highcharts);
+}
+
 const TIMEFRAMES = ['15m', '1h', '4h', '24h', '7d'] as const;
 type Timeframe = typeof TIMEFRAMES[number];
+type XAxisMode = 'mcap' | 'volume' | 'change';
 
 const formatCompactNumber = (number: number) => {
   if (!number || number === 0) return "---";
@@ -71,65 +78,43 @@ const useIsDark = () => {
 
 // --- COMPONENTS FOR LEFT SIDEBAR ---
 
-const GaugeChart: React.FC<{ value: number, label: string, isDark: boolean }> = ({ value, label, isDark }) => {
-    const cx = 100;
-    const cy = 100; // Half circle bottom
-    const r = 80;
-    const strokeWidth = 12;
+// Reusing the Widget visual style exactly
+const SidebarGauge: React.FC<{ value: number }> = ({ value }) => {
+    const rsiVal = clamp(value, 0, 100);
+    const rotation = -90 + (rsiVal / 100) * 180;
     
-    // Convert 0-100 to angle -90 to +90
-    const angle = Math.min(Math.max((value / 100) * 180 - 90, -90), 90);
-    
+    let label = "Neutro";
+    if (rsiVal >= 70) label = "Sobrecompra";
+    if (rsiVal <= 30) label = "Sobrevenda";
+
     return (
-        <div className="flex flex-col items-center justify-center relative h-[160px]">
-            <svg viewBox="0 0 200 120" className="w-full h-full overflow-visible">
-                <defs>
-                    <linearGradient id="rsiGaugeGradSidebar" x1="0" y1="0" x2="1" y2="0">
-                        <stop offset="0%" stopColor="#4ade80" /> {/* Green (Oversold) */}
-                        <stop offset="50%" stopColor="#fbbf24" /> {/* Yellow */}
-                        <stop offset="100%" stopColor="#f87171" /> {/* Red (Overbought) */}
-                    </linearGradient>
-                </defs>
-                {/* Background Arc */}
-                <path 
-                    d={`M ${cx-r} ${cy} A ${r} ${r} 0 0 1 ${cx+r} ${cy}`} 
-                    fill="none" 
-                    stroke={isDark ? "#334155" : "#e2e8f0"} 
-                    strokeWidth={strokeWidth} 
-                    strokeLinecap="round" 
-                />
-                {/* Value Arc */}
-                <path 
-                    d={`M ${cx-r} ${cy} A ${r} ${r} 0 0 1 ${cx+r} ${cy}`} 
-                    fill="none" 
-                    stroke="url(#rsiGaugeGradSidebar)" 
-                    strokeWidth={strokeWidth} 
-                    strokeLinecap="round"
-                    strokeDasharray={`${(Math.PI * r)}`}
-                    strokeDashoffset={`${(Math.PI * r) * (1 - value/100)}`} 
-                    className="transition-all duration-1000 ease-out"
-                />
-                {/* Needle */}
-                <g transform={`rotate(${angle}, ${cx}, ${cy})`} className="transition-all duration-700 ease-out">
-                    <path d={`M ${cx} ${cy} L ${cx} ${cy - r + 5}`} stroke={isDark ? "#fff" : "#1f2937"} strokeWidth="3" />
-                    <circle cx={cx} cy={cy} r="4" fill={isDark ? "#fff" : "#1f2937"} />
-                </g>
-                
-                <text x={cx} y={cy - 25} textAnchor="middle" className="text-4xl font-black fill-white dark:fill-white font-mono" style={{ fontSize: '32px' }}>
-                    {value.toFixed(2)}
-                </text>
-            </svg>
-            <div className="flex justify-between w-full px-4 -mt-4 text-[10px] font-bold text-gray-500 uppercase">
-                <span>Oversold</span>
-                <span>Overbought</span>
+        <div className="flex flex-col items-center justify-center h-full py-4">
+            <div className="relative w-full max-w-[220px]">
+                <svg viewBox="0 0 200 110" className="w-full overflow-visible">
+                    <defs>
+                        <linearGradient id="rsiSidebarGrad" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0%" stopColor="#4ade80" />
+                            <stop offset="50%" stopColor="#fbbf24" />
+                            <stop offset="100%" stopColor="#f87171" />
+                        </linearGradient>
+                    </defs>
+                    <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" className="stroke-[#eeeeee] dark:stroke-[#333]" strokeWidth="18" strokeLinecap="round"/>
+                    <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" stroke="url(#rsiSidebarGrad)" strokeWidth="18" strokeDasharray={`${(rsiVal/100)*283} 283`} strokeLinecap="round" />
+                    <g transform={`rotate(${rotation} 100 100)`}>
+                        <path d="M 100 100 L 100 20" className="stroke-gray-800 dark:stroke-white" strokeWidth="3" /><circle cx={100} cy={100} r="5" className="fill-gray-800 dark:fill-white" />
+                    </g>
+                </svg>
+            </div>
+            <div className="flex flex-col items-center mt-2 z-10">
+                <div className="text-4xl font-black text-[#dd9933] leading-none font-mono tracking-tighter">{rsiVal.toFixed(2)}</div>
+                <div className="text-sm font-bold text-gray-900 dark:text-white uppercase mt-1">{label}</div>
             </div>
         </div>
     );
 };
 
-// 1. Left Sidebar Container (Exported as RsiGauge for compatibility)
+// 1. Left Sidebar Container
 export const RsiGauge: React.FC<{ language?: Language }> = ({ language = 'pt' }) => {
-  const isDark = useIsDark();
   const [avgData, setAvgData] = useState<RsiAvgData | null>(null);
   const [tableData, setTableData] = useState<RsiTableItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -145,7 +130,7 @@ export const RsiGauge: React.FC<{ language?: Language }> = ({ language = 'pt' })
     });
   }, []);
 
-  const timeframe: Timeframe = '4h'; // Default for avg calc
+  const timeframe: Timeframe = '4h'; 
   const avgRsi = useMemo(() => computeAvgRsi(tableData, timeframe), [tableData, timeframe]);
   const counts = useMemo(() => computeCounts(tableData, timeframe), [tableData, timeframe]);
   const total = counts.valid || 1;
@@ -155,49 +140,47 @@ export const RsiGauge: React.FC<{ language?: Language }> = ({ language = 'pt' })
   if (loading) return <div className="h-full flex items-center justify-center"><Loader2 className="animate-spin text-gray-400" /></div>;
 
   return (
-    <div className="flex flex-col gap-4 h-full">
-        {/* Box 1: Average RSI */}
-        <div className="bg-[#1a1c1e] rounded-xl border border-slate-800 p-5 shadow-lg">
-            <div className="flex justify-between items-center mb-2">
-                <h3 className="font-bold text-white text-sm uppercase">Average Crypto RSI</h3>
-                <Info size={14} className="text-slate-500" />
+    <div className="flex flex-col gap-3 h-full">
+        {/* Box 1: Average RSI Gauge (Flex 1 to take remaining space) */}
+        <div className="flex-1 bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 p-4 shadow-sm flex flex-col relative overflow-hidden">
+            <div className="flex justify-between items-center mb-1 shrink-0">
+                <h3 className="font-bold text-gray-900 dark:text-white text-xs uppercase tracking-wider">Average RSI (4h)</h3>
+                <Info size={14} className="text-slate-400" />
             </div>
-            <GaugeChart value={avgRsi} label="" isDark={isDark} />
+            <SidebarGauge value={avgRsi} />
         </div>
 
-        {/* Box 2: OB vs OS */}
-        <div className="bg-[#1a1c1e] rounded-xl border border-slate-800 p-5 shadow-lg">
-            <div className="flex justify-between items-center mb-4">
-                <h3 className="font-bold text-white text-sm uppercase">Overbought vs Oversold</h3>
-                <Info size={14} className="text-slate-500" />
+        {/* Box 2: OB vs OS (Fixed height) */}
+        <div className="shrink-0 bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 p-4 shadow-sm">
+            <div className="flex justify-between items-center mb-3">
+                <h3 className="font-bold text-gray-900 dark:text-white text-xs uppercase tracking-wider">Estado do Mercado</h3>
             </div>
-            <div className="flex justify-between text-xs font-bold mb-1">
-                <span className="text-green-400 flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-green-400"></div> Oversold {osPct.toFixed(1)}%</span>
-                <span className="text-red-400 flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-red-400"></div> Overbought {obPct.toFixed(1)}%</span>
+            <div className="flex justify-between text-[10px] font-black uppercase mb-1.5">
+                <span className="text-green-500 flex items-center gap-1">Sobrevenda {osPct.toFixed(0)}%</span>
+                <span className="text-red-500 flex items-center gap-1">Sobrecompra {obPct.toFixed(0)}%</span>
             </div>
-            <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden flex relative">
+            <div className="w-full h-2.5 bg-gray-100 dark:bg-slate-700 rounded-full overflow-hidden flex relative">
                 <div className="h-full bg-green-500" style={{ width: `${osPct}%` }}></div>
-                <div className="h-full bg-slate-700 flex-1"></div> {/* Neutral space */}
+                <div className="h-full flex-1"></div>
                 <div className="h-full bg-red-500" style={{ width: `${obPct}%` }}></div>
             </div>
+            <div className="text-[10px] text-center text-gray-400 mt-1 font-mono">Total: {total} ativos</div>
         </div>
 
-        {/* Box 3: Historical */}
-        <div className="bg-[#1a1c1e] rounded-xl border border-slate-800 p-5 shadow-lg flex-1">
-            <div className="flex justify-between items-center mb-4">
-                <h3 className="font-bold text-white text-sm uppercase">Historical RSI Values</h3>
-                <Info size={14} className="text-slate-500" />
+        {/* Box 3: Historical (Fixed height) */}
+        <div className="shrink-0 bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 p-4 shadow-sm">
+            <div className="flex justify-between items-center mb-3">
+                <h3 className="font-bold text-gray-900 dark:text-white text-xs uppercase tracking-wider">Histórico da Média</h3>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
                 {[
-                    { l: 'Yesterday', v: avgData?.yesterday },
-                    { l: '7 Days Ago', v: avgData?.days7Ago },
-                    { l: '30 Days Ago', v: avgData?.days30Ago },
-                    { l: '90 Days Ago', v: avgData?.days90Ago }
+                    { l: 'Ontem', v: avgData?.yesterday },
+                    { l: '7 Dias', v: avgData?.days7Ago },
+                    { l: '30 Dias', v: avgData?.days30Ago }
                 ].map((h, i) => (
-                    <div key={i} className="flex justify-between items-center bg-white/5 p-2 rounded px-3">
-                        <span className="text-xs font-bold text-slate-400 uppercase">{h.l}</span>
-                        <span className={`text-sm font-black font-mono ${getRsiColor(h.v || 50, true)}`}>
+                    <div key={i} className="flex justify-between items-center bg-gray-50 dark:bg-white/5 p-1.5 rounded px-3">
+                        <span className="text-[10px] font-bold text-gray-500 dark:text-slate-400 uppercase">{h.l}</span>
+                        <span className={`text-xs font-black font-mono ${getRsiColor(h.v || 50, true)}`}>
                             {h.v ? h.v.toFixed(2) : '-'}
                         </span>
                     </div>
@@ -208,12 +191,15 @@ export const RsiGauge: React.FC<{ language?: Language }> = ({ language = 'pt' })
   );
 };
 
-// 2. Scatter Chart (Exported as RsiScatterChart)
+// 2. Scatter Chart (Updated)
 export const RsiScatterChart: React.FC = () => {
   const isDark = useIsDark();
   const chartRef = useRef<HTMLDivElement>(null);
   const [rows, setRows] = useState<RsiTableItem[]>([]);
+  
+  // Controls
   const [timeframe, setTimeframe] = useState<Timeframe>('4h');
+  const [xMode, setXMode] = useState<XAxisMode>('mcap');
 
   useEffect(() => {
       fetchRsiTable({ force: false }).then(data => {
@@ -224,83 +210,123 @@ export const RsiScatterChart: React.FC = () => {
   useEffect(() => {
     if (!chartRef.current || rows.length === 0) return;
 
-    const bgColor = isDark ? '#1a1c1e' : '#ffffff';
-    const textColor = isDark ? '#e2e8f0' : '#334155';
+    const bgColor = 'transparent';
+    const textColor = isDark ? '#94a3b8' : '#64748b';
     const gridColor = isDark ? '#334155' : '#e2e8f0';
 
     const seriesData = rows
         .filter(r => r.marketCap && r.marketCap > 0 && r.rsi?.[timeframe])
-        .map(r => ({
-            x: r.marketCap,
-            y: r.rsi?.[timeframe],
-            z: r.volume24h, // Size bubble by volume if wanted, or plain scatter
-            name: r.symbol,
-            fullName: r.name,
-            price: r.price,
-            marker: {
-                symbol: `url(${r.logo})`,
-                width: 24,
-                height: 24
-            }
-        }));
+        .map(r => {
+            let xVal = 0;
+            if (xMode === 'mcap') xVal = r.marketCap || 0;
+            else if (xMode === 'volume') xVal = r.volume24h || 0;
+            else xVal = r.change || 0;
+
+            return {
+                x: xVal,
+                y: r.rsi?.[timeframe],
+                z: r.volume24h,
+                name: r.symbol,
+                fullName: r.name,
+                price: r.price,
+                change: r.change,
+                marker: {
+                    symbol: `url(${r.logo})`,
+                    width: 24,
+                    height: 24
+                }
+            };
+        });
+
+    const xAxisType = xMode === 'change' ? 'linear' : 'logarithmic';
+    const xTitle = xMode === 'mcap' ? 'Market Cap (Log)' : xMode === 'volume' ? 'Volume 24h (Log)' : 'Variação 24h (%)';
+
+    // Plot lines for X Axis (Zero line for change)
+    const xPlotLines = xMode === 'change' ? [{
+        value: 0,
+        color: textColor,
+        width: 1,
+        dashStyle: 'Dash',
+        zIndex: 2
+    }] : [];
 
     Highcharts.chart(chartRef.current, {
         chart: {
             type: 'scatter',
             backgroundColor: bgColor,
             style: { fontFamily: 'Inter, sans-serif' },
-            height: 420
+            height: null, // Let flex container handle it
+            zooming: {
+                mouseWheel: {
+                    enabled: true
+                },
+                type: 'xy',
+                resetZoomButton: {
+                    position: { align: 'right', verticalAlign: 'top', x: -10, y: 10 },
+                    theme: {
+                        fill: isDark ? '#2f3032' : '#ffffff',
+                        stroke: '#dd9933',
+                        r: 4,
+                        style: { color: '#dd9933', fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase' },
+                        states: { hover: { fill: '#dd9933', style: { color: '#000000' } } }
+                    }
+                }
+            }
         },
         title: { text: null },
         credits: { enabled: false },
         legend: { enabled: false },
         xAxis: {
-            type: 'logarithmic',
-            reversed: true, // High Mcap on left (like in screenshot)
-            title: { text: 'Market Cap (USD)', style: { color: '#64748b' } },
+            type: xAxisType,
+            reversed: xMode === 'mcap', // Big caps left
+            title: { text: xTitle, style: { color: textColor, fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase' } },
             gridLineColor: gridColor,
             labels: {
-                style: { color: '#64748b' },
-                formatter: function (this: any) { return '$' + formatCompactNumber(this.value); }
+                style: { color: textColor, fontSize: '10px' },
+                formatter: function (this: any) { 
+                    if (xMode === 'change') return this.value + '%';
+                    return '$' + formatCompactNumber(this.value); 
+                }
             },
             lineColor: gridColor,
-            tickColor: gridColor
+            tickColor: gridColor,
+            plotLines: xPlotLines
         },
         yAxis: {
-            title: { text: 'Relative Strength Index', style: { color: '#64748b' } },
+            title: { text: 'Relative Strength Index', style: { color: textColor, fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase' } },
             min: 0, 
             max: 100,
             gridLineColor: gridColor,
             gridLineDashStyle: 'Dash',
-            labels: { style: { color: '#64748b' } },
+            labels: { style: { color: textColor, fontSize: '10px' } },
             plotLines: [
-                { value: 70, color: '#f87171', dashStyle: 'ShortDash', width: 1, label: { text: 'Overbought', align: 'right', style: { color: '#f87171' } }, zIndex: 5 },
-                { value: 30, color: '#4ade80', dashStyle: 'ShortDash', width: 1, label: { text: 'Oversold', align: 'right', style: { color: '#4ade80' } }, zIndex: 5 },
-                { value: 50, color: '#64748b', width: 1, zIndex: 5 }
+                { value: 80, color: '#f87171', dashStyle: 'ShortDash', width: 2, label: { text: 'Overbought (80)', align: 'right', style: { color: '#f87171', fontSize: '10px' } }, zIndex: 5 },
+                { value: 20, color: '#4ade80', dashStyle: 'ShortDash', width: 2, label: { text: 'Oversold (20)', align: 'right', style: { color: '#4ade80', fontSize: '10px' } }, zIndex: 5 },
+                { value: 50, color: textColor, width: 1, zIndex: 1 }
             ],
             plotBands: [
-                { from: 70, to: 100, color: 'rgba(248, 113, 113, 0.08)' }, // Red Tint
-                { from: 0, to: 30, color: 'rgba(74, 222, 128, 0.08)' }    // Green Tint
+                { from: 80, to: 100, color: 'rgba(248, 113, 113, 0.08)' }, // Red Tint
+                { from: 0, to: 20, color: 'rgba(74, 222, 128, 0.08)' }    // Green Tint
             ]
         },
         tooltip: {
             useHTML: true,
             backgroundColor: isDark ? 'rgba(26, 28, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)',
-            borderColor: '#334155',
+            borderColor: gridColor,
             borderRadius: 8,
-            style: { color: textColor },
+            style: { color: isDark ? '#fff' : '#000' },
             formatter: function (this: any) {
                 const p = this.point;
                 return `
-                    <div style="display:flex; align-items:center; gap:8px; min-width:120px;">
+                    <div style="display:flex; align-items:center; gap:8px; min-width:120px; padding: 4px;">
                         <div style="font-weight:900; font-size:14px;">${p.name}</div>
-                        <div style="font-size:12px; color:#94a3b8;">$${formatCompactNumber(p.options.price)}</div>
+                        <div style="font-size:12px; opacity:0.7;">$${formatCompactNumber(p.options.price)}</div>
                     </div>
-                    <div style="margin-top:4px;">
-                        <span style="color:#94a3b8;">RSI:</span> <b>${p.y.toFixed(2)}</b>
+                    <div style="margin-top:4px; font-size:12px;">
+                        <span style="opacity:0.7;">RSI (${timeframe}):</span> <b>${p.y.toFixed(2)}</b>
                     </div>
-                    <div>
-                        <span style="color:#94a3b8;">Mcap:</span> <b>$${formatCompactNumber(p.x)}</b>
+                    <div style="font-size:12px;">
+                        <span style="opacity:0.7;">Var 24h:</span> <b style="color:${p.options.change >= 0 ? '#4ade80' : '#f87171'}">${p.options.change.toFixed(2)}%</b>
                     </div>
                 `;
             }
@@ -308,35 +334,58 @@ export const RsiScatterChart: React.FC = () => {
         plotOptions: {
             scatter: {
                 marker: {
-                    radius: 5, // Fallback radius
+                    radius: 5,
                     states: { hover: { enabled: true, lineColor: 'rgb(100,100,100)' } }
                 }
             }
         },
         series: [{
             name: 'Coins',
-            data: seriesData
+            data: seriesData,
+            color: 'rgba(156, 163, 175, 0.5)' // default dot color if image fails
         }]
     } as any);
 
-  }, [rows, timeframe, isDark]);
+  }, [rows, timeframe, xMode, isDark]);
 
   return (
-    <div className="bg-[#1a1c1e] rounded-xl border border-slate-800 shadow-lg p-4 h-full flex flex-col">
-        <div className="flex justify-between items-center mb-4 px-2">
+    <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm p-4 h-full flex flex-col">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
             <div className="flex items-center gap-2">
-                <h3 className="font-bold text-white uppercase text-sm">Crypto RSI Heatmap</h3>
-                <Info size={14} className="text-slate-500" />
+                <h3 className="font-bold text-gray-900 dark:text-white uppercase text-sm tracking-wider">RSI Scatter Map</h3>
+                
+                {/* Timeframe Selector */}
+                <div className="flex bg-gray-100 dark:bg-[#2f3032] rounded p-0.5 ml-2">
+                    {TIMEFRAMES.map(t => (
+                        <button 
+                            key={t}
+                            onClick={() => setTimeframe(t)}
+                            className={`px-2 py-1 text-[10px] font-bold rounded transition-colors ${timeframe === t ? 'bg-white dark:bg-[#1a1c1e] text-[#dd9933] shadow-sm' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}
+                        >
+                            {t}
+                        </button>
+                    ))}
+                </div>
             </div>
-            <select 
-                value={timeframe} 
-                onChange={e => setTimeframe(e.target.value as Timeframe)}
-                className="bg-[#2f3032] text-white text-xs font-bold px-3 py-1 rounded border border-slate-700 outline-none"
-            >
-                {TIMEFRAMES.map(t => <option key={t} value={t}>{t.toUpperCase()}</option>)}
-            </select>
+
+            {/* X-Axis Toggle */}
+            <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-gray-400 uppercase">Eixo X:</span>
+                <div className="flex bg-gray-100 dark:bg-[#2f3032] rounded p-0.5">
+                    <button onClick={() => setXMode('mcap')} className={`px-2 py-1 text-[10px] font-bold rounded flex items-center gap-1 ${xMode === 'mcap' ? 'bg-white dark:bg-[#1a1c1e] text-[#dd9933] shadow-sm' : 'text-gray-500'}`}>
+                        <DollarSign size={10} /> Market Cap
+                    </button>
+                    <button onClick={() => setXMode('change')} className={`px-2 py-1 text-[10px] font-bold rounded flex items-center gap-1 ${xMode === 'change' ? 'bg-white dark:bg-[#1a1c1e] text-[#dd9933] shadow-sm' : 'text-gray-500'}`}>
+                        <Percent size={10} /> Price 24h
+                    </button>
+                    <button onClick={() => setXMode('volume')} className={`px-2 py-1 text-[10px] font-bold rounded flex items-center gap-1 ${xMode === 'volume' ? 'bg-white dark:bg-[#1a1c1e] text-[#dd9933] shadow-sm' : 'text-gray-500'}`}>
+                        <BarChart2 size={10} /> Vol 24h
+                    </button>
+                </div>
+            </div>
         </div>
-        <div className="flex-1 w-full min-h-[350px] relative rounded-lg overflow-hidden">
+        
+        <div className="flex-1 w-full min-h-0 relative rounded-lg overflow-hidden">
             {rows.length === 0 ? (
                 <div className="absolute inset-0 flex items-center justify-center text-slate-500"><Loader2 className="animate-spin" /></div>
             ) : (
@@ -347,7 +396,7 @@ export const RsiScatterChart: React.FC = () => {
   );
 };
 
-// 3. Table List (Exported as RsiTableList)
+// 3. Table List (Enhanced with Row Count)
 export const RsiTableList: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<RsiTableItem[]>([]);
@@ -376,18 +425,32 @@ export const RsiTableList: React.FC = () => {
   }, [page, pageSize, search]);
 
   return (
-      <div className="bg-[#1a1c1e] rounded-xl border border-slate-800 shadow-lg flex flex-col overflow-hidden h-full">
-        <div className="p-4 border-b border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-3">
-            <h3 className="font-bold text-white text-sm uppercase">RSI Data Table</h3>
-            <div className="flex items-center gap-2 w-full sm:w-auto">
+      <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm flex flex-col overflow-hidden h-full min-h-[500px]">
+        <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-3 bg-gray-50 dark:bg-black/20">
+            <h3 className="font-bold text-gray-900 dark:text-white text-sm uppercase tracking-wider">Dados Detalhados</h3>
+            
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+                {/* Page Size Selector */}
+                <div className="flex items-center gap-2 bg-white dark:bg-[#2f3032] border border-gray-200 dark:border-slate-700 rounded px-2 py-1.5">
+                    <span className="text-[10px] font-bold text-gray-500 uppercase">Linhas:</span>
+                    <select 
+                        value={pageSize}
+                        onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                        className="bg-transparent text-xs font-bold outline-none text-gray-900 dark:text-white"
+                    >
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                    </select>
+                </div>
+
                 <div className="relative flex-1 sm:w-64">
-                    <Search size={14} className="absolute left-3 top-2.5 text-slate-500" />
+                    <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
                     <input 
                         type="text" 
                         value={search}
-                        onChange={e => setSearch(e.target.value)}
-                        placeholder="Search coin..." 
-                        className="w-full bg-[#2f3032] border border-slate-700 text-slate-200 text-xs py-2 pl-9 pr-3 rounded focus:border-[#dd9933] outline-none"
+                        onChange={e => { setSearch(e.target.value); setPage(1); }}
+                        placeholder="Buscar ativo..." 
+                        className="w-full bg-white dark:bg-[#2f3032] border border-gray-200 dark:border-slate-700 text-gray-900 dark:text-slate-200 text-xs py-2 pl-9 pr-3 rounded focus:border-[#dd9933] outline-none transition-colors"
                     />
                 </div>
             </div>
@@ -395,62 +458,100 @@ export const RsiTableList: React.FC = () => {
         
         <div className="flex-1 overflow-auto custom-scrollbar">
             <table className="w-full text-left border-collapse">
-                <thead className="bg-[#2f3032] sticky top-0 z-10 text-[10px] uppercase font-black text-slate-400">
+                <thead className="bg-gray-100 dark:bg-[#2f3032] sticky top-0 z-10 text-[10px] uppercase font-black text-gray-500 dark:text-slate-400">
                     <tr>
                         <th className="p-3 text-center w-12">#</th>
-                        <th className="p-3">Asset</th>
-                        <th className="p-3 text-right">Price</th>
+                        <th className="p-3">Ativo</th>
+                        <th className="p-3 text-right">Preço</th>
                         <th className="p-3 text-center">15m</th>
                         <th className="p-3 text-center">1h</th>
-                        <th className="p-3 text-center bg-[#222] text-[#dd9933]">4h</th>
+                        <th className="p-3 text-center bg-white dark:bg-white/5 text-[#dd9933]">4h</th>
                         <th className="p-3 text-center">24h</th>
                         <th className="p-3 text-center">7d</th>
                         <th className="p-3 text-right">Mkt Cap</th>
                         <th className="p-3 text-right">Vol 24h</th>
                     </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800 text-sm">
+                <tbody className="divide-y divide-gray-100 dark:divide-slate-800 text-sm">
                     {loading ? (
                         <tr><td colSpan={10} className="p-10 text-center"><Loader2 className="animate-spin mx-auto text-[#dd9933]" /></td></tr>
                     ) : rows.map((r, i) => (
-                        <tr key={r.id} className="hover:bg-white/5 transition-colors">
-                            <td className="p-3 text-center text-slate-500 font-mono text-xs">{r.rank}</td>
+                        <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                            <td className="p-3 text-center text-gray-400 dark:text-slate-500 font-mono text-xs">{r.rank}</td>
                             <td className="p-3">
                                 <div className="flex items-center gap-3">
-                                    <img src={r.logo} className="w-6 h-6 rounded-full bg-white p-0.5" alt="" onError={(e) => (e.target as HTMLImageElement).style.display = 'none'} />
+                                    <img src={r.logo} className="w-6 h-6 rounded-full bg-white p-0.5 border border-gray-200 dark:border-white/10" alt="" onError={(e) => (e.target as HTMLImageElement).style.display = 'none'} />
                                     <div className="flex flex-col">
-                                        <span className="font-bold text-slate-200 leading-none">{r.name}</span>
-                                        <span className="text-[10px] font-bold text-slate-500 uppercase">{r.symbol}</span>
+                                        <span className="font-bold text-gray-900 dark:text-slate-200 leading-none">{r.name}</span>
+                                        <span className="text-[10px] font-bold text-gray-500 uppercase">{r.symbol}</span>
                                     </div>
                                 </div>
                             </td>
-                            <td className="p-3 text-right font-mono font-bold text-slate-300">
+                            <td className="p-3 text-right font-mono font-bold text-gray-700 dark:text-slate-300">
                                 ${r.price < 1 ? r.price.toFixed(5) : r.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                             </td>
                             <td className={`p-3 text-center font-mono font-bold ${getRsiColor(r.rsi["15m"], true)}`}>{r.rsi["15m"]?.toFixed(0)}</td>
                             <td className={`p-3 text-center font-mono font-bold ${getRsiColor(r.rsi["1h"], true)}`}>{r.rsi["1h"]?.toFixed(0)}</td>
-                            <td className={`p-3 text-center font-mono font-bold bg-white/5 ${getRsiColor(r.rsi["4h"], true)}`}>{r.rsi["4h"]?.toFixed(0)}</td>
+                            <td className={`p-3 text-center font-mono font-bold bg-gray-50 dark:bg-white/5 ${getRsiColor(r.rsi["4h"], true)}`}>{r.rsi["4h"]?.toFixed(0)}</td>
                             <td className={`p-3 text-center font-mono font-bold ${getRsiColor(r.rsi["24h"], true)}`}>{r.rsi["24h"]?.toFixed(0)}</td>
                             <td className={`p-3 text-center font-mono font-bold ${getRsiColor(r.rsi["7d"], true)}`}>{r.rsi["7d"]?.toFixed(0)}</td>
-                            <td className="p-3 text-right font-mono text-slate-400 text-xs">${formatCompactNumber(r.marketCap || 0)}</td>
-                            <td className="p-3 text-right font-mono text-slate-400 text-xs">${formatCompactNumber(r.volume24h || 0)}</td>
+                            <td className="p-3 text-right font-mono text-gray-500 dark:text-slate-400 text-xs">${formatCompactNumber(r.marketCap || 0)}</td>
+                            <td className="p-3 text-right font-mono text-gray-500 dark:text-slate-400 text-xs">${formatCompactNumber(r.volume24h || 0)}</td>
                         </tr>
                     ))}
                 </tbody>
             </table>
         </div>
 
-        <div className="p-3 border-t border-slate-800 flex justify-between items-center bg-[#2f3032]">
-            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="p-2 hover:bg-white/10 rounded disabled:opacity-50 text-white"><ChevronLeft size={16}/></button>
-            <span className="text-xs font-bold text-slate-400">Page {page} of {totalPages}</span>
-            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="p-2 hover:bg-white/10 rounded disabled:opacity-50 text-white"><ChevronRight size={16}/></button>
+        <div className="p-3 border-t border-gray-200 dark:border-slate-800 flex justify-between items-center bg-gray-50 dark:bg-[#2f3032]">
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="p-2 hover:bg-white dark:hover:bg-white/10 rounded disabled:opacity-50 text-gray-600 dark:text-white transition-colors border border-transparent hover:border-gray-200 dark:hover:border-slate-700"><ChevronLeft size={16}/></button>
+            <span className="text-xs font-bold text-gray-500 dark:text-slate-400">Página {page} de {totalPages}</span>
+            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="p-2 hover:bg-white dark:hover:bg-white/10 rounded disabled:opacity-50 text-gray-600 dark:text-white transition-colors border border-transparent hover:border-gray-200 dark:hover:border-slate-700"><ChevronRight size={16}/></button>
         </div>
       </div>
   );
 };
 
-// Default export for Workspace Grid Widget (Reformatted to match Fear&Greed/AltSeason)
+// 4. FAQ Component
+export const RsiFaq: React.FC = () => {
+    const [openIndex, setOpenIndex] = useState<number | null>(null);
+    
+    const items = [
+        { q: "O que é o RSI (Índice de Força Relativa)?", a: "O RSI é um oscilador de momentum que mede a velocidade e a mudança dos movimentos de preço. Ele oscila entre 0 e 100." },
+        { q: "Como a fórmula é calculada?", a: "RSI = 100 - (100 / (1 + RS)), onde RS é a média dos ganhos dos dias de alta dividida pela média das perdas dos dias de baixa." },
+        { q: "Para que serve o RSI?", a: "Principalmente para identificar condições de sobrecompra (potencial topo) ou sobrevenda (potencial fundo) de um ativo." },
+        { q: "O que é Divergência?", a: "Ocorre quando o preço faz um novo topo/fundo, mas o RSI não acompanha. Isso geralmente sinaliza uma reversão de tendência iminente." },
+        { q: "Quais são os níveis críticos?", a: "Tradicionalmente, acima de 70 é considerado sobrecompra (risco de queda) e abaixo de 30 é sobrevenda (oportunidade de compra). Em mercados de forte tendência, esses níveis podem ser ajustados para 80/20." }
+    ];
+
+    return (
+        <div className="max-w-4xl mx-auto mt-8">
+            <h3 className="text-xl font-black text-gray-800 dark:text-[#dd9933] uppercase tracking-widest text-center mb-6">Entendendo o RSI</h3>
+            <div className="space-y-3">
+                {items.map((item, i) => (
+                    <div key={i} className="bg-white dark:bg-[#1a1c1e] border border-gray-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm transition-all">
+                        <button
+                            onClick={() => setOpenIndex(openIndex === i ? null : i)}
+                            className="w-full flex items-center justify-between p-4 text-left group hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
+                        >
+                            <span className={`font-bold text-sm ${openIndex === i ? 'text-[#dd9933]' : 'text-gray-700 dark:text-gray-300'}`}>{item.q}</span>
+                            <ChevronDown size={16} className={`text-gray-400 transition-transform duration-300 ${openIndex === i ? 'rotate-180 text-[#dd9933]' : ''}`} />
+                        </button>
+                        <div className={`transition-all duration-300 ease-in-out ${openIndex === i ? 'max-h-40 opacity-100' : 'max-h-0 opacity-0'}`}>
+                            <div className="p-4 pt-0 text-sm text-gray-600 dark:text-slate-400 leading-relaxed border-t border-transparent dark:border-white/5">
+                                {item.a}
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+// Default Widget Export
 const RsiWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ item, language = 'pt' }) => {
+    // Reuse the Gauge Logic for the widget
     const [avgData, setAvgData] = useState<RsiAvgData | null>(null);
     const [loading, setLoading] = useState(true);
     const t = getTranslations(language as Language).dashboard.widgets.rsi;
@@ -478,9 +579,8 @@ const RsiWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ ite
                 <Watermark />
                 <div className="flex-1 overflow-auto z-10 custom-scrollbar">
                     <div className="flex items-center justify-center h-full">
-                        {/* We reuse the sidebar gauge chart component for maximized view but bigger */}
                         <div className="scale-150">
-                            <GaugeChart value={rsiVal} label="" isDark={document.documentElement.classList.contains('dark')} />
+                            <SidebarGauge value={rsiVal} />
                         </div>
                     </div>
                 </div>
@@ -507,7 +607,6 @@ const RsiWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ ite
                     </g>
                 </svg>
             </div>
-            {/* Margem ajustada: mt-2 para dar "respiro" entre o ponteiro e o número */}
             <div className="flex flex-col items-center mt-2 z-10">
                 <div className="text-3xl font-black text-[#dd9933] leading-none font-mono tracking-tighter">{rsiVal.toFixed(2)}</div>
                 <div className="text-sm font-bold text-gray-900 dark:text-white uppercase mt-0.5">{rsiLabel}</div>

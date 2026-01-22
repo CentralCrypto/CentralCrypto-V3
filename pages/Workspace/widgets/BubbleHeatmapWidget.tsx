@@ -7,8 +7,10 @@ import { DashboardItem, Language, ApiCoin } from '../../../types';
 import Highcharts from 'highcharts';
 import addHighchartsMore from 'highcharts/highcharts-more';
 
-// Initialize
-try { (addHighchartsMore as any)(Highcharts); } catch(e) { console.error("Highcharts More init error", e); }
+// Initialize Standard Module with protection
+if (typeof addHighchartsMore === 'function') {
+    addHighchartsMore(Highcharts);
+}
 
 declare global {
   interface Window {
@@ -169,7 +171,7 @@ const BubbleHeatmapWidget: React.FC<Props> = ({ item, language = 'pt' }) => {
     }, [marketPool, mode, activeRanges, coinLimit]);
 
     useEffect(() => {
-        if (!chartRef.current || !window.Highcharts || filteredBubbleData.length === 0) return;
+        if (!chartRef.current || !Highcharts || filteredBubbleData.length === 0) return;
 
         if (chartInstance.current) {
             chartInstance.current.destroy();

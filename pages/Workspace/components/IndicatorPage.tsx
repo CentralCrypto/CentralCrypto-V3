@@ -6,7 +6,7 @@ import { getTranslations } from '../../../locales';
 import CryptoWidget from './CryptoWidget';
 import CryptoMarketBubbles from '../widgets/CryptoMarketBubbles';
 import MarketCapTable from '../widgets/MarketCapTable';
-import { RsiGauge, RsiScatterChart, RsiTableList } from '../widgets/RsiWidget';
+import { RsiGauge, RsiScatterChart, RsiTableList, RsiFaq } from '../widgets/RsiWidget';
 
 import {
   Activity,
@@ -62,10 +62,12 @@ function PageFaq({ language, pageType }: { language: Language; pageType: string 
   const [openIndex, setOpenIndex] = useState<number | null>(null);
   const t = getTranslations(language).workspace.pages.faq;
 
+  // RSI FAQ is handled by its own component now, return null for it here
+  if (pageType === 'RSI') return null;
+
   const faqData = useMemo(() => {
     switch (pageType) {
       case 'FNG': return t.fng;
-      case 'RSI': return t.rsi;
       case 'MACD': return t.macd;
       case 'ALTSEASON': return t.altseason;
       case 'ETF': return t.etf;
@@ -110,16 +112,16 @@ function PageFaq({ language, pageType }: { language: Language; pageType: string 
   );
 }
 
-// --- RSI CUSTOM PAGE LAYOUT (DASHBOARD STYLE) ---
+// --- RSI CUSTOM PAGE LAYOUT (FIXED HEIGHT GRID) ---
 const RsiPageLayout = ({ language }: { language: Language }) => {
     return (
-        <div className="flex flex-col gap-6 w-full">
-            {/* Top Row: Gauge (1/3) + Heatmap (2/3) */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[420px]">
-                <div className="col-span-1 h-full">
+        <div className="flex flex-col gap-6 w-full pb-10">
+            {/* Top Row: Gauge (1/3) + Heatmap (2/3) - FIXED EQUAL HEIGHT */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[500px]">
+                <div className="col-span-1 h-full min-h-0">
                     <RsiGauge language={language} />
                 </div>
-                <div className="col-span-1 lg:col-span-2 h-full">
+                <div className="col-span-1 lg:col-span-2 h-full min-h-0">
                     <RsiScatterChart />
                 </div>
             </div>
@@ -128,6 +130,9 @@ const RsiPageLayout = ({ language }: { language: Language }) => {
             <div className="min-h-[500px]">
                 <RsiTableList />
             </div>
+            
+            {/* FAQ Section */}
+            <RsiFaq />
         </div>
     );
 };
@@ -247,10 +252,10 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
           className={`flex-1 flex-col min-w-0 h-full overflow-y-auto custom-scrollbar pr-1 ${activePage === 'BUBBLES' ? 'hidden' : 'flex'}`}
         >
           {activePage === 'RSI' ? (
-              <div className="bg-[#1a1c1e] p-6 rounded-xl border border-slate-800 shadow-sm transition-colors mb-6 shrink-0">
-                  <h2 className="text-2xl font-bold text-white">Crypto Relative Strength Index (RSI)</h2>
-                  <p className="text-slate-400 mt-1 text-sm">
-                      Este painel mostra o mapa de calor e os dados do Índice de Força Relativa do mercado de criptomoedas atual.
+              <div className="bg-white dark:bg-[#1a1c1e] p-6 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm transition-colors mb-6 shrink-0">
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Crypto Relative Strength Index (RSI)</h2>
+                  <p className="text-gray-500 dark:text-slate-400 mt-1 text-sm">
+                      Análise global de momentum, divergências e condições de sobrecompra/sobrevenda.
                   </p>
               </div>
           ) : (
