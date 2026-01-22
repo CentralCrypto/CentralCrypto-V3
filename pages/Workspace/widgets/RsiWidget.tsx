@@ -126,8 +126,8 @@ const SidebarGauge: React.FC<{ value: number }> = ({ value }) => {
                     </g>
                 </svg>
             </div>
-            {/* Reduced margin top from mt-5 to mt-0 */}
-            <div className="flex flex-col items-center mt-0 z-10">
+            {/* AGRESSIVE Negative Margin to pull text up */}
+            <div className="flex flex-col items-center -mt-6 z-10">
                 <div className="text-4xl font-black text-[#dd9933] leading-none font-mono tracking-tighter">{rsiVal.toFixed(2)}</div>
                 <div className="text-sm font-bold text-gray-900 dark:text-white uppercase mt-1 tracking-widest">{label}</div>
             </div>
@@ -229,7 +229,7 @@ export const RsiScatterChart: React.FC = () => {
 
   useEffect(() => {
       fetchRsiTrackerHist().then(data => {
-          if (data && data.length > 0) setPoints(data);
+          if (data && Array.isArray(data)) setPoints(data);
       });
   }, []);
 

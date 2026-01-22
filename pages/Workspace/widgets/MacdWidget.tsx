@@ -96,8 +96,8 @@ const MacdGauge: React.FC<{ bullishPct: number, avgNMacd: number }> = ({ bullish
                     </g>
                 </svg>
             </div>
-            {/* Reduced margin top from mt-5 to mt-0 */}
-            <div className="flex flex-col items-center mt-0 z-10">
+            {/* AGRESSIVE Negative Margin to pull text up */}
+            <div className="flex flex-col items-center -mt-6 z-10">
                 <div className="text-3xl font-black text-[#dd9933] leading-none font-mono tracking-tighter">{avgNMacd.toFixed(2)}</div>
                 <div className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mt-1 tracking-widest">Avg Normalized MACD</div>
                 <div className={`text-xs font-black uppercase mt-1 ${avgNMacd > 0 ? 'text-green-500' : 'text-red-500'}`}>{label}</div>
@@ -188,7 +188,7 @@ export const MacdScatterChart: React.FC = () => {
 
   useEffect(() => {
       fetchMacdTracker().then(data => {
-          if (data && data.length > 0) setPoints(data);
+          if (data && Array.isArray(data) && data.length > 0) setPoints(data);
       });
   }, []);
 

@@ -13,7 +13,6 @@ import {
     fetchAltcoinSeason, 
     fetchAltcoinSeasonHistory, 
     fetchTrumpData, 
-    fetchGainersLosers,
     fetchRsiAverage,
     TrumpData,
     fetchLongShortRatio,
