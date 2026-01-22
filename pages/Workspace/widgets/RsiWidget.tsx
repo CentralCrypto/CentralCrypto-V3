@@ -96,7 +96,7 @@ const ScatterCard: React.FC<{
     if (!chartRef.current) return;
     // Se não tiver dados, limpa o gráfico ou mostra mensagem
     if (!rows || rows.length === 0) {
-        chartRef.current.innerHTML = "<div style='height:100%;display:flex;align-items:center;justify-content:center;color:#666;'>Carregando dados...</div>";
+        chartRef.current.innerHTML = "<div style='height:100%;display:flex;align-items:center;justify-content:center;color:#666;'>Carregando dados do RSI...</div>";
         return;
     }
 
@@ -240,7 +240,7 @@ export const RsiScatterChart: React.FC = () => {
   const [rows, setRows] = useState<RsiTableItem[]>([]);
   
   useEffect(() => {
-      // Usa fetchRsiTable que agora é robusto
+      // Usa fetchRsiTable que agora é robusto para a estrutura do rsitracker.json
       fetchRsiTable({ force: false }).then(data => {
           if (data) setRows(data);
       });

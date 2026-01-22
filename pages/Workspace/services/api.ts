@@ -296,40 +296,28 @@ export const fetchRsiAverage = async (): Promise<RsiAvgData | null> => {
 
 // --------- RSI TRACKER HIST (SCATTER) ---------
 export const fetchRsiTrackerHist = async (): Promise<RsiTrackerPoint[]> => {
-  const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTrackerHist));
-
-  let items: any[] = [];
-  if (Array.isArray(raw)) {
-    items = (raw[0]?.data && Array.isArray(raw[0].data)) ? raw[0].data : raw;
-  } else if (raw && raw.data) {
-    items = Array.isArray(raw.data) ? raw.data : [];
-  }
-
-  if (!items.length) return [];
-
-  return items.map((p: any) => {
-    const rsiNode = p.rsiOverall || p.rsi || {};
-    const symbol = p.symbol || p.s || '';
-    return {
-      symbol,
-      name: p.name || p.n || symbol,
-      price: safeNum(p.current_price || p.price, 0),
-      change24h: safeNum(p.price_change_percentage_24h || p.price24h, 0),
-      marketCap: safeNum(p.market_cap || p.marketCap, 0),
-      volume24h: safeNum(p.total_volume || p.volume24h, undefined as any),
-      rank: Number.isFinite(Number(p.market_cap_rank || p.rank)) ? Number(p.market_cap_rank || p.rank) : undefined,
-      logo: p.image || p.logo || `https://assets.coincap.io/assets/icons/${symbol.toLowerCase()}@2x.png`,
-      rsi: {
-        "15m": safeNum(rsiNode?.rsi15m ?? rsiNode?.['15m'], 50),
-        "1h": safeNum(rsiNode?.rsi1h ?? rsiNode?.['1h'], 50),
-        "4h": safeNum(rsiNode?.rsi4h ?? rsiNode?.['4h'], 50),
-        "24h": safeNum(rsiNode?.rsi24h ?? rsiNode?.['24h'], 50),
-        "7d": safeNum(rsiNode?.rsi7d ?? rsiNode?.['7d'], 50),
-      },
-      currentRsi: Number.isFinite(Number(p.currentRsi)) ? Number(p.currentRsi) : (Number.isFinite(Number(rsiNode?.rsi4h)) ? Number(rsiNode?.rsi4h) : undefined),
-      lastRsi: Number.isFinite(Number(p.lastRsi)) ? Number(p.lastRsi) : undefined
-    };
-  });
+  // Use fetchRsiTable to get the data from rsitracker.json
+  const tableData = await fetchRsiTable();
+  
+  return tableData.map(r => ({
+    symbol: r.symbol,
+    name: r.name || r.symbol,
+    price: r.price,
+    change24h: r.change || 0,
+    marketCap: r.marketCap || 0,
+    volume24h: r.volume24h,
+    rank: r.rank,
+    logo: r.logo,
+    rsi: {
+        "15m": r.rsi["15m"],
+        "1h": r.rsi["1h"],
+        "4h": r.rsi["4h"],
+        "24h": r.rsi["24h"],
+        "7d": r.rsi["7d"],
+    },
+    currentRsi: r.rsi["4h"],
+    lastRsi: undefined
+  }));
 };
 
 // --------- RSI TABLE CACHE (rsitracker.json) ---------
@@ -347,52 +335,66 @@ export const fetchRsiTable = async (opts?: { force?: boolean; ttlMs?: number }):
   if (!force && rsiTableInFlight) return rsiTableInFlight;
 
   rsiTableInFlight = (async () => {
+    // USE rsitracker.json AS REQUESTED
     const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTable));
 
     let items: any[] = [];
-    if (Array.isArray(raw)) {
-      if (raw.length > 0 && raw[0]?.symbol) items = raw;
-      else if (raw[0]?.data && Array.isArray(raw[0].data)) items = raw[0].data;
-      else items = raw;
-    } else if (raw && typeof raw === 'object') {
-        if (Array.isArray(raw.data)) items = raw.data;
-        else if (Array.isArray(raw.items)) items = raw.items;
-        else if (Array.isArray(raw.result)) items = raw.result;
+    
+    // STRUCTURE PARSING LOGIC:
+    // User JSON: [{"data":{"data":[{"id":"...", "rsi":{...}}, ...], "pagination":...}, "status":...}]
+    if (Array.isArray(raw) && raw.length > 0) {
+        // Deep nested check for user structure
+        if (raw[0]?.data?.data && Array.isArray(raw[0].data.data)) {
+             items = raw[0].data.data;
+        } 
+        // Fallback for n8n flatten output
+        else if (raw[0]?.data && Array.isArray(raw[0].data)) {
+             items = raw[0].data;
+        } 
+        // Fallback direct array
         else {
-            const possibleKey = Object.values(raw).find(v => Array.isArray(v) && v.length > 5);
-            if (possibleKey) items = possibleKey as any[];
+             items = raw;
+        }
+    } else if (raw && typeof raw === 'object') {
+        if (raw.data && Array.isArray(raw.data.data)) {
+            items = raw.data.data;
+        } else if (Array.isArray(raw.data)) {
+            items = raw.data;
         }
     }
 
     if (!items || items.length === 0) {
-      console.warn("[RSI API] Nenhum dado encontrado.");
+      console.warn("[RSI API] Nenhum dado encontrado em rsitracker.json.");
       rsiTableCache = [];
       return [];
     }
 
     rsiTableCache = items.map((p: any) => {
-      const symbol = p.symbol || p.s || '';
-      const rsiNode = p.rsiOverall || p.rsi || p.rsi_overall || p;
+      const symbol = (p.symbol || p.slug || '').toUpperCase();
+      const rsiNode = p.rsi || {};
 
       return {
         id: String(p.id || symbol || Math.random()),
-        symbol: symbol.toUpperCase(),
-        name: p.name || p.n || symbol,
-        price: safeNum(p.current_price || p.price || p.p, 0),
-        change: safeNum(p.price_change_percentage_24h || p.price24h || p.change24h || p.p24, 0),
-        marketCap: safeNum(p.market_cap || p.marketCap || p.mc, 0),
-        volume24h: safeNum(p.total_volume || p.volume24h || p.v, 0),
-        rank: safeNum(p.market_cap_rank || p.rank || p.r, 999),
-        logo: p.image || p.logo || p.i || `https://assets.coincap.io/assets/icons/${symbol.toLowerCase()}@2x.png`,
+        symbol: symbol,
+        name: p.name || p.slug,
+        price: safeNum(p.price || p.current_price, 0),
+        // Important: map 'price24h' from provided JSON
+        change: safeNum(p.price24h || p.price_change_percentage_24h || p.change, 0),
+        // Important: map 'marketCap' from provided JSON
+        marketCap: safeNum(p.marketCap || p.market_cap, 0),
+        // Important: map 'volume24h' from provided JSON
+        volume24h: safeNum(p.volume24h || p.total_volume, 0),
+        rank: safeNum(p.rank || p.market_cap_rank, 999),
+        logo: p.image || p.logo || `https://assets.coincap.io/assets/icons/${symbol.toLowerCase()}@2x.png`,
         rsi: {
-          "15m": safeNum(rsiNode?.rsi15m || rsiNode?.['15m'], 50),
-          "1h": safeNum(rsiNode?.rsi1h || rsiNode?.['1h'], 50),
-          "4h": safeNum(rsiNode?.rsi4h || rsiNode?.['4h'], 50),
-          "24h": safeNum(rsiNode?.rsi24h || rsiNode?.['24h'], 50),
-          "7d": safeNum(rsiNode?.rsi7d || rsiNode?.['7d'], 50)
+          "15m": safeNum(rsiNode.rsi15m, 50),
+          "1h": safeNum(rsiNode.rsi1h, 50),
+          "4h": safeNum(rsiNode.rsi4h, 50),
+          "24h": safeNum(rsiNode.rsi24h, 50),
+          "7d": safeNum(rsiNode.rsi7d, 50)
         }
       } as RsiTableItem;
-    }).filter(i => i.symbol);
+    }).filter(i => i.symbol); // Ensure valid symbol
 
     rsiTableCacheTs = Date.now();
     return rsiTableCache;
@@ -591,4 +593,4 @@ export const fetchMarketCapHistory = async (): Promise<any | null> => {
   return data;
 };
 
-export const fetchTopCoinsDummy = async () => []; 
+export const fetchTopCoinsDummy = async () => [];
