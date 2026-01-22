@@ -115,20 +115,28 @@ const CustomTreemapContent = (props: any) => {
   if (!width || !height || width < 0 || height < 0 || !symbol) return null;
 
   // VIEWPORT CULLING (PERFORMANCE OPTIMIZATION)
-  // Calculate world coordinates
-  const worldX = x * containerTransform.k + containerTransform.x;
-  const worldY = y * containerTransform.k + containerTransform.y;
-  const worldW = width * containerTransform.k;
-  const worldH = height * containerTransform.k;
+  // Disable culling if container size is invalid/zero to prevent hiding everything
+  const hasValidSize = containerSize.w > 0 && containerSize.h > 0;
+  
+  let isVisible = true;
+  
+  if (hasValidSize) {
+      // Calculate world coordinates
+      const worldX = x * containerTransform.k + containerTransform.x;
+      const worldY = y * containerTransform.k + containerTransform.y;
+      const worldW = width * containerTransform.k;
+      const worldH = height * containerTransform.k;
 
-  // Check if tile is visible in viewport
-  // Give a small buffer (50px) to prevent pop-in at edges
-  const isVisible = (
-      worldX + worldW > -50 && 
-      worldX < containerSize.w + 50 &&
-      worldY + worldH > -50 && 
-      worldY < containerSize.h + 50
-  );
+      // Check if tile is visible in viewport
+      // Give a LARGE buffer (2000px) to prevent pop-in and ensure rendering on load
+      const BUFFER = 2000;
+      isVisible = (
+          worldX + worldW > -BUFFER && 
+          worldX < containerSize.w + BUFFER &&
+          worldY + worldH > -BUFFER && 
+          worldY < containerSize.h + BUFFER
+      );
+  }
 
   // Background color (always render bg, but simplier if culled)
   const color = getColorForChange(change || 0);
@@ -141,8 +149,9 @@ const CustomTreemapContent = (props: any) => {
   const visualW = width * zoomLevel;
   const visualH = height * zoomLevel;
 
-  const isTiny = visualW < 50 || visualH < 40;
-  const isSmall = !isTiny && (visualW < 100 || visualH < 70);
+  // Relaxed Tiny Check
+  const isTiny = visualW < 30 || visualH < 30;
+  const isSmall = !isTiny && (visualW < 80 || visualH < 60);
 
   // Font Scaling Logic
   // Scale base size by zoom, but cap it so giant tiles don't have giant text
@@ -248,19 +257,29 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
 
   const [tooltipState, setTooltipState] = useState<{ visible: boolean, data: any, x: number, y: number }>({ visible: false, data: null, x: 0, y: 0 });
 
-  // Update container size for culling
+  // Update container size for culling - MUST DEPEND ON LOADING TO RE-ATTACH
   useEffect(() => {
-      if (containerRef.current) {
-          setContainerSize({ w: containerRef.current.clientWidth, h: containerRef.current.clientHeight });
-      }
+      const updateSize = () => {
+          if (containerRef.current) {
+              setContainerSize({ w: containerRef.current.clientWidth, h: containerRef.current.clientHeight });
+          }
+      };
+
+      // Initial measurement
+      updateSize();
+
       const ro = new ResizeObserver(entries => {
           for (let entry of entries) {
               setContainerSize({ w: entry.contentRect.width, h: entry.contentRect.height });
           }
       });
-      if (containerRef.current) ro.observe(containerRef.current);
+
+      if (containerRef.current) {
+          ro.observe(containerRef.current);
+      }
+
       return () => ro.disconnect();
-  }, []);
+  }, [loading]); // Re-run when loading finishes and ref becomes available
 
   const handleContentHover = useCallback((data: any, clientX: number, clientY: number) => {
       if (isDragging) return;
@@ -390,12 +409,11 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
         
         if (metric === 'change') {
             const absChange = Math.abs(coin.change);
-            // OUTLIER CAP: Cap at 15% absolute change for SIZING purposes.
-            // This prevents a 2000% shitcoin from taking 99% of the map.
-            const cappedChange = Math.min(absChange, 15);
+            // OUTLIER CAP: Cap at 8% absolute change for SIZING purposes (more gentle)
+            const cappedChange = Math.min(absChange, 8);
             
-            // Power 3 creates strong variance: 1% -> 1, 5% -> 125, 10% -> 1000
-            sizeValue = Math.pow(cappedChange + 0.5, 3) * 1000; 
+            // Power 2 creates variance but not dominance
+            sizeValue = Math.pow(cappedChange + 1, 2) * 1000; 
         }
 
         return { ...coin, size: sizeValue, rank: index + 1 };
