@@ -41,6 +41,15 @@ const TIMEFRAMES = ['15m', '1h', '4h', '24h', '7d'] as const;
 type Timeframe = typeof TIMEFRAMES[number];
 type XAxisMode = 'mcap' | 'volume' | 'change';
 
+// Helper for Unicode-safe Base64 Encoding
+const safeEncodeBase64 = (str: string) => {
+    try {
+        return btoa(unescape(encodeURIComponent(str)));
+    } catch (e) {
+        return '';
+    }
+};
+
 const formatCompactNumber = (number: number) => {
   if (!number || number === 0) return "---";
   if (number < 1000) return number.toString();
@@ -259,15 +268,16 @@ export const RsiScatterChart: React.FC = () => {
             const last = r.lastRsi; 
             const isRising = (last !== undefined && cur > last);
             
-            const symbolShort = r.symbol.substring(0, 3).toUpperCase();
+            const symbolShort = (r.symbol || 'UNK').substring(0, 3).toUpperCase();
             
-            // Generate fallback SVG for this point
-            const fallbackSVG = `data:image/svg+xml;base64,${btoa(`
+            // Generate fallback SVG for this point using Unicode-safe encoding
+            const svgContent = `
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
                     <circle cx="12" cy="12" r="12" fill="#334155"/>
                     <text x="50%" y="50%" dy=".35em" text-anchor="middle" fill="#fff" font-family="sans-serif" font-weight="bold" font-size="8px">${symbolShort}</text>
                 </svg>
-            `)}`;
+            `;
+            const fallbackSVG = `data:image/svg+xml;base64,${safeEncodeBase64(svgContent)}`;
 
             // Standardize Logo URL 
             const logoUrl = `https://assets.coincap.io/assets/icons/${r.symbol.toLowerCase()}@2x.png`;
@@ -800,7 +810,8 @@ const RsiWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ ite
                     </g>
                 </svg>
             </div>
-            <div className="flex flex-col items-center mt-2 z-10">
+            {/* AGRESSIVE Negative Margin to pull text up */}
+            <div className="flex flex-col items-center -mt-6 z-10">
                 <div className="text-3xl font-black text-[#dd9933] leading-none font-mono tracking-tighter">{rsiVal.toFixed(2)}</div>
                 <div className="text-sm font-bold text-gray-900 dark:text-white uppercase mt-0.5">{rsiLabel}</div>
             </div>

@@ -39,6 +39,15 @@ const TIMEFRAMES = ['15m', '1h', '4h', '24h', '7d'] as const;
 type Timeframe = typeof TIMEFRAMES[number];
 type XAxisMode = 'mcap' | 'change';
 
+// Helper for Unicode-safe Base64 Encoding
+const safeEncodeBase64 = (str: string) => {
+    try {
+        return btoa(unescape(encodeURIComponent(str)));
+    } catch (e) {
+        return '';
+    }
+};
+
 const formatCompactNumber = (number: number) => {
   if (!number || number === 0) return "---";
   if (number < 1000) return number.toString();
@@ -216,15 +225,16 @@ export const MacdScatterChart: React.FC = () => {
             const macdData = r.macd?.[timeframe];
             const yVal = macdData?.nmacd || 0; // Use NORMALIZED MACD
             const isBullish = yVal > 0;
-            const symbolShort = r.symbol.substring(0, 3).toUpperCase();
+            const symbolShort = (r.symbol || 'UNK').substring(0, 3).toUpperCase();
 
-            // Generate fallback SVG for this point
-            const fallbackSVG = `data:image/svg+xml;base64,${btoa(`
+            // Generate fallback SVG for this point using Unicode-safe encoding
+            const svgContent = `
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
                     <circle cx="12" cy="12" r="12" fill="#334155"/>
                     <text x="50%" y="50%" dy=".35em" text-anchor="middle" fill="#fff" font-family="sans-serif" font-weight="bold" font-size="8px">${symbolShort}</text>
                 </svg>
-            `)}`;
+            `;
+            const fallbackSVG = `data:image/svg+xml;base64,${safeEncodeBase64(svgContent)}`;
             
             // Standardize Logo URL to avoid errors
             const logoUrl = r.logo || `https://assets.coincap.io/assets/icons/${r.symbol.toLowerCase()}@2x.png`;
