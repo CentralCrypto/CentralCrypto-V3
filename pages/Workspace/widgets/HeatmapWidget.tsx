@@ -132,12 +132,12 @@ const CustomTreemapContent = (props: any) => {
 
   const color = getColorForChange(change || 0);
 
-  // Scaled dimensions for stroke/padding logic
-  // Use inverse scale to keep borders thin visually (1px visual)
-  const strokeWidth = 1 / zoomLevel; 
+  // --- REFINEMENT: Thinner borders on zoom ---
+  // Reduced base width to 0.6px visual equivalent
+  const strokeWidth = 0.6 / zoomLevel; 
   
   if (!isVisible) {
-      return <rect x={x} y={y} width={width} height={height} fill={color} stroke="#1a1c1e" strokeWidth={strokeWidth} />;
+      return <rect x={x} y={y} width={width} height={height} fill={color} stroke="#1a1c1e" strokeWidth={strokeWidth} shapeRendering="crispEdges" />;
   }
 
   const visualW = width * zoomLevel;
@@ -146,10 +146,10 @@ const CustomTreemapContent = (props: any) => {
   // Aggressive rendering: show content if visual dimension is at least 15px
   const isTiny = visualW < 15 || visualH < 15;
   
-  // Dynamic internal styling to prevent "exploding borders"
-  const borderRadius = Math.min(4, Math.min(width, height) * 0.1) / zoomLevel; // Max 4px radius visual
-  const padding = 2 / zoomLevel;
-  const gap = 1 / zoomLevel;
+  // --- REFINEMENT: Tighter padding on zoom ---
+  const borderRadius = Math.min(4, Math.min(width, height) * 0.1) / zoomLevel; 
+  const padding = 1 / zoomLevel; // Reduced from 2
+  const gap = 0.5 / zoomLevel; // Reduced from 1
   
   // Font Scaling
   const baseScale = Math.min(width, height) / 5; 
@@ -176,6 +176,7 @@ const CustomTreemapContent = (props: any) => {
         rx={borderRadius} 
         ry={borderRadius}
         style={{ fill: color, stroke: '#1a1c1e', strokeWidth: strokeWidth }}
+        shapeRendering="crispEdges" // Helps with gap issues
       />
       {/* Interactive Layer */}
       <rect x={x} y={y} width={width} height={height} style={{ fill: 'transparent', cursor: 'grab' }} onClick={onClick} onMouseEnter={onContentLeave} />
@@ -183,11 +184,6 @@ const CustomTreemapContent = (props: any) => {
       {!isTiny && (
         <foreignObject x={x} y={y} width={width} height={height} style={{ pointerEvents: 'none', overflow: 'visible' }}>
             <div className="w-full h-full flex items-center justify-center" style={{ padding: `${padding}px` }}>
-                {/* 
-                    CONTENT CONTAINER
-                    - No fixed-pixel classes (border, shadow, rounded)
-                    - Uses inline styles with inverse scaling
-                */}
                 <div 
                     className="flex flex-col items-center justify-center transition-colors overflow-hidden cursor-default pointer-events-auto"
                     style={{ 
@@ -215,7 +211,6 @@ const CustomTreemapContent = (props: any) => {
                                     maxWidth: '100%',
                                     objectFit: 'contain',
                                     borderRadius: '50%',
-                                    // Remove borders from image to save space
                                 }}
                                 onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
                             />
@@ -468,7 +463,17 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
             ) : error ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-red-500 gap-2"><AlertTriangle size={24} /><span className="text-xs font-bold">{error}</span><button onClick={() => setRefreshKey(k => k + 1)} className="px-3 py-1 bg-red-900/20 rounded text-xs hover:bg-red-900/30 transition-colors">Tentar Novamente</button></div>
             ) : (
-                <div ref={containerRef} style={{ width: '100%', height: '100%', transformOrigin: '0 0', cursor: transform.k > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default', willChange: 'transform' }}>
+                <div 
+                    ref={containerRef} 
+                    style={{ 
+                        width: '100%', 
+                        height: '100%', 
+                        transformOrigin: '0 0', 
+                        cursor: transform.k > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
+                        // FIX: Only apply will-change when dragging to prevent blur on zoom
+                        willChange: isDragging ? 'transform' : 'auto' 
+                    }}
+                >
                     <ResponsiveContainer width="100%" height="100%">
                         <Treemap
                             data={treeData}

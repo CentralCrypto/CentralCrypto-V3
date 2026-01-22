@@ -41,8 +41,9 @@ import { useBinanceWS } from '../../../services/BinanceWebSocketContext';
 const GREEN = '#548F3F';
 const RED = '#ff6961';
 
-const FLASH_GREEN_BG = '#122A21';
-const FLASH_RED_BG = '#C33B4080';
+// Adjusted to be lighter/transparent for better visibility on white backgrounds
+const FLASH_GREEN_BG = 'rgba(22, 163, 74, 0.25)'; // green-600 with opacity
+const FLASH_RED_BG = 'rgba(220, 38, 38, 0.25)';   // red-600 with opacity
 
 const formatUSD = (val: number, compact = false) => {
   if (val === undefined || val === null) return '---';
@@ -215,7 +216,7 @@ const LiveRow = React.memo(({ coin, colOrder, favorites, toggleFav }: any) => {
         <button
           type="button"
           onClick={() => toggleFav(coin.id)}
-          className="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"
+          className="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
           title={isFav ? 'Remover dos favoritos' : 'Favoritar'}
         >
           <Star
@@ -372,8 +373,6 @@ type MarketCapTableProps = {
 const MarketCapTable = ({ language, scrollContainerRef }: MarketCapTableProps) => {
   const t = getTranslations(language).workspace.marketCapTable;
   
-  // NOTE: Removed useBinanceWS from parent to avoid full table re-renders
-
   const [coins, setCoins] = useState<ApiCoin[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -1207,7 +1206,7 @@ ${isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                           setViewMode('coins');
                           setPage(0);
                           setTopMode('none');
-                          setSortConfig({ key: 'market_cap', direction: 'desc' });
+                          setSortConfig({ key: 'market_cap_rank', direction: 'desc' });
                           scrollToTop();
 
                           if (!catCoinMap && !catWarnDismissed) {
@@ -1365,12 +1364,26 @@ ${isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
     scrollToTop();
   };
 
+  // Improved logic to show Back button also when in Top Gainers/Losers mode
   const canShowBack =
-    viewMode === 'categories' || (viewMode === 'coins' && !!activeMasterId);
+    viewMode === 'categories' ||
+    (viewMode === 'coins' && (!!activeMasterId || topMode !== 'none'));
 
   const handleBack = () => {
-    if (viewMode === 'categories') goBackToCoins();
-    else goBackToCategories();
+    if (viewMode === 'categories') {
+        goBackToCoins();
+    } else {
+        // If we are in Top Gainers/Losers mode, reset to standard coin view
+        if (topMode !== 'none') {
+            setTopMode('none');
+            setSortConfig({ key: 'market_cap_rank', direction: 'asc' });
+            setPage(0);
+            scrollToTop();
+        } else {
+            // Otherwise go back to categories
+            goBackToCategories();
+        }
+    }
   };
 
   const TopToggleButton = ({
@@ -1388,10 +1401,11 @@ ${isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
     onClick: () => void;
     title: string;
   }) => {
+    // UPDATED: Lighter colors for visibility
     const activeStyle =
       variant === 'gainers'
-        ? { backgroundColor: '#122A21', color: '#ffffff', borderColor: 'transparent' }
-        : { backgroundColor: '#C33B4080', color: '#ffffff', borderColor: 'transparent' };
+        ? { backgroundColor: '#16a34a', color: '#ffffff', borderColor: 'transparent' } // green-600
+        : { backgroundColor: '#dc2626', color: '#ffffff', borderColor: 'transparent' }; // red-600
 
     return (
       <button
@@ -1590,7 +1604,8 @@ hover:bg-gray-100 dark:hover:bg-white/5 outline-none"
             {/* ✅ Reset com 1 giro */}
             <button
               onClick={handleResetUI}
-              className="p-2.5 hover:bg-gray-200 dark:hover:bg-slate-700 rounded-lg text-gray-500 transition-colors"
+              // Updated to match Fav/Back buttons: border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] hover:bg-gray-100 dark:hover:bg-white/5
+              className="p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 transition-colors"
               title="Reset UI"
             >
               <span
@@ -1606,7 +1621,8 @@ hover:bg-gray-100 dark:hover:bg-white/5 outline-none"
 
             <button
               onClick={refresh}
-              className="p-2.5 hover:bg-gray-200 dark:hover:bg-slate-700 rounded-lg text-gray-500 transition-colors"
+              // Updated to match style
+              className="p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#2f3032] hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 transition-colors"
               title={t.refresh}
             >
               <RefreshCw size={22} className={(loading || catLoading) ? 'animate-spin' : ''} />

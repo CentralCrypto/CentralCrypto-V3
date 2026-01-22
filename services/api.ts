@@ -16,7 +16,10 @@ export const fetchWithFallback = async (url: string): Promise<any | null> => {
     const { data } = await httpGetJson(finalUrl, { timeoutMs: 10000, retries: 2 });
     return data;
   } catch (e) {
-    console.error(`[API] Erro ao buscar ${url}: `, (e as any).message || e);
+    // Suppress 404 errors to avoid console noise for optional resources
+    if ((e as any).status !== 404) {
+        console.warn(`[API] Warn fetching ${url}:`, (e as any).message || e);
+    }
   }
   return null;
 };
@@ -247,45 +250,42 @@ export const fetchFearAndGreed = async (): Promise<FngData[]> => {
 
 export const fetchRsiAverage = async (): Promise<RsiAvgData | null> => {
   const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiAvg));
-  
-  // Try finding the 'overall' object recursively/in common places
   if (!raw) return null;
   
-  // 1. Direct object
-  if (raw.overall) return raw.overall;
-  if (raw.data?.overall) return raw.data.overall;
+  // Handle: [{ data: { overall: ... } }] or { data: { overall: ... } }
+  const root = Array.isArray(raw) ? raw[0] : raw;
+  const dataNode = root?.data || root;
   
-  // 2. Array wrapper
-  if (Array.isArray(raw) && raw.length > 0) {
-      if (raw[0]?.overall) return raw[0].overall;
-      if (raw[0]?.data?.overall) return raw[0].data.overall;
-  }
-  
-  return raw.overall || raw;
+  return dataNode?.overall || dataNode;
 };
 
-// Use explicit file for Scatter
+// SCATTER CHART DATA (rsitrackerhist.json)
 export const fetchRsiTrackerHist = async (): Promise<RsiTrackerPoint[]> => {
   const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTrackerHist));
   
-  // Robust unwrapping for points array
-  let points: any[] = [];
+  // Targeted Path: [0].data.heatmap.items
+  let items: any[] = [];
   
   if (raw) {
-      if (Array.isArray(raw.points)) points = raw.points;
-      else if (Array.isArray(raw.data?.points)) points = raw.data.points;
-      else if (Array.isArray(raw.data)) points = raw.data; // Sometimes data IS the array
-      else if (Array.isArray(raw)) {
-          // Wrapped in array [ { points: ... } ]
-          if (Array.isArray(raw[0]?.points)) points = raw[0].points;
-          else if (Array.isArray(raw[0]?.data?.points)) points = raw[0].data.points;
-          else points = raw; // The root is the array
+      // 1. Try finding 'heatmap.items' in root[0].data
+      const root = Array.isArray(raw) ? raw[0] : raw;
+      
+      if (root?.data?.heatmap?.items) {
+          items = root.data.heatmap.items;
+      } 
+      // 2. Try 'data.points' legacy path
+      else if (root?.data?.points) {
+          items = root.data.points;
+      }
+      // 3. Try direct 'heatmap.items'
+      else if (root?.heatmap?.items) {
+          items = root.heatmap.items;
       }
   }
 
-  if (!Array.isArray(points)) return [];
+  if (!Array.isArray(items)) return [];
 
-  return points.map((p: any) => ({
+  return items.map((p: any) => ({
       symbol: p.symbol,
       name: p.name,
       price: Number(p.price || 0),
@@ -304,20 +304,27 @@ export const fetchRsiTrackerHist = async (): Promise<RsiTrackerPoint[]> => {
   }));
 };
 
-// Use explicit file for Table
+// TABLE DATA (rsitracker.json)
 export const fetchRsiTable = async (): Promise<RsiTableItem[]> => {
   const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTable));
   
+  // Targeted Path: [0].data.data
   let items: any[] = [];
 
   if (raw) {
-      if (Array.isArray(raw.data)) items = raw.data;
-      else if (Array.isArray(raw)) {
-          if (Array.isArray(raw[0]?.data)) items = raw[0].data;
-          else items = raw;
-      } else if (typeof raw === 'object') {
-          // Fallback if data is a direct object map, or similar
-          items = Object.values(raw); 
+      const root = Array.isArray(raw) ? raw[0] : raw;
+      
+      // 1. Try 'data.data' (Nested object in array)
+      if (Array.isArray(root?.data?.data)) {
+          items = root.data.data;
+      } 
+      // 2. Try 'data' direct array
+      else if (Array.isArray(root?.data)) {
+          items = root.data;
+      }
+      // 3. Try root is array
+      else if (Array.isArray(root)) {
+          items = root;
       }
   }
   
