@@ -247,22 +247,42 @@ export const fetchFearAndGreed = async (): Promise<FngData[]> => {
 
 export const fetchRsiAverage = async (): Promise<RsiAvgData | null> => {
   const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiAvg));
-  // Robust unwrapping for [{ data: ... }] or { data: ... } or direct object
-  if (Array.isArray(raw) && raw[0]) return raw[0]?.data?.overall || raw[0]?.overall || raw[0];
-  if (raw?.data?.overall) return raw.data.overall;
-  if (raw?.overall) return raw.overall;
-  return raw || null;
+  
+  // Try finding the 'overall' object recursively/in common places
+  if (!raw) return null;
+  
+  // 1. Direct object
+  if (raw.overall) return raw.overall;
+  if (raw.data?.overall) return raw.data.overall;
+  
+  // 2. Array wrapper
+  if (Array.isArray(raw) && raw.length > 0) {
+      if (raw[0]?.overall) return raw[0].overall;
+      if (raw[0]?.data?.overall) return raw[0].data.overall;
+  }
+  
+  return raw.overall || raw;
 };
 
 // Use explicit file for Scatter
 export const fetchRsiTrackerHist = async (): Promise<RsiTrackerPoint[]> => {
   const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTrackerHist));
   
-  // Robust unwrapping
-  let root = raw;
-  if (Array.isArray(raw)) root = raw[0];
+  // Robust unwrapping for points array
+  let points: any[] = [];
   
-  const points = root?.data?.points || root?.points || [];
+  if (raw) {
+      if (Array.isArray(raw.points)) points = raw.points;
+      else if (Array.isArray(raw.data?.points)) points = raw.data.points;
+      else if (Array.isArray(raw.data)) points = raw.data; // Sometimes data IS the array
+      else if (Array.isArray(raw)) {
+          // Wrapped in array [ { points: ... } ]
+          if (Array.isArray(raw[0]?.points)) points = raw[0].points;
+          else if (Array.isArray(raw[0]?.data?.points)) points = raw[0].data.points;
+          else points = raw; // The root is the array
+      }
+  }
+
   if (!Array.isArray(points)) return [];
 
   return points.map((p: any) => ({
@@ -288,12 +308,21 @@ export const fetchRsiTrackerHist = async (): Promise<RsiTrackerPoint[]> => {
 export const fetchRsiTable = async (): Promise<RsiTableItem[]> => {
   const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTable));
   
-  // Robust unwrapping
-  let root = raw;
-  if (Array.isArray(raw)) root = raw[0];
+  let items: any[] = [];
 
-  const items = Array.isArray(root?.data) ? root.data : (Array.isArray(root) ? root : []);
+  if (raw) {
+      if (Array.isArray(raw.data)) items = raw.data;
+      else if (Array.isArray(raw)) {
+          if (Array.isArray(raw[0]?.data)) items = raw[0].data;
+          else items = raw;
+      } else if (typeof raw === 'object') {
+          // Fallback if data is a direct object map, or similar
+          items = Object.values(raw); 
+      }
+  }
   
+  if (!Array.isArray(items)) return [];
+
   return items.map((p: any) => ({
       id: p.id,
       symbol: p.symbol,

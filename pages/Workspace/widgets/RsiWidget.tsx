@@ -129,7 +129,6 @@ export const RsiScatterChart: React.FC = () => {
                 backgroundColor: '#15191c', 
                 zoomType: 'xy', 
                 style: { fontFamily: 'Inter, sans-serif' }, 
-                height: 400
             },
             title: { text: 'Crypto RSI Heatmap', align: 'left', style: { color: '#fff', fontWeight: 'bold' } }, 
             credits: { enabled: false }, 
@@ -199,7 +198,8 @@ export const RsiScatterChart: React.FC = () => {
                     {TIMEFRAMES.map(tf => <option key={tf} value={tf}>{tf.toUpperCase()}</option>)}
                 </select>
             </div>
-            <div ref={chartRef} className="rounded-lg overflow-hidden" />
+            {/* Added w-full h-full to container to ensure Highcharts renders */}
+            <div ref={chartRef} className="rounded-lg overflow-hidden w-full h-full" />
         </div>
     );
 };
