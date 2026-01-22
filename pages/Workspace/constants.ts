@@ -55,7 +55,7 @@ export const AVAILABLE_WIDGETS = [
 export const getMainBoardItems = (): DashboardItem[] => [
   { id: `main-fng`, type: WidgetType.FEAR_GREED, title: 'Fear & Greed Sincero', symbol: 'SENTIMENT' },
   { id: `main-altseason`, type: WidgetType.ALTCOIN_SEASON, title: 'Altcoin Season Index', symbol: 'SENTIMENT' },
-  { id: `main-rsi`, type: WidgetType.RSI_AVG, title: 'RSI Average / Tracker', symbol: 'MARKET' },
+  { id: `main-rsi`, type: WidgetType.RSI_AVG, title: 'RSI Tracker', symbol: 'MARKET' },
   { id: `main-macd`, type: WidgetType.MACD_AVG, title: 'MACD Average / Tracker', symbol: 'MARKET' },
   { id: `main-lsr`, type: WidgetType.LONG_SHORT_RATIO, title: 'Long/Short Ratio', symbol: 'MARKET' },
   { id: `main-trump`, type: WidgetType.TRUMP_METER, title: 'Trump-o-Meter', symbol: 'SENTIMENT' },
