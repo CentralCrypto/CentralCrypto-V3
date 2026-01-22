@@ -106,7 +106,7 @@ const SidebarGauge: React.FC<{ value: number }> = ({ value }) => {
     if (rsiVal >= 70) label = "Sobrecompra";
     if (rsiVal <= 30) label = "Sobrevenda";
 
-    // Reduced radius from 90 to 80 to prevent cutoff
+    // Adjusted Geometry: Raised Center Y to 85, Radius reduced to 65 to prevent text cutoff
     return (
         <div className="flex flex-col items-center justify-center h-full py-4">
             <div className="relative w-full max-w-[220px]">
@@ -118,16 +118,17 @@ const SidebarGauge: React.FC<{ value: number }> = ({ value }) => {
                             <stop offset="100%" stopColor="#f87171" />
                         </linearGradient>
                     </defs>
-                    <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" className="stroke-[#eeeeee] dark:stroke-[#333]" strokeWidth="18" strokeLinecap="round"/>
-                    <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="url(#rsiSidebarGrad)" strokeWidth="18" strokeDasharray={`${(rsiVal/100)*251} 251`} strokeLinecap="round" />
-                    <g transform={`rotate(${rotation} 100 100)`}>
-                        <path d="M 100 100 L 100 35" className="stroke-gray-800 dark:stroke-white" strokeWidth="3" /><circle cx={100} cy={100} r="5" className="fill-gray-800 dark:fill-white" />
+                    <path d="M 35 85 A 65 65 0 0 1 165 85" fill="none" className="stroke-[#eeeeee] dark:stroke-[#333]" strokeWidth="14" strokeLinecap="round"/>
+                    <path d="M 35 85 A 65 65 0 0 1 165 85" fill="none" stroke="url(#rsiSidebarGrad)" strokeWidth="14" strokeDasharray={`${(rsiVal/100)*204} 204`} strokeLinecap="round" />
+                    <g transform={`rotate(${rotation} 100 85)`}>
+                        <path d="M 100 85 L 100 35" className="stroke-gray-800 dark:stroke-white" strokeWidth="3" /><circle cx={100} cy={85} r="4" className="fill-gray-800 dark:fill-white" />
                     </g>
                 </svg>
             </div>
-            <div className="flex flex-col items-center mt-2 z-10">
-                <div className="text-4xl font-black text-[#dd9933] leading-none font-mono tracking-tighter">{rsiVal.toFixed(2)}</div>
-                <div className="text-sm font-bold text-gray-900 dark:text-white uppercase mt-1">{label}</div>
+            {/* Text positioned absolutely relative to container to avoid SVG clipping issues */}
+            <div className="flex flex-col items-center -mt-4 z-10">
+                <div className="text-3xl font-black text-[#dd9933] leading-none font-mono tracking-tighter">{rsiVal.toFixed(2)}</div>
+                <div className="text-xs font-bold text-gray-900 dark:text-white uppercase mt-1 tracking-widest">{label}</div>
             </div>
         </div>
     );
@@ -242,6 +243,8 @@ export const RsiScatterChart: React.FC = () => {
     const bgColor = 'transparent';
     const textColor = isDark ? '#94a3b8' : '#64748b';
     const gridColor = isDark ? '#334155' : '#e2e8f0';
+    // Lighter crosshair color for visibility
+    const crosshairColor = isDark ? '#64748b' : '#94a3b8'; 
 
     const seriesData = points
         .filter(r => r.marketCap && r.marketCap > 0 && r.rsi?.[timeframe])
@@ -266,7 +269,7 @@ export const RsiScatterChart: React.FC = () => {
                 isRising: isRising,
                 marker: {
                     symbol: `url(${r.logo})`,
-                    width: 24,
+                    width: 24, // Initial size
                     height: 24
                 }
             };
@@ -293,6 +296,41 @@ export const RsiScatterChart: React.FC = () => {
             zooming: {
                 mouseWheel: { enabled: true },
                 type: 'xy'
+            },
+            events: {
+                // Feature: Resize markers slightly on zoom for better visibility
+                render: function() {
+                    const chart = this;
+                    // Safe check if we have data to calculate scale
+                    if (!chart.xAxis[0].dataMin || !chart.xAxis[0].dataMax) return;
+                    
+                    const xExtremes = chart.xAxis[0].getExtremes();
+                    const dataRange = chart.xAxis[0].dataMax - chart.xAxis[0].dataMin;
+                    const viewRange = xExtremes.max - xExtremes.min;
+                    
+                    // Simple zoom factor: 1 (full view) to X (zoomed in)
+                    // We cap magnification to avoid huge icons
+                    let zoomFactor = Math.min(Math.max(dataRange / viewRange, 1), 3);
+                    // Smooth scaling: base 24px, max 48px
+                    let newSize = 24 + (zoomFactor - 1) * 8; 
+                    newSize = Math.min(newSize, 48);
+
+                    // Update series only if significant change to prevent loops
+                    const currentSize = chart.series[0].options.marker?.width;
+                    if (currentSize && Math.abs(currentSize - newSize) > 2) {
+                        chart.series[0].update({
+                            marker: {
+                                width: newSize,
+                                height: newSize
+                            },
+                            dataLabels: {
+                                // Adjust label offset based on new size
+                                x: newSize / 2 - 2, 
+                                y: newSize / 2 - 2
+                            }
+                        }, true, false); // Redraw: true, Animation: false
+                    }
+                }
             }
         },
         title: { text: null },
@@ -300,7 +338,7 @@ export const RsiScatterChart: React.FC = () => {
         legend: { enabled: false },
         xAxis: {
             type: xAxisType,
-            reversed: xMode === 'mcap', // Big caps left
+            reversed: xMode === 'mcap', 
             title: { text: xTitle, style: { color: textColor, fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase' } },
             gridLineColor: gridColor,
             labels: {
@@ -312,7 +350,15 @@ export const RsiScatterChart: React.FC = () => {
             },
             lineColor: gridColor,
             tickColor: gridColor,
-            plotLines: xPlotLines
+            plotLines: xPlotLines,
+            // Crosshair Feature (Mira no X)
+            crosshair: {
+                width: 1,
+                color: crosshairColor,
+                dashStyle: 'Dot',
+                snap: false, // Continuous movement
+                zIndex: 5
+            }
         },
         yAxis: {
             title: { text: 'Relative Strength Index', style: { color: textColor, fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase' } },
@@ -329,7 +375,15 @@ export const RsiScatterChart: React.FC = () => {
             plotBands: [
                 { from: 80, to: 100, color: 'rgba(248, 113, 113, 0.08)' },
                 { from: 0, to: 20, color: 'rgba(74, 222, 128, 0.08)' } 
-            ]
+            ],
+            // Crosshair Feature (Mira no Y)
+            crosshair: {
+                width: 1,
+                color: crosshairColor,
+                dashStyle: 'Dot',
+                snap: false,
+                zIndex: 5
+            }
         },
         tooltip: {
             useHTML: true,
@@ -339,15 +393,9 @@ export const RsiScatterChart: React.FC = () => {
             style: { color: isDark ? '#fff' : '#000' },
             formatter: function (this: any) {
                 const p = this.point;
-                // Trend Arrow based on isRising logic
-                const arrow = p.options.isRising 
-                    ? '<span style="color:#4ade80; font-size:14px;">↗</span>' 
-                    : '<span style="color:#f87171; font-size:14px;">↘</span>';
-
                 return `
                     <div style="display:flex; align-items:center; gap:8px; min-width:140px; padding: 4px;">
                         <div style="font-weight:900; font-size:14px;">${p.name}</div>
-                        ${arrow}
                     </div>
                     <div style="font-size:12px; opacity:0.7; margin-bottom:4px;">$${formatCompactNumber(p.options.price)}</div>
                     <div style="margin-top:4px; font-size:12px;">
@@ -364,6 +412,25 @@ export const RsiScatterChart: React.FC = () => {
                 marker: {
                     radius: 5,
                     states: { hover: { enabled: true, lineColor: 'rgb(100,100,100)' } }
+                },
+                // Trend Triangle Feature using DataLabels
+                dataLabels: {
+                    enabled: true,
+                    useHTML: true,
+                    allowOverlap: true,
+                    formatter: function (this: any) {
+                        const p = this.point;
+                        const isRising = p.options.isRising;
+                        const color = isRising ? '#4ade80' : '#f87171'; // Green / Red
+                        const symbol = isRising ? '▲' : '▼'; 
+                        // Small triangle, positioned carefully
+                        return `<span style="color: ${color}; font-size: 10px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.8);">${symbol}</span>`;
+                    },
+                    align: 'right', // Align right relative to point
+                    verticalAlign: 'bottom', // Align bottom relative to point
+                    x: 8, // Offset right
+                    y: 8, // Offset bottom
+                    style: { textOutline: 'none' } // Remove SVG text stroke
                 }
             }
         },
