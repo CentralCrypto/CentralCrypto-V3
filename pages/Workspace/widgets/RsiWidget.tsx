@@ -84,7 +84,7 @@ const GaugeChart: React.FC<{ value: number, label: string, isDark: boolean }> = 
         <div className="flex flex-col items-center justify-center relative h-[160px]">
             <svg viewBox="0 0 200 120" className="w-full h-full overflow-visible">
                 <defs>
-                    <linearGradient id="rsiGaugeGrad" x1="0" y1="0" x2="1" y2="0">
+                    <linearGradient id="rsiGaugeGradSidebar" x1="0" y1="0" x2="1" y2="0">
                         <stop offset="0%" stopColor="#4ade80" /> {/* Green (Oversold) */}
                         <stop offset="50%" stopColor="#fbbf24" /> {/* Yellow */}
                         <stop offset="100%" stopColor="#f87171" /> {/* Red (Overbought) */}
@@ -102,7 +102,7 @@ const GaugeChart: React.FC<{ value: number, label: string, isDark: boolean }> = 
                 <path 
                     d={`M ${cx-r} ${cy} A ${r} ${r} 0 0 1 ${cx+r} ${cy}`} 
                     fill="none" 
-                    stroke="url(#rsiGaugeGrad)" 
+                    stroke="url(#rsiGaugeGradSidebar)" 
                     strokeWidth={strokeWidth} 
                     strokeLinecap="round"
                     strokeDasharray={`${(Math.PI * r)}`}
@@ -449,13 +449,74 @@ export const RsiTableList: React.FC = () => {
   );
 };
 
-// Default export for Workspace Grid Widget (Condensed View)
-const RsiWidget: React.FC<{ item: DashboardItem }> = ({ item }) => {
-    // For small widgets, we can reuse RsiGauge (the sidebar component) 
-    // or create a simplified view. RsiGauge is compact enough.
+// Default export for Workspace Grid Widget (Reformatted to match Fear&Greed/AltSeason)
+const RsiWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ item, language = 'pt' }) => {
+    const [avgData, setAvgData] = useState<RsiAvgData | null>(null);
+    const [loading, setLoading] = useState(true);
+    const t = getTranslations(language as Language).dashboard.widgets.rsi;
+    const tTime = getTranslations(language as Language).dashboard.widgets.time;
+
+    useEffect(() => {
+        setLoading(true);
+        fetchRsiAverage().then(data => {
+            if(data) setAvgData(data);
+            setLoading(false);
+        }).catch(() => setLoading(false));
+    }, []);
+
+    const Watermark = () => <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden opacity-[0.05] z-0"><img src="https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png" alt="watermark" className="w-3/4 h-auto grayscale filter" /></div>;
+
+    if (loading) return <div className="flex items-center justify-center h-full text-gray-400 dark:text-slate-500"><Loader2 className="animate-spin" /></div>;
+
+    const rsiVal = avgData?.averageRsi ?? 50;
+    const rsiLabel = rsiVal >= 70 ? t.overbought : rsiVal <= 30 ? t.oversold : t.neutral;
+    const rotation = -90 + (Math.min(Math.max(rsiVal, 0), 100) / 100) * 180;
+
+    if (item.isMaximized) {
+        return (
+            <div className="h-full flex flex-col p-4 bg-white dark:bg-[#1a1c1e] relative">
+                <Watermark />
+                <div className="flex-1 overflow-auto z-10 custom-scrollbar">
+                    <div className="flex items-center justify-center h-full">
+                        {/* We reuse the sidebar gauge chart component for maximized view but bigger */}
+                        <div className="scale-150">
+                            <GaugeChart value={rsiVal} label="" isDark={document.documentElement.classList.contains('dark')} />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
-        <div className="h-full w-full bg-[#1a1c1e] p-2 overflow-y-auto custom-scrollbar">
-            <RsiGauge />
+        <div className="h-full flex flex-col justify-center gap-1 p-2 relative text-center bg-white dark:bg-[#2f3032]">
+            <Watermark />
+            <div className="flex items-center justify-center relative mt-3 z-10">
+                <svg viewBox="0 0 200 110" className="w-[85%] max-w-[280px]">
+                    <defs>
+                        <linearGradient id="rsiGaugeGradWidget" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0%" stopColor="#4ade80" />
+                            <stop offset="50%" stopColor="#fbbf24" />
+                            <stop offset="100%" stopColor="#f87171" />
+                        </linearGradient>
+                    </defs>
+                    <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" className="stroke-[#eeeeee] dark:stroke-[#333]" strokeWidth="18" strokeLinecap="round"/>
+                    <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" stroke="url(#rsiGaugeGradWidget)" strokeWidth="18" strokeDasharray={`${(rsiVal/100)*283} 283`} strokeLinecap="round" />
+                    <g transform={`rotate(${rotation} 100 100)`}>
+                        <path d="M 100 100 L 100 20" className="stroke-gray-800 dark:stroke-white" strokeWidth="3" /><circle cx={100} cy={100} r="5" className="fill-gray-800 dark:fill-white" />
+                    </g>
+                </svg>
+            </div>
+            {/* Margem ajustada: mt-2 para dar "respiro" entre o ponteiro e o número */}
+            <div className="flex flex-col items-center mt-2 z-10">
+                <div className="text-3xl font-black text-[#dd9933] leading-none font-mono tracking-tighter">{rsiVal.toFixed(2)}</div>
+                <div className="text-sm font-bold text-gray-900 dark:text-white uppercase mt-0.5">{rsiLabel}</div>
+            </div>
+            <div className="flex justify-around w-full mt-2 text-center z-10 border-t border-gray-200 dark:border-slate-700/30 pt-2 pb-2">
+                <div><div className="text-[10px] text-gray-500 dark:text-slate-500 font-bold uppercase">{tTime.yesterday}</div><div className="text-sm font-bold text-gray-800 dark:text-white">{avgData?.yesterday?.toFixed(0) || '-'}</div></div>
+                <div><div className="text-[10px] text-gray-500 dark:text-slate-500 font-bold uppercase">{tTime.d7}</div><div className="text-sm font-bold text-gray-800 dark:text-white">{avgData?.days7Ago?.toFixed(0) || '-'}</div></div>
+                <div><div className="text-[10px] text-gray-500 dark:text-slate-500 font-bold uppercase">{tTime.d30}</div><div className="text-sm font-bold text-gray-800 dark:text-white">{avgData?.days30Ago?.toFixed(0) || '-'}</div></div>
+            </div>
         </div>
     );
 };
