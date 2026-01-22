@@ -70,27 +70,27 @@ const ManualTooltip = ({ data, x, y }: { data: any, x: number, y: number }) => {
             className="fixed z-[9999] pointer-events-none animate-in fade-in zoom-in-95 duration-100"
             style={{ top: pos.top, left: pos.left, maxWidth: '240px' }} 
         >
-            <div className="bg-[#121314]/95 backdrop-blur-xl border border-gray-700/50 rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.5)] overflow-hidden flex flex-col">
-                <div className="bg-white/5 p-2.5 flex items-center justify-between border-b border-white/5">
+            <div className="bg-white/95 dark:bg-[#121314]/95 backdrop-blur-xl border border-gray-200 dark:border-gray-700/50 rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.5)] overflow-hidden flex flex-col">
+                <div className="bg-gray-50 dark:bg-white/5 p-2.5 flex items-center justify-between border-b border-gray-200 dark:border-white/5">
                     <div className="flex items-center gap-2.5">
-                        {data.image && <img src={data.image} className="w-8 h-8 rounded-full border border-white/10 bg-white p-0.5" alt="" onError={(e) => (e.currentTarget.style.display = 'none')} />}
+                        {data.image && <img src={data.image} className="w-8 h-8 rounded-full border border-gray-200 dark:border-white/10 bg-white p-0.5" alt="" onError={(e) => (e.currentTarget.style.display = 'none')} />}
                         <div className="min-w-0">
                             <div className="flex items-center gap-1.5">
-                                <span className="text-sm font-black text-white leading-none truncate">{data.symbol}</span>
-                                <span className="text-[9px] font-bold text-gray-400 bg-white/10 px-1 py-0.5 rounded">#{data.rank}</span>
+                                <span className="text-sm font-black text-gray-900 dark:text-white leading-none truncate">{data.symbol}</span>
+                                <span className="text-[9px] font-bold text-gray-500 dark:text-gray-400 bg-gray-200 dark:bg-white/10 px-1 py-0.5 rounded">#{data.rank}</span>
                             </div>
-                            <span className="text-[9px] font-medium text-gray-400 truncate max-w-[100px] block mt-0.5">{data.fullName}</span>
+                            <span className="text-[9px] font-medium text-gray-500 dark:text-gray-400 truncate max-w-[100px] block mt-0.5">{data.fullName}</span>
                         </div>
                     </div>
                     <div className="text-right whitespace-nowrap ml-2">
-                        <div className="text-base font-mono font-bold text-white">{formatPrice(data.price)}</div>
-                        <div className={`text-[10px] font-black ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+                        <div className="text-base font-mono font-bold text-gray-900 dark:text-white">{formatPrice(data.price)}</div>
+                        <div className={`text-[10px] font-black ${isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                             {isPositive ? '+' : ''}{Number(data.change || 0).toFixed(2)}%
                         </div>
                     </div>
                 </div>
                 <div className="p-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[10px]">
-                    <div className="flex flex-col"><span className="text-gray-500 font-bold uppercase tracking-wide">Mkt Cap</span><span className="font-mono font-medium text-gray-200 text-xs">{formatCompact(data.mcap)}</span></div>
+                    <div className="flex flex-col"><span className="text-gray-500 font-bold uppercase tracking-wide">Mkt Cap</span><span className="font-mono font-medium text-gray-700 dark:text-gray-200 text-xs">{formatCompact(data.mcap)}</span></div>
                     <div className="flex flex-col text-right"><span className="text-gray-500 font-bold uppercase tracking-wide">Vol 24h</span><span className="font-mono font-medium text-[#dd9933] text-xs">{formatCompact(data.vol)}</span></div>
                 </div>
             </div>
@@ -113,7 +113,7 @@ const CustomTreemapContent = (props: any) => {
   
   if (!width || !height || width < 0 || height < 0 || !symbol) return null;
 
-  // Culling: only calculate visibility if container size is known
+  // Culling optimization
   const hasValidSize = containerSize.w > 0 && containerSize.h > 0;
   let isVisible = true;
   if (hasValidSize) {
@@ -132,32 +132,47 @@ const CustomTreemapContent = (props: any) => {
 
   const color = getColorForChange(change || 0);
 
-  // Borders:
-  // Use the SAME color for stroke to remove black gaps/borders.
-  // Use a relative stroke width to ensure overlap seals the gaps regardless of zoom.
-  const strokeColor = color;
-  const strokeWidth = 2 / zoomLevel; 
+  // Border logic: At higher zooms, remove stroke completely to avoid gaps
+  const strokeWidth = zoomLevel > 1.5 ? 0 : (1 / zoomLevel);
+  // Dark mode stroke vs Light mode stroke (handled via JS since SVG props)
+  const isDark = document.documentElement.classList.contains('dark');
+  const strokeColor = isDark ? '#0f1011' : '#ffffff'; 
   
   if (!isVisible) {
-      return <rect x={x} y={y} width={width} height={height} fill={color} stroke={strokeColor} strokeWidth={strokeWidth} shapeRendering="geometricPrecision" />;
+      // Render simple rect placeholder for off-screen items to maintain layout integrity
+      return <rect x={x} y={y} width={width} height={height} fill={color} stroke={strokeColor} strokeWidth={strokeWidth} />;
   }
 
-  // Calculate visual size on screen to decide what to render
+  // Calculate visual size on screen
   const visualW = width * zoomLevel;
   const visualH = height * zoomLevel;
 
-  // Thresholds for rendering content (Optimization)
+  // Rendering thresholds
   const isTiny = visualW < 20 || visualH < 15;
-  const isSmall = visualW < 50 || visualH < 40;
+  const isSmall = visualW < 60 || visualH < 50;
   
-  // No border radius when zoomed in to maximize space
-  const borderRadius = zoomLevel > 2 ? 0 : Math.min(4, Math.min(width, height) * 0.1);
+  // Font sizes relative to box dimensions (Data Units)
+  const minDim = Math.min(width, height);
+  const logoSize = Math.min(minDim * 0.4, 60); 
+  const symbolFontSize = Math.min(width * 0.25, height * 0.25, 30); 
+  const priceFontSize = Math.min(width * 0.15, height * 0.15, 16);
+
+  // Positioning
+  const centerX = x + width / 2;
+  const centerY = y + height / 2;
+  const textGap = symbolFontSize * 0.2;
+  const logoGap = logoSize * 0.1;
   
-  // Sizes relative to the box (native SVG coords), NOT divided by zoomLevel.
-  // The CSS transform on the parent will scale these up visually.
-  const maxLogoH = Math.min(height * 0.5, width * 0.5);
-  const fontSizeSymbol = Math.min(width * 0.25, height * 0.25, 24); 
-  const fontSizePrice = Math.min(width * 0.15, height * 0.15, 14);
+  // Total content height approximation
+  let totalContentH = symbolFontSize;
+  if (image && !isSmall) totalContentH += logoSize + logoGap;
+  if (!isSmall) totalContentH += priceFontSize + textGap;
+  
+  // Start Y position (centered)
+  let startY = centerY - totalContentH / 2 + symbolFontSize / 2;
+
+  // Unique clip path ID for this cell
+  const clipId = `clip-${symbol}-${x}-${y}`;
 
   const secondaryValue = metric === 'mcap' 
       ? formatPrice(price)
@@ -165,66 +180,70 @@ const CustomTreemapContent = (props: any) => {
 
   return (
     <g>
+      <defs>
+        <clipPath id={clipId}>
+            <rect x={x} y={y} width={width} height={height} />
+        </clipPath>
+      </defs>
+
       <rect
         x={x}
         y={y}
         width={width}
         height={height}
-        rx={borderRadius} 
-        ry={borderRadius}
         style={{ fill: color, stroke: strokeColor, strokeWidth: strokeWidth }}
-        shapeRendering="geometricPrecision"
+        shapeRendering="crispEdges"
       />
       
       {/* Interactive Layer */}
       <rect x={x} y={y} width={width} height={height} style={{ fill: 'transparent', cursor: 'grab' }} onClick={onClick} onMouseEnter={onContentLeave} />
 
       {!isTiny && (
-        <foreignObject x={x} y={y} width={width} height={height} style={{ pointerEvents: 'none', overflow: 'visible' }}>
-            <div 
-                className="w-full h-full flex flex-col items-center justify-center text-center overflow-hidden" 
-                style={{ 
-                    // Use flex gap relative to box size
-                    gap: `${Math.min(width, height) * 0.05}px`,
-                    padding: '2px'
-                }}
-                onMouseEnter={(e) => { e.stopPropagation(); onContentHover(props, e.clientX, e.clientY); }}
-                onMouseLeave={onContentLeave}
-            >
-                {image && !isSmall && (
-                    <img 
-                        src={image} 
-                        alt={symbol} 
-                        style={{ 
-                            width: `${maxLogoH}px`, 
-                            height: `${maxLogoH}px`,
-                            borderRadius: '50%',
-                            display: 'block',
-                            objectFit: 'contain',
-                            filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.3))'
-                        }}
-                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-                    />
-                )}
+        <g clipPath={`url(#${clipId})`} style={{ pointerEvents: 'none' }}>
+            
+            {image && !isSmall && (
+                <image
+                    x={centerX - logoSize / 2}
+                    y={startY}
+                    width={logoSize}
+                    height={logoSize}
+                    href={image}
+                    style={{ opacity: 0.9 }}
+                />
+            )}
 
-                <div className="flex flex-col items-center justify-center w-full leading-none pointer-events-auto cursor-pointer" onClick={onClick}>
-                    <span 
-                        className="font-black text-white drop-shadow-md truncate w-full px-0.5"
-                        style={{ fontSize: `${Math.max(fontSizeSymbol, 2)}px` }} 
-                    >
-                        {symbol}
-                    </span>
-                    {!isSmall && (
-                        <span 
-                            className="font-bold text-white/90 drop-shadow-sm truncate w-full px-0.5 mt-[2%]"
-                            style={{ fontSize: `${Math.max(fontSizePrice, 2)}px` }}
-                        >
-                            {secondaryValue}
-                        </span>
-                    )}
-                </div>
-            </div>
-        </foreignObject>
+            <text
+                x={centerX}
+                y={image && !isSmall ? startY + logoSize + logoGap + symbolFontSize * 0.8 : centerY + symbolFontSize * 0.3}
+                textAnchor="middle"
+                fill="#ffffff"
+                style={{ 
+                    fontSize: `${symbolFontSize}px`, 
+                    fontWeight: 900, 
+                    textShadow: '0px 1px 3px rgba(0,0,0,0.5)',
+                    fontFamily: 'Inter, sans-serif'
+                }}
+            >
+                {symbol}
+            </text>
+
+            {!isSmall && (
+                <text
+                    x={centerX}
+                    y={startY + logoSize + logoGap + symbolFontSize + textGap + priceFontSize * 0.8}
+                    textAnchor="middle"
+                    fill="rgba(255,255,255,0.9)"
+                    style={{ 
+                        fontSize: `${priceFontSize}px`, 
+                        fontWeight: 700,
+                        textShadow: '0px 1px 2px rgba(0,0,0,0.5)',
+                        fontFamily: 'JetBrains Mono, monospace'
+                    }}
+                >
+                    {secondaryValue}
+                </text>
+            )}
+        </g>
       )}
     </g>
   );
@@ -298,7 +317,6 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
       const sensitivity = 0.001;
       const delta = -e.deltaY * sensitivity;
       const oldK = transformRef.current.k;
-      // Increased max zoom to 50x for deep inspection
       const newK = Math.min(Math.max(1, oldK + delta), 50); 
       if (newK === oldK || !containerRef.current) return;
       
@@ -398,7 +416,6 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
         
         if (metric === 'change') {
             const absChange = Math.abs(coin.change);
-            // OUTLIER CAP: Cap at 8% absolute change for SIZING purposes (more gentle)
             const cappedChange = Math.min(absChange, 8);
             sizeValue = Math.pow(cappedChange + 3, 2) * 100; 
         }
@@ -412,16 +429,16 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
   const toggleFullscreen = () => { if (item?.isMaximized && onClose) onClose(); else setIsFullscreen(!isFullscreen); };
 
   const renderContent = () => (
-    <div className="flex flex-col w-full h-full bg-[#1a1c1e] text-white overflow-hidden relative font-sans">
+    <div className="flex flex-col w-full h-full bg-white dark:bg-[#1a1c1e] text-gray-900 dark:text-white overflow-hidden relative font-sans transition-colors">
         {tooltipState.visible && tooltipState.data && <ManualTooltip data={tooltipState.data} x={tooltipState.x} y={tooltipState.y} />}
 
-        <div className="flex justify-between items-center px-4 py-2 border-b border-gray-800 bg-[#1a1c1e] shrink-0 z-10">
+        <div className="flex justify-between items-center px-4 py-2 bg-gray-50 dark:bg-[#1a1c1e] border-b border-gray-100 dark:border-gray-800 shrink-0 z-10 shadow-sm dark:shadow-none">
             <div className="flex items-center gap-4">
-                <span className="text-sm font-black uppercase tracking-wider hidden sm:inline text-gray-300">{title}</span>
+                <span className="text-sm font-black uppercase tracking-wider hidden sm:inline text-gray-500 dark:text-gray-300">{title}</span>
                 {!loading && !error && (
-                    <div className="flex bg-black/40 p-0.5 rounded-lg border border-gray-700">
-                        <button onClick={() => { setMetric('mcap'); resetZoom(); }} className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded flex items-center gap-1.5 transition-all ${metric === 'mcap' ? 'bg-[#dd9933] text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}><PieChart size={12} /> MarketCap</button>
-                        <button onClick={() => { setMetric('change'); resetZoom(); }} className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded flex items-center gap-1.5 transition-all ${metric === 'change' ? 'bg-[#dd9933] text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}><BarChart2 size={12} /> Variação 24h</button>
+                    <div className="flex bg-gray-200 dark:bg-black/40 p-0.5 rounded-lg border border-gray-300 dark:border-gray-700">
+                        <button onClick={() => { setMetric('mcap'); resetZoom(); }} className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded flex items-center gap-1.5 transition-all ${metric === 'mcap' ? 'bg-white dark:bg-[#dd9933] text-gray-900 dark:text-black shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}><PieChart size={12} /> MarketCap</button>
+                        <button onClick={() => { setMetric('change'); resetZoom(); }} className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded flex items-center gap-1.5 transition-all ${metric === 'change' ? 'bg-white dark:bg-[#dd9933] text-gray-900 dark:text-black shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}><BarChart2 size={12} /> Variação 24h</button>
                     </div>
                 )}
             </div>
@@ -434,13 +451,13 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
                     </button>
                 )}
                 
-                <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-gray-800/50 rounded text-[10px] font-bold text-gray-400"><Layers size={12} />{data.length > 0 ? `Top 1000` : '0 moedas'}</div>
-                <button onClick={() => setRefreshKey(k => k + 1)} className="p-1.5 hover:bg-gray-800 rounded text-gray-400 hover:text-white transition-colors"><RefreshCw size={14} className={loading ? 'animate-spin' : ''} /></button>
-                <button onClick={toggleFullscreen} className="p-1.5 hover:bg-gray-800 rounded text-gray-400 hover:text-white transition-colors">{isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}</button>
+                <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-gray-100 dark:bg-gray-800/50 rounded text-[10px] font-bold text-gray-500 dark:text-gray-400"><Layers size={12} />{data.length > 0 ? `Top 1000` : '0 moedas'}</div>
+                <button onClick={() => setRefreshKey(k => k + 1)} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"><RefreshCw size={14} className={loading ? 'animate-spin' : ''} /></button>
+                <button onClick={toggleFullscreen} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">{isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}</button>
             </div>
         </div>
 
-        <div className="flex-1 w-full min-h-0 relative bg-[#0f1011] overflow-hidden" 
+        <div className="flex-1 w-full min-h-0 relative bg-white dark:bg-[#0f1011] overflow-hidden" 
              onWheel={handleWheel} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}
         >
             {loading ? (
@@ -455,7 +472,6 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
                         height: '100%', 
                         transformOrigin: '0 0', 
                         cursor: transform.k > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
-                        // FIX: Only apply will-change when dragging to prevent blur on zoom
                         willChange: isDragging ? 'transform' : 'auto' 
                     }}
                 >
@@ -463,8 +479,8 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
                         <Treemap
                             data={treeData}
                             dataKey="size"
-                            stroke="#0f1011" 
-                            fill="#1a1c1e"
+                            stroke="transparent" 
+                            fill="transparent"
                             content={
                                 <CustomTreemapContent 
                                     zoomLevel={transform.k}
@@ -484,12 +500,12 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
             )}
         </div>
         
-        <div className="h-8 bg-[#121416] border-t border-gray-800 flex items-center justify-center gap-1 px-4 shrink-0 overflow-hidden z-20">
+        <div className="h-8 bg-gray-50 dark:bg-[#121416] border-t border-gray-100 dark:border-gray-800 flex items-center justify-center gap-1 px-4 shrink-0 overflow-hidden z-20">
             <span className="text-[9px] text-gray-500 font-bold mr-2">-20%</span>
             <div className="w-8 h-3 bg-[#b93c3c] rounded-sm" title="<= -20%"></div>
             <div className="w-8 h-3 bg-[#e0524e] rounded-sm" title="-7% to -20%"></div>
             <div className="w-8 h-3 bg-[#ff6961] rounded-sm" title="0% to -7% (User Red)"></div>
-            <div className="w-6 h-3 bg-[#2d3748] rounded-sm border border-gray-700 mx-2" title="0% (Neutral)"></div>
+            <div className="w-6 h-3 bg-[#2d3748] rounded-sm border border-gray-300 dark:border-gray-700 mx-2" title="0% (Neutral)"></div>
             <div className="w-8 h-3 bg-[#548F3F] rounded-sm" title="0% to +7% (User Green)"></div>
             <div className="w-8 h-3 bg-[#467a33] rounded-sm" title="+7% to +20%"></div>
             <div className="w-8 h-3 bg-[#345e2a] rounded-sm" title=">= +20%"></div>
@@ -499,11 +515,11 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
   );
 
   if (isFullscreen) {
-    return createPortal(<div className="fixed inset-0 z-[9999] w-screen h-screen bg-[#1a1c1e]">{renderContent()}</div>, document.body);
+    return createPortal(<div className="fixed inset-0 z-[9999] w-screen h-screen bg-white dark:bg-[#1a1c1e]">{renderContent()}</div>, document.body);
   }
 
   return (
-    <div className="w-full h-full overflow-hidden rounded-xl border border-gray-800 shadow-xl bg-[#1a1c1e]">{renderContent()}</div>
+    <div className="w-full h-full overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800 shadow-xl bg-white dark:bg-[#1a1c1e]">{renderContent()}</div>
   );
 };
 

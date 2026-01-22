@@ -1381,10 +1381,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
       // update radii
       for (const p of particles) {
-        // Zoom-independent size logic: 
-        // In Game Mode: constant target.
-        // In Chart Mode (zooming enabled): divide by k to counteract context scale -> effectively constant visual size.
-        // In Free Mode (zoom disabled): k is 1, so regular scaling applies.
         const viewRadius = rs.isGameMode ? p.targetRadius : (p.targetRadius / k);
         p.radius += (viewRadius - p.radius) * 0.15;
         p.mass = Math.max(1, p.radius);
@@ -1967,8 +1963,8 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   }, [playPocket]);
 
   const containerClassName = isWidget 
-        ? "w-full h-full relative flex flex-col bg-white dark:bg-[#0b0f14] overflow-hidden" 
-        : "fixed inset-0 z-[2000] bg-white dark:bg-[#0b0f14] text-gray-900 dark:text-white flex flex-col overflow-hidden touch-none select-none overscroll-none h-[100dvh]";
+        ? "w-full h-full relative flex flex-col bg-white dark:bg-[#0b0f14] overflow-hidden transition-colors" 
+        : "fixed inset-0 z-[2000] bg-white dark:bg-[#0b0f14] text-gray-900 dark:text-white flex flex-col overflow-hidden touch-none select-none overscroll-none h-[100dvh] transition-colors";
 
   // If minimized widget, hide header complex controls
   const showControls = !isWidget || (isWidget && isMaximized);
@@ -1980,12 +1976,12 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     >
       {/* HEADER */}
       {showControls && (
-        <div className="flex items-center p-4 z-20 bg-white/80 dark:bg-black/50 backdrop-blur-sm border-b border-gray-200 dark:border-white/10 shrink-0">
+        <div className="flex items-center p-4 z-20 bg-gray-50/80 dark:bg-black/50 backdrop-blur-sm border-b border-gray-100 dark:border-white/10 shrink-0 transition-colors shadow-sm dark:shadow-none">
             {/* LEFT */}
             <div className="flex items-center gap-4 shrink-0">
             {!isWidget && <Coins size={28} className="text-[#dd9933]" />}
             <div>
-                <h3 className="text-xl font-black uppercase tracking-wider hidden sm:block">Crypto Bubbles</h3>
+                <h3 className="text-xl font-black uppercase tracking-wider hidden sm:block text-gray-900 dark:text-white">Crypto Bubbles</h3>
                 {!isWidget && (
                     <p className="text-xs text-gray-500 dark:text-gray-400 font-bold">
                     {status === 'demo' ? 'MODO DEMO' : isGameMode ? 'MODO GAME' : isFreeMode ? 'MODO LIVRE' : 'MODO MAPA'}
@@ -1994,9 +1990,9 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
             </div>
 
             {isGameMode && (
-                <div className="ml-2 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5">
+                <div className="ml-2 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-100 dark:bg-white/5">
                 <div className="text-[11px] font-black text-gray-500 dark:text-gray-400">Bolas fora</div>
-                <div className="text-sm font-black">{pocketedUI.count}/{pocketedUI.max}</div>
+                <div className="text-sm font-black text-gray-900 dark:text-white">{pocketedUI.count}/{pocketedUI.max}</div>
                 </div>
             )}
             </div>
@@ -2012,12 +2008,12 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                     if (isGameMode && gameHasShotRef.current) return;
                     setNumCoins(v);
                 }}
-                className="bg-white dark:bg-[#2f3032] text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs font-black border border-gray-200 dark:border-white/10 outline-none"
+                className="bg-transparent text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs font-black outline-none border-none cursor-pointer"
                 disabled={isGameMode && gameHasShot}
                 title={isGameMode && gameHasShot ? 'Travado após a 1ª tacada' : ''}
                 >
                 {(isGameMode ? [16, 24, 32] : [25, 50, 100, 150, 200, 250]).map(n => (
-                    <option key={n} value={n}>{isGameMode ? `${n} bolas` : `${n} moedas`}</option>
+                    <option key={n} value={n} className="bg-white dark:bg-[#2f3032]">{isGameMode ? `${n} bolas` : `${n} moedas`}</option>
                 ))}
                 </select>
             </div>
@@ -2029,12 +2025,12 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Buscar..."
-                className="bg-transparent outline-none text-sm w-24 sm:w-56 text-gray-900 dark:text-white"
+                className="bg-transparent outline-none text-sm w-24 sm:w-56 text-gray-900 dark:text-white placeholder-gray-500"
                 disabled={false}
                 />
                 {searchTerm && (
                 <button onClick={() => { setSearchTerm(''); setSelectedParticle(null); }}>
-                    <XCircle size={16} className="text-gray-500 hover:text-white" />
+                    <XCircle size={16} className="text-gray-500 hover:text-gray-900 dark:hover:text-white" />
                 </button>
                 )}
             </div>
@@ -2046,7 +2042,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                 <div className="flex bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10">
                 <button
                     onClick={() => setChartMode('valuation')}
-                    className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'valuation' ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500 dark:text-gray-300'}`}
+                    className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'valuation' ? 'bg-white dark:bg-[#2f3032] shadow-sm text-[#dd9933]' : 'text-gray-500 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'}`}
                     disabled={isGameMode}
                 >
                     MarketCap
@@ -2056,25 +2052,25 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                 <div className="flex items-center bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-gray-200 dark:border-white/10">
                 <button
                     onClick={() => setChartMode('performance')}
-                    className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'performance' ? 'bg-white dark:bg-[#2f3032] shadow text-[#dd9933]' : 'text-gray-500 dark:text-gray-300'}`}
+                    className={`px-4 py-1.5 text-xs font-black rounded transition-colors ${chartMode === 'performance' ? 'bg-white dark:bg-[#2f3032] shadow-sm text-[#dd9933]' : 'text-gray-500 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'}`}
                     disabled={isGameMode}
                 >
                     Var %
                 </button>
 
-                <div className="w-px h-5 bg-gray-200 dark:bg-white/10 mx-1"></div>
+                <div className="w-px h-5 bg-gray-300 dark:bg-white/10 mx-1"></div>
 
                 <div className="flex items-center gap-2 px-2 py-1">
                     <Wind size={14} className="text-gray-400" />
                     <select
                     value={timeframe}
                     onChange={(e) => setTimeframe(e.target.value as Timeframe)}
-                    className="bg-white dark:bg-[#2f3032] text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs font-black border border-gray-200 dark:border-white/10 outline-none"
+                    className="bg-transparent text-gray-900 dark:text-gray-100 px-2 py-1 rounded text-xs font-black border-none outline-none cursor-pointer"
                     disabled={isGameMode}
                     >
-                    <option value="1h">1h</option>
-                    <option value="24h">24h</option>
-                    <option value="7d">7d</option>
+                    <option value="1h" className="bg-white dark:bg-[#2f3032]">1h</option>
+                    <option value="24h" className="bg-white dark:bg-[#2f3032]">24h</option>
+                    <option value="7d" className="bg-white dark:bg-[#2f3032]">7d</option>
                     </select>
                 </div>
                 </div>
@@ -2094,7 +2090,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                 ref={settingsBtnRef}
                 onClick={() => setSettingsOpen(v => !v)}
                 onMouseEnter={handleSettingsEnter}
-                className={`p-3 rounded-lg border transition-colors backdrop-blur-sm ${settingsOpen ? 'bg-[#dd9933] text-black border-[#dd9933]' : 'bg-gray-100 dark:bg-black/50 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10'}`}
+                className={`p-3 rounded-lg border transition-colors backdrop-blur-sm ${settingsOpen ? 'bg-[#dd9933] text-black border-[#dd9933]' : 'bg-gray-100 dark:bg-black/50 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-600 dark:text-gray-300'}`}
                 title="Settings"
             >
                 <Settings size={20} />
@@ -2116,7 +2112,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       {settingsOpen && (
         <div
           ref={settingsPanelRef}
-          className="absolute top-24 right-4 bg-white/90 dark:bg-black/80 p-4 rounded-lg border border-gray-200 dark:border-white/10 backdrop-blur-md w-80 z-30 shadow-xl"
+          className="absolute top-24 right-4 bg-white/95 dark:bg-black/90 p-4 rounded-lg border border-gray-200 dark:border-white/10 backdrop-blur-md w-80 z-30 shadow-2xl"
           onMouseEnter={handleSettingsEnter}
           onMouseLeave={handleSettingsLeave}
           onWheel={(e) => e.stopPropagation()}
@@ -2124,19 +2120,19 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         >
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <Atom size={14} />
-              <span className="text-xs font-black uppercase tracking-wider">Modo Game</span>
+              <Atom size={14} className="text-gray-600 dark:text-gray-400" />
+              <span className="text-xs font-black uppercase tracking-wider text-gray-800 dark:text-white">Modo Game</span>
 
               <div className="relative group">
                 <button
-                  className="ml-1 p-1 rounded hover:bg-black/5 dark:hover:bg-white/10"
+                  className="ml-1 p-1 rounded hover:bg-gray-100 dark:hover:bg-white/10"
                   title="Instruções do Modo Game"
                   onPointerDown={(e) => e.stopPropagation()}
                 >
                   <Info size={14} className="text-gray-500 dark:text-gray-300" />
                 </button>
 
-                <div className="absolute right-0 top-6 w-72 bg-white/95 dark:bg-black/85 border border-gray-200 dark:border-white/10 rounded-xl p-3 shadow-xl backdrop-blur-md text-xs opacity-0 pointer-events-none group-hover:opacity-100 z-50">
+                <div className="absolute right-0 top-6 w-72 bg-white dark:bg-black/95 border border-gray-200 dark:border-white/10 rounded-xl p-3 shadow-xl backdrop-blur-md text-xs opacity-0 pointer-events-none group-hover:opacity-100 z-50">
                   <div className="font-black text-gray-800 dark:text-gray-100 mb-1">Como jogar</div>
                   <div className="text-gray-700 dark:text-gray-200 leading-relaxed">
                     Clique 1 fixa a mira. Clique 2: segure e arraste o taco para trás para regular a força. Solte o botão para dar a tacada.
@@ -2157,8 +2153,8 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           {!isGameMode && (
             <div className="mt-3 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
-                <Wind size={14} />
-                <span className="text-xs font-black uppercase tracking-wider">Modo Livre</span>
+                <Wind size={14} className="text-gray-600 dark:text-gray-400" />
+                <span className="text-xs font-black uppercase tracking-wider text-gray-800 dark:text-white">Modo Livre</span>
               </div>
 
               <button
@@ -2175,8 +2171,8 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
             <div className={isGameMode ? 'opacity-50' : ''}>
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <Wind size={14} />
-                  <span className="text-xs font-black uppercase tracking-wider">Flutuação</span>
+                  <Wind size={14} className="text-gray-600 dark:text-gray-400" />
+                  <span className="text-xs font-black uppercase tracking-wider text-gray-800 dark:text-white">Flutuação</span>
                 </div>
                 <span className="text-xs font-bold text-gray-500 dark:text-gray-400">{Math.round(floatStrengthRaw * 100)}%</span>
               </div>
@@ -2187,15 +2183,15 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                 step="0.05"
                 value={floatStrengthRaw}
                 onChange={e => setFloatStrengthRaw(parseFloat(e.target.value))}
-                className="w-full accent-[#dd9933] mt-2"
+                className="w-full accent-[#dd9933] mt-2 bg-gray-200 dark:bg-gray-700 rounded-lg h-2"
               />
             </div>
 
             <div>
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <Droplets size={14} />
-                  <span className="text-xs font-black uppercase tracking-wider">Rastro (Trail)</span>
+                  <Droplets size={14} className="text-gray-600 dark:text-gray-400" />
+                  <span className="text-xs font-black uppercase tracking-wider text-gray-800 dark:text-white">Rastro (Trail)</span>
                 </div>
                 <span className="text-xs font-bold text-gray-500 dark:text-gray-400">{trailLength}</span>
               </div>
@@ -2206,7 +2202,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                 step="1"
                 value={trailLength}
                 onChange={e => setTrailLength(parseInt(e.target.value))}
-                className="w-full accent-[#dd9933] mt-2"
+                className="w-full accent-[#dd9933] mt-2 bg-gray-200 dark:bg-gray-700 rounded-lg h-2"
               />
             </div>
 
@@ -2223,7 +2219,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       {showGameIntro && isGameMode && (
         <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in zoom-in duration-300">
             <div className="bg-white dark:bg-[#1a1c1e] p-8 rounded-2xl max-w-md text-center border border-gray-200 dark:border-white/10 shadow-2xl relative">
-                <button onClick={() => setShowGameIntro(false)} className="absolute top-3 right-3 p-2 text-gray-400 hover:text-white transition-colors"><CloseIcon size={20}/></button>
+                <button onClick={() => setShowGameIntro(false)} className="absolute top-3 right-3 p-2 text-gray-400 hover:text-black dark:hover:text-white transition-colors"><CloseIcon size={20}/></button>
                 <div className="w-16 h-16 bg-[#dd9933]/10 rounded-full flex items-center justify-center mx-auto mb-4 text-[#dd9933]">
                     <Atom size={32} />
                 </div>
@@ -2267,7 +2263,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       {/* DETAIL CARD SIMPLE LIST */}
       {detailOpen && detailCoin && (
         <div
-          className="absolute inset-0 z-[80] flex items-center justify-center bg-black/55"
+          className="absolute inset-0 z-[80] flex items-center justify-center bg-black/55 backdrop-blur-sm"
           onPointerDown={() => setDetailOpen(false)}
         >
           <div
@@ -2281,7 +2277,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
               <div className="flex items-center gap-3">
                 <img src={detailCoin.image} alt={detailCoin.name} className="w-12 h-12 rounded-full" />
                 <div>
-                  <div className="text-lg font-black leading-tight">{detailCoin.name}</div>
+                  <div className="text-lg font-black leading-tight text-gray-900 dark:text-white">{detailCoin.name}</div>
                   <div className="text-xs font-bold text-gray-500 dark:text-gray-400">
                     {detailCoin.symbol?.toUpperCase()} • Rank #{detailCoin.market_cap_rank ?? '-'}
                   </div>
@@ -2290,7 +2286,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
               <button
                 onClick={() => setDetailOpen(false)}
-                className="p-2 rounded-lg bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 border border-gray-200 dark:border-white/10"
+                className="p-2 rounded-lg bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 border border-gray-200 dark:border-white/10 text-gray-600 dark:text-white"
                 title="Fechar"
               >
                 <CloseIcon size={18} />
@@ -2298,7 +2294,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
             </div>
 
             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="text-sm space-y-2">
+              <div className="text-sm space-y-2 text-gray-800 dark:text-gray-200">
                 <div className="flex justify-between gap-4"><span className="font-bold text-gray-500 dark:text-gray-400">Preço</span><span className="font-black">{formatPrice(detailCoin.current_price)}</span></div>
                 <div className="flex justify-between gap-4"><span className="font-bold text-gray-500 dark:text-gray-400">Market Cap</span><span className="font-black">{formatCompact(detailCoin.market_cap)}</span></div>
                 <div className="flex justify-between gap-4"><span className="font-bold text-gray-500 dark:text-gray-400">Volume 24h</span><span className="font-black">{formatCompact(detailCoin.total_volume)}</span></div>
@@ -2322,7 +2318,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                                 href={s.href}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-white/5 hover:bg-[#dd9933] hover:text-white dark:hover:bg-[#dd9933] dark:hover:text-white transition-all shadow-sm"
+                                className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-white/5 hover:bg-[#dd9933] hover:text-white dark:hover:bg-[#dd9933] dark:hover:text-white transition-all shadow-sm text-gray-600 dark:text-gray-400"
                             >
                                 <Icon size={16} />
                             </a>
@@ -2338,14 +2334,14 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setMagIndex(i => (i - 1 + magSlides.length) % magSlides.length)}
-                    className="px-3 py-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-xs font-black"
+                    className="px-3 py-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-xs font-black text-gray-600 dark:text-gray-300"
                     disabled={magSlides.length <= 1}
                   >
                     <ChevronLeft size={12} />
                   </button>
                   <button
                     onClick={() => setMagIndex(i => (i + 1) % magSlides.length)}
-                    className="px-3 py-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-xs font-black"
+                    className="px-3 py-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-xs font-black text-gray-600 dark:text-gray-300"
                     disabled={magSlides.length <= 1}
                   >
                     <ChevronRight size={12} />
@@ -2369,7 +2365,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                       )}
                     </div>
                     <div className="p-3">
-                      <div className="text-sm font-black line-clamp-2">{p.title}</div>
+                      <div className="text-sm font-black line-clamp-2 text-gray-800 dark:text-gray-200">{p.title}</div>
                     </div>
                   </a>
                 ))}

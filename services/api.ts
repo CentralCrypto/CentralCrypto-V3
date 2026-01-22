@@ -16,7 +16,6 @@ export const fetchWithFallback = async (url: string): Promise<any | null> => {
     const { data } = await httpGetJson(finalUrl, { timeoutMs: 15000, retries: 2 });
     return data;
   } catch (e: any) {
-    // Suppress 404 errors to avoid console noise for optional resources
     if (e.status !== 404) {
         console.warn(`[API] Warn fetching ${url}:`, e.message || e);
     }
@@ -28,7 +27,6 @@ export const isStablecoin = (symbol: string) => STABLECOINS.includes(symbol.toUp
 
 /**
  * Cache + dedupe em memória (por aba).
- * Evita várias chamadas simultâneas ao mesmo JSON quando há muitos widgets.
  */
 const TOP_COINS_TTL_MS = 60_000;
 let topCoinsCacheTs = 0;
@@ -252,108 +250,78 @@ export const fetchRsiAverage = async (): Promise<RsiAvgData | null> => {
   const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiAvg));
   if (!raw) return null;
   
-  // Handle: [{ data: { overall: ... } }] or { data: { overall: ... } }
   const root = Array.isArray(raw) ? raw[0] : raw;
   const dataNode = root?.data || root;
   
   return dataNode?.overall || dataNode;
 };
 
-// SCATTER CHART DATA (rsitrackerhist.json)
-// Structure: [ { "data": { "heatmap": { "items": [...] } } } ]
+// --- SCATTER CHART DATA (RSI TRACKER) ---
+// Arquivo Específico: rsitrackerhist.json
 export const fetchRsiTrackerHist = async (): Promise<RsiTrackerPoint[]> => {
   const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTrackerHist));
   
+  // N8N Output standard: [ { data: ... } ] or direct array
   let items: any[] = [];
-  
-  if (raw) {
-      // 1. Unpack array root
-      const root = Array.isArray(raw) ? raw[0] : raw;
-      
-      // 2. Navigate deep: data -> heatmap -> items
-      if (root?.data?.heatmap?.items && Array.isArray(root.data.heatmap.items)) {
-          items = root.data.heatmap.items;
-      }
-      // 3. Fallback: data -> points
-      else if (root?.data?.points && Array.isArray(root.data.points)) {
-          items = root.data.points;
-      }
-      // 4. Fallback: direct properties
-      else if (root?.heatmap?.items && Array.isArray(root.heatmap.items)) {
-          items = root.heatmap.items;
-      }
+  if (Array.isArray(raw)) {
+      items = (raw[0]?.data && Array.isArray(raw[0].data)) ? raw[0].data : raw;
+  } else if (raw && raw.data) {
+      items = Array.isArray(raw.data) ? raw.data : [];
   }
 
-  if (!items.length) {
-      // console.warn("fetchRsiTrackerHist: No items found in parsed data", raw);
-      return [];
-  }
+  if (!items.length) return [];
 
   return items.map((p: any) => ({
-      symbol: p.symbol,
-      name: p.name,
-      price: Number(p.price || 0),
-      change24h: Number(p.price24h || 0),
-      marketCap: Number(p.marketCap || 0),
-      logo: `https://assets.coincap.io/assets/icons/${(p.symbol||'').toLowerCase()}@2x.png`, 
+      symbol: p.symbol || p.s,
+      name: p.name || p.n,
+      price: Number(p.current_price || p.price || 0),
+      change24h: Number(p.price_change_percentage_24h || p.price24h || 0),
+      marketCap: Number(p.market_cap || p.marketCap || 0),
+      logo: p.image || p.logo || `https://assets.coincap.io/assets/icons/${(p.symbol||'').toLowerCase()}@2x.png`,
+      // Mapeamento específico baseado no seu histórico
       rsi: {
-          "15m": p.rsiOverall?.rsi15m ?? 50,
-          "1h": p.rsiOverall?.rsi1h ?? 50,
-          "4h": p.rsiOverall?.rsi4h ?? 50,
-          "24h": p.rsiOverall?.rsi24h ?? 50,
-          "7d": p.rsiOverall?.rsi7d ?? 50,
+          "15m": Number(p.rsiOverall?.rsi15m || 50),
+          "1h": Number(p.rsiOverall?.rsi1h || 50),
+          "4h": Number(p.rsiOverall?.rsi4h || 50),
+          "24h": Number(p.rsiOverall?.rsi24h || 50),
+          "7d": Number(p.rsiOverall?.rsi7d || 50),
       },
-      currentRsi: p.currentRsi,
-      lastRsi: p.lastRsi
+      currentRsi: Number(p.currentRsi || p.rsiOverall?.rsi1h || 50),
+      lastRsi: Number(p.lastRsi || 0)
   }));
 };
 
-// TABLE DATA (rsitracker.json)
-// Structure: [ { "data": { "data": [ ... ] } } ]
+// --- TABLE DATA ---
+// Arquivo Específico: rsitracker.json
 export const fetchRsiTable = async (): Promise<RsiTableItem[]> => {
   const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTable));
   
   let items: any[] = [];
-
-  if (raw) {
-      // 1. Unpack array root
-      const root = Array.isArray(raw) ? raw[0] : raw;
-      
-      // 2. Navigate deep: data -> data (Array)
-      if (root?.data?.data && Array.isArray(root.data.data)) {
-          items = root.data.data;
-      }
-      // 3. Fallback: direct data array
-      else if (Array.isArray(root?.data)) {
-          items = root.data;
-      }
-      // 4. Fallback: root IS array
-      else if (Array.isArray(root)) {
-          items = root;
-      }
+  if (Array.isArray(raw)) {
+      items = (raw[0]?.data && Array.isArray(raw[0].data)) ? raw[0].data : raw;
+  } else if (raw && raw.data) {
+      items = Array.isArray(raw.data) ? raw.data : [];
   }
   
-  if (!items.length) {
-      // console.warn("fetchRsiTable: No items found in parsed data", raw);
-      return [];
-  }
+  if (!items.length) return [];
 
   return items.map((p: any) => ({
-      id: p.id,
+      id: p.id || p.symbol,
       symbol: p.symbol,
       name: p.name,
-      price: Number(p.price || 0),
-      change: Number(p.price24h || 0),
-      marketCap: Number(p.marketCap || 0),
-      volume24h: Number(p.volume24h || 0),
-      rank: p.rank,
-      logo: `https://assets.coincap.io/assets/icons/${(p.symbol||'').toLowerCase()}@2x.png`,
+      price: Number(p.current_price || p.price || 0),
+      change: Number(p.price_change_percentage_24h || p.price24h || 0),
+      marketCap: Number(p.market_cap || p.marketCap || 0),
+      volume24h: Number(p.total_volume || p.volume24h || 0),
+      rank: p.market_cap_rank || p.rank,
+      logo: p.image || p.logo || `https://assets.coincap.io/assets/icons/${(p.symbol||'').toLowerCase()}@2x.png`,
+      // Tabela costuma ter chaves diretas ou 'rsi'
       rsi: {
-          "15m": p.rsi?.rsi15m ?? 50,
-          "1h": p.rsi?.rsi1h ?? 50,
-          "4h": p.rsi?.rsi4h ?? 50,
-          "24h": p.rsi?.rsi24h ?? 50,
-          "7d": p.rsi?.rsi7d ?? 50
+          "15m": Number(p.rsi15m || p.rsi?.rsi15m || 50),
+          "1h": Number(p.rsi1h || p.rsi?.rsi1h || 50),
+          "4h": Number(p.rsi4h || p.rsi?.rsi4h || 50),
+          "24h": Number(p.rsi24h || p.rsi?.rsi24h || 50),
+          "7d": Number(p.rsi7d || p.rsi?.rsi7d || 50)
       }
   }));
 };

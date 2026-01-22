@@ -54,10 +54,10 @@ export const RsiTableList: React.FC<{ filterText?: string }> = ({ filterText }) 
 
     return (
         <div className="flex flex-col h-full overflow-hidden bg-white dark:bg-[#15191c] rounded-xl border border-gray-100 dark:border-slate-800 shadow-xl">
-            <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-800 flex justify-between items-center bg-[#15191c]">
-                <h3 className="text-lg font-bold text-white">Crypto Market RSI Leaders</h3>
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-800 flex justify-between items-center bg-gray-50 dark:bg-[#15191c]">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Crypto Market RSI Leaders</h3>
             </div>
-            <div className="grid grid-cols-[1.5fr_1fr_0.8fr_0.8fr_0.8fr_0.8fr_0.8fr] gap-2 px-6 py-3 bg-[#111315] text-[10px] font-black text-gray-500 uppercase tracking-widest sticky top-0 z-10 border-b border-white/5">
+            <div className="grid grid-cols-[1.5fr_1fr_0.8fr_0.8fr_0.8fr_0.8fr_0.8fr] gap-2 px-6 py-3 bg-gray-100 dark:bg-[#111315] text-[10px] font-black text-gray-500 uppercase tracking-widest sticky top-0 z-10 border-b border-gray-200 dark:border-white/5">
                 <span>Asset</span>
                 <span className="text-right">Price</span>
                 <span className="text-center">15m</span>
@@ -68,13 +68,13 @@ export const RsiTableList: React.FC<{ filterText?: string }> = ({ filterText }) 
             </div>
             <div className="flex-1 overflow-y-auto custom-scrollbar min-h-[400px]">
                 {filtered.map((item, i) => (
-                    <div key={item.id + i} className="grid grid-cols-[1.5fr_1fr_0.8fr_0.8fr_0.8fr_0.8fr_0.8fr] gap-2 px-6 py-3 border-b border-white/5 hover:bg-white/5 transition-colors items-center text-sm group">
+                    <div key={item.id + i} className="grid grid-cols-[1.5fr_1fr_0.8fr_0.8fr_0.8fr_0.8fr_0.8fr] gap-2 px-6 py-3 border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors items-center text-sm group">
                         <div className="flex items-center gap-3">
                             <span className="text-xs text-gray-500 font-mono w-4">{item.rank || i+1}</span>
                             {item.logo && <img src={item.logo} className="w-6 h-6 rounded-full grayscale group-hover:grayscale-0 transition-all" onError={(e) => (e.target as HTMLImageElement).style.display = 'none'} />}
-                            <span className="font-bold text-gray-300 group-hover:text-white transition-colors">{item.name} <span className="text-xs text-gray-500 ml-1">{item.symbol}</span></span>
+                            <span className="font-bold text-gray-700 dark:text-gray-300 group-hover:text-black dark:group-hover:text-white transition-colors">{item.name} <span className="text-xs text-gray-500 ml-1">{item.symbol}</span></span>
                         </div>
-                        <div className="text-right font-mono text-gray-300 font-bold">
+                        <div className="text-right font-mono text-gray-700 dark:text-gray-300 font-bold">
                             ${item.price < 1 ? item.price.toFixed(5) : item.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                         </div>
                         <div className={`text-center font-bold font-mono ${getRsiColor(item.rsi?.["15m"], true)}`}>{(item.rsi?.["15m"] ?? 0).toFixed(0)}</div>
@@ -95,6 +95,15 @@ export const RsiScatterChart: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [timeframe, setTimeframe] = useState('4h');
     const chartRef = useRef<HTMLDivElement>(null);
+    const [isDark, setIsDark] = useState(document.documentElement.classList.contains('dark'));
+
+    useEffect(() => {
+        const observer = new MutationObserver(() => {
+            setIsDark(document.documentElement.classList.contains('dark'));
+        });
+        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+        return () => observer.disconnect();
+    }, []);
 
     useEffect(() => {
         setLoading(true);
@@ -107,49 +116,58 @@ export const RsiScatterChart: React.FC = () => {
     useEffect(() => {
         if (!chartRef.current || loading || data.length === 0) return;
         
-        const seriesData = data
+        const bgColor = isDark ? '#15191c' : '#ffffff';
+        const textColor = isDark ? '#ffffff' : '#333333';
+        const gridColor = isDark ? '#222' : '#e5e7eb';
+        const lineColor = isDark ? '#444' : '#d1d5db';
+
+        // FILTER: Remove items with invalid MarketCap to prevent chart blanking out on Log Scale
+        const validSeriesData = data
+            .filter(p => p.marketCap && p.marketCap > 1000) // Ensure > 0 for Log Axis
             .slice(0, 300)
             .map(p => {
-                const xVal = p.marketCap;
-                if (!xVal || xVal <= 0) return null;
                 // Allow explicit timeframe access or default to 50
                 const rsiVal = (p.rsi as any)?.[timeframe] || 50;
+                
                 return {
-                    x: xVal, 
+                    x: p.marketCap, 
                     y: rsiVal, 
                     name: p.symbol, 
                     marketCap: p.marketCap, 
                     rsiVal: rsiVal,
                     marker: { radius: 4 }
                 };
-            }).filter(p => p !== null);
+            });
 
         Highcharts.chart(chartRef.current, {
             chart: { 
                 type: 'scatter', 
-                backgroundColor: '#15191c', 
+                backgroundColor: bgColor, 
                 zoomType: 'xy', 
                 style: { fontFamily: 'Inter, sans-serif' }, 
             },
-            title: { text: 'Crypto RSI Heatmap', align: 'left', style: { color: '#fff', fontWeight: 'bold' } }, 
+            title: { text: 'Crypto RSI Heatmap', align: 'left', style: { color: textColor, fontWeight: 'bold' } }, 
             credits: { enabled: false }, 
             exporting: { enabled: false },
             legend: { enabled: false },
             xAxis: { 
-                title: { text: 'Market Cap (USD)', style: { color: '#666' } }, 
+                title: { text: 'Market Cap (Log USD)', style: { color: isDark ? '#666' : '#9ca3af' } }, 
                 type: 'logarithmic', 
-                gridLineColor: '#222', 
-                labels: { style: { color: '#666' } } 
+                gridLineColor: gridColor, 
+                labels: { style: { color: isDark ? '#666' : '#6b7280' } },
+                lineColor: lineColor,
+                tickColor: lineColor
             },
             yAxis: { 
-                title: { text: 'Relative Strength Index', style: { color: '#666' } }, 
+                title: { text: 'Relative Strength Index', style: { color: isDark ? '#666' : '#9ca3af' } }, 
                 min: 0, 
                 max: 100, 
-                gridLineColor: '#222', 
+                gridLineColor: gridColor, 
+                labels: { style: { color: isDark ? '#666' : '#6b7280' } },
                 plotLines: [
                     { value: 70, color: '#f87171', dashStyle: 'ShortDash', width: 1, label: { text: 'Overbought', style: { color: '#f87171' }, align: 'right' } },
                     { value: 30, color: '#4ade80', dashStyle: 'ShortDash', width: 1, label: { text: 'Oversold', style: { color: '#4ade80' }, align: 'right' } },
-                    { value: 50, color: '#444', width: 1 }
+                    { value: 50, color: lineColor, width: 1 }
                 ],
                 plotBands: [
                     { from: 70, to: 100, color: 'rgba(248, 113, 113, 0.1)' },
@@ -158,9 +176,10 @@ export const RsiScatterChart: React.FC = () => {
             },
             tooltip: { 
                 useHTML: true, 
-                backgroundColor: 'rgba(0,0,0,0.8)', 
-                borderColor: '#333', 
-                style: { color: '#fff' },
+                backgroundColor: isDark ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.95)', 
+                borderColor: isDark ? '#333' : '#e5e7eb', 
+                style: { color: textColor },
+                shadow: true,
                 formatter: function(this: any) {
                     return `<b>${this.point.name}</b><br/>RSI: ${this.point.y.toFixed(2)}<br/>Mkt Cap: $${formatCompactNumber(this.point.x)}`;
                 }
@@ -177,25 +196,25 @@ export const RsiScatterChart: React.FC = () => {
             },
             series: [{ 
                 name: 'Coins', 
-                data: seriesData, 
+                data: validSeriesData, 
                 color: 'rgba(255,255,255,0.5)',
                 colorKey: 'y',
                 zones: [
                     { value: 30, color: '#4ade80' },
-                    { value: 70, color: '#94a3b8' },
+                    { value: 70, color: isDark ? '#94a3b8' : '#64748b' },
                     { color: '#f87171' }
                 ]
             }]
         } as any);
-    }, [data, loading, timeframe]);
+    }, [data, loading, timeframe, isDark]);
 
     if (loading) return <div className="h-96 flex items-center justify-center"><Loader2 className="animate-spin text-gray-400" /></div>;
-    if (data.length === 0) return <div className="h-96 flex items-center justify-center text-gray-500 text-xs font-bold uppercase">Sem dados do gráfico</div>;
+    if (data.length === 0) return <div className="h-96 flex items-center justify-center text-gray-500 text-xs font-bold uppercase">Sem dados do gráfico (Offline)</div>;
 
     return (
-        <div className="relative w-full h-full bg-[#15191c] rounded-xl border border-slate-800 p-4 shadow-xl">
+        <div className="relative w-full h-full bg-white dark:bg-[#15191c] rounded-xl border border-gray-200 dark:border-slate-800 p-4 shadow-xl">
             <div className="absolute top-4 right-4 z-10">
-                <select value={timeframe} onChange={(e) => setTimeframe(e.target.value)} className="bg-[#222] text-xs font-bold text-white p-1 rounded border border-[#333] outline-none cursor-pointer">
+                <select value={timeframe} onChange={(e) => setTimeframe(e.target.value)} className="bg-gray-100 dark:bg-[#222] text-xs font-bold text-gray-900 dark:text-white p-1 rounded border border-gray-200 dark:border-[#333] outline-none cursor-pointer">
                     {TIMEFRAMES.map(tf => <option key={tf} value={tf}>{tf.toUpperCase()}</option>)}
                 </select>
             </div>
