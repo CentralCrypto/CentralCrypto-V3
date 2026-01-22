@@ -138,6 +138,21 @@ const CustomTreemapContent = (props: any) => {
   const isDark = document.documentElement.classList.contains('dark');
   const strokeColor = isDark ? '#0f1011' : '#ffffff'; 
   
+  // Interaction Handler for Tooltip
+  const handleMouseMove = (e: React.MouseEvent) => {
+    // Reconstruct data for tooltip
+    onContentHover({
+        symbol,
+        price,
+        change,
+        image,
+        fullName: props.fullName || props.name,
+        mcap: props.mcap,
+        vol: props.vol,
+        rank: props.rank
+    }, e.clientX, e.clientY);
+  };
+
   if (!isVisible) {
       return <rect x={x} y={y} width={width} height={height} fill={color} stroke={strokeColor} strokeWidth={strokeWidth} />;
   }
@@ -147,45 +162,70 @@ const CustomTreemapContent = (props: any) => {
   const visualH = height * zoomLevel;
 
   // Rendering thresholds
-  const isTiny = visualW < 20 || visualH < 15;
-  const isSmall = visualW < 60 || visualH < 50;
+  const isTiny = visualW < 30 || visualH < 25;
   
-  // --- FONT SIZE CALCULATION (PREVENT OVERFLOW) ---
-  const charCount = symbol.length;
-  // Adjusted factors to prevent text from leaking out of the box
-  const maxFontW = (width * 0.70) / (charCount * 0.7); // Reduced width availability
-  const maxFontH = height * 0.20; // Reduced height availability
-  // Clamp max size to 24px (smaller than before)
-  const symbolFontSize = Math.min(Math.max(maxFontW, 4), maxFontH, 24); 
-  
-  // Calculate price font size relative to symbol
-  const priceFontSize = Math.max(symbolFontSize * 0.6, 9);
+  // Layout Logic - Vertical Stacking
+  // Available space for content (keeping a small padding)
+  const padding = Math.min(width, height) * 0.08;
+  const contentW = width - padding * 2;
+  const contentH = height - padding * 2;
 
-  // Determine logo size
-  const minDim = Math.min(width, height);
-  const logoSize = Math.min(minDim * 0.4, 50);
+  // Dynamic Font Sizing
+  const charLen = symbol ? symbol.length : 3;
+  // Base font size on width, clamped by max reasonable size
+  let symbolFontSize = Math.min(contentW / (charLen * 0.7), 120);
   
-  // Layout logic
-  const showLogo = image && !isSmall && (logoSize > 12) && (height > symbolFontSize * 3);
-  const showPrice = !isSmall && (height > symbolFontSize * 2.5);
+  // Also constrain by height (assume it takes ~30% of height max if alone)
+  symbolFontSize = Math.min(symbolFontSize, contentH * 0.6);
+  symbolFontSize = Math.max(symbolFontSize, 8); // Min absolute size
 
+  let priceFontSize = symbolFontSize * 0.45;
+  priceFontSize = Math.max(priceFontSize, 8); // Min price size
+
+  let logoSize = Math.min(contentW * 0.6, contentH * 0.5);
+  logoSize = Math.min(logoSize, 80); // Max absolute logo size
+
+  // Determine what fits
+  // Stack: Logo + Symbol + Price
+  const gap = symbolFontSize * 0.2;
+  const fullStackH = logoSize + gap + symbolFontSize + gap + priceFontSize;
+  
+  let showLogo = image && (visualH > 60) && (visualW > 60) && (fullStackH <= contentH);
+  let showPrice = (fullStackH <= contentH) || ((symbolFontSize + gap + priceFontSize) <= contentH);
+  
+  // If we can't show everything, try dropping elements
+  if (!showLogo && !showPrice) {
+      // Just Symbol
+      // Recalculate font size to center perfectly
+      symbolFontSize = Math.min(contentW / (charLen * 0.6), contentH * 0.8);
+  } else if (!showLogo && showPrice) {
+      // Symbol + Price (Vertical)
+      // Check if it really fits
+      if ((symbolFontSize + gap + priceFontSize) > contentH) {
+          showPrice = false; // Drop price if it clashes
+      }
+  }
+
+  // Positioning
   const centerX = x + width / 2;
   const centerY = y + height / 2;
-  const textGap = symbolFontSize * 0.15;
-  const logoGap = logoSize * 0.1;
-  
-  // Total content height approximation
-  let totalContentH = symbolFontSize;
-  if (showLogo) totalContentH += logoSize + logoGap;
-  if (showPrice) totalContentH += priceFontSize + textGap;
-  
-  // Start Y position (centered)
-  let startY = centerY - totalContentH / 2;
-  if (showLogo) startY += logoSize / 2; // Offset start if logo exists
+
+  // Calculate Y offsets based on what is visible
+  let currentY = 0;
+  let totalVisibleH = 0;
+
+  if (showLogo) totalVisibleH += logoSize + gap;
+  totalVisibleH += symbolFontSize;
+  if (showPrice) totalVisibleH += gap + priceFontSize;
+
+  let startY = centerY - totalVisibleH / 2;
+
+  const logoY = startY;
+  const symbolY = showLogo ? logoY + logoSize + gap + symbolFontSize * 0.75 : startY + symbolFontSize * 0.75; // text baseline correction
+  const priceY = symbolY + gap + priceFontSize * 0.8;
 
   // Unique clip path ID for this cell
   const clipId = `clip-${symbol}-${x}-${y}`;
-
   const secondaryValue = metric === 'mcap' 
       ? formatPrice(price)
       : `${(change || 0) > 0 ? '+' : ''}${(change || 0).toFixed(2)}%`;
@@ -207,8 +247,17 @@ const CustomTreemapContent = (props: any) => {
         shapeRendering="crispEdges"
       />
       
-      {/* Interactive Layer */}
-      <rect x={x} y={y} width={width} height={height} style={{ fill: 'transparent', cursor: 'grab' }} onClick={onClick} onMouseEnter={onContentLeave} />
+      {/* Interactive Layer - FIXED: Added onMouseMove */}
+      <rect 
+        x={x} 
+        y={y} 
+        width={width} 
+        height={height} 
+        style={{ fill: 'transparent', cursor: 'grab' }} 
+        onClick={onClick} 
+        onMouseMove={handleMouseMove} 
+        onMouseLeave={onContentLeave} 
+      />
 
       {!isTiny && (
         <g clipPath={`url(#${clipId})`} style={{ pointerEvents: 'none' }}>
@@ -216,7 +265,7 @@ const CustomTreemapContent = (props: any) => {
             {showLogo && (
                 <image
                     x={centerX - logoSize / 2}
-                    y={startY}
+                    y={logoY}
                     width={logoSize}
                     height={logoSize}
                     href={image}
@@ -226,7 +275,7 @@ const CustomTreemapContent = (props: any) => {
 
             <text
                 x={centerX}
-                y={showLogo ? startY + logoSize + logoGap + symbolFontSize * 0.8 : centerY + symbolFontSize * 0.3}
+                y={symbolY}
                 textAnchor="middle"
                 fill="#ffffff"
                 style={{ 
@@ -242,7 +291,7 @@ const CustomTreemapContent = (props: any) => {
             {showPrice && (
                 <text
                     x={centerX}
-                    y={showLogo ? startY + logoSize + logoGap + symbolFontSize + textGap + priceFontSize * 0.8 : centerY + symbolFontSize + textGap}
+                    y={priceY}
                     textAnchor="middle"
                     fill="rgba(255,255,255,0.9)"
                     style={{ 

@@ -149,7 +149,7 @@ export interface MacdTrackerPoint {
   macdNorm?: number;
 }
 
-export interface RsiAvgData { averageRsi: number; yesterday: number; days7Ago: number; days30Ago: number; }
+export interface RsiAvgData { averageRsi: number; yesterday: number; days7Ago: number; days30Ago: number; days90Ago?: number; }
 
 export interface RsiTrackerPoint {
   symbol: string;
@@ -157,6 +157,8 @@ export interface RsiTrackerPoint {
   price: number;
   change24h: number;
   marketCap: number;
+  volume24h?: number;
+  rank?: number;
   logo?: string;
   rsi: Record<string, number>;
   currentRsi?: number;
@@ -249,61 +251,229 @@ export const fetchFearAndGreed = async (): Promise<FngData[]> => {
 };
 
 export const fetchRsiAverage = async (): Promise<RsiAvgData | null> => {
-  const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiAvg));
-  return data || null;
+  const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiAvg));
+  if (!raw) return null;
+
+  const root = Array.isArray(raw) ? raw[0] : raw;
+  const dataNode = root?.data || root;
+  const overall = dataNode?.overall || dataNode;
+
+  return {
+    averageRsi: safeNum(overall?.averageRsi, 50),
+    yesterday: safeNum(overall?.yesterday, 50),
+    days7Ago: safeNum(overall?.days7Ago, 50),
+    days30Ago: safeNum(overall?.days30Ago, 50),
+    days90Ago: Number.isFinite(Number(overall?.days90Ago)) ? Number(overall?.days90Ago) : undefined
+  };
 };
 
 // SCATTER CHART DATA
 export const fetchRsiTrackerHist = async (): Promise<RsiTrackerPoint[]> => {
-  const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTrackerHist));
-  // Structure: { data: { points: [...] } }
-  const points = data?.data?.points;
-  if (!Array.isArray(points)) return [];
+  const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTrackerHist));
+  
+  let items: any[] = [];
+  if (Array.isArray(raw)) {
+    items = (raw[0]?.data && Array.isArray(raw[0].data)) ? raw[0].data : raw;
+  } else if (raw && raw.data) {
+    items = Array.isArray(raw.data) ? raw.data : [];
+  }
 
-  return points.map((p: any) => ({
-      symbol: p.symbol,
-      name: p.name,
-      price: Number(p.price || 0),
-      change24h: Number(p.price24h || 0),
-      marketCap: Number(p.marketCap || 0),
-      // logo is not in the json example, might need fallback
-      logo: `https://assets.coincap.io/assets/icons/${(p.symbol||'').toLowerCase()}@2x.png`, 
-      rsi: {
-          "15m": p.rsiOverall?.rsi15m,
-          "1h": p.rsiOverall?.rsi1h,
-          "4h": p.rsiOverall?.rsi4h,
-          "24h": p.rsiOverall?.rsi24h,
-          "7d": p.rsiOverall?.rsi7d,
-      },
-      currentRsi: p.currentRsi,
-      lastRsi: p.lastRsi
-  }));
+  if (!items.length) return [];
+
+  return items.map((p: any) => {
+      const rsiNode = p.rsiOverall || p.rsi || {};
+      const symbol = p.symbol || p.s || '';
+      return {
+          symbol,
+          name: p.name || p.n || symbol,
+          price: safeNum(p.current_price || p.price, 0),
+          change24h: safeNum(p.price_change_percentage_24h || p.price24h, 0),
+          marketCap: safeNum(p.market_cap || p.marketCap, 0),
+          volume24h: safeNum(p.total_volume || p.volume24h, undefined as any),
+          rank: Number.isFinite(Number(p.market_cap_rank || p.rank)) ? Number(p.market_cap_rank || p.rank) : undefined,
+          logo: p.image || p.logo || `https://assets.coincap.io/assets/icons/${symbol.toLowerCase()}@2x.png`,
+          rsi: {
+              "15m": safeNum(rsiNode?.rsi15m ?? rsiNode?.['15m'], 50),
+              "1h": safeNum(rsiNode?.rsi1h ?? rsiNode?.['1h'], 50),
+              "4h": safeNum(rsiNode?.rsi4h ?? rsiNode?.['4h'], 50),
+              "24h": safeNum(rsiNode?.rsi24h ?? rsiNode?.['24h'], 50),
+              "7d": safeNum(rsiNode?.rsi7d ?? rsiNode?.['7d'], 50),
+          },
+          currentRsi: Number.isFinite(Number(p.currentRsi)) ? Number(p.currentRsi) : (Number.isFinite(Number(rsiNode?.rsi4h)) ? Number(rsiNode?.rsi4h) : undefined),
+          lastRsi: Number.isFinite(Number(p.lastRsi)) ? Number(p.lastRsi) : undefined
+      };
+  });
 };
 
+// -------------------- HELPERS RSI (client-side paging/sort) --------------------
+
+export type RsiTimeframeKey = '15m' | '1h' | '4h' | '24h' | '7d';
+export type RsiSortKey = 'rsi15m' | 'rsi1h' | 'rsi4h' | 'rsi24h' | 'rsi7d' | 'marketCap' | 'volume24h' | 'price24h' | 'rank';
+
+export interface RsiTablePageResult {
+  items: RsiTableItem[];
+  page: number;
+  totalPages: number;
+  totalItems: number;
+}
+
+const tfKeyFromSort = (sort: string): RsiTimeframeKey | null => {
+  if (sort === 'rsi15m') return '15m';
+  if (sort === 'rsi1h') return '1h';
+  if (sort === 'rsi4h') return '4h';
+  if (sort === 'rsi24h') return '24h';
+  if (sort === 'rsi7d') return '7d';
+  return null;
+};
+
+const safeNum = (v: any, fallback = 0) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const normalizeSearch = (s: string) => (s || '').toLowerCase().trim();
+
+// -------- RSI TABLE CACHE (rsitracker.json) com TTL + inflight --------
+
+const RSI_TABLE_TTL_MS = 60_000;
+let rsiTableCacheTs = 0;
+let rsiTableCache: RsiTableItem[] = [];
+let rsiTableInFlight: Promise<RsiTableItem[]> | null = null;
+
 // TABLE DATA
-export const fetchRsiTable = async (): Promise<RsiTableItem[]> => {
-  const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTable));
-  // Structure: { data: [...] }
-  const items = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
-  
-  return items.map((p: any) => ({
-      id: p.id,
-      symbol: p.symbol,
-      name: p.name,
-      price: Number(p.price || 0),
-      change: Number(p.price24h || 0), // Mapped from price24h
-      marketCap: Number(p.marketCap || 0),
-      volume24h: Number(p.volume24h || 0),
-      rank: p.rank,
-      logo: `https://assets.coincap.io/assets/icons/${(p.symbol||'').toLowerCase()}@2x.png`,
-      rsi: {
-          "15m": p.rsi?.rsi15m,
-          "1h": p.rsi?.rsi1h,
-          "4h": p.rsi?.rsi4h,
-          "24h": p.rsi?.rsi24h,
-          "7d": p.rsi?.rsi7d
-      }
-  }));
+export const fetchRsiTable = async (opts?: { force?: boolean; ttlMs?: number }): Promise<RsiTableItem[]> => {
+  const now = Date.now();
+  const force = Boolean(opts?.force);
+  const ttlMs = typeof opts?.ttlMs === 'number' && isFinite(opts.ttlMs) ? opts!.ttlMs! : RSI_TABLE_TTL_MS;
+
+  if (!force && rsiTableCache.length > 0 && (now - rsiTableCacheTs) < ttlMs) return rsiTableCache;
+  if (!force && rsiTableInFlight) return rsiTableInFlight;
+
+  rsiTableInFlight = (async () => {
+    const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTable));
+    
+    let items: any[] = [];
+    if (Array.isArray(raw)) {
+      items = (raw[0]?.data && Array.isArray(raw[0].data)) ? raw[0].data : raw;
+    } else if (raw && raw.data) {
+      items = Array.isArray(raw.data) ? raw.data : [];
+    }
+
+    if (!items.length) {
+      rsiTableCache = [];
+      rsiTableCacheTs = Date.now();
+      return rsiTableCache;
+    }
+    
+    rsiTableCache = items.map((p: any) => {
+      const symbol = p.symbol || '';
+      const rsiNode = p.rsiOverall || p.rsi || p.rsi_overall || {};
+
+      return {
+        id: String(p.id || symbol || ''),
+        symbol,
+        name: p.name,
+        price: safeNum(p.current_price || p.price, 0),
+        change: safeNum(p.price_change_percentage_24h || p.price24h || p.change24h, 0),
+        marketCap: Number.isFinite(Number(p.market_cap || p.marketCap)) ? Number(p.market_cap || p.marketCap) : undefined,
+        volume24h: Number.isFinite(Number(p.total_volume || p.volume24h)) ? Number(p.total_volume || p.volume24h) : undefined,
+        rank: Number.isFinite(Number(p.market_cap_rank || p.rank)) ? Number(p.market_cap_rank || p.rank) : undefined,
+        logo: p.image || p.logo || `https://assets.coincap.io/assets/icons/${symbol.toLowerCase()}@2x.png`,
+        rsi: {
+            "15m": safeNum(p.rsi15m || rsiNode?.rsi15m || rsiNode?.['15m'], 50),
+            "1h": safeNum(p.rsi1h || rsiNode?.rsi1h || rsiNode?.['1h'], 50),
+            "4h": safeNum(p.rsi4h || rsiNode?.rsi4h || rsiNode?.['4h'], 50),
+            "24h": safeNum(p.rsi24h || rsiNode?.rsi24h || rsiNode?.['24h'], 50),
+            "7d": safeNum(p.rsi7d || rsiNode?.rsi7d || rsiNode?.['7d'], 50)
+        }
+      } as RsiTableItem;
+    });
+
+    rsiTableCacheTs = Date.now();
+    return rsiTableCache;
+  })().finally(() => {
+    rsiTableInFlight = null;
+  });
+
+  return rsiTableInFlight;
+};
+
+/**
+ * Paginação/sort/search em cima do MESMO cache rsitracker.json
+ * Assim você consegue tabela e scatter usando 1 endpoint de cache.
+ */
+export const fetchRsiTablePage = async (args: {
+  page: number;
+  limit: number;
+  sort?: RsiSortKey;
+  ascendingOrder?: boolean;
+  filterText?: string;
+  force?: boolean;
+}): Promise<RsiTablePageResult> => {
+  const page = Math.max(1, Math.floor(args.page || 1));
+  const limit = Math.max(1, Math.min(500, Math.floor(args.limit || 200)));
+  const sort = (args.sort || 'rsi4h') as RsiSortKey;
+  const asc = Boolean(args.ascendingOrder);
+  const q = normalizeSearch(args.filterText || '');
+
+  const all = await fetchRsiTable({ force: args.force });
+
+  // filter
+  let filtered = all;
+  if (q) {
+    filtered = all.filter(i => {
+      const sym = (i.symbol || '').toLowerCase();
+      const nm = (i.name || '').toLowerCase();
+      return sym.includes(q) || nm.includes(q);
+    });
+  }
+
+  // sort
+  const tf = tfKeyFromSort(sort);
+  const sorted = [...filtered].sort((a, b) => {
+    let av = 0;
+    let bv = 0;
+
+    if (tf) {
+      av = safeNum(a.rsi?.[tf], 0);
+      bv = safeNum(b.rsi?.[tf], 0);
+    } else if (sort === 'marketCap') {
+      av = safeNum(a.marketCap, 0);
+      bv = safeNum(b.marketCap, 0);
+    } else if (sort === 'volume24h') {
+      av = safeNum(a.volume24h, 0);
+      bv = safeNum(b.volume24h, 0);
+    } else if (sort === 'price24h') {
+      av = safeNum(a.change, 0);
+      bv = safeNum(b.change, 0);
+    } else if (sort === 'rank') {
+      // rank menor = melhor; em sort asc/desc a gente respeita o toggle
+      av = safeNum(a.rank, 0);
+      bv = safeNum(b.rank, 0);
+    } else {
+      av = safeNum(a.rsi?.['4h'], 0);
+      bv = safeNum(b.rsi?.['4h'], 0);
+    }
+
+    if (av === bv) {
+      // desempate estável: marketCap desc
+      const am = safeNum(a.marketCap, 0);
+      const bm = safeNum(b.marketCap, 0);
+      return bm - am;
+    }
+
+    return asc ? (av - bv) : (bv - av);
+  });
+
+  const totalItems = sorted.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / limit));
+  const safePage = Math.min(page, totalPages);
+
+  const start = (safePage - 1) * limit;
+  const end = start + limit;
+  const items = sorted.slice(start, end);
+
+  return { items, page: safePage, totalPages, totalItems };
 };
 
 export const fetchMacdAverage = async (): Promise<MacdAvgData | null> => {
