@@ -97,7 +97,7 @@ const useIsDark = () => {
 
 // --- COMPONENTS FOR LEFT SIDEBAR ---
 
-// Sidebar Gauge (Tamanho Otimizado)
+// Sidebar Gauge (Tamanho Otimizado e Ajustado)
 const SidebarGauge: React.FC<{ value: number }> = ({ value }) => {
     const rsiVal = clamp(value, 0, 100);
     const rotation = -90 + (rsiVal / 100) * 180;
@@ -106,11 +106,11 @@ const SidebarGauge: React.FC<{ value: number }> = ({ value }) => {
     if (rsiVal >= 70) label = "Sobrecompra";
     if (rsiVal <= 30) label = "Sobrevenda";
 
-    // Geometry Optimization: Center vertically in the box, maximize size
+    // Geometry Optimization: Center Y raised to 80 (was 95)
     return (
         <div className="flex flex-col items-center justify-center h-full py-2">
             <div className="relative w-full max-w-[240px] -mt-2">
-                <svg viewBox="0 0 200 110" className="w-full overflow-visible">
+                <svg viewBox="0 0 200 100" className="w-full overflow-visible">
                     <defs>
                         <linearGradient id="rsiSidebarGrad" x1="0" y1="0" x2="1" y2="0">
                             <stop offset="0%" stopColor="#4ade80" />
@@ -118,15 +118,16 @@ const SidebarGauge: React.FC<{ value: number }> = ({ value }) => {
                             <stop offset="100%" stopColor="#f87171" />
                         </linearGradient>
                     </defs>
-                    {/* Increased Radius to 85, Center Y at 95 */}
-                    <path d="M 15 95 A 85 85 0 0 1 185 95" fill="none" className="stroke-[#eeeeee] dark:stroke-[#333]" strokeWidth="16" strokeLinecap="round"/>
-                    <path d="M 15 95 A 85 85 0 0 1 185 95" fill="none" stroke="url(#rsiSidebarGrad)" strokeWidth="16" strokeDasharray={`${(rsiVal/100)*267} 267`} strokeLinecap="round" />
-                    <g transform={`rotate(${rotation} 100 95)`}>
-                        <path d="M 100 95 L 100 25" className="stroke-gray-800 dark:stroke-white" strokeWidth="4" /><circle cx={100} cy={95} r="5" className="fill-gray-800 dark:fill-white" />
+                    {/* Arc Path Raised */}
+                    <path d="M 15 80 A 85 85 0 0 1 185 80" fill="none" className="stroke-[#eeeeee] dark:stroke-[#333]" strokeWidth="16" strokeLinecap="round"/>
+                    <path d="M 15 80 A 85 85 0 0 1 185 80" fill="none" stroke="url(#rsiSidebarGrad)" strokeWidth="16" strokeDasharray={`${(rsiVal/100)*267} 267`} strokeLinecap="round" />
+                    <g transform={`rotate(${rotation} 100 80)`}>
+                        <path d="M 100 80 L 100 10" className="stroke-gray-800 dark:stroke-white" strokeWidth="4" /><circle cx={100} cy={80} r="5" className="fill-gray-800 dark:fill-white" />
                     </g>
                 </svg>
             </div>
-            <div className="flex flex-col items-center -mt-6 z-10">
+            {/* Reduced margin top from mt-5 to mt-0 */}
+            <div className="flex flex-col items-center mt-0 z-10">
                 <div className="text-4xl font-black text-[#dd9933] leading-none font-mono tracking-tighter">{rsiVal.toFixed(2)}</div>
                 <div className="text-sm font-bold text-gray-900 dark:text-white uppercase mt-1 tracking-widest">{label}</div>
             </div>
@@ -172,7 +173,7 @@ export const RsiGauge: React.FC<{ language?: Language }> = ({ language = 'pt' })
             <SidebarGauge value={avgRsi} />
         </div>
 
-        {/* Box 2: Market State Bar (Updated Visuals) */}
+        {/* Box 2: Market State Bar (Verified) */}
         <div className="shrink-0 bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 p-4 shadow-sm">
             <div className="flex justify-between items-center mb-2">
                 <h3 className="font-bold text-gray-900 dark:text-white text-xs uppercase tracking-wider">Estado do Mercado</h3>
@@ -183,9 +184,9 @@ export const RsiGauge: React.FC<{ language?: Language }> = ({ language = 'pt' })
                 <span className="text-red-500">Overbought {obPct.toFixed(0)}%</span>
             </div>
             <div className="w-full h-3 bg-gray-100 dark:bg-slate-800 rounded-full overflow-hidden flex relative border border-gray-200 dark:border-slate-700">
-                <div className="h-full bg-green-500" style={{ width: `${osPct}%` }} title={`Sobrevenda: ${counts.oversold}`}></div>
-                <div className="h-full bg-gray-300 dark:bg-slate-600" style={{ width: `${neutralPct}%` }} title={`Neutro`}></div>
-                <div className="h-full bg-red-500" style={{ width: `${obPct}%` }} title={`Sobrecompra: ${counts.overbought}`}></div>
+                <div className="h-full bg-green-500 transition-all duration-500" style={{ width: `${osPct}%` }} title={`Sobrevenda: ${counts.oversold}`}></div>
+                <div className="h-full bg-gray-300 dark:bg-slate-600 transition-all duration-500" style={{ width: `${neutralPct}%` }} title={`Neutro`}></div>
+                <div className="h-full bg-red-500 transition-all duration-500" style={{ width: `${obPct}%` }} title={`Sobrecompra: ${counts.overbought}`}></div>
             </div>
             <div className="text-[9px] text-center text-gray-400 mt-1.5 font-mono">Total Monitorado: {total} ativos</div>
         </div>
@@ -258,7 +259,17 @@ export const RsiScatterChart: React.FC = () => {
             const last = r.lastRsi; 
             const isRising = (last !== undefined && cur > last);
             
-            // Standardize Logo URL to avoid errors
+            const symbolShort = r.symbol.substring(0, 3).toUpperCase();
+            
+            // Generate fallback SVG for this point
+            const fallbackSVG = `data:image/svg+xml;base64,${btoa(`
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="12" fill="#334155"/>
+                    <text x="50%" y="50%" dy=".35em" text-anchor="middle" fill="#fff" font-family="sans-serif" font-weight="bold" font-size="8px">${symbolShort}</text>
+                </svg>
+            `)}`;
+
+            // Standardize Logo URL 
             const logoUrl = `https://assets.coincap.io/assets/icons/${r.symbol.toLowerCase()}@2x.png`;
 
             return {
@@ -270,11 +281,8 @@ export const RsiScatterChart: React.FC = () => {
                 price: r.price,
                 change: r.change24h,
                 isRising: isRising,
-                marker: {
-                    symbol: `url(${logoUrl})`,
-                    width: 24, 
-                    height: 24
-                }
+                logoUrl: logoUrl,
+                fallbackSVG: fallbackSVG
             };
         });
 
@@ -298,27 +306,6 @@ export const RsiScatterChart: React.FC = () => {
             zooming: {
                 mouseWheel: { enabled: true },
                 type: 'xy'
-            },
-            events: {
-                // Resize logic remains the same
-                render: function() {
-                    const chart = this;
-                    if (!chart.xAxis[0].dataMin || !chart.xAxis[0].dataMax) return;
-                    const xExtremes = chart.xAxis[0].getExtremes();
-                    const dataRange = chart.xAxis[0].dataMax - chart.xAxis[0].dataMin;
-                    const viewRange = xExtremes.max - xExtremes.min;
-                    let zoomFactor = Math.min(Math.max(dataRange / viewRange, 1), 3);
-                    let newSize = 24 + (zoomFactor - 1) * 8; 
-                    newSize = Math.min(newSize, 48);
-
-                    const currentSize = chart.series[0].options.marker?.width;
-                    if (currentSize && Math.abs(currentSize - newSize) > 2) {
-                        chart.series[0].update({
-                            marker: { width: newSize, height: newSize },
-                            dataLabels: { x: (newSize / 2) + 2, y: 0 } // Re-center arrow next to bubble
-                        }, true, false);
-                    }
-                }
             }
         },
         title: { text: null },
@@ -366,7 +353,7 @@ export const RsiScatterChart: React.FC = () => {
             borderRadius: 8,
             style: { 
                 color: isDark ? '#fff' : '#000',
-                zIndex: 9999 // FIX Z-INDEX
+                zIndex: 9999 
             },
             outside: true, // Ensure it floats above chart elements
             formatter: function (this: any) {
@@ -387,26 +374,41 @@ export const RsiScatterChart: React.FC = () => {
         },
         plotOptions: {
             scatter: {
+                // Invisible marker to capture mouse events
                 marker: {
-                    radius: 5,
-                    states: { hover: { enabled: true, lineColor: 'rgb(100,100,100)' } }
+                    radius: 12, // Hit area
+                    fillColor: 'rgba(0,0,0,0)',
+                    lineWidth: 0,
+                    states: { hover: { enabled: false } }
                 },
                 dataLabels: {
                     enabled: true,
                     useHTML: true,
                     allowOverlap: true,
+                    // Center the custom HTML on the point coordinates
+                    y: -12,
+                    x: -12,
                     formatter: function (this: any) {
                         const p = this.point;
                         const isRising = p.options.isRising;
                         const color = isRising ? '#4ade80' : '#f87171';
                         const symbol = isRising ? '▲' : '▼'; 
-                        // Triangle to the right
-                        return `<span style="color: ${color}; font-size: 10px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.8);">${symbol}</span>`;
+                        const logo = p.options.logoUrl;
+                        const fallback = p.options.fallbackSVG;
+
+                        // HTML Structure: Image with onError fallback + Absolute positioned Triangle
+                        // Added `pointer-events-none` to let clicks pass through if needed, though highcharts handles interaction via the (invisible) marker.
+                        return `
+                        <div style="position: relative; width: 24px; height: 24px;">
+                            <img src="${logo}" 
+                                 style="width: 24px; height: 24px; border-radius: 50%; object-fit: cover; background: #334155;" 
+                                 onerror="this.onerror=null; this.src='${fallback}';" 
+                            />
+                            <div style="position: absolute; right: -4px; bottom: -2px; color: ${color}; font-size: 10px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.8); line-height: 1;">
+                                ${symbol}
+                            </div>
+                        </div>`;
                     },
-                    align: 'left', // Align to the right side of the point
-                    verticalAlign: 'middle',
-                    x: 14, // Offset to the right
-                    y: 2, 
                     style: { textOutline: 'none' }
                 }
             }

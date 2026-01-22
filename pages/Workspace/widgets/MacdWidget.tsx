@@ -72,15 +72,16 @@ const useIsDark = () => {
 
 // --- COMPONENTS FOR LEFT SIDEBAR ---
 
-// Sidebar Gauge (MACD Specific)
+// Sidebar Gauge (MACD Specific - Adjusted Geometry)
 const MacdGauge: React.FC<{ bullishPct: number, avgNMacd: number }> = ({ bullishPct, avgNMacd }) => {
     const rotation = -90 + (clamp(bullishPct, 0, 100) / 100) * 180;
     const label = avgNMacd > 0.5 ? "Strong Buy" : avgNMacd > 0 ? "Buy" : avgNMacd < -0.5 ? "Strong Sell" : "Sell";
     
+    // Geometry Optimization: Center Y raised to 80 (was 95)
     return (
         <div className="flex flex-col items-center justify-center h-full py-2">
             <div className="relative w-full max-w-[240px] -mt-2">
-                <svg viewBox="0 0 200 110" className="w-full overflow-visible">
+                <svg viewBox="0 0 200 100" className="w-full overflow-visible">
                     <defs>
                         <linearGradient id="macdSidebarGrad" x1="0" y1="0" x2="1" y2="0">
                             <stop offset="0%" stopColor="#ef4444" />
@@ -88,14 +89,15 @@ const MacdGauge: React.FC<{ bullishPct: number, avgNMacd: number }> = ({ bullish
                             <stop offset="100%" stopColor="#22c55e" />
                         </linearGradient>
                     </defs>
-                    <path d="M 15 95 A 85 85 0 0 1 185 95" fill="none" className="stroke-[#eeeeee] dark:stroke-[#333]" strokeWidth="16" strokeLinecap="round"/>
-                    <path d="M 15 95 A 85 85 0 0 1 185 95" fill="none" stroke="url(#macdSidebarGrad)" strokeWidth="16" strokeDasharray={`${(bullishPct/100)*267} 267`} strokeLinecap="round" />
-                    <g transform={`rotate(${rotation} 100 95)`}>
-                        <path d="M 100 95 L 100 25" className="stroke-gray-800 dark:stroke-white" strokeWidth="4" /><circle cx={100} cy={95} r="5" className="fill-gray-800 dark:fill-white" />
+                    <path d="M 15 80 A 85 85 0 0 1 185 80" fill="none" className="stroke-[#eeeeee] dark:stroke-[#333]" strokeWidth="16" strokeLinecap="round"/>
+                    <path d="M 15 80 A 85 85 0 0 1 185 80" fill="none" stroke="url(#macdSidebarGrad)" strokeWidth="16" strokeDasharray={`${(bullishPct/100)*267} 267`} strokeLinecap="round" />
+                    <g transform={`rotate(${rotation} 100 80)`}>
+                        <path d="M 100 80 L 100 10" className="stroke-gray-800 dark:stroke-white" strokeWidth="4" /><circle cx={100} cy={80} r="5" className="fill-gray-800 dark:fill-white" />
                     </g>
                 </svg>
             </div>
-            <div className="flex flex-col items-center -mt-6 z-10">
+            {/* Reduced margin top from mt-5 to mt-0 */}
+            <div className="flex flex-col items-center mt-0 z-10">
                 <div className="text-3xl font-black text-[#dd9933] leading-none font-mono tracking-tighter">{avgNMacd.toFixed(2)}</div>
                 <div className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mt-1 tracking-widest">Avg Normalized MACD</div>
                 <div className={`text-xs font-black uppercase mt-1 ${avgNMacd > 0 ? 'text-green-500' : 'text-red-500'}`}>{label}</div>
@@ -214,6 +216,15 @@ export const MacdScatterChart: React.FC = () => {
             const macdData = r.macd?.[timeframe];
             const yVal = macdData?.nmacd || 0; // Use NORMALIZED MACD
             const isBullish = yVal > 0;
+            const symbolShort = r.symbol.substring(0, 3).toUpperCase();
+
+            // Generate fallback SVG for this point
+            const fallbackSVG = `data:image/svg+xml;base64,${btoa(`
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="12" fill="#334155"/>
+                    <text x="50%" y="50%" dy=".35em" text-anchor="middle" fill="#fff" font-family="sans-serif" font-weight="bold" font-size="8px">${symbolShort}</text>
+                </svg>
+            `)}`;
             
             // Standardize Logo URL to avoid errors
             const logoUrl = r.logo || `https://assets.coincap.io/assets/icons/${r.symbol.toLowerCase()}@2x.png`;
@@ -227,11 +238,8 @@ export const MacdScatterChart: React.FC = () => {
                 price: r.price,
                 change: r.change24h,
                 isBullish: isBullish,
-                marker: {
-                    symbol: `url(${logoUrl})`,
-                    width: 24, 
-                    height: 24
-                }
+                logoUrl: logoUrl,
+                fallbackSVG: fallbackSVG
             };
         });
 
@@ -337,24 +345,39 @@ export const MacdScatterChart: React.FC = () => {
         plotOptions: {
             scatter: {
                 marker: {
-                    radius: 5,
-                    states: { hover: { enabled: true, lineColor: 'rgb(100,100,100)' } }
+                    radius: 12, // Hit area
+                    fillColor: 'rgba(0,0,0,0)',
+                    lineWidth: 0,
+                    states: { hover: { enabled: false } }
                 },
                 dataLabels: {
                     enabled: true,
                     useHTML: true,
                     allowOverlap: true,
+                    // Center the custom HTML on the point coordinates
+                    y: -12,
+                    x: -12,
                     formatter: function (this: any) {
                         const p = this.point;
                         const isBullish = p.options.isBullish;
                         const color = isBullish ? '#4ade80' : '#f87171';
                         const symbol = isBullish ? '▲' : '▼'; 
-                        return `<span style="color: ${color}; font-size: 10px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.8);">${symbol}</span>`;
+                        const logo = p.options.logoUrl;
+                        const fallback = p.options.fallbackSVG;
+
+                        // HTML Structure: Image with onError fallback + Absolute positioned Triangle
+                        // Adjusted position: right -4px, bottom -2px as requested
+                        return `
+                        <div style="position: relative; width: 24px; height: 24px;">
+                            <img src="${logo}" 
+                                 style="width: 24px; height: 24px; border-radius: 50%; object-fit: cover; background: #334155;" 
+                                 onerror="this.onerror=null; this.src='${fallback}';" 
+                            />
+                            <div style="position: absolute; right: -4px; bottom: -2px; color: ${color}; font-size: 10px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.8); line-height: 1;">
+                                ${symbol}
+                            </div>
+                        </div>`;
                     },
-                    align: 'left',
-                    verticalAlign: 'middle',
-                    x: 14, 
-                    y: 2, 
                     style: { textOutline: 'none' }
                 }
             }
@@ -421,7 +444,7 @@ export const MacdScatterChart: React.FC = () => {
   );
 };
 
-// 3. Table List (Updated for MACD data)
+// 3. Table List (Updated for MACD data with Fallback Images)
 // Column IDs
 const COLS = {
     asset: { id: 'asset', label: 'Ativo' },
@@ -533,14 +556,29 @@ export const MacdTableList: React.FC = () => {
 
   // Helper to render cell based on col ID
   const renderCell = (r: MacdTrackerPoint, colId: string) => {
-      // Fallback logo
+      // Fallback logo logic
       const logoUrl = r.logo || `https://assets.coincap.io/assets/icons/${r.symbol.toLowerCase()}@2x.png`;
 
       switch (colId) {
           case 'asset': return (
               <td key={colId} className="p-3">
                   <div className="flex items-center gap-3">
-                      <img src={logoUrl} className="w-6 h-6 rounded-full bg-white p-0.5 border border-gray-200 dark:border-white/10" alt="" onError={(e) => (e.target as HTMLImageElement).style.display = 'none'} />
+                      <img 
+                          src={logoUrl} 
+                          className="w-6 h-6 rounded-full bg-white p-0.5 border border-gray-200 dark:border-white/10" 
+                          alt="" 
+                          onError={(e) => {
+                                // Fallback to circle div with first char
+                                const parent = e.currentTarget.parentElement;
+                                if (parent) {
+                                    e.currentTarget.style.display = 'none';
+                                    const fallback = document.createElement('div');
+                                    fallback.className = "w-6 h-6 rounded-full bg-gray-200 dark:bg-slate-700 flex items-center justify-center text-[9px] font-bold text-gray-500 dark:text-gray-300";
+                                    fallback.innerText = r.symbol.charAt(0).toUpperCase();
+                                    parent.prepend(fallback);
+                                }
+                           }} 
+                      />
                       <div className="flex flex-col">
                           <span className="font-bold text-gray-900 dark:text-slate-200 leading-none">{r.name}</span>
                           <span className="text-[10px] font-bold text-gray-500 uppercase">{r.symbol}</span>
@@ -555,12 +593,12 @@ export const MacdTableList: React.FC = () => {
           );
           case 'mcap': return <td key={colId} className="p-3 text-center font-mono text-gray-500 dark:text-slate-400 text-xs">${formatCompactNumber(r.marketCap || 0)}</td>;
           
-          // MACD Columns (Normalized Value)
-          case 'macd15m': return <td key={colId} className={`p-3 text-center font-mono font-bold ${getMacdColor(r.macd["15m"]?.nmacd, true)}`}>{r.macd["15m"]?.nmacd?.toFixed(3)}</td>;
-          case 'macd1h': return <td key={colId} className={`p-3 text-center font-mono font-bold ${getMacdColor(r.macd["1h"]?.nmacd, true)}`}>{r.macd["1h"]?.nmacd?.toFixed(3)}</td>;
-          case 'macd4h': return <td key={colId} className={`p-3 text-center font-mono font-bold bg-gray-50 dark:bg-white/5 ${getMacdColor(r.macd["4h"]?.nmacd, true)}`}>{r.macd["4h"]?.nmacd?.toFixed(3)}</td>;
-          case 'macd24h': return <td key={colId} className={`p-3 text-center font-mono font-bold ${getMacdColor(r.macd["24h"]?.nmacd, true)}`}>{r.macd["24h"]?.nmacd?.toFixed(3)}</td>;
-          case 'macd7d': return <td key={colId} className={`p-3 text-center font-mono font-bold ${getMacdColor(r.macd["7d"]?.nmacd, true)}`}>{r.macd["7d"]?.nmacd?.toFixed(3)}</td>;
+          // MACD Columns (Normalized Value) - SAFE ACCESSORS WITH OPTIONAL CHAINING
+          case 'macd15m': return <td key={colId} className={`p-3 text-center font-mono font-bold ${getMacdColor(r.macd?.["15m"]?.nmacd, true)}`}>{r.macd?.["15m"]?.nmacd?.toFixed(3) || '-'}</td>;
+          case 'macd1h': return <td key={colId} className={`p-3 text-center font-mono font-bold ${getMacdColor(r.macd?.["1h"]?.nmacd, true)}`}>{r.macd?.["1h"]?.nmacd?.toFixed(3) || '-'}</td>;
+          case 'macd4h': return <td key={colId} className={`p-3 text-center font-mono font-bold bg-gray-50 dark:bg-white/5 ${getMacdColor(r.macd?.["4h"]?.nmacd, true)}`}>{r.macd?.["4h"]?.nmacd?.toFixed(3) || '-'}</td>;
+          case 'macd24h': return <td key={colId} className={`p-3 text-center font-mono font-bold ${getMacdColor(r.macd?.["24h"]?.nmacd, true)}`}>{r.macd?.["24h"]?.nmacd?.toFixed(3) || '-'}</td>;
+          case 'macd7d': return <td key={colId} className={`p-3 text-center font-mono font-bold ${getMacdColor(r.macd?.["7d"]?.nmacd, true)}`}>{r.macd?.["7d"]?.nmacd?.toFixed(3) || '-'}</td>;
           default: return <td key={colId}></td>;
       }
   };
@@ -624,6 +662,8 @@ export const MacdTableList: React.FC = () => {
                     <tbody className="divide-y divide-gray-100 dark:divide-slate-800 text-sm">
                         {loading ? (
                             <tr><td colSpan={colOrder.length} className="p-10 text-center"><Loader2 className="animate-spin mx-auto text-[#dd9933]" /></td></tr>
+                        ) : rows.length === 0 ? (
+                            <tr><td colSpan={colOrder.length} className="p-10 text-center text-gray-500">Sem dados</td></tr>
                         ) : rows.map((r) => (
                             <tr key={r.symbol} className="hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
                                 {colOrder.map(colId => renderCell(r, colId))}

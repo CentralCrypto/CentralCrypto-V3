@@ -326,12 +326,14 @@ export const fetchRsiAverage = async (): Promise<RsiAvgData | null> => {
 export const fetchRsiTrackerHist = async (): Promise<RsiTrackerPoint[]> => {
   const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTrackerHist));
 
-  // N8N Output standard: [ { data: ... } ] or direct array
+  // Universal Parser for multiple JSON structures
   let items: any[] = [];
   if (Array.isArray(raw)) {
-    items = (raw[0]?.data && Array.isArray(raw[0].data)) ? raw[0].data : raw;
+      if (raw[0]?.data && Array.isArray(raw[0].data)) items = raw[0].data;
+      else if (raw[0]?.rsi) items = raw; // It's a flat list
+      else items = raw;
   } else if (raw && raw.data) {
-    items = Array.isArray(raw.data) ? raw.data : [];
+      items = Array.isArray(raw.data) ? raw.data : [];
   }
 
   if (!items.length) return [];
@@ -383,11 +385,14 @@ export const fetchRsiTable = async (opts?: { force?: boolean; ttlMs?: number }):
   rsiTableInFlight = (async () => {
     const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTable));
 
+    // Universal Parser
     let items: any[] = [];
     if (Array.isArray(raw)) {
-      items = (raw[0]?.data && Array.isArray(raw[0].data)) ? raw[0].data : raw;
+        if (raw[0]?.data && Array.isArray(raw[0].data)) items = raw[0].data;
+        else if (raw[0]?.rsi || raw[0]?.rsiOverall) items = raw; // Direct list of RSI objects
+        else items = raw;
     } else if (raw && raw.data) {
-      items = Array.isArray(raw.data) ? raw.data : [];
+        items = Array.isArray(raw.data) ? raw.data : [];
     }
 
     if (!items.length) {
@@ -572,12 +577,16 @@ export const fetchMacdTracker = async (opts?: { force?: boolean }): Promise<Macd
       const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.macdTracker));
       let items: any[] = [];
       
-      // Parse nested heatmap structure
+      // Parse nested heatmap structure from MACD JSON
       if (Array.isArray(raw)) {
           if (raw[0]?.data?.heatmap?.items) items = raw[0].data.heatmap.items;
           else if (raw[0]?.data?.items) items = raw[0].data.items;
+          else if (raw[0]?.items) items = raw[0].items; // Direct list
+          else items = raw; // Try direct array
       } else if (raw?.data?.heatmap?.items) {
           items = raw.data.heatmap.items;
+      } else if (raw?.data) {
+          items = Array.isArray(raw.data) ? raw.data : [];
       }
 
       const mapped = items.map((i: any) => {
@@ -661,12 +670,13 @@ export const fetchMacdTablePage = async (args: {
         let av = 0;
         let bv = 0;
 
+        // Safety checks for missing MACD data
         if (sort === 'nmacd') {
-            av = a.macd[tf].nmacd;
-            bv = b.macd[tf].nmacd;
+            av = a.macd?.[tf]?.nmacd ?? 0;
+            bv = b.macd?.[tf]?.nmacd ?? 0;
         } else if (sort === 'macd') {
-            av = a.macd[tf].macd;
-            bv = b.macd[tf].macd;
+            av = a.macd?.[tf]?.macd ?? 0;
+            bv = b.macd?.[tf]?.macd ?? 0;
         } else if (sort === 'change24h') {
             av = a.change24h;
             bv = b.change24h;
