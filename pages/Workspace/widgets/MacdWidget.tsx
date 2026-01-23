@@ -598,7 +598,7 @@ export const MacdTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false }
   };
 
   return (
-      <div className={`bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm flex flex-col ${isPage ? 'h-auto overflow-visible' : 'h-full overflow-hidden min-h-[500px]'}`}>
+      <div className={`bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm flex flex-col ${isPage ? 'h-fit w-full' : 'h-full overflow-hidden min-h-[500px]'}`}>
         <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-3 bg-gray-50 dark:bg-black/20">
             <h3 className="font-bold text-gray-900 dark:text-white text-sm uppercase tracking-wider">Dados Detalhados</h3>
             <div className="flex items-center gap-3 w-full sm:w-auto">

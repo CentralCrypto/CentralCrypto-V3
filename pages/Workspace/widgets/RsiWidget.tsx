@@ -39,6 +39,11 @@ type Timeframe = typeof TIMEFRAMES[number];
 type XAxisMode = 'mcap' | 'volume' | 'change';
 const LIMIT_OPTIONS = [50, 100, 150, 200, 250];
 
+// CORES MATTE / ESCURAS (Não Neon)
+const COLOR_GREEN = '#15803d'; // Green 700
+const COLOR_RED = '#b91c1c';   // Red 700
+const COLOR_NEUTRAL = '#475569'; // Slate 600
+
 const formatCompactNumber = (number: number) => {
   if (!number || number === 0) return "---";
   if (number < 1000) return number.toString();
@@ -53,8 +58,9 @@ const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(ma
 
 const getRsiColor = (val: number, isText = false) => {
   if (val === null || val === undefined || Number.isNaN(val)) return isText ? 'text-gray-400' : '';
-  if (val >= 70) return isText ? 'text-[#f87171] font-bold' : 'bg-[#f87171]/20 text-[#f87171]';
-  if (val <= 30) return isText ? 'text-[#4ade80] font-bold' : 'bg-[#4ade80]/20 text-[#4ade80]';
+  // Usando cores hexadecimais diretas para garantir o tom exato
+  if (val >= 70) return isText ? `text-[${COLOR_RED}] font-bold` : `bg-[${COLOR_RED}]/20 text-[${COLOR_RED}]`;
+  if (val <= 30) return isText ? `text-[${COLOR_GREEN}] font-bold` : `bg-[${COLOR_GREEN}]/20 text-[${COLOR_GREEN}]`;
   return isText ? 'text-gray-700 dark:text-slate-300' : 'text-gray-700 dark:text-slate-300';
 };
 
@@ -107,9 +113,9 @@ const SidebarGauge: React.FC<{ value: number }> = ({ value }) => {
                 <svg viewBox="0 0 200 100" className="w-full overflow-visible">
                     <defs>
                         <linearGradient id="rsiSidebarGrad" x1="0" y1="0" x2="1" y2="0">
-                            <stop offset="0%" stopColor="#4ade80" />
+                            <stop offset="0%" stopColor={COLOR_GREEN} />
                             <stop offset="50%" stopColor="#fbbf24" />
-                            <stop offset="100%" stopColor="#f87171" />
+                            <stop offset="100%" stopColor={COLOR_RED} />
                         </linearGradient>
                     </defs>
                     <path d="M 15 80 A 85 85 0 0 1 185 80" fill="none" className="stroke-[#eeeeee] dark:stroke-[#333]" strokeWidth="16" strokeLinecap="round"/>
@@ -157,9 +163,9 @@ const RsiGridWidget: React.FC<{ language: Language }> = ({ language }) => {
                 <svg viewBox="0 0 200 110" className="w-[85%] max-w-[280px]">
                     <defs>
                         <linearGradient id="rsiGridGrad" x1="0" y1="0" x2="1" y2="0">
-                            <stop offset="0%" stopColor="#4ade80" />
+                            <stop offset="0%" stopColor={COLOR_GREEN} />
                             <stop offset="50%" stopColor="#fbbf24" />
-                            <stop offset="100%" stopColor="#f87171" />
+                            <stop offset="100%" stopColor={COLOR_RED} />
                         </linearGradient>
                     </defs>
                     <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" className="stroke-[#eeeeee] dark:stroke-[#333]" strokeWidth="18" strokeLinecap="round"/>
@@ -223,14 +229,14 @@ export const RsiGauge: React.FC<{ language?: Language }> = ({ language = 'pt' })
                 <h3 className="font-bold text-gray-900 dark:text-white text-xs uppercase tracking-wider">Estado do Mercado</h3>
             </div>
             <div className="flex justify-between text-[9px] font-black uppercase mb-1.5 opacity-80">
-                <span className="text-[#4ade80]">Oversold {osPct.toFixed(0)}%</span>
+                <span style={{ color: COLOR_GREEN }}>Oversold {osPct.toFixed(0)}%</span>
                 <span className="text-gray-400">Neutral {neutralPct.toFixed(0)}%</span>
-                <span className="text-[#f87171]">Overbought {obPct.toFixed(0)}%</span>
+                <span style={{ color: COLOR_RED }}>Overbought {obPct.toFixed(0)}%</span>
             </div>
             <div className="w-full h-3 bg-gray-100 dark:bg-slate-800 rounded-full overflow-hidden flex relative border border-gray-200 dark:border-slate-700">
-                <div className="h-full bg-[#4ade80] transition-all duration-500" style={{ width: `${osPct}%` }} title={`Sobrevenda: ${counts.oversold}`}></div>
+                <div className="h-full transition-all duration-500" style={{ width: `${osPct}%`, backgroundColor: COLOR_GREEN }} title={`Sobrevenda: ${counts.oversold}`}></div>
                 <div className="h-full bg-slate-500 dark:bg-slate-600 transition-all duration-500" style={{ width: `${neutralPct}%` }} title={`Neutro`}></div>
-                <div className="h-full bg-[#f87171] transition-all duration-500" style={{ width: `${obPct}%` }} title={`Sobrecompra: ${counts.overbought}`}></div>
+                <div className="h-full transition-all duration-500" style={{ width: `${obPct}%`, backgroundColor: COLOR_RED }} title={`Sobrecompra: ${counts.overbought}`}></div>
             </div>
             <div className="text-[9px] text-center text-gray-400 mt-1.5 font-mono">Total Monitorado: {total} ativos</div>
         </div>
@@ -394,13 +400,13 @@ export const RsiScatterChart: React.FC = () => {
             gridLineDashStyle: 'Dash',
             labels: { style: { color: textColor, fontSize: '10px' } },
             plotLines: [
-                { value: 80, color: '#f87171', dashStyle: 'ShortDash', width: 2, label: { text: 'Overbought (80)', align: 'right', style: { color: '#f87171', fontSize: '10px' } }, zIndex: 5 },
-                { value: 20, color: '#4ade80', dashStyle: 'ShortDash', width: 2, label: { text: 'Oversold (20)', align: 'right', style: { color: '#4ade80', fontSize: '10px' } }, zIndex: 5 },
+                { value: 80, color: COLOR_RED, dashStyle: 'ShortDash', width: 2, label: { text: 'Overbought (80)', align: 'right', style: { color: COLOR_RED, fontSize: '10px' } }, zIndex: 5 },
+                { value: 20, color: COLOR_GREEN, dashStyle: 'ShortDash', width: 2, label: { text: 'Oversold (20)', align: 'right', style: { color: COLOR_GREEN, fontSize: '10px' } }, zIndex: 5 },
                 { value: 50, color: textColor, width: 1, zIndex: 1 }
             ],
             plotBands: [
-                { from: 80, to: 100, color: 'rgba(248, 113, 113, 0.08)' },
-                { from: 0, to: 20, color: 'rgba(74, 222, 128, 0.08)' } 
+                { from: 80, to: 100, color: 'rgba(185, 28, 28, 0.08)' }, // Red-700 w/ opacity
+                { from: 0, to: 20, color: 'rgba(21, 128, 61, 0.08)' } // Green-700 w/ opacity
             ],
             crosshair: { width: 1, color: crosshairColor, dashStyle: 'Dot', snap: false, zIndex: 5 }
         },
@@ -417,6 +423,7 @@ export const RsiScatterChart: React.FC = () => {
             },
             formatter: function (this: any) {
                 const p = this.point;
+                const changeColor = p.options.change >= 0 ? COLOR_GREEN : COLOR_RED;
                 return `
                     <div style="display:flex; align-items:center; gap:8px; min-width:140px; padding: 4px; z-index:9999;">
                         <div style="font-weight:900; font-size:14px;">${p.name}</div>
@@ -426,7 +433,7 @@ export const RsiScatterChart: React.FC = () => {
                         <span style="opacity:0.7;">RSI (${timeframe}):</span> <b>${p.y.toFixed(2)}</b>
                     </div>
                     <div style="font-size:12px;">
-                        <span style="opacity:0.7;">Var 24h:</span> <b style="color:${p.options.change >= 0 ? '#4ade80' : '#f87171'}">${p.options.change.toFixed(2)}%</b>
+                        <span style="opacity:0.7;">Var 24h:</span> <b style="color:${changeColor}">${p.options.change.toFixed(2)}%</b>
                     </div>
                 `;
             }
@@ -449,7 +456,7 @@ export const RsiScatterChart: React.FC = () => {
                     formatter: function (this: any) {
                         const p = this.point;
                         const isRising = p.options.isRising;
-                        const color = isRising ? '#4ade80' : '#f87171';
+                        const color = isRising ? COLOR_GREEN : COLOR_RED;
                         const symbol = isRising ? '▲' : '▼'; 
                         const logo = p.options.logoUrl;
                         const short = p.options.symbolShort || '';
@@ -502,15 +509,15 @@ export const RsiScatterChart: React.FC = () => {
                         </button>
                     ))}
                 </div>
-                {/* ZONE FILTERS */}
+                {/* ZONE FILTERS - CORES ESCURAS */}
                 <div className="flex bg-gray-100 dark:bg-[#2f3032] rounded p-0.5 ml-2">
-                     <button onClick={() => toggleZone('oversold')} className={`px-2 py-1 text-[10px] font-bold rounded transition-all flex items-center gap-1 ${visibleZones.includes('oversold') ? 'bg-[#4ade80] text-black shadow-sm' : 'text-[#4ade80] opacity-60 border border-[#4ade80]/30'}`}>
+                     <button onClick={() => toggleZone('oversold')} className={`px-2 py-1 text-[10px] font-bold rounded transition-all flex items-center gap-1 ${visibleZones.includes('oversold') ? `bg-[${COLOR_GREEN}] text-white shadow-sm` : `text-[${COLOR_GREEN}] opacity-60 border border-[${COLOR_GREEN}]/30`}`}>
                         <Filter size={10} /> Oversold
                      </button>
-                     <button onClick={() => toggleZone('neutral')} className={`px-2 py-1 text-[10px] font-bold rounded transition-all flex items-center gap-1 ${visibleZones.includes('neutral') ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 opacity-60 border border-slate-500/30'}`}>
+                     <button onClick={() => toggleZone('neutral')} className={`px-2 py-1 text-[10px] font-bold rounded transition-all flex items-center gap-1 ${visibleZones.includes('neutral') ? `bg-[${COLOR_NEUTRAL}] text-white shadow-sm` : `text-[${COLOR_NEUTRAL}] opacity-60 border border-[${COLOR_NEUTRAL}]/30`}`}>
                         <Filter size={10} /> Neutral
                      </button>
-                     <button onClick={() => toggleZone('overbought')} className={`px-2 py-1 text-[10px] font-bold rounded transition-all flex items-center gap-1 ${visibleZones.includes('overbought') ? 'bg-[#f87171] text-white shadow-sm' : 'text-[#f87171] opacity-60 border border-[#f87171]/30'}`}>
+                     <button onClick={() => toggleZone('overbought')} className={`px-2 py-1 text-[10px] font-bold rounded transition-all flex items-center gap-1 ${visibleZones.includes('overbought') ? `bg-[${COLOR_RED}] text-white shadow-sm` : `text-[${COLOR_RED}] opacity-60 border border-[${COLOR_RED}]/30`}`}>
                         <Filter size={10} /> Overbought
                      </button>
                 </div>
@@ -643,7 +650,7 @@ export const RsiTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false })
     };
 
     return (
-        <div className={`bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm flex flex-col ${isPage ? 'h-auto overflow-visible' : 'h-full overflow-hidden min-h-[500px]'}`}>
+        <div className={`bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm flex flex-col ${isPage ? 'h-fit w-full' : 'h-full overflow-hidden min-h-[500px]'}`}>
             <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-3 bg-gray-50 dark:bg-black/20">
                 <h3 className="font-bold text-gray-900 dark:text-white text-sm uppercase tracking-wider">Dados Detalhados</h3>
                 <div className="flex items-center gap-3 w-full sm:w-auto">
