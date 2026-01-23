@@ -111,6 +111,60 @@ const MacdGauge: React.FC<{ bullishPct: number, avgNMacd: number }> = ({ bullish
     );
 };
 
+// === COMPONENTE DEDICADO PARA GRID (MAIN BOARD) ===
+const MacdGridWidget: React.FC<{ language: Language }> = ({ language }) => {
+    const [avgData, setAvgData] = useState<MacdAvgData | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetchMacdAverage().then((avg) => {
+            setAvgData(avg);
+            setLoading(false);
+        });
+    }, []);
+
+    const Watermark = () => <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden opacity-[0.05] z-0"><img src="https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png" alt="watermark" className="w-3/4 h-auto grayscale filter" /></div>;
+
+    if (loading || !avgData) return <div className="flex items-center justify-center h-full text-slate-500"><Loader2 className="animate-spin" /></div>;
+
+    const bullishPct = avgData.bullishPercentage || 50;
+    const avgNMacd = avgData.averageNMacd || 0;
+    const rotation = -90 + (clamp(bullishPct, 0, 100) / 100) * 180;
+    const label = avgNMacd > 0.5 ? "Strong Buy" : avgNMacd > 0 ? "Buy" : avgNMacd < -0.5 ? "Strong Sell" : "Sell";
+
+    return (
+        <div className="h-full flex flex-col justify-center gap-1 p-2 relative text-center bg-white dark:bg-[#2f3032]">
+            <Watermark />
+            <div className="flex items-center justify-center relative mt-3 z-10">
+                <svg viewBox="0 0 200 110" className="w-[85%] max-w-[280px]">
+                    <defs>
+                        <linearGradient id="macdGridGrad" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0%" stopColor="#ef4444" />
+                            <stop offset="50%" stopColor="#fbbf24" />
+                            <stop offset="100%" stopColor="#22c55e" />
+                        </linearGradient>
+                    </defs>
+                    <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" className="stroke-[#eeeeee] dark:stroke-[#333]" strokeWidth="18" strokeLinecap="round"/>
+                    <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" stroke="url(#macdGridGrad)" strokeWidth="18" strokeDasharray={`${(bullishPct/100)*283} 283`} strokeLinecap="round" />
+                    <g transform={`rotate(${rotation} 100 100)`}>
+                        <path d="M 100 100 L 100 20" className="stroke-gray-800 dark:stroke-white" strokeWidth="3" /><circle cx={100} cy={100} r="5" className="fill-gray-800 dark:fill-white" />
+                    </g>
+                </svg>
+            </div>
+            <div className="flex flex-col items-center mt-2 z-10">
+                <div className="text-3xl font-black text-[#dd9933] leading-none font-mono tracking-tighter">{avgNMacd.toFixed(2)}</div>
+                <div className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mt-1 tracking-widest">Avg Normalized MACD</div>
+                <div className={`text-xs font-black uppercase mt-1 ${avgNMacd > 0 ? 'text-green-500' : 'text-red-500'}`}>{label}</div>
+            </div>
+            <div className="flex justify-around w-full mt-2 text-center z-10 border-t border-gray-200 dark:border-slate-700/30 pt-2 pb-2">
+                <div><div className="text-[10px] text-gray-500 dark:text-slate-500 font-bold uppercase">Ontem</div><div className={`text-sm font-bold font-mono ${getMacdColor(avgData.yesterdayNMacd, true)}`}>{avgData.yesterdayNMacd.toFixed(3)}</div></div>
+                <div><div className="text-[10px] text-gray-500 dark:text-slate-500 font-bold uppercase">7 Dias</div><div className="text-sm font-bold font-mono text-gray-800 dark:text-white">{(avgData.days7Ago > 100 ? avgData.days7Ago / 1000 : avgData.days7Ago).toFixed(3)}</div></div>
+                <div><div className="text-[10px] text-gray-500 dark:text-slate-500 font-bold uppercase">30 Dias</div><div className="text-sm font-bold font-mono text-gray-800 dark:text-white">{(avgData.days30Ago > 100 ? avgData.days30Ago / 1000 : avgData.days30Ago).toFixed(3)}</div></div>
+            </div>
+        </div>
+    );
+};
+
 export const MacdSidebar: React.FC<{ language?: Language }> = ({ language = 'pt' }) => {
     // ... existing ...
     const [avgData, setAvgData] = useState<MacdAvgData | null>(null);
@@ -592,7 +646,7 @@ export const MacdFaq: React.FC = () => { return null; };
 const MacdWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ item, language = 'pt' }) => {
     // 1. Grid Mode: Only Sidebar
     if (!item.isMaximized) {
-        return <MacdSidebar language={language} />;
+        return <MacdGridWidget language={language} />;
     }
     
     // 2. Maximized Mode: Scatter Chart + Table

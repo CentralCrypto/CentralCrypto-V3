@@ -127,6 +127,62 @@ const SidebarGauge: React.FC<{ value: number }> = ({ value }) => {
     );
 };
 
+// === COMPONENTE DEDICADO PARA GRID (MAIN BOARD) ===
+const RsiGridWidget: React.FC<{ language: Language }> = ({ language }) => {
+    const [avgData, setAvgData] = useState<RsiAvgData | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetchRsiAverage().then(data => {
+            setAvgData(data);
+            setLoading(false);
+        });
+    }, []);
+
+    const Watermark = () => <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden opacity-[0.05] z-0"><img src="https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png" alt="watermark" className="w-3/4 h-auto grayscale filter" /></div>;
+
+    if (loading) return <div className="flex items-center justify-center h-full text-slate-500"><Loader2 className="animate-spin" /></div>;
+
+    const rsiVal = avgData?.averageRsi || 50;
+    const rotation = -90 + (clamp(rsiVal, 0, 100) / 100) * 180;
+    
+    let label = "Neutro";
+    if (rsiVal >= 70) label = "Sobrecompra";
+    if (rsiVal <= 30) label = "Sobrevenda";
+
+    return (
+        <div className="h-full flex flex-col justify-center gap-1 p-2 relative text-center bg-white dark:bg-[#2f3032]">
+            <Watermark />
+            <div className="flex items-center justify-center relative mt-3 z-10">
+                <svg viewBox="0 0 200 110" className="w-[85%] max-w-[280px]">
+                    <defs>
+                        <linearGradient id="rsiGridGrad" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0%" stopColor="#4ade80" />
+                            <stop offset="50%" stopColor="#fbbf24" />
+                            <stop offset="100%" stopColor="#f87171" />
+                        </linearGradient>
+                    </defs>
+                    <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" className="stroke-[#eeeeee] dark:stroke-[#333]" strokeWidth="18" strokeLinecap="round"/>
+                    <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" stroke="url(#rsiGridGrad)" strokeWidth="18" strokeDasharray={`${(rsiVal/100)*283} 283`} strokeLinecap="round" />
+                    <g transform={`rotate(${rotation} 100 100)`}>
+                        <path d="M 100 100 L 100 20" className="stroke-gray-800 dark:stroke-white" strokeWidth="3" /><circle cx={100} cy={100} r="5" className="fill-gray-800 dark:fill-white" />
+                    </g>
+                </svg>
+            </div>
+            <div className="flex flex-col items-center mt-2 z-10">
+                <div className="text-3xl font-black text-[#dd9933] leading-none font-mono tracking-tighter">{rsiVal.toFixed(2)}</div>
+                <div className="text-sm font-bold text-gray-900 dark:text-white uppercase mt-0.5">{label}</div>
+            </div>
+            <div className="flex justify-around w-full mt-2 text-center z-10 border-t border-gray-200 dark:border-slate-700/30 pt-2 pb-2">
+                <div><div className="text-[10px] text-gray-500 dark:text-slate-500 font-bold uppercase">Ontem</div><div className={`text-sm font-bold font-mono ${getRsiColor(avgData?.yesterday || 50, true)}`}>{avgData?.yesterday?.toFixed(0)}</div></div>
+                <div><div className="text-[10px] text-gray-500 dark:text-slate-500 font-bold uppercase">7 Dias</div><div className={`text-sm font-bold font-mono ${getRsiColor(avgData?.days7Ago || 50, true)}`}>{avgData?.days7Ago?.toFixed(0)}</div></div>
+                <div><div className="text-[10px] text-gray-500 dark:text-slate-500 font-bold uppercase">30 Dias</div><div className={`text-sm font-bold font-mono ${getRsiColor(avgData?.days30Ago || 50, true)}`}>{avgData?.days30Ago?.toFixed(0)}</div></div>
+            </div>
+        </div>
+    );
+};
+
+// === COMPONENTE SIDEBAR PARA PAGINA DE DETALHES (3 Cards) ===
 export const RsiGauge: React.FC<{ language?: Language }> = ({ language = 'pt' }) => {
   const [avgData, setAvgData] = useState<RsiAvgData | null>(null);
   const [tableData, setTableData] = useState<RsiTableItem[]>([]);
@@ -602,12 +658,12 @@ export const RsiTableList: React.FC = () => {
     );
 };
 
-export const RsiFaq: React.FC = () => { /* ... existing ... */ return null; }; // Keeping minimal for brevity
+export const RsiFaq: React.FC = () => { return null; };
 
 const RsiWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ item, language = 'pt' }) => {
-    // 1. Grid Mode: Only Sidebar/Gauge
+    // 1. Grid Mode: Simplified Widget
     if (!item.isMaximized) {
-        return <RsiGauge language={language} />;
+        return <RsiGridWidget language={language} />;
     }
     
     // 2. Maximized Mode: Scatter Chart + Table
