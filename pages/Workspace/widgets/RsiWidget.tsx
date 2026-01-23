@@ -1,6 +1,6 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, Info, Search, ChevronLeft, ChevronRight, BarChart2, DollarSign, Percent, ZoomOut, MousePointer2, GripVertical, ChevronsUpDown } from 'lucide-react';
+import { Loader2, Info, Search, ChevronLeft, ChevronRight, BarChart2, DollarSign, Percent, ZoomOut, MousePointer2, GripVertical, ChevronsUpDown, Filter } from 'lucide-react';
 import Highcharts from 'highcharts';
 import addMouseWheelZoom from 'highcharts/modules/mouse-wheel-zoom';
 import { Language, DashboardItem } from '../../../types';
@@ -266,6 +266,9 @@ export const RsiScatterChart: React.FC = () => {
   const [timeframe, setTimeframe] = useState<Timeframe>('4h');
   const [xMode, setXMode] = useState<XAxisMode>('mcap');
   const [limit, setLimit] = useState(50); 
+  
+  // Filters
+  const [visibleZones, setVisibleZones] = useState<string[]>(['oversold', 'neutral', 'overbought']);
 
   useEffect(() => {
       fetchRsiTrackerHist().then(data => {
@@ -277,6 +280,12 @@ export const RsiScatterChart: React.FC = () => {
       if (chartInstance.current) {
           chartInstance.current.zoomOut();
       }
+  };
+
+  const toggleZone = (zone: string) => {
+      setVisibleZones(prev => 
+          prev.includes(zone) ? prev.filter(z => z !== zone) : [...prev, zone]
+      );
   };
 
   useEffect(() => {
@@ -297,6 +306,16 @@ export const RsiScatterChart: React.FC = () => {
             else xVal = r.change24h || 0;
 
             const cur = r.rsi?.[timeframe];
+            
+            // Zone Filtering Logic
+            const isOversold = cur <= 30;
+            const isOverbought = cur >= 70;
+            const isNeutral = !isOversold && !isOverbought;
+
+            if (isOversold && !visibleZones.includes('oversold')) return null;
+            if (isOverbought && !visibleZones.includes('overbought')) return null;
+            if (isNeutral && !visibleZones.includes('neutral')) return null;
+
             const last = r.lastRsi; 
             const isRising = (last !== undefined && cur > last);
             const symbolShort = (r.symbol || 'UNK').substring(0, 3).toUpperCase();
@@ -315,12 +334,13 @@ export const RsiScatterChart: React.FC = () => {
                 logoUrl: logoUrl,
                 symbolShort
             };
-        });
+        })
+        .filter(p => p !== null); // Remove filtered out points
 
-    seriesData.sort((a, b) => a.name.localeCompare(b.name));
+    seriesData.sort((a, b) => a!.name.localeCompare(b!.name));
 
     if (chartInstance.current) {
-        chartInstance.current.series[0].setData(seriesData, true, { duration: 1000, easing: 'easeOutQuart' }, true);
+        chartInstance.current.series[0].setData(seriesData as any, true, { duration: 1000, easing: 'easeOutQuart' }, true);
         const xAxisType = xMode === 'change' ? 'linear' : 'logarithmic';
         const xTitle = xMode === 'mcap' ? 'Market Cap (Log)' : xMode === 'volume' ? 'Volume 24h (Log)' : 'Variação 24h (%)';
         
@@ -449,9 +469,9 @@ export const RsiScatterChart: React.FC = () => {
                 }
             }
         },
-        series: [{ name: 'Coins', data: seriesData, color: 'rgba(156, 163, 175, 0.5)' }]
+        series: [{ name: 'Coins', data: seriesData as any, color: 'rgba(156, 163, 175, 0.5)' }]
     } as any);
-  }, [points, timeframe, xMode, isDark, limit]);
+  }, [points, timeframe, xMode, isDark, limit, visibleZones]);
 
   return (
     <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm p-4 h-full flex flex-col relative overflow-hidden">
@@ -481,6 +501,18 @@ export const RsiScatterChart: React.FC = () => {
                             {t}
                         </button>
                     ))}
+                </div>
+                {/* ZONE FILTERS */}
+                <div className="flex bg-gray-100 dark:bg-[#2f3032] rounded p-0.5 ml-2">
+                     <button onClick={() => toggleZone('oversold')} className={`px-2 py-1 text-[10px] font-bold rounded transition-all flex items-center gap-1 ${visibleZones.includes('oversold') ? 'bg-green-500 text-white shadow-sm' : 'text-gray-500 opacity-50'}`}>
+                        <Filter size={10} /> Oversold
+                     </button>
+                     <button onClick={() => toggleZone('neutral')} className={`px-2 py-1 text-[10px] font-bold rounded transition-all flex items-center gap-1 ${visibleZones.includes('neutral') ? 'bg-gray-400 text-white shadow-sm' : 'text-gray-500 opacity-50'}`}>
+                        <Filter size={10} /> Neutral
+                     </button>
+                     <button onClick={() => toggleZone('overbought')} className={`px-2 py-1 text-[10px] font-bold rounded transition-all flex items-center gap-1 ${visibleZones.includes('overbought') ? 'bg-red-500 text-white shadow-sm' : 'text-gray-500 opacity-50'}`}>
+                        <Filter size={10} /> Overbought
+                     </button>
                 </div>
             </div>
             <div className="flex items-center gap-2">
@@ -611,7 +643,7 @@ export const RsiTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false })
     };
 
     return (
-        <div className={`bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm flex flex-col ${isPage ? 'h-auto' : 'h-full overflow-hidden min-h-[500px]'}`}>
+        <div className={`bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm flex flex-col ${isPage ? 'h-auto overflow-visible' : 'h-full overflow-hidden min-h-[500px]'}`}>
             <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-3 bg-gray-50 dark:bg-black/20">
                 <h3 className="font-bold text-gray-900 dark:text-white text-sm uppercase tracking-wider">Dados Detalhados</h3>
                 <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -628,7 +660,7 @@ export const RsiTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false })
                     </div>
                 </div>
             </div>
-            <div className={isPage ? 'w-full' : 'flex-1 overflow-auto custom-scrollbar'}>
+            <div className={isPage ? 'w-full overflow-visible' : 'flex-1 overflow-auto custom-scrollbar'}>
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                     <table className="w-full text-left border-collapse">
                         <thead className="sticky top-0 z-10">
