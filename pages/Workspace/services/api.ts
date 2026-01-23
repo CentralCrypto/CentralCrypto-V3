@@ -6,12 +6,12 @@ import { getCacheckoUrl, ENDPOINTS } from '../../../services/endpoints';
 const STABLECOINS = ['USDT', 'USDC', 'DAI', 'FDUSD', 'TUSD', 'USDD', 'PYUSD', 'USDE', 'GUSD', 'USDP', 'BUSD'];
 
 /**
- * Helper: Tenta extrair um array de dados de qualquer estrutura JSON (n8n wrapper, direct array, object data key)
+ * Helper: Tenta extrair um array de dados de qualquer estrutura JSON
  */
 function extractDataArray(raw: any): any[] {
     if (!raw) return [];
     if (Array.isArray(raw)) {
-        // Se for um array de objetos onde o primeiro item tem uma chave 'data' que é array, usa esse interno
+        // Se for um array de objetos onde o primeiro item tem uma chave 'data' que é array
         if (raw.length > 0 && raw[0]?.data && Array.isArray(raw[0].data)) {
             return raw[0].data;
         }
@@ -39,7 +39,7 @@ const safeNum = (v: any, fallback = 0) => {
 const normalizeSearch = (s: string) => (s || '').toLowerCase().trim();
 
 /**
- * Busca dados usando caminhos relativos e o utilitário robusto httpGetJson.
+ * Busca dados usando caminhos relativos
  */
 export const fetchWithFallback = async (url: string): Promise<any | null> => {
   try {
@@ -55,9 +55,7 @@ export const fetchWithFallback = async (url: string): Promise<any | null> => {
 
 export const isStablecoin = (symbol: string) => STABLECOINS.includes(symbol.toUpperCase());
 
-/**
- * Cache + dedupe em memória (por aba).
- */
+// ... (Restante do código de cache de moedas, categorias, news, etc mantido igual)
 const TOP_COINS_TTL_MS = 60_000;
 let topCoinsCacheTs = 0;
 let topCoinsCache: ApiCoin[] = [];
@@ -84,25 +82,18 @@ export const fetchTopCoins = async (opts?: { force?: boolean; ttlMs?: number }):
   return topCoinsInFlight;
 };
 
-// --------- CATEGORIES ---------
 export interface HeatmapCategory { id: string; name: string; description?: string; type?: string; coin_counter?: number; ico_counter?: number; coins?: any[]; }
-
 export const fetchHeatmapCategories = async (): Promise<HeatmapCategory[]> => {
     const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.heatmapCategories));
     const items = extractDataArray(data);
     return items as HeatmapCategory[];
 };
 
-// --------- INTERFACES ---------
-
 export interface NewsItem { title: string; link: string; pubDate: string; source: string; description: string; thumbnail: string; }
 export interface EtfFlowData { btcValue: number; ethValue: number; netFlow: number; timestamp: number; chartDataBTC: any[]; chartDataETH: any[]; history: { lastWeek: number; lastMonth: number; last90d: number; }; solValue: number; xrpValue: number; }
 export interface LsrData { lsr: number | null; longs: number | null; shorts: number | null; }
 
-export interface MacdAvgData { 
-    averageMacd: number; averageNMacd: number; bullishPercentage: number; bearishPercentage: number; 
-    yesterday: number; days7Ago: number; days30Ago: number; yesterdayNMacd: number; 
-}
+export interface MacdAvgData { averageMacd: number; averageNMacd: number; bullishPercentage: number; bearishPercentage: number; yesterday: number; days7Ago: number; days30Ago: number; yesterdayNMacd: number; }
 
 export interface MacdTrackerPoint {
   symbol: string; name: string; price: number; change24h: number; marketCap: number; logo?: string;
@@ -147,17 +138,11 @@ export interface MacdTablePageResult { items: MacdTrackerPoint[]; page: number; 
 export const fetchRsiAverage = async (): Promise<RsiAvgData | null> => {
   const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiAvg));
   if (!raw) return null;
-  
   let root = Array.isArray(raw) ? raw[0] : raw;
-  
-  // Try to find the inner data if wrapped by n8n
   if (root?.data?.overall) root = root.data;
   else if (root?.overall) root = root; 
-
   const overall = root?.overall;
-  
   if (!overall) return null;
-
   return {
     averageRsi: safeNum(overall.averageRsi, 50),
     yesterday: safeNum(overall.yesterday, 50),
@@ -170,9 +155,7 @@ export const fetchRsiAverage = async (): Promise<RsiAvgData | null> => {
 export const fetchRsiTrackerHist = async (): Promise<RsiTrackerPoint[]> => {
   const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTrackerHist));
   const items = extractDataArray(raw);
-
   if (!items.length) return [];
-
   return items.map((p: any) => {
     const rsiNode = p.rsiOverall || p.rsi || {};
     const symbol = String(p.symbol || p.s || '').toUpperCase();
@@ -206,12 +189,13 @@ export const fetchRsiTable = async (opts?: { force?: boolean }): Promise<RsiTabl
 
   return items.map((p: any) => {
     const symbol = String(p.symbol || '').toUpperCase();
-    const rsiNode = p.rsiOverall || p.rsi || p.rsi_overall || {};
+    // Tenta pegar RSI de vários lugares possíveis no JSON
+    const rsiNode = p.rsiOverall || p.rsi || p.rsi_overall || p; 
 
     return {
       id: String(p.id || symbol || ''),
       symbol,
-      name: p.name,
+      name: p.name || symbol,
       price: safeNum(p.current_price || p.price, 0),
       change: safeNum(p.price_change_percentage_24h || p.price24h || p.change24h, 0),
       marketCap: safeNum(p.market_cap || p.marketCap, 0),
@@ -219,11 +203,11 @@ export const fetchRsiTable = async (opts?: { force?: boolean }): Promise<RsiTabl
       rank: safeNum(p.market_cap_rank || p.rank, 9999),
       logo: p.image || p.logo || `https://assets.coincap.io/assets/icons/${symbol.toLowerCase()}@2x.png`,
       rsi: {
-        "15m": safeNum(p.rsi15m || rsiNode?.rsi15m || rsiNode?.['15m'], 50),
-        "1h": safeNum(p.rsi1h || rsiNode?.rsi1h || rsiNode?.['1h'], 50),
-        "4h": safeNum(p.rsi4h || rsiNode?.rsi4h || rsiNode?.['4h'], 50),
-        "24h": safeNum(p.rsi24h || rsiNode?.rsi24h || rsiNode?.['24h'], 50),
-        "7d": safeNum(p.rsi7d || rsiNode?.rsi7d || rsiNode?.['7d'], 50)
+        "15m": safeNum(rsiNode.rsi15m ?? rsiNode['15m'], 50),
+        "1h": safeNum(rsiNode.rsi1h ?? rsiNode['1h'], 50),
+        "4h": safeNum(rsiNode.rsi4h ?? rsiNode['4h'], 50),
+        "24h": safeNum(rsiNode.rsi24h ?? rsiNode['24h'], 50),
+        "7d": safeNum(rsiNode.rsi7d ?? rsiNode['7d'], 50)
       }
     };
   });
@@ -246,7 +230,7 @@ export const fetchRsiTablePage = async (args: { page: number; limit: number; sor
     else if (sort === 'volume24h') { av = a.volume24h || 0; bv = b.volume24h || 0; }
     else if (sort === 'price24h') { av = a.change || 0; bv = b.change || 0; }
     else if (sort === 'rank') { av = a.rank || 0; bv = b.rank || 0; }
-    else { av = a.rsi['4h']; bv = b.rsi['4h']; } // default
+    else { av = a.rsi['4h']; bv = b.rsi['4h']; } 
     return asc ? (av - bv) : (bv - av);
   });
 
@@ -281,13 +265,12 @@ export const fetchMacdAverage = async (): Promise<MacdAvgData | null> => {
 
 export const fetchMacdTracker = async (opts?: { force?: boolean }): Promise<MacdTrackerPoint[]> => {
   const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.macdTracker));
-  const items = extractDataArray(raw); // Uses robust extractor
+  const items = extractDataArray(raw); 
 
   return items.map((i: any) => {
       const symbol = String(i.symbol || '').toUpperCase();
       const macdNode = i.macd || {};
       
-      // Ensure all numbers are safe to prevent sort crashes
       return {
           symbol,
           name: i.name || symbol,
@@ -321,7 +304,7 @@ export const fetchMacdTablePage = async (args: { page: number; limit: number; so
         if (sort === 'nmacd') { av = a.macd?.[tf]?.nmacd ?? 0; bv = b.macd?.[tf]?.nmacd ?? 0; }
         else if (sort === 'macd') { av = a.macd?.[tf]?.macd ?? 0; bv = b.macd?.[tf]?.macd ?? 0; }
         else if (sort === 'change24h') { av = a.change24h; bv = b.change24h; }
-        else { av = a.marketCap; bv = b.marketCap; } // default marketCap
+        else { av = a.marketCap; bv = b.marketCap; } 
         return asc ? (av - bv) : (bv - av);
     });
 
@@ -334,8 +317,7 @@ export const fetchMacdTablePage = async (args: { page: number; limit: number; so
     return { items: sorted.slice(start, start + limit), page, totalPages, totalItems };
 };
 
-// --------- OTHER HELPERS ---------
-
+// ... Rest of the file (Other helpers) remains largely unchanged
 export const fetchCryptoNews = async (symbol: string, coinName: string): Promise<NewsItem[]> => {
   const url = `${ENDPOINTS.special.news}?s=${encodeURIComponent(symbol)}&n=${encodeURIComponent(coinName)}`;
   const data = await fetchWithFallback(url);
