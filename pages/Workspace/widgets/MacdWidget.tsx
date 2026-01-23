@@ -223,8 +223,8 @@ export const MacdScatterChart: React.FC = () => {
             
             return {
                 id: r.symbol, 
-                x: xVal,
-                y: yVal,
+                x: xVal, // X = Market Cap / Change
+                y: yVal, // Y = MACD
                 z: r.marketCap,
                 name: r.symbol,
                 fullName: r.name,
