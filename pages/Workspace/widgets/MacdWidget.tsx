@@ -221,14 +221,6 @@ export const MacdScatterChart: React.FC = () => {
 
             const logoUrl = r.logo || `https://assets.coincap.io/assets/icons/${r.symbol.toLowerCase()}@2x.png`;
             
-            const svgContent = `
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-                    <circle cx="12" cy="12" r="12" fill="#334155"/>
-                    <text x="50%" y="50%" dy=".35em" text-anchor="middle" fill="#fff" font-family="sans-serif" font-weight="bold" font-size="8px">${symbolShort}</text>
-                </svg>
-            `;
-            const fallbackSVG = `data:image/svg+xml;base64,${safeEncodeBase64(svgContent)}`;
-            
             return {
                 id: r.symbol, 
                 x: xVal,
@@ -240,7 +232,7 @@ export const MacdScatterChart: React.FC = () => {
                 change: r.change24h,
                 isBullish: isBullish,
                 logoUrl: logoUrl,
-                fallbackSVG: fallbackSVG
+                symbolShort
             };
         });
     
@@ -272,13 +264,8 @@ export const MacdScatterChart: React.FC = () => {
             backgroundColor: bgColor,
             style: { fontFamily: 'Inter, sans-serif' },
             height: null, 
-            zooming: {
-                mouseWheel: { enabled: true },
-                type: 'xy'
-            },
-            animation: {
-                duration: 1000
-            }
+            zooming: { mouseWheel: { enabled: true }, type: 'xy' },
+            animation: { duration: 1000 }
         },
         title: { text: null },
         credits: { enabled: false },
@@ -315,14 +302,13 @@ export const MacdScatterChart: React.FC = () => {
             backgroundColor: isDark ? 'rgba(26, 28, 30, 0.98)' : 'rgba(255, 255, 255, 0.98)',
             borderColor: gridColor,
             borderRadius: 8,
-            style: { 
-                color: isDark ? '#fff' : '#000',
-                zIndex: 9999 
-            },
+            style: { color: isDark ? '#fff' : '#000', zIndex: 9999 },
             outside: true, 
-            // Fixed position ABOVE the point to avoid covering logo
+            // Strict Snap
+            snap: 5,
+            // Position above the logo
             positioner: function (labelWidth: number, labelHeight: number, point: any) {
-                return { x: point.plotX - labelWidth / 2, y: point.plotY - labelHeight - 20 };
+                return { x: point.plotX - labelWidth / 2, y: point.plotY - labelHeight - 35 };
             },
             formatter: function (this: any) {
                 const p = this.point;
@@ -342,8 +328,9 @@ export const MacdScatterChart: React.FC = () => {
         },
         plotOptions: {
             scatter: {
+                stickyTracking: false,
                 marker: {
-                    radius: 12, // Hit area
+                    radius: 12, 
                     fillColor: 'rgba(0,0,0,0)',
                     lineWidth: 0,
                     states: { hover: { enabled: false } }
@@ -360,13 +347,15 @@ export const MacdScatterChart: React.FC = () => {
                         const color = isBullish ? '#4ade80' : '#f87171';
                         const symbol = isBullish ? '▲' : '▼'; 
                         const logo = p.options.logoUrl;
-                        const fallback = p.options.fallbackSVG;
+                        const short = p.options.symbolShort || '';
 
+                        // CSS Fallback Layering
                         return `
                         <div style="position: relative; width: 24px; height: 24px;">
+                            <div style="position: absolute; inset: 0; background: #334155; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: bold; color: #fff;">${short.charAt(0)}</div>
                             <img src="${logo}" 
-                                 style="width: 24px; height: 24px; border-radius: 50%; object-fit: cover; background: #334155;" 
-                                 onerror="this.onerror=null; this.src='${fallback}';" 
+                                 style="position: relative; width: 24px; height: 24px; border-radius: 50%; object-fit: cover;" 
+                                 onerror="this.style.display='none'" 
                             />
                             <div style="position: absolute; right: -4px; bottom: -2px; color: ${color}; font-size: 10px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.8); line-height: 1;">
                                 ${symbol}
@@ -377,37 +366,29 @@ export const MacdScatterChart: React.FC = () => {
                 }
             }
         },
-        series: [{
-            name: 'Coins',
-            data: seriesData,
-            color: 'rgba(156, 163, 175, 0.5)'
-        }]
+        series: [{ name: 'Coins', data: seriesData, color: 'rgba(156, 163, 175, 0.5)' }]
     } as any);
 
   }, [points, timeframe, xMode, isDark, limit]);
 
   return (
     <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm p-4 h-full flex flex-col relative overflow-hidden">
-        {/* Watermark */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.05] z-0">
             <img src="https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png" alt="watermark" className="w-1/2 h-auto grayscale filter" />
         </div>
-
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3 z-10 relative">
             <div className="flex items-center gap-2">
                 <h3 className="font-bold text-gray-900 dark:text-white uppercase text-sm tracking-wider">MACD Scatter Map</h3>
-                
-                {/* Limit Selector */}
-                <div className="flex bg-gray-100 dark:bg-[#2f3032] rounded p-0.5 ml-2">
+                <div className="flex bg-gray-100 dark:bg-[#2f3032] rounded p-0.5 ml-2 items-center">
+                    <span className="text-[9px] font-bold text-gray-500 uppercase px-2">Nº Moedas:</span>
                     <select 
                         value={limit} 
                         onChange={(e) => setLimit(parseInt(e.target.value))}
-                        className="bg-transparent text-[10px] font-bold outline-none text-gray-500 hover:text-gray-900 dark:hover:text-white cursor-pointer px-2"
+                        className="bg-transparent text-[10px] font-bold outline-none text-gray-900 dark:text-white cursor-pointer px-1"
                     >
-                        {LIMIT_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        {LIMIT_OPTIONS.map(opt => <option key={opt} value={opt} className="bg-white dark:bg-[#1a1c1e] text-gray-900 dark:text-white">{opt}</option>)}
                     </select>
                 </div>
-                
                 <div className="flex bg-gray-100 dark:bg-[#2f3032] rounded p-0.5 ml-2">
                     {TIMEFRAMES.map(t => (
                         <button 
@@ -451,9 +432,7 @@ export const MacdScatterChart: React.FC = () => {
   );
 };
 
-// ... Table logic remains unchanged
-// 3. Table List (Updated for MACD data with Fallback Images)
-// Column IDs
+// ... Table logic ...
 const COLS = {
     asset: { id: 'asset', label: 'Ativo' },
     price: { id: 'price', label: 'Preço' },
@@ -465,21 +444,24 @@ const COLS = {
     macd7d: { id: 'macd7d', label: '7d' },
 };
 
+const sortKeyMap: Record<string, string> = {
+    asset: 'mcap',
+    price: 'price',
+    mcap: 'mcap',
+    macd15m: 'macd15m',
+    macd1h: 'macd1h',
+    macd4h: 'macd4h',
+    macd24h: 'macd24h',
+    macd7d: 'macd7d'
+};
+
 const SortableTh = ({ colId, label, sortKey, activeKey, onSort }: any) => {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: colId });
-    const style = {
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.6 : 1,
-        zIndex: isDragging ? 100 : 'auto',
-    };
-
+    const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1, zIndex: isDragging ? 100 : 'auto' };
     return (
         <th ref={setNodeRef} style={style} className={`p-3 text-center bg-gray-100 dark:bg-[#2f3032] cursor-pointer group select-none ${colId === 'asset' ? 'text-left' : 'text-center'}`} onClick={() => onSort(sortKey)}>
             <div className={`flex items-center gap-1 ${colId === 'asset' ? 'justify-start' : 'justify-center'}`}>
-                <span className={`p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 cursor-grab ${isDragging ? 'cursor-grabbing' : ''}`} {...attributes} {...listeners} onClick={e => e.stopPropagation()}>
-                    <GripVertical size={12} className="text-gray-400" />
-                </span>
+                <span className={`p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 cursor-grab ${isDragging ? 'cursor-grabbing' : ''}`} {...attributes} {...listeners} onClick={e => e.stopPropagation()}><GripVertical size={12} className="text-gray-400" /></span>
                 <span className="text-[10px] uppercase font-black text-gray-500 dark:text-slate-400">{label}</span>
                 <ChevronsUpDown size={12} className={`text-gray-400 transition-colors ${activeKey === sortKey ? 'text-[#dd9933]' : 'opacity-0 group-hover:opacity-100'}`} />
             </div>
@@ -503,14 +485,7 @@ export const MacdTableList: React.FC = () => {
   useEffect(() => {
     let mounted = true;
     setLoading(true);
-    fetchMacdTablePage({
-      page,
-      limit: pageSize,
-      sort: sortKey as any,
-      timeframe: sortTf,
-      ascendingOrder: sortAsc,
-      filterText: search
-    }).then(res => {
+    fetchMacdTablePage({ page, limit: pageSize, sort: sortKey as any, timeframe: sortTf, ascendingOrder: sortAsc, filterText: search }).then(res => {
         if(!mounted) return;
         setRows(res.items);
         setTotalPages(res.totalPages);
@@ -519,22 +494,14 @@ export const MacdTableList: React.FC = () => {
     return () => { mounted = false; };
   }, [page, pageSize, search, sortKey, sortTf, sortAsc]);
 
+  // ... rest of table sort/drag handlers ...
   const handleSort = (key: string) => {
       let tf: Timeframe = '4h';
-      if (key.includes('15m')) tf = '15m';
-      else if (key.includes('1h')) tf = '1h';
-      else if (key.includes('4h')) tf = '4h';
-      else if (key.includes('24h')) tf = '24h';
-      else if (key.includes('7d')) tf = '7d';
-
+      if (key.includes('15m')) tf = '15m'; else if (key.includes('1h')) tf = '1h'; else if (key.includes('4h')) tf = '4h'; else if (key.includes('24h')) tf = '24h'; else if (key.includes('7d')) tf = '7d';
       let sk = 'nmacd';
-      if (key === 'mcap') sk = 'marketCap';
-      else if (key === 'price') sk = 'change24h';
-
-      if (sortKey === sk && sortTf === tf) { setSortAsc(!sortAsc); } 
-      else { setSortKey(sk); setSortTf(tf); setSortAsc(false); }
+      if (key === 'mcap') sk = 'marketCap'; else if (key === 'price') sk = 'change24h';
+      if (sortKey === sk && sortTf === tf) { setSortAsc(!sortAsc); } else { setSortKey(sk); setSortTf(tf); setSortAsc(false); }
   };
-
   const handleDragEnd = (event: DragEndEvent) => {
       const { active, over } = event;
       if (over && active.id !== over.id) {
@@ -545,7 +512,6 @@ export const MacdTableList: React.FC = () => {
           });
       }
   };
-
   const renderCell = (r: MacdTrackerPoint, colId: string) => {
       const logoUrl = r.logo || `https://assets.coincap.io/assets/icons/${r.symbol.toLowerCase()}@2x.png`;
       switch (colId) {
@@ -576,44 +542,25 @@ export const MacdTableList: React.FC = () => {
           default: return <td key={colId}></td>;
       }
   };
-  // ... rest of table component
-  // Map sort keys 
-  const sortKeyMap: Record<string, string> = {
-      asset: 'mcap', price: 'price', mcap: 'mcap',
-      macd15m: 'macd15m', macd1h: 'macd1h', macd4h: 'macd4h', macd24h: 'macd24h', macd7d: 'macd7d'
-  };
 
   return (
       <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm flex flex-col overflow-hidden h-full min-h-[500px]">
         <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-3 bg-gray-50 dark:bg-black/20">
             <h3 className="font-bold text-gray-900 dark:text-white text-sm uppercase tracking-wider">Dados Detalhados</h3>
-            
             <div className="flex items-center gap-3 w-full sm:w-auto">
                 <div className="flex items-center gap-2 bg-white dark:bg-[#2f3032] border border-gray-200 dark:border-slate-700 rounded px-2 py-1.5">
                     <span className="text-[10px] font-bold text-gray-500 uppercase">Linhas:</span>
-                    <select 
-                        value={pageSize}
-                        onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
-                        className="bg-transparent text-xs font-bold outline-none text-gray-900 dark:text-white"
-                    >
+                    <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }} className="bg-transparent text-xs font-bold outline-none text-gray-900 dark:text-white">
                         <option value={50} className="bg-white dark:bg-[#2f3032]">50</option>
                         <option value={100} className="bg-white dark:bg-[#2f3032]">100</option>
                     </select>
                 </div>
-
                 <div className="relative flex-1 sm:w-64">
                     <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
-                    <input 
-                        type="text" 
-                        value={search}
-                        onChange={e => { setSearch(e.target.value); setPage(1); }}
-                        placeholder="Buscar ativo..." 
-                        className="w-full bg-white dark:bg-[#2f3032] border border-gray-200 dark:border-slate-700 text-gray-900 dark:text-slate-200 text-xs py-2 pl-9 pr-3 rounded focus:border-[#dd9933] outline-none transition-colors"
-                    />
+                    <input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Buscar ativo..." className="w-full bg-white dark:bg-[#2f3032] border border-gray-200 dark:border-slate-700 text-gray-900 dark:text-slate-200 text-xs py-2 pl-9 pr-3 rounded focus:border-[#dd9933] outline-none transition-colors"/>
                 </div>
             </div>
         </div>
-        
         <div className="flex-1 overflow-auto custom-scrollbar">
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                 <table className="w-full text-left border-collapse">
@@ -621,33 +568,17 @@ export const MacdTableList: React.FC = () => {
                         <tr className="bg-gray-100 dark:bg-[#2f3032] border-b border-gray-200 dark:border-slate-800">
                             <SortableContext items={colOrder} strategy={horizontalListSortingStrategy}>
                                 {colOrder.map(colId => (
-                                    <SortableTh 
-                                        key={colId} 
-                                        colId={colId} 
-                                        label={COLS[colId as keyof typeof COLS].label} 
-                                        sortKey={sortKeyMap[colId]} 
-                                        activeKey={sortTf === (colId.replace('macd','') as any) ? colId : ''} // basic active highlight logic
-                                        onSort={handleSort} 
-                                    />
+                                    <SortableTh key={colId} colId={colId} label={COLS[colId as keyof typeof COLS].label} sortKey={sortKeyMap[colId]} activeKey={sortKey} onSort={handleSort} />
                                 ))}
                             </SortableContext>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-slate-800 text-sm">
-                        {loading ? (
-                            <tr><td colSpan={colOrder.length} className="p-10 text-center"><Loader2 className="animate-spin mx-auto text-[#dd9933]" /></td></tr>
-                        ) : rows.length === 0 ? (
-                            <tr><td colSpan={colOrder.length} className="p-10 text-center text-gray-500">Sem dados</td></tr>
-                        ) : rows.map((r) => (
-                            <tr key={r.symbol} className="hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
-                                {colOrder.map(colId => renderCell(r, colId))}
-                            </tr>
-                        ))}
+                        {loading ? <tr><td colSpan={colOrder.length} className="p-10 text-center"><Loader2 className="animate-spin mx-auto text-[#dd9933]" /></td></tr> : rows.map(r => <tr key={r.symbol} className="hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">{colOrder.map(colId => renderCell(r, colId))}</tr>)}
                     </tbody>
                 </table>
             </DndContext>
         </div>
-
         <div className="p-3 border-t border-gray-200 dark:border-slate-800 flex justify-between items-center bg-gray-50 dark:bg-[#2f3032]">
             <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="p-2 hover:bg-white dark:hover:bg-white/10 rounded disabled:opacity-50 text-gray-600 dark:text-white transition-colors border border-transparent hover:border-gray-200 dark:hover:border-slate-700"><ChevronLeft size={16}/></button>
             <span className="text-xs font-bold text-gray-500 dark:text-slate-400">Página {page} de {totalPages}</span>
@@ -656,9 +587,8 @@ export const MacdTableList: React.FC = () => {
       </div>
   );
 };
-export const MacdFaq: React.FC = () => { return null; }; // Minimized for brevity
+export const MacdFaq: React.FC = () => { return null; }; 
 
-// Default Widget Export
 const MacdWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ item, language = 'pt' }) => {
     return <MacdSidebar language={language} />;
 };

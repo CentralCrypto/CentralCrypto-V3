@@ -10,24 +10,30 @@ const STABLECOINS = ['USDT', 'USDC', 'DAI', 'FDUSD', 'TUSD', 'USDD', 'PYUSD', 'U
  */
 function extractDataArray(raw: any): any[] {
     if (!raw) return [];
+    
+    // Se for array direto
     if (Array.isArray(raw)) {
-        // Se for um array de objetos onde o primeiro item tem uma chave 'data' que é array
-        if (raw.length > 0 && raw[0]?.data && Array.isArray(raw[0].data)) {
-            return raw[0].data;
+        // Caso específico: Array onde o primeiro item tem uma chave 'data' que é o array real (Wrapper comum n8n)
+        if (raw.length > 0 && raw[0] && typeof raw[0] === 'object') {
+             if (Array.isArray(raw[0].data)) return raw[0].data;
+             if (raw[0].data && Array.isArray(raw[0].data.data)) return raw[0].data.data; // Wrapper duplo
+             // Caso MACD complexo ou heatmap
+             if (raw[0].data?.heatmap?.items && Array.isArray(raw[0].data.heatmap.items)) return raw[0].data.heatmap.items;
         }
-        // Se for array de objetos onde o primeiro tem 'heatmap' (caso MACD complexo)
-        if (raw.length > 0 && raw[0]?.data?.heatmap?.items && Array.isArray(raw[0].data.heatmap.items)) {
-            return raw[0].data.heatmap.items;
-        }
-        // Caso contrário, assume que o próprio array é a lista
         return raw;
     }
-    // Se for objeto { data: [...] }
-    if (raw.data && Array.isArray(raw.data)) return raw.data;
-    // Se for objeto { items: [...] }
-    if (raw.items && Array.isArray(raw.items)) return raw.items;
     
-    // Fallback: retorna vazio
+    // Se for objeto
+    if (typeof raw === 'object') {
+        if (Array.isArray(raw.data)) return raw.data;
+        if (Array.isArray(raw.items)) return raw.items;
+        // Tenta achar qualquer chave que seja um array grande
+        const keys = Object.keys(raw);
+        for (const key of keys) {
+            if (Array.isArray(raw[key]) && raw[key].length > 0) return raw[key];
+        }
+    }
+    
     return [];
 }
 
@@ -189,7 +195,7 @@ export const fetchRsiTable = async (opts?: { force?: boolean }): Promise<RsiTabl
 
   return items.map((p: any) => {
     const symbol = String(p.symbol || '').toUpperCase();
-    // Tenta pegar RSI de vários lugares possíveis no JSON
+    // Tenta pegar RSI de vários lugares possíveis no JSON para robustez
     const rsiNode = p.rsiOverall || p.rsi || p.rsi_overall || p; 
 
     return {
