@@ -39,9 +39,9 @@ type Timeframe = typeof TIMEFRAMES[number];
 type XAxisMode = 'mcap' | 'volume' | 'change';
 const LIMIT_OPTIONS = [50, 100, 150, 200, 250];
 
-// CORES MATTE / ESCURAS (Não Neon)
-const COLOR_GREEN = '#15803d'; // Green 700
-const COLOR_RED = '#b91c1c';   // Red 700
+// CORES EXATAS SOLICITADAS
+const COLOR_GREEN = '#4e843c';
+const COLOR_RED = '#C2544E';
 const COLOR_NEUTRAL = '#475569'; // Slate 600
 
 const formatCompactNumber = (number: number) => {
@@ -58,7 +58,6 @@ const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(ma
 
 const getRsiColor = (val: number, isText = false) => {
   if (val === null || val === undefined || Number.isNaN(val)) return isText ? 'text-gray-400' : '';
-  // Usando cores hexadecimais diretas para garantir o tom exato
   if (val >= 70) return isText ? `text-[${COLOR_RED}] font-bold` : `bg-[${COLOR_RED}]/20 text-[${COLOR_RED}]`;
   if (val <= 30) return isText ? `text-[${COLOR_GREEN}] font-bold` : `bg-[${COLOR_GREEN}]/20 text-[${COLOR_GREEN}]`;
   return isText ? 'text-gray-700 dark:text-slate-300' : 'text-gray-700 dark:text-slate-300';
@@ -405,8 +404,8 @@ export const RsiScatterChart: React.FC = () => {
                 { value: 50, color: textColor, width: 1, zIndex: 1 }
             ],
             plotBands: [
-                { from: 80, to: 100, color: 'rgba(185, 28, 28, 0.08)' }, // Red-700 w/ opacity
-                { from: 0, to: 20, color: 'rgba(21, 128, 61, 0.08)' } // Green-700 w/ opacity
+                { from: 80, to: 100, color: 'rgba(194, 84, 78, 0.08)' }, // Red with opacity
+                { from: 0, to: 20, color: 'rgba(78, 132, 60, 0.08)' } // Green with opacity
             ],
             crosshair: { width: 1, color: crosshairColor, dashStyle: 'Dot', snap: false, zIndex: 5 }
         },
@@ -650,7 +649,7 @@ export const RsiTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false })
     };
 
     return (
-        <div className={`bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm flex flex-col ${isPage ? 'h-fit w-full' : 'h-full overflow-hidden min-h-[500px]'}`}>
+        <div className={`bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm flex flex-col ${isPage ? 'w-full h-auto block' : 'h-full overflow-hidden min-h-[500px]'}`}>
             <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-3 bg-gray-50 dark:bg-black/20">
                 <h3 className="font-bold text-gray-900 dark:text-white text-sm uppercase tracking-wider">Dados Detalhados</h3>
                 <div className="flex items-center gap-3 w-full sm:w-auto">
