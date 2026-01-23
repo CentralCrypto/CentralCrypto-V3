@@ -1,10 +1,9 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, Info, Search, ChevronLeft, ChevronRight, BarChart2, DollarSign, Percent, ZoomOut, MousePointer2, GripVertical, ChevronsUpDown, ChevronDown, Coins } from 'lucide-react';
+import { Loader2, Info, Search, ChevronLeft, ChevronRight, BarChart2, DollarSign, Percent, ZoomOut, MousePointer2, GripVertical, ChevronsUpDown } from 'lucide-react';
 import Highcharts from 'highcharts';
 import addMouseWheelZoom from 'highcharts/modules/mouse-wheel-zoom';
 import { Language, DashboardItem } from '../../../types';
-import { getTranslations } from '../../../locales';
 import {
   RsiAvgData,
   RsiTableItem,
@@ -37,16 +36,8 @@ if (typeof addMouseWheelZoom === 'function') {
 
 const TIMEFRAMES = ['15m', '1h', '4h', '24h', '7d'] as const;
 type Timeframe = typeof TIMEFRAMES[number];
-type XAxisMode = 'mcap' | 'volume' | 'change';
+type YAxisMode = 'mcap' | 'volume' | 'change';
 const LIMIT_OPTIONS = [50, 100, 150, 200, 250];
-
-const safeEncodeBase64 = (str: string) => {
-    try {
-        return btoa(unescape(encodeURIComponent(str)));
-    } catch (e) {
-        return '';
-    }
-};
 
 const formatCompactNumber = (number: number) => {
   if (!number || number === 0) return "---";
@@ -128,7 +119,6 @@ const SidebarGauge: React.FC<{ value: number }> = ({ value }) => {
                     </g>
                 </svg>
             </div>
-            {/* Optimized text size and positioning as requested */}
             <div className="flex flex-col items-center -mt-4 z-10">
                 <div className="text-3xl font-black text-[#dd9933] leading-none font-mono tracking-tighter">{rsiVal.toFixed(2)}</div>
                 <div className="text-sm font-bold text-gray-900 dark:text-white uppercase mt-0.5 tracking-widest">{label}</div>
@@ -218,7 +208,7 @@ export const RsiScatterChart: React.FC = () => {
   
   const [points, setPoints] = useState<RsiTrackerPoint[]>([]);
   const [timeframe, setTimeframe] = useState<Timeframe>('4h');
-  const [xMode, setXMode] = useState<XAxisMode>('mcap');
+  const [yMode, setYMode] = useState<YAxisMode>('mcap');
   const [limit, setLimit] = useState(50); 
 
   useEffect(() => {
@@ -245,21 +235,21 @@ export const RsiScatterChart: React.FC = () => {
         .filter(r => r.marketCap && r.marketCap > 0 && r.rsi?.[timeframe])
         .slice(0, limit)
         .map(r => {
-            let xVal = 0;
-            if (xMode === 'mcap') xVal = r.marketCap || 0;
-            else if (xMode === 'volume') xVal = r.volume24h || 0;
-            else xVal = r.change24h || 0;
+            let yVal = 0;
+            if (yMode === 'mcap') yVal = r.marketCap || 0;
+            else if (yMode === 'volume') yVal = r.volume24h || 0;
+            else yVal = r.change24h || 0;
 
-            const cur = r.rsi?.[timeframe];
+            const rsi = r.rsi?.[timeframe];
             const last = r.lastRsi; 
-            const isRising = (last !== undefined && cur > last);
+            const isRising = (last !== undefined && rsi > last);
             const symbolShort = (r.symbol || 'UNK').substring(0, 3).toUpperCase();
             const logoUrl = r.logo || `https://assets.coincap.io/assets/icons/${r.symbol.toLowerCase()}@2x.png`;
             
             return {
                 id: r.symbol, 
-                x: xVal,
-                y: cur,
+                x: rsi, // X Axis = RSI
+                y: yVal, // Y Axis = Metric
                 z: r.volume24h,
                 name: r.symbol,
                 fullName: r.name,
@@ -275,21 +265,20 @@ export const RsiScatterChart: React.FC = () => {
 
     if (chartInstance.current) {
         chartInstance.current.series[0].setData(seriesData, true, { duration: 1000, easing: 'easeOutQuart' }, true);
-        const xAxisType = xMode === 'change' ? 'linear' : 'logarithmic';
-        const xTitle = xMode === 'mcap' ? 'Market Cap (Log)' : xMode === 'volume' ? 'Volume 24h (Log)' : 'Variação 24h (%)';
+        const yAxisType = yMode === 'change' ? 'linear' : 'logarithmic';
+        const yTitle = yMode === 'mcap' ? 'Market Cap (Log)' : yMode === 'volume' ? 'Volume 24h (Log)' : 'Variação 24h (%)';
         
-        chartInstance.current.xAxis[0].update({
-             type: xAxisType,
-             reversed: xMode === 'mcap',
-             title: { text: xTitle },
-             plotLines: xMode === 'change' ? [{ value: 0, color: textColor, width: 1, dashStyle: 'Dash', zIndex: 2 }] : []
+        chartInstance.current.yAxis[0].update({
+             type: yAxisType,
+             title: { text: yTitle },
+             plotLines: yMode === 'change' ? [{ value: 0, color: textColor, width: 1, dashStyle: 'Dash', zIndex: 2 }] : []
         });
         return;
     }
 
-    const xAxisType = xMode === 'change' ? 'linear' : 'logarithmic';
-    const xTitle = xMode === 'mcap' ? 'Market Cap (Log)' : xMode === 'volume' ? 'Volume 24h (Log)' : 'Variação 24h (%)';
-    const xPlotLines = xMode === 'change' ? [{ value: 0, color: textColor, width: 1, dashStyle: 'Dash', zIndex: 2 }] : [];
+    const yAxisType = yMode === 'change' ? 'linear' : 'logarithmic';
+    const yTitle = yMode === 'mcap' ? 'Market Cap (Log)' : yMode === 'volume' ? 'Volume 24h (Log)' : 'Variação 24h (%)';
+    const yPlotLines = yMode === 'change' ? [{ value: 0, color: textColor, width: 1, dashStyle: 'Dash', zIndex: 2 }] : [];
 
     chartInstance.current = Highcharts.chart(chartRef.current, {
         chart: {
@@ -304,38 +293,39 @@ export const RsiScatterChart: React.FC = () => {
         credits: { enabled: false },
         legend: { enabled: false },
         xAxis: {
-            type: xAxisType,
-            reversed: xMode === 'mcap', 
-            title: { text: xTitle, style: { color: textColor, fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase' } },
+            min: 0,
+            max: 100,
+            title: { text: `RSI (${timeframe})`, style: { color: textColor, fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase' } },
             gridLineColor: gridColor,
             labels: {
-                style: { color: textColor, fontSize: '10px' },
-                formatter: function (this: any) { 
-                    if (xMode === 'change') return this.value + '%';
-                    return '$' + formatCompactNumber(this.value); 
-                }
+                style: { color: textColor, fontSize: '10px' }
             },
             lineColor: gridColor,
             tickColor: gridColor,
-            plotLines: xPlotLines,
-            crosshair: { width: 1, color: crosshairColor, dashStyle: 'Dot', snap: false, zIndex: 5 }
-        },
-        yAxis: {
-            title: { text: 'Relative Strength Index', style: { color: textColor, fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase' } },
-            min: 0, 
-            max: 100,
-            gridLineColor: gridColor,
-            gridLineDashStyle: 'Dash',
-            labels: { style: { color: textColor, fontSize: '10px' } },
             plotLines: [
-                { value: 80, color: '#f87171', dashStyle: 'ShortDash', width: 2, label: { text: 'Overbought (80)', align: 'right', style: { color: '#f87171', fontSize: '10px' } }, zIndex: 5 },
-                { value: 20, color: '#4ade80', dashStyle: 'ShortDash', width: 2, label: { text: 'Oversold (20)', align: 'right', style: { color: '#4ade80', fontSize: '10px' } }, zIndex: 5 },
+                { value: 70, color: '#f87171', dashStyle: 'ShortDash', width: 2, label: { text: 'OB (70)', rotation: 0, y: 15, style: { color: '#f87171', fontSize: '10px' } }, zIndex: 5 },
+                { value: 30, color: '#4ade80', dashStyle: 'ShortDash', width: 2, label: { text: 'OS (30)', rotation: 0, y: 15, style: { color: '#4ade80', fontSize: '10px' } }, zIndex: 5 },
                 { value: 50, color: textColor, width: 1, zIndex: 1 }
             ],
             plotBands: [
-                { from: 80, to: 100, color: 'rgba(248, 113, 113, 0.08)' },
-                { from: 0, to: 20, color: 'rgba(74, 222, 128, 0.08)' } 
+                { from: 70, to: 100, color: 'rgba(248, 113, 113, 0.08)' },
+                { from: 0, to: 30, color: 'rgba(74, 222, 128, 0.08)' } 
             ],
+            crosshair: { width: 1, color: crosshairColor, dashStyle: 'Dot', snap: false, zIndex: 5 }
+        },
+        yAxis: {
+            type: yAxisType,
+            title: { text: yTitle, style: { color: textColor, fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase' } },
+            gridLineColor: gridColor,
+            gridLineDashStyle: 'Dash',
+            labels: { 
+                style: { color: textColor, fontSize: '10px' },
+                formatter: function(this: any) {
+                    if (yMode === 'change') return this.value + '%';
+                    return '$' + formatCompactNumber(this.value);
+                }
+            },
+            plotLines: yPlotLines,
             crosshair: { width: 1, color: crosshairColor, dashStyle: 'Dot', snap: false, zIndex: 5 }
         },
         tooltip: {
@@ -357,10 +347,13 @@ export const RsiScatterChart: React.FC = () => {
                     </div>
                     <div style="font-size:12px; opacity:0.7; margin-bottom:4px;">$${formatCompactNumber(p.options.price)}</div>
                     <div style="margin-top:4px; font-size:12px;">
-                        <span style="opacity:0.7;">RSI (${timeframe}):</span> <b>${p.y.toFixed(2)}</b>
+                        <span style="opacity:0.7;">RSI (${timeframe}):</span> <b>${p.x.toFixed(2)}</b>
                     </div>
                     <div style="font-size:12px;">
-                        <span style="opacity:0.7;">Var 24h:</span> <b style="color:${p.options.change >= 0 ? '#4ade80' : '#f87171'}">${p.options.change.toFixed(2)}%</b>
+                        <span style="opacity:0.7;">${yMode === 'change' ? 'Var 24h' : yMode === 'mcap' ? 'Mkt Cap' : 'Vol 24h'}:</span> 
+                        <b style="color:${p.options.change >= 0 ? '#4ade80' : '#f87171'}">
+                            ${yMode === 'change' ? p.y.toFixed(2) + '%' : '$' + formatCompactNumber(p.y)}
+                        </b>
                     </div>
                 `;
             }
@@ -405,7 +398,7 @@ export const RsiScatterChart: React.FC = () => {
         },
         series: [{ name: 'Coins', data: seriesData, color: 'rgba(156, 163, 175, 0.5)' }]
     } as any);
-  }, [points, timeframe, xMode, isDark, limit]);
+  }, [points, timeframe, yMode, isDark, limit]);
 
   return (
     <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm p-4 h-full flex flex-col relative overflow-hidden">
@@ -443,13 +436,13 @@ export const RsiScatterChart: React.FC = () => {
                 </button>
                 <div className="w-px h-4 bg-gray-200 dark:bg-white/10 mx-1"></div>
                 <div className="flex bg-gray-100 dark:bg-[#2f3032] rounded p-0.5">
-                    <button onClick={() => setXMode('mcap')} className={`px-2 py-1 text-[10px] font-bold rounded flex items-center gap-1 ${xMode === 'mcap' ? 'bg-white dark:bg-[#1a1c1e] text-[#dd9933] shadow-sm' : 'text-gray-500'}`}>
+                    <button onClick={() => setYMode('mcap')} className={`px-2 py-1 text-[10px] font-bold rounded flex items-center gap-1 ${yMode === 'mcap' ? 'bg-white dark:bg-[#1a1c1e] text-[#dd9933] shadow-sm' : 'text-gray-500'}`}>
                         <DollarSign size={10} /> MC
                     </button>
-                    <button onClick={() => setXMode('change')} className={`px-2 py-1 text-[10px] font-bold rounded flex items-center gap-1 ${xMode === 'change' ? 'bg-white dark:bg-[#1a1c1e] text-[#dd9933] shadow-sm' : 'text-gray-500'}`}>
+                    <button onClick={() => setYMode('change')} className={`px-2 py-1 text-[10px] font-bold rounded flex items-center gap-1 ${yMode === 'change' ? 'bg-white dark:bg-[#1a1c1e] text-[#dd9933] shadow-sm' : 'text-gray-500'}`}>
                         <Percent size={10} /> 24h
                     </button>
-                    <button onClick={() => setXMode('volume')} className={`px-2 py-1 text-[10px] font-bold rounded flex items-center gap-1 ${xMode === 'volume' ? 'bg-white dark:bg-[#1a1c1e] text-[#dd9933] shadow-sm' : 'text-gray-500'}`}>
+                    <button onClick={() => setYMode('volume')} className={`px-2 py-1 text-[10px] font-bold rounded flex items-center gap-1 ${yMode === 'volume' ? 'bg-white dark:bg-[#1a1c1e] text-[#dd9933] shadow-sm' : 'text-gray-500'}`}>
                         <BarChart2 size={10} /> Vol
                     </button>
                 </div>
@@ -470,7 +463,6 @@ export const RsiScatterChart: React.FC = () => {
 };
 
 export const RsiTableList: React.FC = () => {
-    // ... code unchanged except imports/exports if needed ...
     const [loading, setLoading] = useState(true);
     const [rows, setRows] = useState<RsiTableItem[]>([]);
     const [page, setPage] = useState(1);
@@ -495,7 +487,6 @@ export const RsiTableList: React.FC = () => {
         return () => { mounted = false; };
     }, [page, pageSize, search, sortKey, sortAsc]);
 
-    // ... sort/drag handlers ...
     const handleSort = (key: string) => {
         if (sortKey === key) setSortAsc(!sortAsc);
         else { setSortKey(key); setSortAsc(false); }
@@ -528,7 +519,7 @@ export const RsiTableList: React.FC = () => {
                                     parent.prepend(fallback);
                                 }
                             }} />
-                        ) : (<div className="w-6 h-6 rounded-full bg-gray-200 dark:bg-slate-700 flex items-center justify-center text-[9px] font-bold text-gray-500 dark:text-gray-300">{r.symbol.charAt(0).toUpperCase())}</div>)}
+                        ) : (<div className="w-6 h-6 rounded-full bg-gray-200 dark:bg-slate-700 flex items-center justify-center text-[9px] font-bold text-gray-500 dark:text-gray-300">{r.symbol.charAt(0).toUpperCase()}</div>)}
                         <div className="flex flex-col"><span className="font-bold text-gray-900 dark:text-slate-200 leading-none">{r.name}</span><span className="text-[10px] font-bold text-gray-500 uppercase">{r.symbol}</span></div>
                     </div>
                 </td>
@@ -545,7 +536,6 @@ export const RsiTableList: React.FC = () => {
         }
     };
     
-    // ... Sortable Headers ...
     const sortKeyMap: Record<string, string> = { rank: 'rank', asset: 'rank', price: 'price24h', mcap: 'marketCap', vol: 'volume24h', rsi15m: 'rsi15m', rsi1h: 'rsi1h', rsi4h: 'rsi4h', rsi24h: 'rsi24h', rsi7d: 'rsi7d' };
     const COLS = {
         rank: { id: 'rank', label: '#' }, asset: { id: 'asset', label: 'Ativo' }, price: { id: 'price', label: 'Preço' },
@@ -612,7 +602,7 @@ export const RsiTableList: React.FC = () => {
     );
 };
 
-export const RsiFaq: React.FC = () => { /* ... existing ... */ return null; }; // Keeping minimal for brevity
+export const RsiFaq: React.FC = () => { return null; };
 
 const RsiWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ item, language = 'pt' }) => {
     // 1. Grid Mode: Only Sidebar/Gauge
