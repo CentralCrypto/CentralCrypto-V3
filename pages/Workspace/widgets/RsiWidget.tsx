@@ -1,6 +1,6 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, Info, Search, ChevronLeft, ChevronRight, BarChart2, DollarSign, Percent, ZoomOut, MousePointer2, GripVertical, ChevronsUpDown, Filter } from 'lucide-react';
+import { Loader2, Info, Search, ChevronLeft, ChevronRight, BarChart2, DollarSign, Percent, ZoomOut, MousePointer2, GripVertical, ChevronsUpDown, Filter, TrendingUp, TrendingDown } from 'lucide-react';
 import Highcharts from 'highcharts';
 import addMouseWheelZoom from 'highcharts/modules/mouse-wheel-zoom';
 import { Language, DashboardItem } from '../../../types';
@@ -44,6 +44,10 @@ const COLOR_GREEN = '#4e843c';
 const COLOR_RED = '#C2544E';
 const COLOR_NEUTRAL = '#475569'; // Slate 600
 
+// NOVOS LIMITES SOLICITADOS
+const RSI_LOW = 20;
+const RSI_HIGH = 80;
+
 const formatCompactNumber = (number: number) => {
   if (!number || number === 0) return "---";
   if (number < 1000) return number.toString();
@@ -58,9 +62,9 @@ const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(ma
 
 const getRsiColor = (val: number, isText = false) => {
   if (val === null || val === undefined || Number.isNaN(val)) return isText ? 'text-gray-400' : '';
-  if (val >= 70) return isText ? `text-[${COLOR_RED}] font-bold` : `bg-[${COLOR_RED}]/20 text-[${COLOR_RED}]`;
-  if (val <= 30) return isText ? `text-[${COLOR_GREEN}] font-bold` : `bg-[${COLOR_GREEN}]/20 text-[${COLOR_GREEN}]`;
-  return isText ? 'text-gray-700 dark:text-slate-300' : 'text-gray-700 dark:text-slate-300';
+  if (val >= RSI_HIGH) return isText ? `text-[${COLOR_RED}] font-black` : `bg-[${COLOR_RED}]/20 text-[${COLOR_RED}]`;
+  if (val <= RSI_LOW) return isText ? `text-[${COLOR_GREEN}] font-black` : `bg-[${COLOR_GREEN}]/20 text-[${COLOR_GREEN}]`;
+  return isText ? 'text-gray-700 dark:text-slate-300 font-bold' : 'text-gray-700 dark:text-slate-300';
 };
 
 const computeAvgRsi = (rows: RsiTableItem[], tf: Timeframe) => {
@@ -80,8 +84,8 @@ const computeCounts = (rows: RsiTableItem[], tf: Timeframe) => {
     const v = r.rsi?.[tf];
     if (typeof v !== 'number') continue;
     valid++;
-    if (v <= 30) oversold++;
-    if (v >= 70) overbought++;
+    if (v <= RSI_LOW) oversold++;
+    if (v >= RSI_HIGH) overbought++;
   }
   return { oversold, overbought, valid };
 };
@@ -103,8 +107,8 @@ const SidebarGauge: React.FC<{ value: number }> = ({ value }) => {
     const rotation = -90 + (rsiVal / 100) * 180;
     
     let label = "Neutro";
-    if (rsiVal >= 70) label = "Sobrecompra";
-    if (rsiVal <= 30) label = "Sobrevenda";
+    if (rsiVal >= RSI_HIGH) label = "Sobrecompra";
+    if (rsiVal <= RSI_LOW) label = "Sobrevenda";
 
     return (
         <div className="flex flex-col items-center justify-center h-full py-2">
@@ -152,8 +156,8 @@ const RsiGridWidget: React.FC<{ language: Language }> = ({ language }) => {
     const rotation = -90 + (clamp(rsiVal, 0, 100) / 100) * 180;
     
     let label = "Neutro";
-    if (rsiVal >= 70) label = "Sobrecompra";
-    if (rsiVal <= 30) label = "Sobrevenda";
+    if (rsiVal >= RSI_HIGH) label = "Sobrecompra";
+    if (rsiVal <= RSI_LOW) label = "Sobrevenda";
 
     return (
         <div className="h-full flex flex-col justify-center gap-1 p-2 relative text-center bg-white dark:bg-[#2f3032]">
@@ -312,9 +316,9 @@ export const RsiScatterChart: React.FC = () => {
 
             const cur = r.rsi?.[timeframe];
             
-            // Zone Filtering Logic
-            const isOversold = cur <= 30;
-            const isOverbought = cur >= 70;
+            // FIX: Filters match the 20/80 logic
+            const isOversold = cur <= RSI_LOW;
+            const isOverbought = cur >= RSI_HIGH;
             const isNeutral = !isOversold && !isOverbought;
 
             if (isOversold && !visibleZones.includes('oversold')) return null;
@@ -398,14 +402,15 @@ export const RsiScatterChart: React.FC = () => {
             gridLineColor: gridColor,
             gridLineDashStyle: 'Dash',
             labels: { style: { color: textColor, fontSize: '10px' } },
+            // FIX: Lines at 20 and 80
             plotLines: [
-                { value: 80, color: COLOR_RED, dashStyle: 'ShortDash', width: 2, label: { text: 'Overbought (80)', align: 'right', style: { color: COLOR_RED, fontSize: '10px' } }, zIndex: 5 },
-                { value: 20, color: COLOR_GREEN, dashStyle: 'ShortDash', width: 2, label: { text: 'Oversold (20)', align: 'right', style: { color: COLOR_GREEN, fontSize: '10px' } }, zIndex: 5 },
+                { value: RSI_HIGH, color: COLOR_RED, dashStyle: 'ShortDash', width: 2, label: { text: 'Overbought (80)', align: 'right', style: { color: COLOR_RED, fontSize: '10px' } }, zIndex: 5 },
+                { value: RSI_LOW, color: COLOR_GREEN, dashStyle: 'ShortDash', width: 2, label: { text: 'Oversold (20)', align: 'right', style: { color: COLOR_GREEN, fontSize: '10px' } }, zIndex: 5 },
                 { value: 50, color: textColor, width: 1, zIndex: 1 }
             ],
             plotBands: [
-                { from: 80, to: 100, color: 'rgba(194, 84, 78, 0.08)' }, // Red with opacity
-                { from: 0, to: 20, color: 'rgba(78, 132, 60, 0.08)' } // Green with opacity
+                { from: RSI_HIGH, to: 100, color: 'rgba(194, 84, 78, 0.08)' }, // Red with opacity
+                { from: 0, to: RSI_LOW, color: 'rgba(78, 132, 60, 0.08)' } // Green with opacity
             ],
             crosshair: { width: 1, color: crosshairColor, dashStyle: 'Dot', snap: false, zIndex: 5 }
         },
@@ -593,6 +598,23 @@ export const RsiTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false })
         }
     };
 
+    const renderRsiCell = (r: RsiTableItem, tf: '15m'|'1h'|'4h'|'24h'|'7d') => {
+        const val = r.rsi[tf];
+        // Use os limites 20/80 para determinar a seta
+        let Icon = null;
+        if (val >= RSI_HIGH) Icon = <TrendingUp size={12} />;
+        if (val <= RSI_LOW) Icon = <TrendingDown size={12} />;
+        
+        return (
+            <td key={`rsi${tf}`} className={`p-3 text-center font-mono font-black ${getRsiColor(val, true)}`}>
+                <div className="flex items-center justify-center gap-1">
+                    {val?.toFixed(0)}
+                    {Icon}
+                </div>
+            </td>
+        );
+    };
+
     const renderCell = (r: RsiTableItem, colId: string) => {
         switch (colId) {
             case 'rank': return <td key={colId} className="p-3 text-center text-gray-400 dark:text-slate-500 font-mono text-xs">{r.rank}</td>;
@@ -618,11 +640,11 @@ export const RsiTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false })
             case 'price': return <td key={colId} className="p-3 text-center font-mono font-bold text-gray-700 dark:text-slate-300">${r.price < 1 ? r.price.toFixed(5) : r.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>;
             case 'mcap': return <td key={colId} className="p-3 text-center font-mono text-gray-500 dark:text-slate-400 text-xs">${formatCompactNumber(r.marketCap || 0)}</td>;
             case 'vol': return <td key={colId} className="p-3 text-center font-mono text-gray-500 dark:text-slate-400 text-xs">${formatCompactNumber(r.volume24h || 0)}</td>;
-            case 'rsi15m': return <td key={colId} className={`p-3 text-center font-mono font-bold ${getRsiColor(r.rsi["15m"], true)}`}>{r.rsi["15m"]?.toFixed(0)}</td>;
-            case 'rsi1h': return <td key={colId} className={`p-3 text-center font-mono font-bold ${getRsiColor(r.rsi["1h"], true)}`}>{r.rsi["1h"]?.toFixed(0)}</td>;
-            case 'rsi4h': return <td key={colId} className={`p-3 text-center font-mono font-bold bg-gray-50 dark:bg-white/5 ${getRsiColor(r.rsi["4h"], true)}`}>{r.rsi["4h"]?.toFixed(0)}</td>;
-            case 'rsi24h': return <td key={colId} className={`p-3 text-center font-mono font-bold ${getRsiColor(r.rsi["24h"], true)}`}>{r.rsi["24h"]?.toFixed(0)}</td>;
-            case 'rsi7d': return <td key={colId} className={`p-3 text-center font-mono font-bold ${getRsiColor(r.rsi["7d"], true)}`}>{r.rsi["7d"]?.toFixed(0)}</td>;
+            case 'rsi15m': return renderRsiCell(r, '15m');
+            case 'rsi1h': return renderRsiCell(r, '1h');
+            case 'rsi4h': return renderRsiCell(r, '4h');
+            case 'rsi24h': return renderRsiCell(r, '24h');
+            case 'rsi7d': return renderRsiCell(r, '7d');
             default: return <td key={colId}></td>;
         }
     };
@@ -653,6 +675,18 @@ export const RsiTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false })
             <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-3 bg-gray-50 dark:bg-black/20">
                 <h3 className="font-bold text-gray-900 dark:text-white text-sm uppercase tracking-wider">Dados Detalhados</h3>
                 <div className="flex items-center gap-3 w-full sm:w-auto">
+                    {/* Header Pagination Controls */}
+                    <div className="flex items-center gap-2 bg-white dark:bg-[#2f3032] border border-gray-200 dark:border-slate-700 rounded px-1.5 py-1">
+                         <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="p-1 hover:bg-gray-100 dark:hover:bg-white/10 rounded disabled:opacity-30 text-gray-600 dark:text-white"><ChevronLeft size={14}/></button>
+                         <div className="flex items-center gap-1 text-[10px] font-bold text-gray-500 dark:text-gray-400">
+                            <span>Pág</span>
+                            <select value={page} onChange={(e) => setPage(Number(e.target.value))} className="bg-transparent text-gray-900 dark:text-white outline-none cursor-pointer font-black">
+                                {Array.from({length: totalPages}, (_, i) => i + 1).map(p => <option key={p} value={p} className="bg-white dark:bg-[#2f3032] text-black dark:text-white">{p}</option>)}
+                            </select>
+                         </div>
+                         <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="p-1 hover:bg-gray-100 dark:hover:bg-white/10 rounded disabled:opacity-30 text-gray-600 dark:text-white"><ChevronRight size={14}/></button>
+                    </div>
+
                     <div className="flex items-center gap-2 bg-white dark:bg-[#2f3032] border border-gray-200 dark:border-slate-700 rounded px-2 py-1.5">
                         <span className="text-[10px] font-bold text-gray-500 uppercase">Linhas:</span>
                         <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }} className="bg-transparent text-xs font-bold outline-none text-gray-900 dark:text-white">

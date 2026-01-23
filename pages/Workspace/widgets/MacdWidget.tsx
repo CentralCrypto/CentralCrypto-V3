@@ -605,6 +605,18 @@ export const MacdTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false }
         <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-3 bg-gray-50 dark:bg-black/20">
             <h3 className="font-bold text-gray-900 dark:text-white text-sm uppercase tracking-wider">Dados Detalhados</h3>
             <div className="flex items-center gap-3 w-full sm:w-auto">
+                {/* Header Pagination Controls */}
+                <div className="flex items-center gap-2 bg-white dark:bg-[#2f3032] border border-gray-200 dark:border-slate-700 rounded px-1.5 py-1">
+                     <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="p-1 hover:bg-gray-100 dark:hover:bg-white/10 rounded disabled:opacity-30 text-gray-600 dark:text-white"><ChevronLeft size={14}/></button>
+                     <div className="flex items-center gap-1 text-[10px] font-bold text-gray-500 dark:text-gray-400">
+                        <span>Pág</span>
+                        <select value={page} onChange={(e) => setPage(Number(e.target.value))} className="bg-transparent text-gray-900 dark:text-white outline-none cursor-pointer font-black">
+                            {Array.from({length: totalPages}, (_, i) => i + 1).map(p => <option key={p} value={p} className="bg-white dark:bg-[#2f3032] text-black dark:text-white">{p}</option>)}
+                        </select>
+                     </div>
+                     <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="p-1 hover:bg-gray-100 dark:hover:bg-white/10 rounded disabled:opacity-30 text-gray-600 dark:text-white"><ChevronRight size={14}/></button>
+                </div>
+                
                 <div className="flex items-center gap-2 bg-white dark:bg-[#2f3032] border border-gray-200 dark:border-slate-700 rounded px-2 py-1.5">
                     <span className="text-[10px] font-bold text-gray-500 uppercase">Linhas:</span>
                     <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }} className="bg-transparent text-xs font-bold outline-none text-gray-900 dark:text-white">
