@@ -1,6 +1,6 @@
 
 // IndicatorPage.tsx
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { ApiCoin, Language, WidgetType, UserTier } from '../../../types';
 import { getTranslations } from '../../../locales';
 import CryptoWidget from './CryptoWidget';
@@ -187,7 +187,11 @@ type PageType =
 
 function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageProps) {
   const [activePage, setActivePage] = useState<PageType>('MARKETCAP');
-  const mainScrollRef = useRef<HTMLDivElement | null>(null);
+  
+  // Use scroll to window top instead of ref
+  const scrollToTop = () => {
+     window.scrollTo({ top: 0, behavior: 'auto' });
+  };
 
   const GROUPS = [
     { 
@@ -240,13 +244,19 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
     if (found) { currentPage = found; break; }
   }
 
+  // STRUCTURE CHANGE:
+  // Use a standard flex container for the page layout.
+  // The sidebar is sticky. The content flows naturally, expanding the document height.
+  // This eliminates internal scrollbars on the main area.
+  
   return (
-    <div className="flex flex-col w-full h-[calc(100vh-160px)] overflow-hidden">
-      <div className="flex h-full w-full gap-4 overflow-hidden">
-        {/* Sidebar */}
-        <div className={`w-64 flex-shrink-0 bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-slate-800 rounded-xl flex-col overflow-hidden shadow-sm transition-all duration-300 shrink-0 ${activePage === 'BUBBLES' ? 'hidden' : 'flex'}`}>
+    <div className="w-full min-h-[calc(100vh-160px)] pb-20">
+      <div className="flex w-full gap-4 items-start">
+        
+        {/* Sidebar - Sticky, no internal scrollbar mess */}
+        <div className={`w-64 shrink-0 bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-slate-800 rounded-xl flex-col overflow-hidden shadow-sm transition-all duration-300 sticky top-[160px] ${activePage === 'BUBBLES' ? 'hidden' : 'flex'}`}>
           <div className="p-4 border-b border-gray-100 dark:border-slate-800 font-black text-gray-500 dark:text-slate-400 text-xs uppercase tracking-wider">Dashboard Pages</div>
-          <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
+          <div className="flex-1 p-2">
             {GROUPS.map((group, groupIdx) => (
               <div key={groupIdx} className="mb-4">
                 <div className="px-4 py-2 text-[10px] font-black text-gray-400 dark:text-slate-500 uppercase tracking-widest">{group.title}</div>
@@ -256,7 +266,7 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
                       key={item.id}
                       onClick={() => {
                         setActivePage(item.id);
-                        if (mainScrollRef.current) mainScrollRef.current.scrollTo({ top: 0, behavior: 'auto' });
+                        scrollToTop();
                       }}
                       className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-black transition-all tracking-wide ${activePage === item.id ? 'bg-[#dd9933] text-black shadow-md' : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-[#2f3032]'}`}
                     >
@@ -269,12 +279,10 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
           </div>
         </div>
 
-        {/* Main Content Area */}
-        <div
-          ref={mainScrollRef}
-          className={`flex-1 flex-col min-w-0 h-full overflow-y-auto custom-scrollbar pr-1 ${activePage === 'BUBBLES' ? 'hidden' : 'flex'}`}
-        >
-          {/* Custom Headers for RSI/MACD pages */}
+        {/* Main Content Area - Grows freely, no overflow:hidden */}
+        <div className={`flex-1 flex-col min-w-0 ${activePage === 'BUBBLES' ? 'hidden' : 'flex'}`}>
+          
+          {/* Headers */}
           {activePage === 'RSI' ? (
               <div className="bg-white dark:bg-[#1a1c1e] p-6 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm transition-colors mb-6 shrink-0">
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Crypto Relative Strength Index (RSI)</h2>
@@ -293,11 +301,11 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
               <PageHeader title={currentPage.label} description="Dados analíticos e ferramentas de mercado em tempo real." />
           )}
 
-          <div className="flex-1 min-h-[600px] relative">
-            {activePage === 'MARKETCAP' && <MarketCapTable language={language} scrollContainerRef={mainScrollRef} />}
-            {activePage === 'HEATMAP' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'heatmap-page', type: WidgetType.HEATMAP, title: 'Crypto Heatmap', symbol: 'MARKET', isMaximized: true }} language={language} /></div>}
+          <div className="w-full">
+            {activePage === 'MARKETCAP' && <MarketCapTable language={language} />}
+            {activePage === 'HEATMAP' && <div className="h-[800px] w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'heatmap-page', type: WidgetType.HEATMAP, title: 'Crypto Heatmap', symbol: 'MARKET', isMaximized: true }} language={language} /></div>}
             
-            {activePage === 'ETF' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'etf-page', type: WidgetType.ETF_NET_FLOW, title: 'ETF Net Flow', symbol: 'GLOBAL', isMaximized: true }} language={language} /></div>}
+            {activePage === 'ETF' && <div className="h-[600px] w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'etf-page', type: WidgetType.ETF_NET_FLOW, title: 'ETF Net Flow', symbol: 'GLOBAL', isMaximized: true }} language={language} /></div>}
             
             {activePage === 'RSI' && <RsiPageLayout language={language} />}
             {activePage === 'MACD' && <MacdPageLayout language={language} />}
@@ -305,7 +313,7 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
             {activePage === 'CCT_INDEX' && <PlaceholderPage title="CCT Index" />}
 
             {activePage === 'LSR' && (
-              <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800 relative">
+              <div className="h-[600px] w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800 relative">
                 {userTier === UserTier.TIER_1 && <LockOverlay />}
                 <div className={userTier === UserTier.TIER_1 ? 'blur-sm h-full' : 'h-full'}>
                   <CryptoWidget item={{ id: 'lsr-page', type: WidgetType.LONG_SHORT_RATIO, title: 'Long/Short Ratio', symbol: 'GLOBAL', isMaximized: true }} language={language} />
@@ -318,11 +326,11 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
             {activePage === 'LIQ_HEATMAP' && <PlaceholderPage title="Liquidation HeatMap" />}
             {activePage === 'DERIVATIVES_TRACKING' && <PlaceholderPage title="CCT Derivatives Tracking" />}
 
-            {activePage === 'CALENDAR' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'cal-page', type: WidgetType.CALENDAR, title: 'Calendar', symbol: 'CAL', isMaximized: true }} language={language} /></div>}
+            {activePage === 'CALENDAR' && <div className="h-[800px] w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'cal-page', type: WidgetType.CALENDAR, title: 'Calendar', symbol: 'CAL', isMaximized: true }} language={language} /></div>}
             
-            {activePage === 'FNG' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'fng-page', type: WidgetType.FEAR_GREED, title: 'Fear & Greed Index', symbol: 'GLOBAL', isMaximized: true }} language={language} /></div>}
-            {activePage === 'ALTSEASON' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'altseason-page', type: WidgetType.ALTCOIN_SEASON, title: 'Altcoin Season Index', symbol: 'GLOBAL', isMaximized: true }} language={language} /></div>}
-            {activePage === 'TRUMP' && <div className="h-full w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'trump-page', type: WidgetType.TRUMP_METER, title: 'Trump-o-Meter', symbol: 'SENTIMENT', isMaximized: true }} language={language} /></div>}
+            {activePage === 'FNG' && <div className="h-[500px] w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'fng-page', type: WidgetType.FEAR_GREED, title: 'Fear & Greed Index', symbol: 'GLOBAL', isMaximized: true }} language={language} /></div>}
+            {activePage === 'ALTSEASON' && <div className="h-[500px] w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'altseason-page', type: WidgetType.ALTCOIN_SEASON, title: 'Altcoin Season Index', symbol: 'GLOBAL', isMaximized: true }} language={language} /></div>}
+            {activePage === 'TRUMP' && <div className="h-[600px] w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'trump-page', type: WidgetType.TRUMP_METER, title: 'Trump-o-Meter', symbol: 'SENTIMENT', isMaximized: true }} language={language} /></div>}
           </div>
 
           <PageFaq language={language} pageType={activePage} />
