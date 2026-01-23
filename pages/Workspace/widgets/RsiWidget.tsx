@@ -11,9 +11,7 @@ import {
   fetchRsiAverage,
   fetchRsiTable,
   fetchRsiTablePage,
-  fetchRsiTrackerHist,
-  SITE_LOGO_FALLBACK,
-  GITHUB_CDN
+  fetchRsiTrackerHist
 } from '../services/api';
 
 import {
@@ -331,7 +329,6 @@ export const RsiScatterChart: React.FC = () => {
             const isRising = (last !== undefined && cur > last);
             const symbolShort = (r.symbol || 'UNK').substring(0, 3).toUpperCase();
             const logoUrl = r.logo || `https://assets.coincap.io/assets/icons/${r.symbol.toLowerCase()}@2x.png`;
-            const backupLogo = `${GITHUB_CDN}/${r.symbol.toLowerCase()}.png`;
             
             return {
                 id: r.symbol, 
@@ -344,7 +341,6 @@ export const RsiScatterChart: React.FC = () => {
                 change: r.change24h,
                 isRising: isRising,
                 logoUrl: logoUrl,
-                backupLogo, // Pass backup
                 symbolShort
             };
         })
@@ -468,23 +464,13 @@ export const RsiScatterChart: React.FC = () => {
                         const symbol = isRising ? '▲' : '▼'; 
                         const logo = p.options.logoUrl;
                         const short = p.options.symbolShort || '';
-                        const backup = p.options.backupLogo;
-
-                        // ROBUST IMAGE FALLBACK CHAIN FOR HIGHCHARTS
-                        // 1. Try Main Logo
-                        // 2. Try Backup (GitHub)
-                        // 3. Try Site Logo (Definitive)
-                        const imgHtml = `
-                            <img src="${logo}" 
-                                 style="position: relative; width: 24px; height: 24px; border-radius: 50%; object-fit: cover; z-index: 2;" 
-                                 onerror="if(!this.dataset.tried){this.dataset.tried='1';this.src='${backup}'}else{this.src='${SITE_LOGO_FALLBACK}'}"
-                            />
-                        `;
-
                         return `
                         <div style="position: relative; width: 24px; height: 24px;">
                             <div style="position: absolute; inset: 0; background: #334155; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: bold; color: #fff; z-index: 1;">${short.charAt(0)}</div>
-                            ${imgHtml}
+                            <img src="${logo}" 
+                                 style="position: relative; width: 24px; height: 24px; border-radius: 50%; object-fit: cover; z-index: 2;" 
+                                 onerror="this.style.display='none'"
+                            />
                             <div style="position: absolute; right: -4px; bottom: -2px; color: ${color}; font-size: 10px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.8); line-height: 1; z-index: 3;">
                                 ${symbol}
                             </div>
@@ -635,20 +621,18 @@ export const RsiTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false })
             case 'asset': return (
                 <td key={colId} className="p-3">
                     <div className="flex items-center gap-3">
-                        <img 
-                            src={r.logo} 
-                            className="w-6 h-6 rounded-full bg-white p-0.5 border border-gray-200 dark:border-white/10" 
-                            alt="" 
-                            onError={(e) => {
-                                const target = e.currentTarget;
-                                const fallback = `${GITHUB_CDN}/${r.symbol.toLowerCase()}.png`;
-                                if (target.src !== fallback && target.src !== SITE_LOGO_FALLBACK) {
-                                    target.src = fallback;
-                                } else if (target.src !== SITE_LOGO_FALLBACK) {
-                                    target.src = SITE_LOGO_FALLBACK;
+                        {r.logo ? (
+                            <img src={r.logo} className="w-6 h-6 rounded-full bg-white p-0.5 border border-gray-200 dark:border-white/10" alt="" onError={(e) => {
+                                const parent = e.currentTarget.parentElement;
+                                if (parent) {
+                                    e.currentTarget.style.display = 'none';
+                                    const fallback = document.createElement('div');
+                                    fallback.className = "w-6 h-6 rounded-full bg-gray-200 dark:bg-slate-700 flex items-center justify-center text-[9px] font-bold text-gray-500 dark:text-gray-300";
+                                    fallback.innerText = r.symbol.charAt(0).toUpperCase();
+                                    parent.prepend(fallback);
                                 }
-                            }} 
-                        />
+                            }} />
+                        ) : (<div className="w-6 h-6 rounded-full bg-gray-200 dark:bg-slate-700 flex items-center justify-center text-[9px] font-bold text-gray-500 dark:text-gray-300">{r.symbol.charAt(0).toUpperCase()}</div>)}
                         <div className="flex flex-col"><span className="font-bold text-gray-900 dark:text-slate-200 leading-none">{r.name}</span><span className="text-[10px] font-bold text-gray-500 uppercase">{r.symbol}</span></div>
                     </div>
                 </td>
