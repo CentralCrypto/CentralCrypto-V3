@@ -515,8 +515,7 @@ export const RsiScatterChart: React.FC = () => {
   );
 };
 
-export const RsiTableList: React.FC = () => {
-    // ... code unchanged except imports/exports if needed ...
+export const RsiTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false }) => {
     const [loading, setLoading] = useState(true);
     const [rows, setRows] = useState<RsiTableItem[]>([]);
     const [page, setPage] = useState(1);
@@ -541,7 +540,6 @@ export const RsiTableList: React.FC = () => {
         return () => { mounted = false; };
     }, [page, pageSize, search, sortKey, sortAsc]);
 
-    // ... sort/drag handlers ...
     const handleSort = (key: string) => {
         if (sortKey === key) setSortAsc(!sortAsc);
         else { setSortKey(key); setSortAsc(false); }
@@ -591,7 +589,6 @@ export const RsiTableList: React.FC = () => {
         }
     };
     
-    // ... Sortable Headers ...
     const sortKeyMap: Record<string, string> = { rank: 'rank', asset: 'rank', price: 'price24h', mcap: 'marketCap', vol: 'volume24h', rsi15m: 'rsi15m', rsi1h: 'rsi1h', rsi4h: 'rsi4h', rsi24h: 'rsi24h', rsi7d: 'rsi7d' };
     const COLS = {
         rank: { id: 'rank', label: '#' }, asset: { id: 'asset', label: 'Ativo' }, price: { id: 'price', label: 'Preço' },
@@ -614,7 +611,7 @@ export const RsiTableList: React.FC = () => {
     };
 
     return (
-        <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm flex flex-col overflow-hidden h-full min-h-[500px]">
+        <div className={`bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm flex flex-col ${isPage ? 'h-auto' : 'h-full overflow-hidden min-h-[500px]'}`}>
             <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-3 bg-gray-50 dark:bg-black/20">
                 <h3 className="font-bold text-gray-900 dark:text-white text-sm uppercase tracking-wider">Dados Detalhados</h3>
                 <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -631,7 +628,7 @@ export const RsiTableList: React.FC = () => {
                     </div>
                 </div>
             </div>
-            <div className="flex-1 overflow-auto custom-scrollbar">
+            <div className={isPage ? 'w-full' : 'flex-1 overflow-auto custom-scrollbar'}>
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                     <table className="w-full text-left border-collapse">
                         <thead className="sticky top-0 z-10">
@@ -666,14 +663,11 @@ const RsiWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ ite
         return <RsiGridWidget language={language} />;
     }
     
-    // 2. Maximized Mode: Scatter Chart + Table
+    // 2. Maximized Mode: JUST SCATTER CHART (as requested)
     return (
-        <div className="flex flex-col h-full bg-white dark:bg-[#1a1c1e] p-4 gap-4 overflow-hidden">
-             <div className="h-[60%] min-h-0 shadow-sm border border-gray-200 dark:border-slate-800 rounded-xl overflow-hidden">
-                 <RsiScatterChart />
-             </div>
+        <div className="flex flex-col h-full bg-white dark:bg-[#1a1c1e] p-4 overflow-hidden">
              <div className="flex-1 min-h-0 shadow-sm border border-gray-200 dark:border-slate-800 rounded-xl overflow-hidden">
-                 <RsiTableList />
+                 <RsiScatterChart />
              </div>
         </div>
     );

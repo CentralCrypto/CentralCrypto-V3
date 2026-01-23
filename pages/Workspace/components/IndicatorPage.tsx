@@ -128,8 +128,8 @@ const RsiPageLayout = ({ language }: { language: Language }) => {
             </div>
 
             {/* Bottom Row: Table (Full) */}
-            <div className="min-h-[500px]">
-                <RsiTableList />
+            <div className="w-full">
+                <RsiTableList isPage={true} />
             </div>
             
             {/* FAQ Section */}
@@ -151,8 +151,8 @@ const MacdPageLayout = ({ language }: { language: Language }) => {
                 </div>
             </div>
 
-            <div className="min-h-[500px]">
-                <MacdTableList />
+            <div className="w-full">
+                <MacdTableList isPage={true} />
             </div>
             
             <MacdFaq />

@@ -523,7 +523,7 @@ const SortableTh = ({ colId, label, sortKey, activeKey, onSort }: any) => {
     );
 };
 
-export const MacdTableList: React.FC = () => {
+export const MacdTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false }) => {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<MacdTrackerPoint[]>([]);
   const [page, setPage] = useState(1);
@@ -598,7 +598,7 @@ export const MacdTableList: React.FC = () => {
   };
 
   return (
-      <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm flex flex-col overflow-hidden h-full min-h-[500px]">
+      <div className={`bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm flex flex-col ${isPage ? 'h-auto' : 'h-full overflow-hidden min-h-[500px]'}`}>
         <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-3 bg-gray-50 dark:bg-black/20">
             <h3 className="font-bold text-gray-900 dark:text-white text-sm uppercase tracking-wider">Dados Detalhados</h3>
             <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -615,7 +615,7 @@ export const MacdTableList: React.FC = () => {
                 </div>
             </div>
         </div>
-        <div className="flex-1 overflow-auto custom-scrollbar">
+        <div className={isPage ? 'w-full' : 'flex-1 overflow-auto custom-scrollbar'}>
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                 <table className="w-full text-left border-collapse">
                     <thead className="sticky top-0 z-10">
@@ -649,14 +649,11 @@ const MacdWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ it
         return <MacdGridWidget language={language} />;
     }
     
-    // 2. Maximized Mode: Scatter Chart + Table
+    // 2. Maximized Mode: JUST SCATTER CHART
     return (
-        <div className="flex flex-col h-full bg-white dark:bg-[#1a1c1e] p-4 gap-4 overflow-hidden">
-             <div className="h-[60%] min-h-0 shadow-sm border border-gray-200 dark:border-slate-800 rounded-xl overflow-hidden">
-                 <MacdScatterChart />
-             </div>
+        <div className="flex flex-col h-full bg-white dark:bg-[#1a1c1e] p-4 overflow-hidden">
              <div className="flex-1 min-h-0 shadow-sm border border-gray-200 dark:border-slate-800 rounded-xl overflow-hidden">
-                 <MacdTableList />
+                 <MacdScatterChart />
              </div>
         </div>
     );
