@@ -673,30 +673,34 @@ export const RsiTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false })
     return (
         <div className={`bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm flex flex-col ${isPage ? 'w-full h-auto block' : 'h-full overflow-hidden min-h-[500px]'}`}>
             <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-3 bg-gray-50 dark:bg-black/20">
-                <h3 className="font-bold text-gray-900 dark:text-white text-sm uppercase tracking-wider">Dados Detalhados</h3>
-                <div className="flex items-center gap-3 w-full sm:w-auto">
-                    {/* Header Pagination Controls */}
-                    <div className="flex items-center gap-2 bg-white dark:bg-[#2f3032] border border-gray-200 dark:border-slate-700 rounded px-1.5 py-1">
-                         <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="p-1 hover:bg-gray-100 dark:hover:bg-white/10 rounded disabled:opacity-30 text-gray-600 dark:text-white"><ChevronLeft size={14}/></button>
-                         <div className="flex items-center gap-1 text-[10px] font-bold text-gray-500 dark:text-gray-400">
+                {/* Header Controls Reorganized */}
+                <div className="flex flex-wrap items-center justify-between gap-4 w-full">
+                    {/* Left Group: Search + Rows */}
+                    <div className="flex items-center gap-4 flex-1">
+                        <div className="relative w-full sm:max-w-xs">
+                            <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
+                            <input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Buscar ativo..." className="w-full bg-white dark:bg-[#2f3032] border border-gray-200 dark:border-slate-700 text-gray-900 dark:text-slate-200 text-xs py-2 pl-9 pr-3 rounded focus:border-[#dd9933] outline-none transition-colors"/>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs font-bold text-gray-500 dark:text-gray-400">
+                             <span>Linhas:</span>
+                             <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }} className="bg-transparent text-gray-900 dark:text-white outline-none cursor-pointer font-black hover:text-[#dd9933] transition-colors">
+                                <option value={50} className="bg-white dark:bg-[#2f3032] text-black dark:text-white">50</option>
+                                <option value={100} className="bg-white dark:bg-[#2f3032] text-black dark:text-white">100</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    {/* Right Group: Pagination */}
+                    <div className="flex items-center gap-2">
+                         <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="p-1 hover:text-[#dd9933] transition-colors disabled:opacity-30 text-gray-600 dark:text-white"><ChevronLeft size={16}/></button>
+                         <div className="flex items-center gap-1 text-xs font-bold text-gray-500 dark:text-gray-400">
                             <span>Pág</span>
-                            <select value={page} onChange={(e) => setPage(Number(e.target.value))} className="bg-transparent text-gray-900 dark:text-white outline-none cursor-pointer font-black">
+                            <select value={page} onChange={(e) => setPage(Number(e.target.value))} className="bg-transparent text-gray-900 dark:text-white outline-none cursor-pointer font-black hover:text-[#dd9933] transition-colors">
                                 {Array.from({length: totalPages}, (_, i) => i + 1).map(p => <option key={p} value={p} className="bg-white dark:bg-[#2f3032] text-black dark:text-white">{p}</option>)}
                             </select>
+                            <span>de {totalPages}</span>
                          </div>
-                         <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="p-1 hover:bg-gray-100 dark:hover:bg-white/10 rounded disabled:opacity-30 text-gray-600 dark:text-white"><ChevronRight size={14}/></button>
-                    </div>
-
-                    <div className="flex items-center gap-2 bg-white dark:bg-[#2f3032] border border-gray-200 dark:border-slate-700 rounded px-2 py-1.5">
-                        <span className="text-[10px] font-bold text-gray-500 uppercase">Linhas:</span>
-                        <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }} className="bg-transparent text-xs font-bold outline-none text-gray-900 dark:text-white">
-                            <option value={50} className="bg-white dark:bg-[#2f3032]">50</option>
-                            <option value={100} className="bg-white dark:bg-[#2f3032]">100</option>
-                        </select>
-                    </div>
-                    <div className="relative flex-1 sm:w-64">
-                        <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
-                        <input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Buscar ativo..." className="w-full bg-white dark:bg-[#2f3032] border border-gray-200 dark:border-slate-700 text-gray-900 dark:text-slate-200 text-xs py-2 pl-9 pr-3 rounded focus:border-[#dd9933] outline-none transition-colors"/>
+                         <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="p-1 hover:text-[#dd9933] transition-colors disabled:opacity-30 text-gray-600 dark:text-white"><ChevronRight size={16}/></button>
                     </div>
                 </div>
             </div>
