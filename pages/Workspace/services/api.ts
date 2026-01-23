@@ -7,26 +7,40 @@ const STABLECOINS = ['USDT', 'USDC', 'DAI', 'FDUSD', 'TUSD', 'USDD', 'PYUSD', 'U
 
 /**
  * Helper: Tenta extrair um array de dados de qualquer estrutura JSON
+ * Agora suporta explicitamente a estrutura do n8n: [{ data: { heatmap: { items: [...] } } }]
  */
 function extractDataArray(raw: any): any[] {
     if (!raw) return [];
     
     // Se for array direto
     if (Array.isArray(raw)) {
-        // Caso específico: Array onde o primeiro item tem uma chave 'data' que é o array real (Wrapper comum n8n)
-        if (raw.length > 0 && raw[0] && typeof raw[0] === 'object') {
-             if (Array.isArray(raw[0].data)) return raw[0].data;
-             if (raw[0].data && Array.isArray(raw[0].data.data)) return raw[0].data.data; // Wrapper duplo
-             // Caso MACD complexo ou heatmap
-             if (raw[0].data?.heatmap?.items && Array.isArray(raw[0].data.heatmap.items)) return raw[0].data.heatmap.items;
+        if (raw.length === 0) return [];
+        const first = raw[0];
+
+        // Caso específico: Array onde o primeiro item tem uma chave 'data' que é o array real
+        if (first && typeof first === 'object') {
+             // Estrutura HEATMAP (RSI/MACD Tracker)
+             if (first.data?.heatmap?.items && Array.isArray(first.data.heatmap.items)) {
+                 return first.data.heatmap.items;
+             }
+             // Estrutura padrão n8n com wrapper 'data'
+             if (Array.isArray(first.data)) {
+                 return first.data;
+             }
+             // Estrutura 'data' dentro de 'data'
+             if (first.data && Array.isArray(first.data.data)) {
+                 return first.data.data;
+             }
         }
         return raw;
     }
     
-    // Se for objeto
+    // Se for objeto único
     if (typeof raw === 'object') {
+        if (raw.data?.heatmap?.items && Array.isArray(raw.data.heatmap.items)) return raw.data.heatmap.items;
         if (Array.isArray(raw.data)) return raw.data;
         if (Array.isArray(raw.items)) return raw.items;
+        
         // Tenta achar qualquer chave que seja um array grande
         const keys = Object.keys(raw);
         for (const key of keys) {
@@ -54,14 +68,16 @@ export const fetchWithFallback = async (url: string): Promise<any | null> => {
     const { data } = await httpGetJson(finalUrl, { timeoutMs: 15000, retries: 2 });
     return data;
   } catch (e: any) {
-    console.warn(`[API] Warn fetching ${url}`, e);
+    if (e.status !== 404) {
+      console.warn(`[API] Warn fetching ${url}:`, e.message || e);
+    }
   }
   return null;
 };
 
 export const isStablecoin = (symbol: string) => STABLECOINS.includes(symbol.toUpperCase());
 
-// ... (Restante do código de cache de moedas, categorias, news, etc mantido igual)
+// ... (Cache de Top Coins mantido igual)
 const TOP_COINS_TTL_MS = 60_000;
 let topCoinsCacheTs = 0;
 let topCoinsCache: ApiCoin[] = [];
@@ -88,6 +104,7 @@ export const fetchTopCoins = async (opts?: { force?: boolean; ttlMs?: number }):
   return topCoinsInFlight;
 };
 
+// ... (Outras funções de fetch mantidas)
 export interface HeatmapCategory { id: string; name: string; description?: string; type?: string; coin_counter?: number; ico_counter?: number; coins?: any[]; }
 export const fetchHeatmapCategories = async (): Promise<HeatmapCategory[]> => {
     const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.heatmapCategories));
@@ -100,17 +117,7 @@ export interface EtfFlowData { btcValue: number; ethValue: number; netFlow: numb
 export interface LsrData { lsr: number | null; longs: number | null; shorts: number | null; }
 
 export interface MacdAvgData { averageMacd: number; averageNMacd: number; bullishPercentage: number; bearishPercentage: number; yesterday: number; days7Ago: number; days30Ago: number; yesterdayNMacd: number; }
-
-export interface MacdTrackerPoint {
-  symbol: string; name: string; price: number; change24h: number; marketCap: number; logo?: string;
-  macd: {
-      "15m": { nmacd: number, macd: number, histogram: number, signalLine: number };
-      "1h": { nmacd: number, macd: number, histogram: number, signalLine: number };
-      "4h": { nmacd: number, macd: number, histogram: number, signalLine: number };
-      "24h": { nmacd: number, macd: number, histogram: number, signalLine: number };
-      "7d": { nmacd: number, macd: number, histogram: number, signalLine: number };
-  };
-}
+export interface MacdTrackerPoint { symbol: string; name: string; price: number; change24h: number; marketCap: number; logo?: string; macd: any; }
 
 export interface RsiAvgData { averageRsi: number; yesterday: number; days7Ago: number; days30Ago: number; days90Ago?: number; }
 
@@ -126,6 +133,7 @@ export interface RsiTableItem {
   change?: number; logo?: string; marketCap?: number; volume24h?: number; rank?: number;
 }
 
+// ... (Interfaces EconEvent, OrderBook, etc mantidas)
 export interface EconEvent { date: string; title: string; country: string; impact: string; previous?: string; forecast?: string; }
 export interface OrderBookData { bids: { price: string; qty: string }[]; asks: { price: string; qty: string }[]; }
 export interface FngData { value: string; timestamp: string; value_classification?: string; }
@@ -135,7 +143,6 @@ export interface AltSeasonData { index: number; yesterday: number; lastWeek: num
 
 export type RsiTimeframeKey = '15m' | '1h' | '4h' | '24h' | '7d';
 export type RsiSortKey = 'rsi15m' | 'rsi1h' | 'rsi4h' | 'rsi24h' | 'rsi7d' | 'marketCap' | 'volume24h' | 'price24h' | 'rank';
-
 export interface RsiTablePageResult { items: RsiTableItem[]; page: number; totalPages: number; totalItems: number; }
 export interface MacdTablePageResult { items: MacdTrackerPoint[]; page: number; totalPages: number; totalItems: number; }
 
@@ -159,9 +166,12 @@ export const fetchRsiAverage = async (): Promise<RsiAvgData | null> => {
 };
 
 export const fetchRsiTrackerHist = async (): Promise<RsiTrackerPoint[]> => {
+  // Use rsitrackerhist.json which has the heatmap structure
   const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTrackerHist));
   const items = extractDataArray(raw);
+
   if (!items.length) return [];
+
   return items.map((p: any) => {
     const rsiNode = p.rsiOverall || p.rsi || {};
     const symbol = String(p.symbol || p.s || '').toUpperCase();
@@ -187,15 +197,25 @@ export const fetchRsiTrackerHist = async (): Promise<RsiTrackerPoint[]> => {
   });
 };
 
+/**
+ * Tabela RSI: Usa o mesmo endpoint do histórico (rsitrackerhist.json) se o rsitracker.json estiver vazio,
+ * pois o usuário confirmou que o rsitrackerhist tem os dados corretos.
+ */
 export const fetchRsiTable = async (opts?: { force?: boolean }): Promise<RsiTableItem[]> => {
-  const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTable));
-  const items = extractDataArray(raw);
+  // Tenta endpoint da tabela, se vazio, tenta o do histórico
+  let raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTable));
+  let items = extractDataArray(raw);
+
+  if (items.length === 0) {
+      // Fallback para o arquivo que o usuário mostrou (rsitrackerhist.json)
+      raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTrackerHist));
+      items = extractDataArray(raw);
+  }
 
   if (!items.length) return [];
 
   return items.map((p: any) => {
     const symbol = String(p.symbol || '').toUpperCase();
-    // Tenta pegar RSI de vários lugares possíveis no JSON para robustez
     const rsiNode = p.rsiOverall || p.rsi || p.rsi_overall || p; 
 
     return {
@@ -249,8 +269,7 @@ export const fetchRsiTablePage = async (args: { page: number; limit: number; sor
   return { items: sorted.slice(start, start + limit), page, totalPages, totalItems };
 };
 
-// -------------------- MACD IMPLEMENTATION --------------------
-
+// ... Resto do arquivo MACD e outros exports mantidos iguais ...
 export const fetchMacdAverage = async (): Promise<MacdAvgData | null> => {
   const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.macdAvg));
   if (!raw) return null;
@@ -323,46 +342,39 @@ export const fetchMacdTablePage = async (args: { page: number; limit: number; so
     return { items: sorted.slice(start, start + limit), page, totalPages, totalItems };
 };
 
-// ... Rest of the file (Other helpers) remains largely unchanged
+// ... Rest of helpers unchanged (CryptoNews, AltSeason, etc.)
 export const fetchCryptoNews = async (symbol: string, coinName: string): Promise<NewsItem[]> => {
   const url = `${ENDPOINTS.special.news}?s=${encodeURIComponent(symbol)}&n=${encodeURIComponent(coinName)}`;
   const data = await fetchWithFallback(url);
   return Array.isArray(data) ? data : [];
 };
-
 export const fetchAltcoinSeason = async (): Promise<AltSeasonData | null> => {
   const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.altseason));
   return Array.isArray(data) ? data[0] : data;
 };
-
 export const fetchAltcoinSeasonHistory = async (): Promise<AltSeasonHistoryPoint[]> => {
   const data = await fetchAltcoinSeason();
   return Array.isArray(data?.history) ? (data!.history as AltSeasonHistoryPoint[]) : [];
 };
-
 export const fetchTrumpData = async (): Promise<TrumpData | null> => {
   const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.trump));
   return Array.isArray(data) ? data[0] : data;
 };
-
 export const fetchFearAndGreed = async (): Promise<FngData[]> => {
   const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.fng));
   const items = extractDataArray(data);
   return items as FngData[];
 };
-
 export const fetchEconomicCalendar = async (): Promise<EconEvent[]> => {
   const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.calendar));
   return Array.isArray(data) ? data : [];
 };
-
 export const fetchEtfFlow = async (): Promise<EtfFlowData | null> => {
   const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.etfNetFlow));
   if (!raw) return null;
   const root = Array.isArray(raw) ? raw[0] : raw;
   const data = (root && (root as any).data) ? (root as any).data : root;
   const status = (root && (root as any).status) ? (root as any).status : null;
-
   return {
     btcValue: Number(data?.totalBtcValue ?? data?.btcValue ?? 0),
     ethValue: Number(data?.totalEthValue ?? data?.ethValue ?? 0),
@@ -375,7 +387,6 @@ export const fetchEtfFlow = async (): Promise<EtfFlowData | null> => {
     xrpValue: Number(data?.xrpValue ?? 0)
   };
 };
-
 export const fetchLongShortRatio = async (symbol: string, period: string): Promise<LsrData> => {
   const cleanSymbol = symbol.toUpperCase().endsWith('USDT') ? symbol.toUpperCase() : `${symbol.toUpperCase()}USDT`;
   try {
@@ -388,7 +399,6 @@ export const fetchLongShortRatio = async (symbol: string, period: string): Promi
   } catch (e) { }
   return { lsr: null, longs: null, shorts: null };
 };
-
 export const fetchOrderBook = async (symbol: string): Promise<OrderBookData | null> => {
   try {
     const response = await fetch(`https://api.binance.com/api/v3/depth?symbol=${symbol}&limit=20`);
@@ -397,7 +407,6 @@ export const fetchOrderBook = async (symbol: string): Promise<OrderBookData | nu
   } catch (e) { }
   return null;
 };
-
 export const fetchMarketCapHistory = async (): Promise<any | null> => {
   return await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.mktcapHist));
 };

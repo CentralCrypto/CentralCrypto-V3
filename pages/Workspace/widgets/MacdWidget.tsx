@@ -305,10 +305,10 @@ export const MacdScatterChart: React.FC = () => {
             style: { color: isDark ? '#fff' : '#000', zIndex: 9999 },
             outside: true, 
             // Strict Snap
-            snap: 5,
+            snap: 2,
             // Position above the logo
             positioner: function (labelWidth: number, labelHeight: number, point: any) {
-                return { x: point.plotX - labelWidth / 2, y: point.plotY - labelHeight - 35 };
+                return { x: point.plotX - labelWidth / 2, y: point.plotY - labelHeight - 40 };
             },
             formatter: function (this: any) {
                 const p = this.point;
@@ -352,12 +352,12 @@ export const MacdScatterChart: React.FC = () => {
                         // CSS Fallback Layering
                         return `
                         <div style="position: relative; width: 24px; height: 24px;">
-                            <div style="position: absolute; inset: 0; background: #334155; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: bold; color: #fff;">${short.charAt(0)}</div>
+                            <div style="position: absolute; inset: 0; background: #334155; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: bold; color: #fff; z-index: 1;">${short.charAt(0)}</div>
                             <img src="${logo}" 
-                                 style="position: relative; width: 24px; height: 24px; border-radius: 50%; object-fit: cover;" 
+                                 style="position: relative; width: 24px; height: 24px; border-radius: 50%; object-fit: cover; z-index: 2;" 
                                  onerror="this.style.display='none'" 
                             />
-                            <div style="position: absolute; right: -4px; bottom: -2px; color: ${color}; font-size: 10px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.8); line-height: 1;">
+                            <div style="position: absolute; right: -4px; bottom: -2px; color: ${color}; font-size: 10px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.8); line-height: 1; z-index: 3;">
                                 ${symbol}
                             </div>
                         </div>`;
@@ -590,7 +590,22 @@ export const MacdTableList: React.FC = () => {
 export const MacdFaq: React.FC = () => { return null; }; 
 
 const MacdWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ item, language = 'pt' }) => {
-    return <MacdSidebar language={language} />;
+    // 1. Grid Mode: Only Sidebar
+    if (!item.isMaximized) {
+        return <MacdSidebar language={language} />;
+    }
+    
+    // 2. Maximized Mode: Scatter Chart + Table
+    return (
+        <div className="flex flex-col h-full bg-white dark:bg-[#1a1c1e] p-4 gap-4 overflow-hidden">
+             <div className="h-[60%] min-h-0 shadow-sm border border-gray-200 dark:border-slate-800 rounded-xl overflow-hidden">
+                 <MacdScatterChart />
+             </div>
+             <div className="flex-1 min-h-0 shadow-sm border border-gray-200 dark:border-slate-800 rounded-xl overflow-hidden">
+                 <MacdTableList />
+             </div>
+        </div>
+    );
 };
 
 export default MacdWidget;

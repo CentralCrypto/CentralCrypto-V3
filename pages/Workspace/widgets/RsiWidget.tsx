@@ -128,8 +128,8 @@ const SidebarGauge: React.FC<{ value: number }> = ({ value }) => {
                     </g>
                 </svg>
             </div>
-            {/* Reduced rank size and pulled up */}
-            <div className="flex flex-col items-center -mt-3 z-10">
+            {/* Optimized text size and positioning as requested */}
+            <div className="flex flex-col items-center -mt-4 z-10">
                 <div className="text-3xl font-black text-[#dd9933] leading-none font-mono tracking-tighter">{rsiVal.toFixed(2)}</div>
                 <div className="text-sm font-bold text-gray-900 dark:text-white uppercase mt-0.5 tracking-widest">{label}</div>
             </div>
@@ -345,11 +345,9 @@ export const RsiScatterChart: React.FC = () => {
             borderRadius: 8,
             style: { color: isDark ? '#fff' : '#000', zIndex: 9999 },
             outside: true,
-            // Mouseover strictly on the point (snap: 0/5)
-            snap: 5,
-            // Position tooltip well ABOVE the point to prevent overlap
+            snap: 2,
             positioner: function (labelWidth: number, labelHeight: number, point: any) {
-                return { x: point.plotX - labelWidth / 2, y: point.plotY - labelHeight - 35 };
+                return { x: point.plotX - labelWidth / 2, y: point.plotY - labelHeight - 40 };
             },
             formatter: function (this: any) {
                 const p = this.point;
@@ -369,7 +367,6 @@ export const RsiScatterChart: React.FC = () => {
         },
         plotOptions: {
             scatter: {
-                // Strict hover detection
                 stickyTracking: false,
                 marker: {
                     radius: 12, 
@@ -390,18 +387,14 @@ export const RsiScatterChart: React.FC = () => {
                         const symbol = isRising ? '▲' : '▼'; 
                         const logo = p.options.logoUrl;
                         const short = p.options.symbolShort || '';
-
-                        // CSS Fallback: Circle with Letter BEHIND the image.
-                        // If image fails to load, the circle is visible.
-                        // Highcharts doesn't reliably fire onerror in formatter string, so we rely on layering.
                         return `
                         <div style="position: relative; width: 24px; height: 24px;">
-                            <div style="position: absolute; inset: 0; background: #334155; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: bold; color: #fff;">${short.charAt(0)}</div>
+                            <div style="position: absolute; inset: 0; background: #334155; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: bold; color: #fff; z-index: 1;">${short.charAt(0)}</div>
                             <img src="${logo}" 
-                                 style="position: relative; width: 24px; height: 24px; border-radius: 50%; object-fit: cover;" 
+                                 style="position: relative; width: 24px; height: 24px; border-radius: 50%; object-fit: cover; z-index: 2;" 
                                  onerror="this.style.display='none'"
                             />
-                            <div style="position: absolute; right: -4px; bottom: -2px; color: ${color}; font-size: 10px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.8); line-height: 1;">
+                            <div style="position: absolute; right: -4px; bottom: -2px; color: ${color}; font-size: 10px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.8); line-height: 1; z-index: 3;">
                                 ${symbol}
                             </div>
                         </div>`;
@@ -535,7 +528,7 @@ export const RsiTableList: React.FC = () => {
                                     parent.prepend(fallback);
                                 }
                             }} />
-                        ) : (<div className="w-6 h-6 rounded-full bg-gray-200 dark:bg-slate-700 flex items-center justify-center text-[9px] font-bold text-gray-500 dark:text-gray-300">{r.symbol.charAt(0).toUpperCase()}</div>)}
+                        ) : (<div className="w-6 h-6 rounded-full bg-gray-200 dark:bg-slate-700 flex items-center justify-center text-[9px] font-bold text-gray-500 dark:text-gray-300">{r.symbol.charAt(0).toUpperCase())}</div>)}
                         <div className="flex flex-col"><span className="font-bold text-gray-900 dark:text-slate-200 leading-none">{r.name}</span><span className="text-[10px] font-bold text-gray-500 uppercase">{r.symbol}</span></div>
                     </div>
                 </td>
@@ -622,7 +615,22 @@ export const RsiTableList: React.FC = () => {
 export const RsiFaq: React.FC = () => { /* ... existing ... */ return null; }; // Keeping minimal for brevity
 
 const RsiWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ item, language = 'pt' }) => {
-    return <RsiGauge language={language} />;
+    // 1. Grid Mode: Only Sidebar/Gauge
+    if (!item.isMaximized) {
+        return <RsiGauge language={language} />;
+    }
+    
+    // 2. Maximized Mode: Scatter Chart + Table
+    return (
+        <div className="flex flex-col h-full bg-white dark:bg-[#1a1c1e] p-4 gap-4 overflow-hidden">
+             <div className="h-[60%] min-h-0 shadow-sm border border-gray-200 dark:border-slate-800 rounded-xl overflow-hidden">
+                 <RsiScatterChart />
+             </div>
+             <div className="flex-1 min-h-0 shadow-sm border border-gray-200 dark:border-slate-800 rounded-xl overflow-hidden">
+                 <RsiTableList />
+             </div>
+        </div>
+    );
 };
 
 export default RsiWidget;
