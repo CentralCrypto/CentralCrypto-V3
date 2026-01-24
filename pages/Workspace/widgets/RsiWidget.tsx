@@ -1,6 +1,6 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, Info, Search, ChevronLeft, ChevronRight, BarChart2, DollarSign, Percent, ZoomOut, MousePointer2, GripVertical, ChevronsUpDown, Filter, TrendingUp, TrendingDown } from 'lucide-react';
+import { Loader2, Info, Search, ChevronLeft, ChevronRight, BarChart2, DollarSign, Percent, ZoomOut, MousePointer2, GripVertical, ChevronsUpDown, Filter, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
 import Highcharts from 'highcharts';
 import addMouseWheelZoom from 'highcharts/modules/mouse-wheel-zoom';
 import { Language, DashboardItem } from '../../../types';
@@ -147,7 +147,7 @@ const RsiGridWidget: React.FC<{ language: Language }> = ({ language }) => {
         fetchRsiAverage().then(data => {
             setAvgData(data);
             setLoading(false);
-        });
+        }).catch(() => setLoading(false));
     }, []);
 
     const Watermark = () => <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden opacity-[0.05] z-0"><img src="https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png" alt="watermark" className="w-3/4 h-auto grayscale filter" /></div>;
@@ -207,7 +207,7 @@ export const RsiGauge: React.FC<{ language?: Language }> = ({ language = 'pt' })
         setAvgData(avg);
         setTableData(table);
         setLoading(false);
-    });
+    }).catch(() => setLoading(false));
   }, []);
 
   const timeframe: Timeframe = '4h'; 
@@ -274,17 +274,19 @@ export const RsiScatterChart: React.FC = () => {
   const chartInstance = useRef<Highcharts.Chart | null>(null);
   
   const [points, setPoints] = useState<RsiTrackerPoint[]>([]);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [timeframe, setTimeframe] = useState<Timeframe>('4h');
   const [xMode, setXMode] = useState<XAxisMode>('mcap');
   const [limit, setLimit] = useState(50); 
   
-  // Filters
   const [visibleZones, setVisibleZones] = useState<string[]>(['oversold', 'neutral', 'overbought']);
 
   useEffect(() => {
-      fetchRsiTrackerHist().then(data => {
-          if (data && Array.isArray(data)) setPoints(data);
-      });
+      fetchRsiTrackerHist()
+        .then(data => {
+            if (data && Array.isArray(data)) setPoints(data);
+        })
+        .finally(() => setHasLoaded(true));
   }, []);
 
   const resetZoom = () => {
@@ -318,7 +320,6 @@ export const RsiScatterChart: React.FC = () => {
 
             const cur = r.rsi?.[timeframe];
             
-            // FIX: Filters match the 20/80 logic
             const isOversold = cur <= RSI_LOW;
             const isOverbought = cur >= RSI_HIGH;
             const isNeutral = !isOversold && !isOverbought;
@@ -331,13 +332,12 @@ export const RsiScatterChart: React.FC = () => {
             const isRising = (last !== undefined && cur > last);
             const symbolShort = (r.symbol || 'UNK').substring(0, 3).toUpperCase();
             
-            // Use o novo helper
             const logoUrl = r.logo || '';
             
             return {
                 id: r.symbol, 
-                x: xVal, // X Axis = Metric (Mcap/Vol/Change)
-                y: cur,  // Y Axis = RSI
+                x: xVal, 
+                y: cur, 
                 z: r.volume24h,
                 name: r.symbol,
                 fullName: r.name,
@@ -348,7 +348,7 @@ export const RsiScatterChart: React.FC = () => {
                 symbolShort
             };
         })
-        .filter(p => p !== null); // Remove filtered out points
+        .filter(p => p !== null); 
 
     seriesData.sort((a, b) => a!.name.localeCompare(b!.name));
 
@@ -406,15 +406,14 @@ export const RsiScatterChart: React.FC = () => {
             gridLineColor: gridColor,
             gridLineDashStyle: 'Dash',
             labels: { style: { color: textColor, fontSize: '10px' } },
-            // FIX: Lines at 20 and 80
             plotLines: [
                 { value: RSI_HIGH, color: COLOR_RED, dashStyle: 'ShortDash', width: 2, label: { text: 'Overbought (80)', align: 'right', style: { color: COLOR_RED, fontSize: '10px' } }, zIndex: 5 },
                 { value: RSI_LOW, color: COLOR_GREEN, dashStyle: 'ShortDash', width: 2, label: { text: 'Oversold (20)', align: 'right', style: { color: COLOR_GREEN, fontSize: '10px' } }, zIndex: 5 },
                 { value: 50, color: textColor, width: 1, zIndex: 1 }
             ],
             plotBands: [
-                { from: RSI_HIGH, to: 100, color: 'rgba(194, 84, 78, 0.08)' }, // Red with opacity
-                { from: 0, to: RSI_LOW, color: 'rgba(78, 132, 60, 0.08)' } // Green with opacity
+                { from: RSI_HIGH, to: 100, color: 'rgba(194, 84, 78, 0.08)' }, 
+                { from: 0, to: RSI_LOW, color: 'rgba(78, 132, 60, 0.08)' } 
             ],
             crosshair: { width: 1, color: crosshairColor, dashStyle: 'Dot', snap: false, zIndex: 5 }
         },
@@ -468,7 +467,6 @@ export const RsiScatterChart: React.FC = () => {
                         const symbol = isRising ? '▲' : '▼'; 
                         const short = p.options.symbolShort || '';
                         
-                        // NEW LOGO HELPER
                         const imgHtml = getHighchartsImgTag(
                            short, 
                            p.options.logoUrl, 
@@ -554,8 +552,10 @@ export const RsiScatterChart: React.FC = () => {
             </div>
         </div>
         <div className="flex-1 w-full min-h-0 relative rounded-lg overflow-hidden border border-gray-100 dark:border-slate-800/50 z-10">
-            {points.length === 0 ? (
-                <div className="absolute inset-0 flex items-center justify-center text-slate-500"><Loader2 className="animate-spin" /></div>
+            {(!hasLoaded || points.length === 0) ? (
+                <div className="absolute inset-0 flex items-center justify-center text-slate-500">
+                    {!hasLoaded ? <Loader2 className="animate-spin" /> : <div className="flex flex-col items-center"><AlertTriangle size={24} className="mb-2"/><span className="text-xs font-bold">Sem dados no momento</span></div>}
+                </div>
             ) : (
                 <div ref={chartRef} className="absolute inset-0" />
             )}
@@ -587,6 +587,11 @@ export const RsiTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false })
             if(!mounted) return;
             setRows(res.items);
             setTotalPages(res.totalPages);
+            setLoading(false);
+        })
+        .catch(err => {
+            if(!mounted) return;
+            console.warn("RSI Table Fetch Error", err);
             setLoading(false);
         });
         return () => { mounted = false; };
@@ -629,23 +634,18 @@ export const RsiTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false })
             case 'asset': return (
                 <td key={colId} className="p-3">
                     <div className="flex items-center gap-3">
-                        {/* 4-Layer Fallback Image */}
                         <img 
                             src={r.logo} 
                             className="w-6 h-6 rounded-full bg-white p-0.5 border border-gray-200 dark:border-white/10" 
                             alt="" 
                             onError={(e) => {
                                 const target = e.currentTarget;
-                                // Obtém a cadeia de fallbacks
                                 const fallbacks = getLogoChain(r.symbol, undefined, r.id); 
-                                // Encontra o índice da URL atual
                                 const currentSrc = target.getAttribute('src') || '';
                                 let nextIndex = fallbacks.indexOf(currentSrc) + 1;
-                                
                                 if (nextIndex < fallbacks.length) {
                                     target.src = fallbacks[nextIndex];
                                 } else {
-                                    // Se falhar tudo, esconde
                                     target.style.display = 'none';
                                 }
                             }} 
@@ -690,9 +690,7 @@ export const RsiTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false })
     return (
         <div className={`bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm flex flex-col ${isPage ? 'w-full h-auto block' : 'h-full overflow-hidden min-h-[500px]'}`}>
             <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-3 bg-gray-50 dark:bg-black/20">
-                {/* Header Controls Reorganized */}
                 <div className="flex flex-wrap items-center justify-between gap-4 w-full">
-                    {/* Left Group: Search + Rows */}
                     <div className="flex items-center gap-4 flex-1">
                         <div className="relative w-full sm:max-w-xs">
                             <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
@@ -706,8 +704,6 @@ export const RsiTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false })
                             </select>
                         </div>
                     </div>
-                    
-                    {/* Right Group: Pagination */}
                     <div className="flex items-center gap-2">
                          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="p-1 hover:text-[#dd9933] transition-colors disabled:opacity-30 text-gray-600 dark:text-white"><ChevronLeft size={16}/></button>
                          <div className="flex items-center gap-1 text-xs font-bold text-gray-500 dark:text-gray-400">
@@ -751,12 +747,9 @@ export const RsiTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false })
 export const RsiFaq: React.FC = () => { return null; };
 
 const RsiWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ item, language = 'pt' }) => {
-    // 1. Grid Mode: Simplified Widget
     if (!item.isMaximized) {
         return <RsiGridWidget language={language} />;
     }
-    
-    // 2. Maximized Mode: JUST SCATTER CHART (as requested)
     return (
         <div className="flex flex-col h-full bg-white dark:bg-[#1a1c1e] p-4 overflow-hidden">
              <div className="flex-1 min-h-0 shadow-sm border border-gray-200 dark:border-slate-800 rounded-xl overflow-hidden">

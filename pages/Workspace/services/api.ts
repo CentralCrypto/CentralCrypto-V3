@@ -4,6 +4,88 @@ import { getCacheckoUrl, ENDPOINTS } from '../../../services/endpoints';
 
 const STABLECOINS = ['USDT', 'USDC', 'DAI', 'FDUSD', 'TUSD', 'USDD', 'PYUSD', 'USDE', 'GUSD', 'USDP', 'BUSD'];
 
+// === LOGO HANDLING CONSTANTS ===
+export const SITE_LOGO_FALLBACK = 'https://centralcrypto.com.br/favicon.ico';
+export const COINCAP_CDN = 'https://assets.coincap.io/assets/icons';
+
+// --- LOGO MANIFEST CACHE ---
+let logoManifest: any = null;
+let symbolToIdMap = new Map<string, string>();
+
+// Inicializa o carregamento do manifesto silenciosamente
+(async () => {
+    try {
+        const url = getCacheckoUrl('/logos/manifest.json');
+        const res = await fetch(url);
+        if (res.ok) {
+            const data = await res.json();
+            logoManifest = data;
+            if (Array.isArray(data.coins)) {
+                data.coins.forEach((c: any) => {
+                    if (c.symbol) symbolToIdMap.set(c.symbol.toLowerCase(), c.id);
+                });
+            }
+        }
+    } catch (e) {
+        // Falha silenciosa
+    }
+})();
+
+// Função principal de resolução de URL inicial
+export const resolveLogo = (symbol: string, apiImage?: string, id?: string): string => {
+    const s = (symbol || '').toLowerCase();
+    
+    // 1. Tenta Cache Local via Manifest
+    if (logoManifest) {
+        const coinId = id || symbolToIdMap.get(s);
+        const localCoin = coinId ? logoManifest.coins.find((c: any) => c.id === coinId) : null;
+        if (localCoin && localCoin.fileName) {
+            return localCoin.fileName;
+        }
+    }
+
+    // 2. Se tiver imagem da API válida
+    if (apiImage && apiImage.startsWith('http') && !apiImage.includes('missing')) {
+        return apiImage;
+    }
+
+    // 3. Fallback Padrão
+    return `${COINCAP_CDN}/${s}@2x.png`;
+};
+
+// Gera cadeia de fallbacks para uso em onError
+export const getLogoChain = (symbol: string, apiImage?: string, id?: string): string[] => {
+    const s = (symbol || '').toLowerCase();
+    const chain: string[] = [];
+
+    // 1. Tenta Local
+    const coinId = id || (logoManifest ? symbolToIdMap.get(s) : null);
+    if (coinId) {
+        chain.push(`/cachecko/logos/${coinId}.png`);
+    }
+
+    // 2. Tenta Origem API
+    if (apiImage && apiImage.startsWith('http')) {
+        chain.push(apiImage);
+    }
+
+    // 3. Tenta CDN CoinCap
+    chain.push(`${COINCAP_CDN}/${s}@2x.png`);
+
+    // 4. Tenta Placeholder Final
+    chain.push(SITE_LOGO_FALLBACK);
+
+    return Array.from(new Set(chain));
+};
+
+// Helper para Highcharts HTML string
+export const getHighchartsImgTag = (symbol: string, url: string, size: number = 24, style: string = ""): string => {
+    const s = (symbol || '').toLowerCase();
+    const fallback = `${COINCAP_CDN}/${s}@2x.png`;
+    const errorLogic = `this.onerror=null;this.src='${fallback}';this.onerror=function(){this.src='${SITE_LOGO_FALLBACK}';}`;
+    return `<img src="${url}" style="width:${size}px;height:${size}px;${style}" onerror="${errorLogic}" />`;
+};
+
 /**
  * Busca dados usando caminhos relativos e o utilitário robusto httpGetJson.
  * O proxy interno do Vite resolve para o domínio principal.
@@ -32,26 +114,24 @@ const extractDataArray = (raw: any): any[] => {
 
   // Se já for array
   if (Array.isArray(raw)) {
+    if (raw.length === 0) return [];
+    
     // Caso n8n comum: [{ data: [...] }]
-    if (raw.length === 1 && raw[0]?.data && Array.isArray(raw[0].data)) {
-        return raw[0].data;
+    if (raw.length === 1) {
+        if (raw[0]?.data && Array.isArray(raw[0].data)) return raw[0].data;
+        if (raw[0]?.json?.data && Array.isArray(raw[0].json.data)) return raw[0].json.data; // n8n json wrapper
+        if (raw[0]?.data?.heatmap?.items && Array.isArray(raw[0].data.heatmap.items)) return raw[0].data.heatmap.items;
     }
-    // Caso n8n heatmap: [{ data: { heatmap: { items: [...] } } }]
-    if (raw.length === 1 && raw[0]?.data?.heatmap?.items && Array.isArray(raw[0].data.heatmap.items)) {
-        return raw[0].data.heatmap.items;
-    }
+    
+    // Se o primeiro item parece ser um dado válido, retorna o array original
     return raw;
   }
 
   // Se for objeto
   if (typeof raw === 'object') {
-    // { data: [...] }
     if (Array.isArray(raw.data)) return raw.data;
-    // { items: [...] }
     if (Array.isArray(raw.items)) return raw.items;
-    // { data: { data: [...] } } (aninhado)
     if (raw.data?.data && Array.isArray(raw.data.data)) return raw.data.data;
-    // { heatmap: { items: [...] } }
     if (raw.heatmap?.items && Array.isArray(raw.heatmap.items)) return raw.heatmap.items;
     
     // Objeto único tratado como lista de 1 item (fallback)
@@ -60,6 +140,13 @@ const extractDataArray = (raw: any): any[] => {
 
   return [];
 };
+
+const safeNum = (v: any, fallback = 0) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const normalizeSearch = (s: string) => (s || '').toLowerCase().trim();
 
 /**
  * Cache + dedupe em memória (por aba).
@@ -80,7 +167,6 @@ export const fetchTopCoins = async (opts?: { force?: boolean; ttlMs?: number }):
   topCoinsInFlight = (async () => {
     const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.main));
     const items = extractDataArray(data);
-    
     topCoinsCache = Array.isArray(items) ? (items as ApiCoin[]) : [];
     topCoinsCacheTs = Date.now();
     return topCoinsCache;
@@ -162,8 +248,7 @@ export interface MacdTrackerPoint {
   change24h: number;
   marketCap: number;
   logo?: string;
-  logoChain?: string[];
-  macd: any;
+  macd: Record<string, any>;
 }
 
 export interface RsiAvgData { averageRsi: number; yesterday: number; days7Ago: number; days30Ago: number; days90Ago?: number; }
@@ -177,7 +262,6 @@ export interface RsiTrackerPoint {
   volume24h?: number;
   rank?: number;
   logo?: string;
-  logoChain?: string[];
   rsi: Record<string, number>;
   currentRsi?: number;
   lastRsi?: number;
@@ -197,7 +281,6 @@ export interface RsiTableItem {
   };
   change?: number;
   logo?: string;
-  logoChain?: string[];
   marketCap?: number;
   volume24h?: number;
   rank?: number;
@@ -261,100 +344,6 @@ const tfKeyFromSort = (sort: string): RsiTimeframeKey | null => {
   return null;
 };
 
-const safeNum = (v: any, fallback = 0) => {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
-};
-
-const normalizeSearch = (s: string) => (s || '').toLowerCase().trim();
-
-// === LOGO HANDLING CONSTANTS ===
-export const SITE_LOGO_FALLBACK = 'https://centralcrypto.com.br/favicon.ico';
-export const COINCAP_CDN = 'https://assets.coincap.io/assets/icons';
-
-// --- LOGO MANIFEST CACHE ---
-let logoManifest: any = null;
-let symbolToIdMap = new Map<string, string>();
-
-// Inicializa o carregamento do manifesto silenciosamente
-(async () => {
-    try {
-        const url = getCacheckoUrl('/logos/manifest.json');
-        const res = await fetch(url);
-        if (res.ok) {
-            const data = await res.json();
-            logoManifest = data;
-            if (Array.isArray(data.coins)) {
-                data.coins.forEach((c: any) => {
-                    if (c.symbol) symbolToIdMap.set(c.symbol.toLowerCase(), c.id);
-                });
-            }
-        }
-    } catch (e) {
-        // Falha silenciosa, usará fallback de CDN
-    }
-})();
-
-// Função principal de resolução de URL inicial
-export const resolveLogo = (symbol: string, apiImage?: string, id?: string): string => {
-    const s = (symbol || '').toLowerCase();
-    
-    // 1. Tenta Cache Local via Manifest
-    if (logoManifest) {
-        // Tenta achar pelo ID direto ou pelo Símbolo
-        const coinId = id || symbolToIdMap.get(s);
-        const localCoin = coinId ? logoManifest.coins.find((c: any) => c.id === coinId) : null;
-        
-        if (localCoin && localCoin.fileName) {
-            return localCoin.fileName; // /cachecko/logos/bitcoin.png
-        }
-    }
-
-    // 2. Se tiver imagem da API (ex: CoinGecko) válida
-    if (apiImage && apiImage.startsWith('http') && !apiImage.includes('missing')) {
-        return apiImage;
-    }
-
-    // 3. Fallback Padrão (CoinCap CDN - Rápido e previsível)
-    return `${COINCAP_CDN}/${s}@2x.png`;
-};
-
-// Gera cadeia de fallbacks para uso em onError
-export const getLogoChain = (symbol: string, apiImage?: string, id?: string): string[] => {
-    const s = (symbol || '').toLowerCase();
-    const chain: string[] = [];
-
-    // 1. Tenta Local
-    const coinId = id || (logoManifest ? symbolToIdMap.get(s) : null);
-    if (coinId) {
-        chain.push(`/cachecko/logos/${coinId}.png`);
-    }
-
-    // 2. Tenta Origem API
-    if (apiImage && apiImage.startsWith('http')) {
-        chain.push(apiImage);
-    }
-
-    // 3. Tenta CDN CoinCap
-    chain.push(`${COINCAP_CDN}/${s}@2x.png`);
-
-    // 4. Tenta Placeholder Final
-    chain.push(SITE_LOGO_FALLBACK);
-
-    // Remove duplicatas
-    return Array.from(new Set(chain));
-};
-
-// Helper para Highcharts HTML string (inline onerror chain)
-export const getHighchartsImgTag = (symbol: string, url: string, size: number = 24, style: string = ""): string => {
-    const s = (symbol || '').toLowerCase();
-    const fallback = `${COINCAP_CDN}/${s}@2x.png`;
-    // Lógica inline simples para Highcharts: Tenta URL -> Tenta CoinCap -> Tenta Site Logo
-    const errorLogic = `this.onerror=null;this.src='${fallback}';this.onerror=function(){this.src='${SITE_LOGO_FALLBACK}';}`;
-    
-    return `<img src="${url}" style="width:${size}px;height:${size}px;${style}" onerror="${errorLogic}" />`;
-};
-
 // --------- NEWS ---------
 
 export const fetchCryptoNews = async (symbol: string, coinName: string): Promise<NewsItem[]> => {
@@ -383,8 +372,7 @@ export const fetchTrumpData = async (): Promise<TrumpData | null> => {
 
 export const fetchFearAndGreed = async (): Promise<FngData[]> => {
   const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.fng));
-  const items = extractDataArray(data);
-  return items as FngData[];
+  return extractDataArray(data) as FngData[];
 };
 
 // -------------------- RSI --------------------
@@ -392,21 +380,24 @@ export const fetchFearAndGreed = async (): Promise<FngData[]> => {
 export const fetchRsiAverage = async (): Promise<RsiAvgData | null> => {
   const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiAvg));
   if (!raw) return null;
-  // Deep parse for nested n8n structures
-  let root = Array.isArray(raw) ? raw[0] : raw;
-  if (root?.data?.overall) root = root.data;
-  else if (root?.overall) root = root;
-  
-  const overall = root?.overall || root;
+
+  const root = Array.isArray(raw) ? raw[0] : raw;
+  const dataNode = root?.data || root;
+
+  // Aceita tanto {overall:{...}} quanto objeto direto
+  const overall = dataNode?.overall || dataNode;
+
   return {
     averageRsi: safeNum(overall?.averageRsi, 50),
     yesterday: safeNum(overall?.yesterday, 50),
     days7Ago: safeNum(overall?.days7Ago, 50),
     days30Ago: safeNum(overall?.days30Ago, 50),
-    days90Ago: safeNum(overall?.days90Ago, undefined)
+    days90Ago: Number.isFinite(Number(overall?.days90Ago)) ? Number(overall?.days90Ago) : undefined
   };
 };
 
+// --- SCATTER CHART DATA (RSI TRACKER) ---
+// Arquivo Específico: rsitrackerhist.json
 export const fetchRsiTrackerHist = async (): Promise<RsiTrackerPoint[]> => {
   const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTrackerHist));
   const items = extractDataArray(raw);
@@ -424,9 +415,7 @@ export const fetchRsiTrackerHist = async (): Promise<RsiTrackerPoint[]> => {
       marketCap: safeNum(p.market_cap || p.marketCap, 0),
       volume24h: safeNum(p.total_volume || p.volume24h, 0),
       rank: safeNum(p.market_cap_rank || p.rank, 9999),
-      // LOGO RESOLUTION - Primary + Chain
       logo: resolveLogo(symbol, p.image || p.logo, p.id),
-      logoChain: getLogoChain(symbol, p.image || p.logo, p.id),
       rsi: {
         "15m": safeNum(rsiNode?.rsi15m ?? rsiNode?.['15m'], 50),
         "1h": safeNum(rsiNode?.rsi1h ?? rsiNode?.['1h'], 50),
@@ -447,6 +436,10 @@ let rsiTableCacheTs = 0;
 let rsiTableCache: RsiTableItem[] = [];
 let rsiTableInFlight: Promise<RsiTableItem[]> | null = null;
 
+/**
+ * --- TABLE DATA ---
+ * Arquivo Específico: rsitracker.json
+ */
 export const fetchRsiTable = async (opts?: { force?: boolean; ttlMs?: number }): Promise<RsiTableItem[]> => {
   const now = Date.now();
   const force = Boolean(opts?.force);
@@ -456,8 +449,14 @@ export const fetchRsiTable = async (opts?: { force?: boolean; ttlMs?: number }):
   if (!force && rsiTableInFlight) return rsiTableInFlight;
 
   rsiTableInFlight = (async () => {
-    const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTable));
-    const items = extractDataArray(raw);
+    let raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTable));
+    let items = extractDataArray(raw);
+
+    // Fallback se não tiver dados na tabela, tenta o historico
+    if (items.length === 0) {
+       raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTrackerHist));
+       items = extractDataArray(raw);
+    }
 
     if (!items.length) {
       rsiTableCache = [];
@@ -467,28 +466,26 @@ export const fetchRsiTable = async (opts?: { force?: boolean; ttlMs?: number }):
 
     rsiTableCache = items.map((p: any) => {
       const symbol = String(p.symbol || '').toUpperCase();
-      const rsiNode = p.rsiOverall || p.rsi || p.rsi_overall || {}; 
+      const rsiNode = p.rsiOverall || p.rsi || p.rsi_overall || p; 
 
       return {
         id: String(p.id || symbol || ''),
         symbol,
         name: p.name || symbol,
-        price: safeNum(p.current_price || p.price, 0),
-        change: safeNum(p.price_change_percentage_24h || p.price24h || p.change24h, 0),
+        price: safeNum(p.current_price ?? p.price, 0),
+        change: safeNum(p.price_change_percentage_24h ?? p.price24h ?? p.change24h, 0),
         marketCap: safeNum(p.market_cap || p.marketCap, 0),
         volume24h: safeNum(p.total_volume || p.volume24h, 0),
         rank: safeNum(p.market_cap_rank || p.rank, 9999),
-        // LOGO RESOLUTION
         logo: resolveLogo(symbol, p.image || p.logo, p.id),
-        logoChain: getLogoChain(symbol, p.image || p.logo, p.id),
         rsi: {
-          "15m": safeNum((p.rsi15m ?? rsiNode?.rsi15m) ?? rsiNode?.['15m'], 50),
-          "1h": safeNum((p.rsi1h ?? rsiNode.rsi1h) ?? rsiNode?.['1h'], 50),
-          "4h": safeNum((p.rsi4h ?? rsiNode?.rsi4h) ?? rsiNode?.['4h'], 50),
-          "24h": safeNum((p.rsi24h ?? rsiNode?.rsi24h) ?? rsiNode?.['24h'], 50),
-          "7d": safeNum((p.rsi7d ?? rsiNode?.rsi7d) ?? rsiNode?.['7d'], 50)
+          "15m": safeNum(p.rsi15m ?? rsiNode?.rsi15m ?? rsiNode?.['15m'], 50),
+          "1h": safeNum(p.rsi1h ?? rsiNode?.rsi1h ?? rsiNode?.['1h'], 50),
+          "4h": safeNum(p.rsi4h ?? rsiNode?.rsi4h ?? rsiNode?.['4h'], 50),
+          "24h": safeNum(p.rsi24h ?? rsiNode?.rsi24h ?? rsiNode?.['24h'], 50),
+          "7d": safeNum(p.rsi7d ?? rsiNode?.rsi7d ?? rsiNode?.['7d'], 50)
         }
-      };
+      } as RsiTableItem;
     });
 
     rsiTableCacheTs = Date.now();
@@ -500,34 +497,70 @@ export const fetchRsiTable = async (opts?: { force?: boolean; ttlMs?: number }):
   return rsiTableInFlight;
 };
 
-export const fetchRsiTablePage = async (args: { page: number; limit: number; sort?: RsiSortKey; ascendingOrder?: boolean; filterText?: string; force?: boolean; }): Promise<RsiTablePageResult> => {
-  const all = await fetchRsiTable({ force: args.force });
+export const fetchRsiTablePage = async (args: {
+  page: number;
+  limit: number;
+  sort?: RsiSortKey;
+  ascendingOrder?: boolean;
+  filterText?: string;
+  force?: boolean;
+}): Promise<RsiTablePageResult> => {
+  const page = Math.max(1, Math.floor(args.page || 1));
+  const limit = Math.max(1, Math.min(500, Math.floor(args.limit || 200)));
+  const sort = (args.sort || 'rsi4h') as RsiSortKey;
+  const asc = Boolean(args.ascendingOrder);
   const q = normalizeSearch(args.filterText || '');
+
+  const all = await fetchRsiTable({ force: args.force });
+
+  // filter
   let filtered = all;
-  if (q) filtered = all.filter(i => (i.symbol || '').toLowerCase().includes(q) || (i.name || '').toLowerCase().includes(q));
+  if (q) {
+    filtered = all.filter(i => {
+      const sym = (i.symbol || '').toLowerCase();
+      const nm = (i.name || '').toLowerCase();
+      return sym.includes(q) || nm.includes(q);
+    });
+  }
 
-  const sort = args.sort || 'rsi4h';
-  const asc = args.ascendingOrder;
-  const tf = (sort === 'rsi15m' || sort === 'rsi1h' || sort === 'rsi4h' || sort === 'rsi24h' || sort === 'rsi7d') ? sort.replace('rsi','') as RsiTimeframeKey : null;
-
+  // sort
+  const tf = tfKeyFromSort(sort);
   const sorted = [...filtered].sort((a, b) => {
-    let av = 0, bv = 0;
-    if (tf) { av = a.rsi[tf]; bv = b.rsi[tf]; }
-    else if (sort === 'marketCap') { av = a.marketCap || 0; bv = b.marketCap || 0; }
-    else if (sort === 'volume24h') { av = a.volume24h || 0; bv = b.volume24h || 0; }
-    else if (sort === 'price24h') { av = a.change || 0; bv = b.change || 0; }
-    else if (sort === 'rank') { av = a.rank || 0; bv = b.rank || 0; }
-    else { av = a.rsi['4h']; bv = b.rsi['4h']; } 
+    let av = 0;
+    let bv = 0;
+
+    if (tf) {
+      av = safeNum(a.rsi?.[tf], 0);
+      bv = safeNum(b.rsi?.[tf], 0);
+    } else if (sort === 'marketCap') {
+      av = safeNum(a.marketCap, 0);
+      bv = safeNum(b.marketCap, 0);
+    } else if (sort === 'volume24h') {
+      av = safeNum(a.volume24h, 0);
+      bv = safeNum(b.volume24h, 0);
+    } else if (sort === 'price24h') {
+      av = safeNum(a.change, 0);
+      bv = safeNum(b.change, 0);
+    } else if (sort === 'rank') {
+      av = safeNum(a.rank, 0);
+      bv = safeNum(b.rank, 0);
+    } else {
+      av = safeNum(a.rsi?.['4h'], 0);
+      bv = safeNum(b.rsi?.['4h'], 0);
+    }
+
     return asc ? (av - bv) : (bv - av);
   });
 
-  const limit = Math.max(1, args.limit);
   const totalItems = sorted.length;
-  const totalPages = Math.ceil(totalItems / limit);
-  const page = Math.min(Math.max(1, args.page), totalPages);
-  const start = (page - 1) * limit;
-  
-  return { items: sorted.slice(start, start + limit), page, totalPages, totalItems };
+  const totalPages = Math.max(1, Math.ceil(totalItems / limit));
+  const safePage = Math.min(page, totalPages);
+
+  const start = (safePage - 1) * limit;
+  const end = start + limit;
+  const items = sorted.slice(start, end);
+
+  return { items, page: safePage, totalPages, totalItems };
 };
 
 // -------------------- MACD --------------------
@@ -535,10 +568,8 @@ export const fetchRsiTablePage = async (args: { page: number; limit: number; sor
 export const fetchMacdAverage = async (): Promise<MacdAvgData | null> => {
   const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.macdAvg));
   if (!raw) return null;
-  // Deep parse
   let root = Array.isArray(raw) ? raw[0] : raw;
   const d = root?.data?.overall || root?.data || root;
-
   return {
       averageMacd: safeNum(d.averageMacd, 0),
       averageNMacd: safeNum(d.averageNMacd, 0),
@@ -554,11 +585,9 @@ export const fetchMacdAverage = async (): Promise<MacdAvgData | null> => {
 export const fetchMacdTracker = async (opts?: { force?: boolean }): Promise<MacdTrackerPoint[]> => {
   const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.macdTracker));
   let items = extractDataArray(raw);
-  
   return items.map((i: any) => {
       const symbol = String(i.symbol || '').toUpperCase();
       const macdNode = i.macd || {};
-      
       return {
           symbol,
           name: i.name || symbol,
@@ -566,7 +595,6 @@ export const fetchMacdTracker = async (opts?: { force?: boolean }): Promise<Macd
           change24h: safeNum(i.price24h, 0),
           marketCap: safeNum(i.marketCap, 0),
           logo: resolveLogo(symbol, i.image || i.logo, i.id),
-          logoChain: getLogoChain(symbol, i.image || i.logo, i.id),
           macd: {
               "15m": { nmacd: safeNum(macdNode.macd15m?.nmacd, 0), macd: safeNum(macdNode.macd15m?.macd, 0), histogram: safeNum(macdNode.macd15m?.histogram, 0), signalLine: safeNum(macdNode.macd15m?.signalLine, 0) },
               "1h": { nmacd: safeNum(macdNode.macd1h?.nmacd, 0), macd: safeNum(macdNode.macd1h?.macd, 0), histogram: safeNum(macdNode.macd1h?.histogram, 0), signalLine: safeNum(macdNode.macd1h?.signalLine, 0) },
@@ -618,9 +646,12 @@ export const fetchEconomicCalendar = async (): Promise<EconEvent[]> => {
 export const fetchEtfFlow = async (): Promise<EtfFlowData | null> => {
   const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.etfNetFlow));
   if (!raw) return null;
+
   const root = Array.isArray(raw) ? raw[0] : raw;
-  const data = (root && (root as any).data) ? (root as any).data : root;
-  const status = (root && (root as any).status) ? (root as any).status : null;
+
+  const data = (root && typeof root === 'object' && (root as any).data) ? (root as any).data : root;
+  const status = (root && typeof root === 'object' && (root as any).status) ? (root as any).status : null;
+
   return {
     btcValue: Number(data?.totalBtcValue ?? data?.btcValue ?? 0),
     ethValue: Number(data?.totalEthValue ?? data?.ethValue ?? 0),
@@ -662,7 +693,12 @@ export const fetchOrderBook = async (symbol: string): Promise<OrderBookData | nu
   try {
     const response = await fetch(`https://api.binance.com/api/v3/depth?symbol=${symbol}&limit=20`);
     const data = await response.json();
-    if (data.bids && data.asks) return { bids: data.bids.map((b:any)=>({price:b[0],qty:b[1]})), asks: data.asks.map((a:any)=>({price:a[0],qty:a[1]})) };
+    if (data.bids && data.asks) {
+      return { 
+        bids: data.bids.map((b:any)=>({price:b[0],qty:b[1]})), 
+        asks: data.asks.map((a:any)=>({price:a[0],qty:a[1]})) 
+      };
+    }
   } catch (e) { }
   return null;
 };
@@ -670,5 +706,6 @@ export const fetchOrderBook = async (symbol: string): Promise<OrderBookData | nu
 // -------------------- MARKETCAP HIST --------------------
 
 export const fetchMarketCapHistory = async (): Promise<any | null> => {
-  return await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.mktcapHist));
+  const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.mktcapHist));
+  return data;
 };

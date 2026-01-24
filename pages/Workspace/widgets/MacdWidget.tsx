@@ -1,22 +1,19 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Loader2, Info, Search, ChevronLeft, ChevronRight, BarChart2, DollarSign, Percent, ZoomOut, MousePointer2, GripVertical, ChevronsUpDown, ChevronDown, Coins } from 'lucide-react';
+import { Loader2, Info, Search, ChevronLeft, ChevronRight, BarChart2, DollarSign, Percent, ZoomOut, MousePointer2, GripVertical, ChevronsUpDown, AlertTriangle } from 'lucide-react';
 import Highcharts from 'highcharts';
 import addMouseWheelZoom from 'highcharts/modules/mouse-wheel-zoom';
 import { Language, DashboardItem } from '../../../types';
-import { getTranslations } from '../../../locales';
 import {
   MacdAvgData,
   MacdTrackerPoint,
   fetchMacdAverage,
   fetchMacdTracker,
   fetchMacdTablePage,
-  SITE_LOGO_FALLBACK,
   getHighchartsImgTag,
   getLogoChain
 } from '../services/api';
 
-// DND Kit Imports for Table
 import {
   DndContext,
   closestCenter,
@@ -44,15 +41,6 @@ const LIMIT_OPTIONS = [50, 100, 150, 200, 250];
 
 const COLOR_GREEN = '#4e843c';
 const COLOR_RED = '#C2544E';
-
-// Helper for Unicode-safe Base64 Encoding
-const safeEncodeBase64 = (str: string) => {
-    try {
-        return btoa(unescape(encodeURIComponent(str)));
-    } catch (e) {
-        return '';
-    }
-};
 
 const formatCompactNumber = (number: number) => {
   if (!number || number === 0) return "---";
@@ -126,7 +114,7 @@ const MacdGridWidget: React.FC<{ language: Language }> = ({ language }) => {
         fetchMacdAverage().then((avg) => {
             setAvgData(avg);
             setLoading(false);
-        });
+        }).catch(() => setLoading(false));
     }, []);
 
     const Watermark = () => <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden opacity-[0.05] z-0"><img src="https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png" alt="watermark" className="w-3/4 h-auto grayscale filter" /></div>;
@@ -172,7 +160,6 @@ const MacdGridWidget: React.FC<{ language: Language }> = ({ language }) => {
 };
 
 export const MacdSidebar: React.FC<{ language?: Language }> = ({ language = 'pt' }) => {
-    // ... existing ...
     const [avgData, setAvgData] = useState<MacdAvgData | null>(null);
     const [loading, setLoading] = useState(true);
 
@@ -180,11 +167,10 @@ export const MacdSidebar: React.FC<{ language?: Language }> = ({ language = 'pt'
         fetchMacdAverage().then((avg) => {
             setAvgData(avg);
             setLoading(false);
-        });
+        }).catch(() => setLoading(false));
     }, []);
 
     if (loading || !avgData) return <div className="h-full flex items-center justify-center"><Loader2 className="animate-spin text-gray-400" /></div>;
-    // ... render logic from before ...
     const bullishPct = avgData.bullishPercentage || 50;
     const bearishPct = avgData.bearishPercentage || 50;
     return (
@@ -239,16 +225,17 @@ export const MacdScatterChart: React.FC = () => {
   const chartInstance = useRef<Highcharts.Chart | null>(null);
   
   const [points, setPoints] = useState<MacdTrackerPoint[]>([]);
-  
-  // Controls
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [timeframe, setTimeframe] = useState<Timeframe>('4h');
   const [xMode, setXMode] = useState<XAxisMode>('mcap');
   const [limit, setLimit] = useState(50); // New limit state
 
   useEffect(() => {
-      fetchMacdTracker().then(data => {
+      fetchMacdTracker()
+        .then(data => {
           if (data && Array.isArray(data) && data.length > 0) setPoints(data);
-      });
+        })
+        .finally(() => setHasLoaded(true));
   }, []);
 
   const resetZoom = () => {
@@ -265,7 +252,6 @@ export const MacdScatterChart: React.FC = () => {
     const gridColor = isDark ? '#334155' : '#e2e8f0';
     const crosshairColor = isDark ? '#64748b' : '#94a3b8'; 
 
-    // Apply slice limit here
     const seriesData = points
         .filter(r => r.marketCap && r.marketCap > 0 && r.macd?.[timeframe])
         .slice(0, limit)
@@ -282,8 +268,8 @@ export const MacdScatterChart: React.FC = () => {
             
             return {
                 id: r.symbol, 
-                x: xVal, // X = Market Cap / Change
-                y: yVal, // Y = MACD
+                x: xVal, 
+                y: yVal, 
                 z: r.marketCap,
                 name: r.symbol,
                 fullName: r.name,
@@ -407,7 +393,6 @@ export const MacdScatterChart: React.FC = () => {
                         const symbol = isBullish ? '▲' : '▼'; 
                         const short = p.options.symbolShort || '';
                         
-                        // NEW LOGO HELPER
                         const imgHtml = getHighchartsImgTag(
                            short, 
                            p.options.logoUrl, 
@@ -415,7 +400,6 @@ export const MacdScatterChart: React.FC = () => {
                            "position: relative; border-radius: 50%; object-fit: cover; z-index: 2;"
                         );
 
-                        // CSS Fallback Layering
                         return `
                         <div style="position: relative; width: 24px; height: 24px;">
                             <div style="position: absolute; inset: 0; background: #334155; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: bold; color: #fff; z-index: 1;">${short.charAt(0)}</div>
@@ -482,8 +466,10 @@ export const MacdScatterChart: React.FC = () => {
         </div>
         
         <div className="flex-1 w-full min-h-0 relative rounded-lg overflow-hidden border border-gray-100 dark:border-slate-800/50 z-10">
-            {points.length === 0 ? (
-                <div className="absolute inset-0 flex items-center justify-center text-slate-500"><Loader2 className="animate-spin" /></div>
+            {(!hasLoaded || points.length === 0) ? (
+                <div className="absolute inset-0 flex items-center justify-center text-slate-500">
+                    {!hasLoaded ? <Loader2 className="animate-spin" /> : <div className="flex flex-col items-center"><AlertTriangle size={24} className="mb-2"/><span className="text-xs font-bold">Sem dados no momento</span></div>}
+                </div>
             ) : (
                 <div ref={chartRef} className="absolute inset-0" />
             )}
@@ -548,12 +534,18 @@ export const MacdTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false }
   useEffect(() => {
     let mounted = true;
     setLoading(true);
-    fetchMacdTablePage({ page, limit: pageSize, sort: sortKey as any, timeframe: sortTf, ascendingOrder: sortAsc, filterText: search }).then(res => {
+    fetchMacdTablePage({ page, limit: pageSize, sort: sortKey as any, timeframe: sortTf, ascendingOrder: sortAsc, filterText: search })
+      .then(res => {
         if(!mounted) return;
         setRows(res.items);
         setTotalPages(res.totalPages);
         setLoading(false);
-    });
+      })
+      .catch(err => {
+        if(!mounted) return;
+        console.warn("MACD Table Fetch Error", err);
+        setLoading(false);
+      });
     return () => { mounted = false; };
   }, [page, pageSize, search, sortKey, sortTf, sortAsc]);
 
