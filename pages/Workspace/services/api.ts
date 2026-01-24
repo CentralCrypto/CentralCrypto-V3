@@ -1,3 +1,4 @@
+
 import { ApiCoin } from '../../../types';
 import { httpGetJson } from '../../../services/http';
 import { getCacheckoUrl, ENDPOINTS } from '../../../services/endpoints';
@@ -327,11 +328,11 @@ export const fetchRsiTrackerHist = async (): Promise<RsiTrackerPoint[]> => {
       rank: Number.isFinite(Number(p.market_cap_rank || p.rank)) ? Number(p.market_cap_rank || p.rank) : undefined,
       logo: p.image || p.logo || `https://assets.coincap.io/assets/icons/${symbol.toLowerCase()}@2x.png`,
       rsi: {
-        "15m": safeNum((p.rsi15m ?? rsiNode?.rsi15m) ?? rsiNode?.['15m'], 50),
-        "1h": safeNum((p.rsi1h ?? rsiNode?.rsi1h) ?? rsiNode?.['1h'], 50),
-        "4h": safeNum((p.rsi4h ?? rsiNode?.rsi4h) ?? rsiNode?.['4h'], 50),
-        "24h": safeNum((p.rsi24h ?? rsiNode?.rsi24h) ?? rsiNode?.['24h'], 50),
-        "7d": safeNum((p.rsi7d ?? rsiNode?.rsi7d) ?? rsiNode?.['7d'], 50),
+        "15m": safeNum(rsiNode?.rsi15m ?? rsiNode?.['15m'], 50),
+        "1h": safeNum(rsiNode?.rsi1h ?? rsiNode?.['1h'], 50),
+        "4h": safeNum(rsiNode?.rsi4h ?? rsiNode?.['4h'], 50),
+        "24h": safeNum(rsiNode?.rsi24h ?? rsiNode?.['24h'], 50),
+        "7d": safeNum(rsiNode?.rsi7d ?? rsiNode?.['7d'], 50),
       },
       currentRsi: Number.isFinite(Number(p.currentRsi)) ? Number(p.currentRsi) : (Number.isFinite(Number(rsiNode?.rsi4h)) ? Number(rsiNode?.rsi4h) : undefined),
       lastRsi: Number.isFinite(Number(p.lastRsi)) ? Number(p.lastRsi) : undefined

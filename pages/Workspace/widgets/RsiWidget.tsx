@@ -12,8 +12,8 @@ import {
   fetchRsiTable,
   fetchRsiTablePage,
   fetchRsiTrackerHist,
-  SITE_LOGO_FALLBACK,
-  GITHUB_CDN
+  getHighchartsImgTag,
+  getLogoChain
 } from '../services/api';
 
 import {
@@ -33,7 +33,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 if (typeof addMouseWheelZoom === 'function') {
-    addMouseWheelZoom(Highcharts);
+    (addMouseWheelZoom as any)(Highcharts);
 }
 
 const TIMEFRAMES = ['15m', '1h', '4h', '24h', '7d'] as const;
@@ -330,9 +330,10 @@ export const RsiScatterChart: React.FC = () => {
             const last = r.lastRsi; 
             const isRising = (last !== undefined && cur > last);
             const symbolShort = (r.symbol || 'UNK').substring(0, 3).toUpperCase();
-            const logoUrl = r.logo || `https://assets.coincap.io/assets/icons/${r.symbol.toLowerCase()}@2x.png`;
-            const backupLogo = `${GITHUB_CDN}/${r.symbol.toLowerCase()}.png`;
-
+            
+            // Use o novo helper
+            const logoUrl = r.logo || '';
+            
             return {
                 id: r.symbol, 
                 x: xVal, // X Axis = Metric (Mcap/Vol/Change)
@@ -344,7 +345,6 @@ export const RsiScatterChart: React.FC = () => {
                 change: r.change24h,
                 isRising: isRising,
                 logoUrl: logoUrl,
-                backupLogo,
                 symbolShort
             };
         })
@@ -466,16 +466,15 @@ export const RsiScatterChart: React.FC = () => {
                         const isRising = p.options.isRising;
                         const color = isRising ? COLOR_GREEN : COLOR_RED;
                         const symbol = isRising ? '▲' : '▼'; 
-                        const logo = p.options.logoUrl;
                         const short = p.options.symbolShort || '';
-                        const backup = p.options.backupLogo;
-
-                        const imgHtml = `
-                            <img src="${logo}" 
-                                 style="position: relative; width: 24px; height: 24px; border-radius: 50%; object-fit: cover; z-index: 2;" 
-                                 onerror="if(!this.dataset.tried){this.dataset.tried='1';this.src='${backup}'}else{this.src='${SITE_LOGO_FALLBACK}'}"
-                            />
-                        `;
+                        
+                        // NEW LOGO HELPER
+                        const imgHtml = getHighchartsImgTag(
+                           short, 
+                           p.options.logoUrl, 
+                           24, 
+                           "position: relative; border-radius: 50%; object-fit: cover; z-index: 2;"
+                        );
 
                         return `
                         <div style="position: relative; width: 24px; height: 24px;">
@@ -630,17 +629,24 @@ export const RsiTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false })
             case 'asset': return (
                 <td key={colId} className="p-3">
                     <div className="flex items-center gap-3">
+                        {/* 4-Layer Fallback Image */}
                         <img 
                             src={r.logo} 
                             className="w-6 h-6 rounded-full bg-white p-0.5 border border-gray-200 dark:border-white/10" 
                             alt="" 
                             onError={(e) => {
                                 const target = e.currentTarget;
-                                const fallback = `${GITHUB_CDN}/${r.symbol.toLowerCase()}.png`;
-                                if (target.src !== fallback && target.src !== SITE_LOGO_FALLBACK) {
-                                    target.src = fallback;
-                                } else if (target.src !== SITE_LOGO_FALLBACK) {
-                                    target.src = SITE_LOGO_FALLBACK;
+                                // Obtém a cadeia de fallbacks
+                                const fallbacks = getLogoChain(r.symbol, undefined, r.id); 
+                                // Encontra o índice da URL atual
+                                const currentSrc = target.getAttribute('src') || '';
+                                let nextIndex = fallbacks.indexOf(currentSrc) + 1;
+                                
+                                if (nextIndex < fallbacks.length) {
+                                    target.src = fallbacks[nextIndex];
+                                } else {
+                                    // Se falhar tudo, esconde
+                                    target.style.display = 'none';
                                 }
                             }} 
                         />
