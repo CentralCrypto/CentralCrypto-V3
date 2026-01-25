@@ -1,4 +1,3 @@
-
 import { ApiCoin } from '../../../types';
 import { httpGetJson } from '../../../services/http';
 import { getCacheckoUrl, ENDPOINTS } from '../../../services/endpoints';
@@ -92,7 +91,9 @@ export const getHighchartsImgTag = (symbol: string, url: string, size: number = 
  */
 export const fetchWithFallback = async (url: string): Promise<any | null> => {
   try {
-    const { data } = await httpGetJson(url, { timeoutMs: 15000, retries: 2 });
+    const salt = Math.floor(Date.now() / 60000);
+    const finalUrl = url.includes('?') ? `${url}&_cb=${salt}` : `${url}?_cb=${salt}`;
+    const { data } = await httpGetJson(finalUrl, { timeoutMs: 15000, retries: 2 });
     return data;
   } catch (e: any) {
     if (e.status !== 404) {
@@ -120,8 +121,10 @@ const extractDataArray = (raw: any): any[] => {
         if (raw[0]?.json?.data && Array.isArray(raw[0].json.data)) return raw[0].json.data; // n8n json wrapper
         if (raw[0]?.data?.heatmap?.items && Array.isArray(raw[0].data.heatmap.items)) return raw[0].data.heatmap.items;
         
-        // Se o único item for o objeto de dados em si (ex: { overall: ... })
+        // Se o único item for o objeto de dados em si (ex: { overall: ... }) ou um array de dados
         if (raw[0]?.overall || raw[0]?.rsiOverall) return raw;
+        // Se parece ser um array de moedas direto dentro de um array de 1 item (edge case)
+        if (raw[0]?.symbol && raw[0]?.price) return raw; 
     }
     
     // Se o primeiro item parece ser um dado válido, retorna o array original
@@ -257,7 +260,6 @@ export const fetchRsiTrackerHist = async (): Promise<RsiTrackerPoint[]> => {
       name: p.name || p.n || symbol,
       price: safeNum(p.current_price || p.price, 0),
       change24h: safeNum(p.price_change_percentage_24h || p.price24h, 0),
-      // Fix: Ensure robust property access for market cap
       marketCap: safeNum(p.market_cap || p.marketCap || p.mc, 0),
       volume24h: safeNum(p.total_volume || p.volume24h || p.v, 0),
       rank: safeNum(p.market_cap_rank || p.rank || p.r, 9999),
