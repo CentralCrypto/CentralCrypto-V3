@@ -2,64 +2,13 @@
 import { ApiCoin } from '../../../types';
 import { httpGetJson } from '../../../services/http';
 import { getCacheckoUrl, ENDPOINTS } from '../../../services/endpoints';
+import { getLogoChain, resolveLogo } from './logo';
 
 const STABLECOINS = ['USDT', 'USDC', 'DAI', 'FDUSD', 'TUSD', 'USDD', 'PYUSD', 'USDE', 'GUSD', 'USDP', 'BUSD'];
 
 /**
- * Helper: Tenta extrair um array de dados de qualquer estrutura JSON
- * Agora suporta explicitamente a estrutura do n8n: [{ data: { heatmap: { items: [...] } } }]
- */
-function extractDataArray(raw: any): any[] {
-    if (!raw) return [];
-    
-    // Se for array direto
-    if (Array.isArray(raw)) {
-        if (raw.length === 0) return [];
-        const first = raw[0];
-
-        // Caso específico: Array onde o primeiro item tem uma chave 'data' que é o array real
-        if (first && typeof first === 'object') {
-             // Estrutura HEATMAP (RSI/MACD Tracker)
-             if (first.data?.heatmap?.items && Array.isArray(first.data.heatmap.items)) {
-                 return first.data.heatmap.items;
-             }
-             // Estrutura padrão n8n com wrapper 'data'
-             if (Array.isArray(first.data)) {
-                 return first.data;
-             }
-             // Estrutura 'data' dentro de 'data'
-             if (first.data && Array.isArray(first.data.data)) {
-                 return first.data.data;
-             }
-        }
-        return raw;
-    }
-    
-    // Se for objeto único
-    if (typeof raw === 'object') {
-        if (raw.data?.heatmap?.items && Array.isArray(raw.data.heatmap.items)) return raw.data.heatmap.items;
-        if (Array.isArray(raw.data)) return raw.data;
-        if (Array.isArray(raw.items)) return raw.items;
-        
-        // Tenta achar qualquer chave que seja um array grande
-        const keys = Object.keys(raw);
-        for (const key of keys) {
-            if (Array.isArray(raw[key]) && raw[key].length > 0) return raw[key];
-        }
-    }
-    
-    return [];
-}
-
-const safeNum = (v: any, fallback = 0) => {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
-};
-
-const normalizeSearch = (s: string) => (s || '').toLowerCase().trim();
-
-/**
- * Busca dados usando caminhos relativos
+ * Busca dados usando caminhos relativos e o utilitário robusto httpGetJson.
+ * O proxy interno do Vite resolve para o domínio principal.
  */
 export const fetchWithFallback = async (url: string): Promise<any | null> => {
   try {
@@ -77,7 +26,38 @@ export const fetchWithFallback = async (url: string): Promise<any | null> => {
 
 export const isStablecoin = (symbol: string) => STABLECOINS.includes(symbol.toUpperCase());
 
-// ... (Cache de Top Coins mantido igual)
+function extractDataArray(raw: any): any[] {
+    if (!raw) return [];
+    if (Array.isArray(raw)) {
+        if (raw.length === 0) return [];
+        const first = raw[0];
+        if (first && typeof first === 'object') {
+             if (first.data?.heatmap?.items && Array.isArray(first.data.heatmap.items)) return first.data.heatmap.items;
+             if (Array.isArray(first.data)) return first.data;
+             if (first.data && Array.isArray(first.data.data)) return first.data.data;
+        }
+        return raw;
+    }
+    if (typeof raw === 'object') {
+        if (raw.data?.heatmap?.items && Array.isArray(raw.data.heatmap.items)) return raw.data.heatmap.items;
+        if (Array.isArray(raw.data)) return raw.data;
+        if (Array.isArray(raw.items)) return raw.items;
+        const keys = Object.keys(raw);
+        for (const key of keys) {
+            if (Array.isArray(raw[key]) && raw[key].length > 0) return raw[key];
+        }
+    }
+    return [];
+}
+
+const safeNum = (v: any, fallback = 0) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const normalizeSearch = (s: string) => (s || '').toLowerCase().trim();
+
+// --------- CACHES ---------
 const TOP_COINS_TTL_MS = 60_000;
 let topCoinsCacheTs = 0;
 let topCoinsCache: ApiCoin[] = [];
@@ -104,7 +84,6 @@ export const fetchTopCoins = async (opts?: { force?: boolean; ttlMs?: number }):
   return topCoinsInFlight;
 };
 
-// ... (Outras funções de fetch mantidas)
 export interface HeatmapCategory { id: string; name: string; description?: string; type?: string; coin_counter?: number; ico_counter?: number; coins?: any[]; }
 export const fetchHeatmapCategories = async (): Promise<HeatmapCategory[]> => {
     const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.heatmapCategories));
@@ -115,14 +94,15 @@ export const fetchHeatmapCategories = async (): Promise<HeatmapCategory[]> => {
 export interface NewsItem { title: string; link: string; pubDate: string; source: string; description: string; thumbnail: string; }
 export interface EtfFlowData { btcValue: number; ethValue: number; netFlow: number; timestamp: number; chartDataBTC: any[]; chartDataETH: any[]; history: { lastWeek: number; lastMonth: number; last90d: number; }; solValue: number; xrpValue: number; }
 export interface LsrData { lsr: number | null; longs: number | null; shorts: number | null; }
-
 export interface MacdAvgData { averageMacd: number; averageNMacd: number; bullishPercentage: number; bearishPercentage: number; yesterday: number; days7Ago: number; days30Ago: number; yesterdayNMacd: number; }
 export interface MacdTrackerPoint { symbol: string; name: string; price: number; change24h: number; marketCap: number; logo?: string; macd: any; }
-
 export interface RsiAvgData { averageRsi: number; yesterday: number; days7Ago: number; days30Ago: number; days90Ago?: number; }
 
+// Updated Interfaces for Logo Chain
 export interface RsiTrackerPoint {
-  symbol: string; name: string; price: number; change24h: number; marketCap: number; volume24h?: number; rank?: number; logo?: string;
+  symbol: string; name: string; price: number; change24h: number; marketCap: number; volume24h?: number; rank?: number; 
+  logo?: string; 
+  logoChain?: string[]; 
   rsi: Record<string, number>;
   currentRsi?: number; lastRsi?: number;
 }
@@ -130,10 +110,12 @@ export interface RsiTrackerPoint {
 export interface RsiTableItem {
   id: string; symbol: string; name?: string; price: number;
   rsi: { "15m": number; "1h": number; "4h": number; "24h": number; "7d": number; };
-  change?: number; logo?: string; marketCap?: number; volume24h?: number; rank?: number;
+  change?: number; 
+  logo?: string; 
+  logoChain?: string[]; 
+  marketCap?: number; volume24h?: number; rank?: number;
 }
 
-// ... (Interfaces EconEvent, OrderBook, etc mantidas)
 export interface EconEvent { date: string; title: string; country: string; impact: string; previous?: string; forecast?: string; }
 export interface OrderBookData { bids: { price: string; qty: string }[]; asks: { price: string; qty: string }[]; }
 export interface FngData { value: string; timestamp: string; value_classification?: string; }
@@ -166,7 +148,6 @@ export const fetchRsiAverage = async (): Promise<RsiAvgData | null> => {
 };
 
 export const fetchRsiTrackerHist = async (): Promise<RsiTrackerPoint[]> => {
-  // Use rsitrackerhist.json which has the heatmap structure
   const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTrackerHist));
   const items = extractDataArray(raw);
 
@@ -175,6 +156,9 @@ export const fetchRsiTrackerHist = async (): Promise<RsiTrackerPoint[]> => {
   return items.map((p: any) => {
     const rsiNode = p.rsiOverall || p.rsi || {};
     const symbol = String(p.symbol || p.s || '').toUpperCase();
+    const originalLogo = p.image || p.logo;
+    const logoChain = getLogoChain(symbol, originalLogo, p.id);
+
     return {
       symbol,
       name: p.name || p.n || symbol,
@@ -183,7 +167,8 @@ export const fetchRsiTrackerHist = async (): Promise<RsiTrackerPoint[]> => {
       marketCap: safeNum(p.market_cap || p.marketCap, 0),
       volume24h: safeNum(p.total_volume || p.volume24h, 0),
       rank: safeNum(p.market_cap_rank || p.rank, 9999),
-      logo: p.image || p.logo || `https://assets.coincap.io/assets/icons/${symbol.toLowerCase()}@2x.png`,
+      logo: logoChain[0], 
+      logoChain: logoChain,
       rsi: {
         "15m": safeNum(rsiNode?.rsi15m ?? rsiNode?.['15m'], 50),
         "1h": safeNum(rsiNode?.rsi1h ?? rsiNode?.['1h'], 50),
@@ -197,46 +182,68 @@ export const fetchRsiTrackerHist = async (): Promise<RsiTrackerPoint[]> => {
   });
 };
 
-/**
- * Tabela RSI: Usa o mesmo endpoint do histórico (rsitrackerhist.json) se o rsitracker.json estiver vazio,
- * pois o usuário confirmou que o rsitrackerhist tem os dados corretos.
- */
-export const fetchRsiTable = async (opts?: { force?: boolean }): Promise<RsiTableItem[]> => {
-  // Tenta endpoint da tabela, se vazio, tenta o do histórico
-  let raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTable));
-  let items = extractDataArray(raw);
+const RSI_TABLE_TTL_MS = 60_000;
+let rsiTableCacheTs = 0;
+let rsiTableCache: RsiTableItem[] = [];
+let rsiTableInFlight: Promise<RsiTableItem[]> | null = null;
 
-  if (items.length === 0) {
-      // Fallback para o arquivo que o usuário mostrou (rsitrackerhist.json)
-      raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTrackerHist));
-      items = extractDataArray(raw);
-  }
+export const fetchRsiTable = async (opts?: { force?: boolean; ttlMs?: number }): Promise<RsiTableItem[]> => {
+  const now = Date.now();
+  const force = Boolean(opts?.force);
+  const ttlMs = typeof opts?.ttlMs === 'number' && isFinite(opts.ttlMs) ? opts!.ttlMs! : RSI_TABLE_TTL_MS;
 
-  if (!items.length) return [];
+  if (!force && rsiTableCache.length > 0 && (now - rsiTableCacheTs) < ttlMs) return rsiTableCache;
+  if (!force && rsiTableInFlight) return rsiTableInFlight;
 
-  return items.map((p: any) => {
-    const symbol = String(p.symbol || '').toUpperCase();
-    const rsiNode = p.rsiOverall || p.rsi || p.rsi_overall || p; 
+  rsiTableInFlight = (async () => {
+    let raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTable));
+    let items = extractDataArray(raw);
 
-    return {
-      id: String(p.id || symbol || ''),
-      symbol,
-      name: p.name || symbol,
-      price: safeNum(p.current_price || p.price, 0),
-      change: safeNum(p.price_change_percentage_24h || p.price24h || p.change24h, 0),
-      marketCap: safeNum(p.market_cap || p.marketCap, 0),
-      volume24h: safeNum(p.total_volume || p.volume24h, 0),
-      rank: safeNum(p.market_cap_rank || p.rank, 9999),
-      logo: p.image || p.logo || `https://assets.coincap.io/assets/icons/${symbol.toLowerCase()}@2x.png`,
-      rsi: {
-        "15m": safeNum(rsiNode.rsi15m ?? rsiNode['15m'], 50),
-        "1h": safeNum(rsiNode.rsi1h ?? rsiNode['1h'], 50),
-        "4h": safeNum(rsiNode.rsi4h ?? rsiNode['4h'], 50),
-        "24h": safeNum(rsiNode.rsi24h ?? rsiNode['24h'], 50),
-        "7d": safeNum(rsiNode.rsi7d ?? rsiNode['7d'], 50)
-      }
-    };
+    if (items.length === 0) {
+        raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTrackerHist));
+        items = extractDataArray(raw);
+    }
+
+    if (!items.length) {
+      rsiTableCache = [];
+      rsiTableCacheTs = Date.now();
+      return rsiTableCache;
+    }
+
+    rsiTableCache = items.map((p: any) => {
+      const symbol = String(p.symbol || '').toUpperCase();
+      const rsiNode = p.rsiOverall || p.rsi || p.rsi_overall || {};
+      const originalLogo = p.image || p.logo;
+      const logoChain = getLogoChain(symbol, originalLogo, p.id);
+
+      return {
+        id: String(p.id || symbol || ''),
+        symbol,
+        name: p.name || symbol,
+        price: safeNum(p.current_price || p.price, 0),
+        change: safeNum(p.price_change_percentage_24h || p.price24h || p.change24h, 0),
+        marketCap: Number.isFinite(Number(p.market_cap || p.marketCap)) ? Number(p.market_cap || p.marketCap) : undefined,
+        volume24h: Number.isFinite(Number(p.total_volume || p.volume24h)) ? Number(p.total_volume || p.volume24h) : undefined,
+        rank: Number.isFinite(Number(p.market_cap_rank || p.rank)) ? Number(p.market_cap_rank || p.rank) : undefined,
+        logo: logoChain[0],
+        logoChain: logoChain,
+        rsi: {
+          "15m": safeNum(p.rsi15m || rsiNode?.rsi15m || rsiNode?.['15m'], 50),
+          "1h": safeNum(p.rsi1h || rsiNode?.rsi1h || rsiNode?.['1h'], 50),
+          "4h": safeNum(p.rsi4h || rsiNode?.rsi4h || rsiNode?.['4h'], 50),
+          "24h": safeNum(p.rsi24h || rsiNode?.rsi24h || rsiNode?.['24h'], 50),
+          "7d": safeNum(p.rsi7d || rsiNode?.rsi7d || rsiNode?.['7d'], 50)
+        }
+      } as RsiTableItem;
+    });
+
+    rsiTableCacheTs = Date.now();
+    return rsiTableCache;
+  })().finally(() => {
+    rsiTableInFlight = null;
   });
+
+  return rsiTableInFlight;
 };
 
 export const fetchRsiTablePage = async (args: { page: number; limit: number; sort?: RsiSortKey; ascendingOrder?: boolean; filterText?: string; force?: boolean; }): Promise<RsiTablePageResult> => {
@@ -269,80 +276,101 @@ export const fetchRsiTablePage = async (args: { page: number; limit: number; sor
   return { items: sorted.slice(start, start + limit), page, totalPages, totalItems };
 };
 
-// ... Resto do arquivo MACD e outros exports mantidos iguais ...
+// -------------------- MACD --------------------
+
 export const fetchMacdAverage = async (): Promise<MacdAvgData | null> => {
   const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.macdAvg));
   if (!raw) return null;
-  const root = Array.isArray(raw) ? raw[0] : raw;
-  const d = root?.data?.overall || root?.data || root;
-
+  const data = Array.isArray(raw) ? raw[0] : raw;
+  const d = data?.data?.overall || data?.data || data;
   return {
-      averageMacd: safeNum(d.averageMacd, 0),
-      averageNMacd: safeNum(d.averageNMacd, 0),
-      bullishPercentage: safeNum(d.bullishPercentage, 50),
-      bearishPercentage: safeNum(d.bearishPercentage, 50),
-      yesterday: safeNum(d.yesterday, 0),
-      days7Ago: safeNum(d.days7Ago, 0),
-      days30Ago: safeNum(d.days30Ago, 0),
-      yesterdayNMacd: safeNum(d.yesterdayNMacd, 0),
-  };
+      averageMacd: safeNum(d?.averageMacd, 0),
+      averageNMacd: safeNum(d?.averageNMacd, 0),
+      bullishPercentage: safeNum(d?.bullishPercentage, 50),
+      bearishPercentage: safeNum(d?.bearishPercentage, 50),
+      yesterday: safeNum(d?.yesterday, 0),
+      days7Ago: safeNum(d?.days7Ago, 0),
+      days30Ago: safeNum(d?.days30Ago, 0),
+      yesterdayNMacd: safeNum(d?.yesterdayNMacd, 0),
+  } as any;
 };
 
-export const fetchMacdTracker = async (opts?: { force?: boolean }): Promise<MacdTrackerPoint[]> => {
+export const fetchMacdTracker = async (): Promise<MacdTrackerPoint[]> => {
   const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.macdTracker));
-  const items = extractDataArray(raw); 
-
+  const items = extractDataArray(raw);
   return items.map((i: any) => {
       const symbol = String(i.symbol || '').toUpperCase();
       const macdNode = i.macd || {};
-      
       return {
           symbol,
           name: i.name || symbol,
           price: safeNum(i.price, 0),
           change24h: safeNum(i.price24h, 0),
-          marketCap: safeNum(i.marketCap, 0),
-          logo: i.image || i.logo || `https://assets.coincap.io/assets/icons/${symbol.toLowerCase()}@2x.png`,
+          marketCap: safeNum(i.market_cap || i.marketCap || i.mc, 0),
+          logo: resolveLogo(symbol, i.image || i.logo, i.id),
           macd: {
-              "15m": { nmacd: safeNum(macdNode.macd15m?.nmacd, 0), macd: safeNum(macdNode.macd15m?.macd, 0), histogram: safeNum(macdNode.macd15m?.histogram, 0), signalLine: safeNum(macdNode.macd15m?.signalLine, 0) },
-              "1h": { nmacd: safeNum(macdNode.macd1h?.nmacd, 0), macd: safeNum(macdNode.macd1h?.macd, 0), histogram: safeNum(macdNode.macd1h?.histogram, 0), signalLine: safeNum(macdNode.macd1h?.signalLine, 0) },
-              "4h": { nmacd: safeNum(macdNode.macd4h?.nmacd, 0), macd: safeNum(macdNode.macd4h?.macd, 0), histogram: safeNum(macdNode.macd4h?.histogram, 0), signalLine: safeNum(macdNode.macd4h?.signalLine, 0) },
-              "24h": { nmacd: safeNum(macdNode.macd24h?.nmacd, 0), macd: safeNum(macdNode.macd24h?.macd, 0), histogram: safeNum(macdNode.macd24h?.histogram, 0), signalLine: safeNum(macdNode.macd24h?.signalLine, 0) },
-              "7d": { nmacd: safeNum(macdNode.macd7d?.nmacd, 0), macd: safeNum(macdNode.macd7d?.macd, 0), histogram: safeNum(macdNode.macd7d?.histogram, 0), signalLine: safeNum(macdNode.macd7d?.signalLine, 0) },
+              "15m": { nmacd: safeNum(macdNode.macd15m?.nmacd, 0), macd: safeNum(macdNode.macd15m?.macd, 0) },
+              "1h": { nmacd: safeNum(macdNode.macd1h?.nmacd, 0), macd: safeNum(macdNode.macd1h?.macd, 0) },
+              "4h": { nmacd: safeNum(macdNode.macd4h?.nmacd, 0), macd: safeNum(macdNode.macd4h?.macd, 0) },
+              "24h": { nmacd: safeNum(macdNode.macd24h?.nmacd, 0), macd: safeNum(macdNode.macd24h?.macd, 0) },
+              "7d": { nmacd: safeNum(macdNode.macd7d?.nmacd, 0), macd: safeNum(macdNode.macd7d?.macd, 0) },
           }
-      };
-  }).filter(x => x.marketCap > 0);
+      } as unknown as MacdTrackerPoint;
+  });
 };
 
-export const fetchMacdTablePage = async (args: { page: number; limit: number; sort?: string; timeframe?: string; ascendingOrder?: boolean; filterText?: string; force?: boolean; }): Promise<MacdTablePageResult> => {
-    const all = await fetchMacdTracker({ force: args.force });
-    const q = normalizeSearch(args.filterText || '');
-    let filtered = all;
-    if (q) filtered = all.filter(i => i.symbol.toLowerCase().includes(q) || i.name.toLowerCase().includes(q));
+export const fetchMacdTablePage = async (args: {
+  page: number;
+  limit: number;
+  sort?: string;
+  ascendingOrder?: boolean;
+  filterText?: string;
+  timeframe?: string;
+}): Promise<MacdTablePageResult> => {
+  const page = Math.max(1, Math.floor(args.page || 1));
+  const limit = Math.max(1, Math.min(500, Math.floor(args.limit || 50)));
+  const sort = args.sort || 'macd4h';
+  const asc = Boolean(args.ascendingOrder);
+  const q = normalizeSearch(args.filterText || '');
+  const tfArg = args.timeframe || '4h';
 
-    const tf = (args.timeframe || '4h') as '15m'|'1h'|'4h'|'24h'|'7d';
-    const sort = args.sort || 'marketCap';
-    const asc = args.ascendingOrder;
+  const all = await fetchMacdTracker();
 
-    const sorted = [...filtered].sort((a, b) => {
-        let av = 0, bv = 0;
-        if (sort === 'nmacd') { av = a.macd?.[tf]?.nmacd ?? 0; bv = b.macd?.[tf]?.nmacd ?? 0; }
-        else if (sort === 'macd') { av = a.macd?.[tf]?.macd ?? 0; bv = b.macd?.[tf]?.macd ?? 0; }
-        else if (sort === 'change24h') { av = a.change24h; bv = b.change24h; }
-        else { av = a.marketCap; bv = b.marketCap; } 
-        return asc ? (av - bv) : (bv - av);
-    });
+  let filtered = all;
+  if (q) {
+    filtered = all.filter(i => (i.symbol || '').toLowerCase().includes(q) || (i.name || '').toLowerCase().includes(q));
+  }
 
-    const limit = Math.max(1, args.limit);
-    const totalItems = sorted.length;
-    const totalPages = Math.ceil(totalItems / limit);
-    const page = Math.min(Math.max(1, args.page), totalPages);
-    const start = (page - 1) * limit;
+  const sorted = [...filtered].sort((a, b) => {
+    let av = 0, bv = 0;
+    
+    if (sort.startsWith('macd')) {
+        const tf = sort.replace('macd', '') || tfArg;
+        av = safeNum(a.macd?.[tf]?.nmacd, -999);
+        bv = safeNum(b.macd?.[tf]?.nmacd, -999);
+    } else if (sort === 'marketCap' || sort === 'mcap') {
+        av = safeNum(a.marketCap, 0);
+        bv = safeNum(b.marketCap, 0);
+    } else if (sort === 'price') {
+        av = safeNum(a.price, 0);
+        bv = safeNum(b.price, 0);
+    } else if (sort === 'change24h' || sort === 'price24h') {
+        av = safeNum(a.change24h, 0);
+        bv = safeNum(b.change24h, 0);
+    }
 
-    return { items: sorted.slice(start, start + limit), page, totalPages, totalItems };
+    if (av === bv) return (b.marketCap || 0) - (a.marketCap || 0);
+    return asc ? (av - bv) : (bv - av);
+  });
+
+  const totalItems = sorted.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / limit));
+  const safePage = Math.min(page, totalPages);
+  const start = (safePage - 1) * limit;
+  
+  return { items: sorted.slice(start, start + limit), page: safePage, totalPages, totalItems };
 };
 
-// ... Rest of helpers unchanged (CryptoNews, AltSeason, etc.)
 export const fetchCryptoNews = async (symbol: string, coinName: string): Promise<NewsItem[]> => {
   const url = `${ENDPOINTS.special.news}?s=${encodeURIComponent(symbol)}&n=${encodeURIComponent(coinName)}`;
   const data = await fetchWithFallback(url);
@@ -362,8 +390,7 @@ export const fetchTrumpData = async (): Promise<TrumpData | null> => {
 };
 export const fetchFearAndGreed = async (): Promise<FngData[]> => {
   const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.fng));
-  const items = extractDataArray(data);
-  return items as FngData[];
+  return extractDataArray(data) as FngData[];
 };
 export const fetchEconomicCalendar = async (): Promise<EconEvent[]> => {
   const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.calendar));
@@ -398,6 +425,13 @@ export const fetchLongShortRatio = async (symbol: string, period: string): Promi
     }
   } catch (e) { }
   return { lsr: null, longs: null, shorts: null };
+};
+export const fetchGainersLosers = async (): Promise<any> => {
+  const coins = await fetchTopCoins();
+  if (!coins || coins.length === 0) return { gainers: [], losers: [] };
+  const filtered = coins.filter(c => c && c.symbol && !isStablecoin(c.symbol));
+  const sorted = [...filtered].sort((a, b) => (b.price_change_percentage_24h || 0) - (a.price_change_percentage_24h || 0));
+  return { gainers: sorted.slice(0, 100), losers: [...sorted].reverse().slice(0, 100) };
 };
 export const fetchOrderBook = async (symbol: string): Promise<OrderBookData | null> => {
   try {

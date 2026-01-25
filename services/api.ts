@@ -140,7 +140,7 @@ export interface MacdTrackerPoint {
   change24h: number;
   marketCap: number;
   logo?: string;
-  macd: Record<string, number>;
+  macd: Record<string, any>;
   signal: Record<string, number>;
   histogram: Record<string, number>;
   macdNorm?: number;
@@ -223,6 +223,13 @@ export type RsiSortKey = 'rsi15m' | 'rsi1h' | 'rsi4h' | 'rsi24h' | 'rsi7d' | 'ma
 
 export interface RsiTablePageResult {
   items: RsiTableItem[];
+  page: number;
+  totalPages: number;
+  totalItems: number;
+}
+
+export interface MacdTablePageResult {
+  items: MacdTrackerPoint[];
   page: number;
   totalPages: number;
   totalItems: number;
@@ -525,6 +532,59 @@ export const fetchMacdAverage = async (): Promise<MacdAvgData | null> => {
 export const fetchMacdTracker = async (): Promise<MacdTrackerPoint[]> => {
   const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.macdTracker));
   return Array.isArray(data) ? data : [];
+};
+
+export const fetchMacdTablePage = async (args: {
+  page: number;
+  limit: number;
+  sort?: string;
+  ascendingOrder?: boolean;
+  filterText?: string;
+  timeframe?: string;
+}): Promise<MacdTablePageResult> => {
+  const page = Math.max(1, Math.floor(args.page || 1));
+  const limit = Math.max(1, Math.min(500, Math.floor(args.limit || 50)));
+  const sort = args.sort || 'macd4h';
+  const asc = Boolean(args.ascendingOrder);
+  const q = normalizeSearch(args.filterText || '');
+  const tfArg = args.timeframe || '4h';
+
+  const all = await fetchMacdTracker();
+
+  let filtered = all;
+  if (q) {
+    filtered = all.filter(i => (i.symbol || '').toLowerCase().includes(q) || (i.name || '').toLowerCase().includes(q));
+  }
+
+  const sorted = [...filtered].sort((a, b) => {
+    let av = 0, bv = 0;
+    
+    // Determine sort value
+    if (sort.startsWith('macd')) {
+        const tf = sort.replace('macd', '') || tfArg;
+        av = safeNum(a.macd?.[tf]?.nmacd, -999);
+        bv = safeNum(b.macd?.[tf]?.nmacd, -999);
+    } else if (sort === 'marketCap' || sort === 'mcap') {
+        av = safeNum(a.marketCap, 0);
+        bv = safeNum(b.marketCap, 0);
+    } else if (sort === 'price') {
+        av = safeNum(a.price, 0);
+        bv = safeNum(b.price, 0);
+    } else if (sort === 'change24h' || sort === 'price24h') {
+        av = safeNum(a.change24h, 0);
+        bv = safeNum(b.change24h, 0);
+    }
+
+    if (av === bv) return (b.marketCap || 0) - (a.marketCap || 0);
+    return asc ? (av - bv) : (bv - av);
+  });
+
+  const totalItems = sorted.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / limit));
+  const safePage = Math.min(page, totalPages);
+  const start = (safePage - 1) * limit;
+  
+  return { items: sorted.slice(start, start + limit), page: safePage, totalPages, totalItems };
 };
 
 // -------------------- ECON --------------------
