@@ -13,7 +13,6 @@ import {
   fetchRsiTablePage,
   fetchRsiTrackerHist
 } from '../services/api';
-import { SITE_LOGO_FALLBACK } from '../services/logo'; // Fallback final
 
 import {
   DndContext,
@@ -35,14 +34,17 @@ if (typeof addMouseWheelZoom === 'function') {
     addMouseWheelZoom(Highcharts);
 }
 
-// ... Constants and Helpers (unchanged)
 const TIMEFRAMES = ['15m', '1h', '4h', '24h', '7d'] as const;
 type Timeframe = typeof TIMEFRAMES[number];
 type XAxisMode = 'mcap' | 'volume' | 'change';
 const LIMIT_OPTIONS = [50, 100, 150, 200, 250];
+
+// CORES EXATAS SOLICITADAS
 const COLOR_GREEN = '#4e843c';
 const COLOR_RED = '#C2544E';
-const COLOR_NEUTRAL = '#475569';
+const COLOR_NEUTRAL = '#475569'; // Slate 600
+
+// NOVOS LIMITES SOLICITADOS
 const RSI_LOW = 20;
 const RSI_HIGH = 80;
 
@@ -66,13 +68,18 @@ const getRsiColor = (val: number, isText = false) => {
 };
 
 const computeAvgRsi = (rows: RsiTableItem[], tf: Timeframe) => {
-  const vals = rows.map(r => r.rsi?.[tf]).filter(v => typeof v === 'number' && !Number.isNaN(v)) as number[];
+  const vals = rows
+    .map(r => r.rsi?.[tf])
+    .filter(v => typeof v === 'number' && !Number.isNaN(v)) as number[];
   if (vals.length === 0) return 50;
-  return vals.reduce((a, b) => a + b, 0) / vals.length;
+  const sum = vals.reduce((a, b) => a + b, 0);
+  return sum / vals.length;
 };
 
 const computeCounts = (rows: RsiTableItem[], tf: Timeframe) => {
-  let oversold = 0, overbought = 0, valid = 0;
+  let oversold = 0;
+  let overbought = 0;
+  let valid = 0;
   for (const r of rows) {
     const v = r.rsi?.[tf];
     if (typeof v !== 'number') continue;
@@ -86,22 +93,23 @@ const computeCounts = (rows: RsiTableItem[], tf: Timeframe) => {
 const useIsDark = () => {
   const [isDark, setIsDark] = useState(document.documentElement.classList.contains('dark'));
   useEffect(() => {
-    const observer = new MutationObserver(() => setIsDark(document.documentElement.classList.contains('dark')));
+    const observer = new MutationObserver(() => {
+      setIsDark(document.documentElement.classList.contains('dark'));
+    });
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     return () => observer.disconnect();
   }, []);
   return isDark;
 };
 
-// ... SidebarGauge, RsiGridWidget, RsiGauge, RsiScatterChart (Unchanged code blocks omitted for brevity)
-// Use the existing implementations for these components from the file provided
-
 const SidebarGauge: React.FC<{ value: number }> = ({ value }) => {
     const rsiVal = clamp(value, 0, 100);
     const rotation = -90 + (rsiVal / 100) * 180;
+    
     let label = "Neutro";
     if (rsiVal >= RSI_HIGH) label = "Sobrecompra";
     if (rsiVal <= RSI_LOW) label = "Sobrevenda";
+
     return (
         <div className="flex flex-col items-center justify-center h-full py-2">
             <div className="relative w-full max-w-[240px] -mt-2">
@@ -128,17 +136,29 @@ const SidebarGauge: React.FC<{ value: number }> = ({ value }) => {
     );
 };
 
+// === COMPONENTE DEDICADO PARA GRID (MAIN BOARD) ===
 const RsiGridWidget: React.FC<{ language: Language }> = ({ language }) => {
     const [avgData, setAvgData] = useState<RsiAvgData | null>(null);
     const [loading, setLoading] = useState(true);
-    useEffect(() => { fetchRsiAverage().then(data => { setAvgData(data); setLoading(false); }); }, []);
+
+    useEffect(() => {
+        fetchRsiAverage().then(data => {
+            setAvgData(data);
+            setLoading(false);
+        });
+    }, []);
+
     const Watermark = () => <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden opacity-[0.05] z-0"><img src="https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png" alt="watermark" className="w-3/4 h-auto grayscale filter" /></div>;
+
     if (loading) return <div className="flex items-center justify-center h-full text-slate-500"><Loader2 className="animate-spin" /></div>;
+
     const rsiVal = avgData?.averageRsi || 50;
     const rotation = -90 + (clamp(rsiVal, 0, 100) / 100) * 180;
+    
     let label = "Neutro";
     if (rsiVal >= RSI_HIGH) label = "Sobrecompra";
     if (rsiVal <= RSI_LOW) label = "Sobrevenda";
+
     return (
         <div className="h-full flex flex-col justify-center gap-1 p-2 relative text-center bg-white dark:bg-[#2f3032]">
             <Watermark />
@@ -171,11 +191,23 @@ const RsiGridWidget: React.FC<{ language: Language }> = ({ language }) => {
     );
 };
 
+// === COMPONENTE SIDEBAR PARA PAGINA DE DETALHES (3 Cards) ===
 export const RsiGauge: React.FC<{ language?: Language }> = ({ language = 'pt' }) => {
   const [avgData, setAvgData] = useState<RsiAvgData | null>(null);
   const [tableData, setTableData] = useState<RsiTableItem[]>([]);
   const [loading, setLoading] = useState(true);
-  useEffect(() => { Promise.all([fetchRsiAverage(), fetchRsiTable({ force: false })]).then(([avg, table]) => { setAvgData(avg); setTableData(table); setLoading(false); }); }, []);
+
+  useEffect(() => {
+    Promise.all([
+        fetchRsiAverage(),
+        fetchRsiTable({ force: false })
+    ]).then(([avg, table]) => {
+        setAvgData(avg);
+        setTableData(table);
+        setLoading(false);
+    });
+  }, []);
+
   const timeframe: Timeframe = '4h'; 
   const avgRsi = avgData?.averageRsi ?? computeAvgRsi(tableData, timeframe);
   const counts = useMemo(() => computeCounts(tableData, timeframe), [tableData, timeframe]);
@@ -183,7 +215,9 @@ export const RsiGauge: React.FC<{ language?: Language }> = ({ language = 'pt' })
   const osPct = (counts.oversold / total) * 100;
   const obPct = (counts.overbought / total) * 100;
   const neutralPct = 100 - osPct - obPct;
+
   if (loading) return <div className="h-full flex items-center justify-center"><Loader2 className="animate-spin text-gray-400" /></div>;
+
   return (
     <div className="flex flex-col gap-3 h-full">
         <div className="flex-1 bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 p-4 shadow-sm flex flex-col relative overflow-hidden">
@@ -214,10 +248,16 @@ export const RsiGauge: React.FC<{ language?: Language }> = ({ language = 'pt' })
                 <h3 className="font-bold text-gray-900 dark:text-white text-xs uppercase tracking-wider">Histórico da Média</h3>
             </div>
             <div className="space-y-1.5">
-                {[ { l: 'Ontem', v: avgData?.yesterday }, { l: '7 Dias', v: avgData?.days7Ago }, { l: '30 Dias', v: avgData?.days30Ago } ].map((h, i) => (
+                {[
+                    { l: 'Ontem', v: avgData?.yesterday },
+                    { l: '7 Dias', v: avgData?.days7Ago },
+                    { l: '30 Dias', v: avgData?.days30Ago }
+                ].map((h, i) => (
                     <div key={i} className="flex justify-between items-center bg-gray-5 dark:bg-white/5 p-1.5 rounded px-3">
                         <span className="text-[10px] font-bold text-gray-500 dark:text-slate-400 uppercase">{h.l}</span>
-                        <span className={`text-xs font-black font-mono ${getRsiColor(h.v || 50, true)}`}>{h.v ? h.v.toFixed(2) : '-'}</span>
+                        <span className={`text-xs font-black font-mono ${getRsiColor(h.v || 50, true)}`}>
+                            {h.v ? h.v.toFixed(2) : '-'}
+                        </span>
                     </div>
                 ))}
             </div>
@@ -230,72 +270,222 @@ export const RsiScatterChart: React.FC = () => {
   const isDark = useIsDark();
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<Highcharts.Chart | null>(null);
+  
   const [points, setPoints] = useState<RsiTrackerPoint[]>([]);
   const [timeframe, setTimeframe] = useState<Timeframe>('4h');
   const [xMode, setXMode] = useState<XAxisMode>('mcap');
   const [limit, setLimit] = useState(50); 
+  
+  // Filters
   const [visibleZones, setVisibleZones] = useState<string[]>(['oversold', 'neutral', 'overbought']);
 
-  useEffect(() => { fetchRsiTrackerHist().then(data => { if (data && Array.isArray(data)) setPoints(data); }); }, []);
-  const resetZoom = () => { if (chartInstance.current) chartInstance.current.zoomOut(); };
-  const toggleZone = (zone: string) => { setVisibleZones(prev => prev.includes(zone) ? prev.filter(z => z !== zone) : [...prev, zone]); };
+  useEffect(() => {
+      fetchRsiTrackerHist().then(data => {
+          if (data && Array.isArray(data)) setPoints(data);
+      });
+  }, []);
+
+  const resetZoom = () => {
+      if (chartInstance.current) {
+          chartInstance.current.zoomOut();
+      }
+  };
+
+  const toggleZone = (zone: string) => {
+      setVisibleZones(prev => 
+          prev.includes(zone) ? prev.filter(z => z !== zone) : [...prev, zone]
+      );
+  };
 
   useEffect(() => {
     if (!chartRef.current || points.length === 0) return;
+
     const bgColor = 'transparent';
     const textColor = isDark ? '#94a3b8' : '#64748b';
     const gridColor = isDark ? '#334155' : '#e2e8f0';
     const crosshairColor = isDark ? '#64748b' : '#94a3b8'; 
+
     const seriesData = points
         .filter(r => r.marketCap && r.marketCap > 0 && r.rsi?.[timeframe])
         .slice(0, limit)
         .map(r => {
             let xVal = 0;
-            if (xMode === 'mcap') xVal = r.marketCap || 0; else if (xMode === 'volume') xVal = r.volume24h || 0; else xVal = r.change24h || 0;
+            if (xMode === 'mcap') xVal = r.marketCap || 0;
+            else if (xMode === 'volume') xVal = r.volume24h || 0;
+            else xVal = r.change24h || 0;
+
             const cur = r.rsi?.[timeframe];
+            
+            // FIX: Filters match the 20/80 logic
             const isOversold = cur <= RSI_LOW;
             const isOverbought = cur >= RSI_HIGH;
             const isNeutral = !isOversold && !isOverbought;
+
             if (isOversold && !visibleZones.includes('oversold')) return null;
             if (isOverbought && !visibleZones.includes('overbought')) return null;
             if (isNeutral && !visibleZones.includes('neutral')) return null;
+
             const last = r.lastRsi; 
             const isRising = (last !== undefined && cur > last);
             const symbolShort = (r.symbol || 'UNK').substring(0, 3).toUpperCase();
             const logoUrl = r.logo || `https://assets.coincap.io/assets/icons/${r.symbol.toLowerCase()}@2x.png`;
+            
             return {
-                id: r.symbol, x: xVal, y: cur, z: r.volume24h, name: r.symbol, fullName: r.name, price: r.price, change: r.change24h, isRising: isRising, logoUrl: logoUrl, symbolShort
+                id: r.symbol, 
+                x: xVal, // X Axis = Metric (Mcap/Vol/Change)
+                y: cur,  // Y Axis = RSI
+                z: r.volume24h,
+                name: r.symbol,
+                fullName: r.name,
+                price: r.price,
+                change: r.change24h,
+                isRising: isRising,
+                logoUrl: logoUrl,
+                symbolShort
             };
-        }).filter(p => p !== null);
+        })
+        .filter(p => p !== null); // Remove filtered out points
+
     seriesData.sort((a, b) => a!.name.localeCompare(b!.name));
 
     if (chartInstance.current) {
         chartInstance.current.series[0].setData(seriesData as any, true, { duration: 1000, easing: 'easeOutQuart' }, true);
         const xAxisType = xMode === 'change' ? 'linear' : 'logarithmic';
         const xTitle = xMode === 'mcap' ? 'Market Cap (Log)' : xMode === 'volume' ? 'Volume 24h (Log)' : 'Variação 24h (%)';
-        chartInstance.current.xAxis[0].update({ type: xAxisType, reversed: xMode === 'mcap', title: { text: xTitle }, plotLines: xMode === 'change' ? [{ value: 0, color: textColor, width: 1, dashStyle: 'Dash', zIndex: 2 }] : [] });
+        
+        chartInstance.current.xAxis[0].update({
+             type: xAxisType,
+             reversed: xMode === 'mcap',
+             title: { text: xTitle },
+             plotLines: xMode === 'change' ? [{ value: 0, color: textColor, width: 1, dashStyle: 'Dash', zIndex: 2 }] : []
+        });
         return;
     }
-    // Highcharts config (omitted detailed implementation for brevity as it's just logic)
-    // The key change is using the correct RSI colors and limits
+
     const xAxisType = xMode === 'change' ? 'linear' : 'logarithmic';
     const xTitle = xMode === 'mcap' ? 'Market Cap (Log)' : xMode === 'volume' ? 'Volume 24h (Log)' : 'Variação 24h (%)';
     const xPlotLines = xMode === 'change' ? [{ value: 0, color: textColor, width: 1, dashStyle: 'Dash', zIndex: 2 }] : [];
 
     chartInstance.current = Highcharts.chart(chartRef.current, {
-        chart: { type: 'scatter', backgroundColor: bgColor, style: { fontFamily: 'Inter, sans-serif' }, height: null, zooming: { mouseWheel: { enabled: true }, type: 'xy' }, animation: { duration: 1000 } },
-        title: { text: null }, credits: { enabled: false }, legend: { enabled: false },
-        xAxis: { type: xAxisType, reversed: xMode === 'mcap', title: { text: xTitle, style: { color: textColor, fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase' } }, gridLineColor: gridColor, labels: { style: { color: textColor, fontSize: '10px' }, formatter: function (this: any) { if (xMode === 'change') return this.value + '%'; return '$' + formatCompactNumber(this.value); } }, lineColor: gridColor, tickColor: gridColor, plotLines: xPlotLines, crosshair: { width: 1, color: crosshairColor, dashStyle: 'Dot', snap: false, zIndex: 5 } },
-        yAxis: { title: { text: 'Relative Strength Index', style: { color: textColor, fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase' } }, min: 0, max: 100, gridLineColor: gridColor, gridLineDashStyle: 'Dash', labels: { style: { color: textColor, fontSize: '10px' } }, plotLines: [ { value: RSI_HIGH, color: COLOR_RED, dashStyle: 'ShortDash', width: 2, label: { text: 'Overbought (80)', align: 'right', style: { color: COLOR_RED, fontSize: '10px' } }, zIndex: 5 }, { value: RSI_LOW, color: COLOR_GREEN, dashStyle: 'ShortDash', width: 2, label: { text: 'Oversold (20)', align: 'right', style: { color: COLOR_GREEN, fontSize: '10px' } }, zIndex: 5 }, { value: 50, color: textColor, width: 1, zIndex: 1 } ], plotBands: [ { from: RSI_HIGH, to: 100, color: 'rgba(194, 84, 78, 0.08)' }, { from: 0, to: RSI_LOW, color: 'rgba(78, 132, 60, 0.08)' } ], crosshair: { width: 1, color: crosshairColor, dashStyle: 'Dot', snap: false, zIndex: 5 } },
-        tooltip: { useHTML: true, backgroundColor: isDark ? 'rgba(26, 28, 30, 0.98)' : 'rgba(255, 255, 255, 0.98)', borderColor: gridColor, borderRadius: 8, style: { color: isDark ? '#fff' : '#000', zIndex: 9999 }, outside: true, snap: 2, positioner: function (labelWidth: number, labelHeight: number, point: any) { return { x: point.plotX - labelWidth / 2, y: point.plotY - labelHeight - 40 }; }, formatter: function (this: any) { const p = this.point; const changeColor = p.options.change >= 0 ? COLOR_GREEN : COLOR_RED; return ` <div style="display:flex; align-items:center; gap:8px; min-width:140px; padding: 4px; z-index:9999;"> <div style="font-weight:900; font-size:14px;">${p.name}</div> </div> <div style="font-size:12px; opacity:0.7; margin-bottom:4px;">$${formatCompactNumber(p.options.price)}</div> <div style="margin-top:4px; font-size:12px;"> <span style="opacity:0.7;">RSI (${timeframe}):</span> <b>${p.y.toFixed(2)}</b> </div> <div style="font-size:12px;"> <span style="opacity:0.7;">Var 24h:</span> <b style="color:${changeColor}">${p.options.change.toFixed(2)}%</b> </div> `; } },
-        plotOptions: { scatter: { stickyTracking: false, marker: { radius: 12, fillColor: 'rgba(0,0,0,0)', lineWidth: 0, states: { hover: { enabled: false } } }, dataLabels: { enabled: true, useHTML: true, allowOverlap: true, y: -12, x: -12, formatter: function (this: any) { const p = this.point; const isRising = p.options.isRising; const color = isRising ? COLOR_GREEN : COLOR_RED; const symbol = isRising ? '▲' : '▼'; const logo = p.options.logoUrl; const short = p.options.symbolShort || ''; return ` <div style="position: relative; width: 24px; height: 24px;"> <div style="position: absolute; inset: 0; background: #334155; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: bold; color: #fff; z-index: 1;">${short.charAt(0)}</div> <img src="${logo}" style="position: relative; width: 24px; height: 24px; border-radius: 50%; object-fit: cover; z-index: 2;" onerror="this.style.display='none'" /> <div style="position: absolute; right: -4px; bottom: -2px; color: ${color}; font-size: 10px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.8); line-height: 1; z-index: 3;"> ${symbol} </div> </div>`; }, style: { textOutline: 'none' } } } },
+        chart: {
+            type: 'scatter',
+            backgroundColor: bgColor,
+            style: { fontFamily: 'Inter, sans-serif' },
+            height: null, 
+            zooming: { mouseWheel: { enabled: true }, type: 'xy' },
+            animation: { duration: 1000 }
+        },
+        title: { text: null },
+        credits: { enabled: false },
+        legend: { enabled: false },
+        xAxis: {
+            type: xAxisType,
+            reversed: xMode === 'mcap', 
+            title: { text: xTitle, style: { color: textColor, fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase' } },
+            gridLineColor: gridColor,
+            labels: {
+                style: { color: textColor, fontSize: '10px' },
+                formatter: function (this: any) { 
+                    if (xMode === 'change') return this.value + '%';
+                    return '$' + formatCompactNumber(this.value); 
+                }
+            },
+            lineColor: gridColor,
+            tickColor: gridColor,
+            plotLines: xPlotLines,
+            crosshair: { width: 1, color: crosshairColor, dashStyle: 'Dot', snap: false, zIndex: 5 }
+        },
+        yAxis: {
+            title: { text: 'Relative Strength Index', style: { color: textColor, fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase' } },
+            min: 0, 
+            max: 100,
+            gridLineColor: gridColor,
+            gridLineDashStyle: 'Dash',
+            labels: { style: { color: textColor, fontSize: '10px' } },
+            // FIX: Lines at 20 and 80
+            plotLines: [
+                { value: RSI_HIGH, color: COLOR_RED, dashStyle: 'ShortDash', width: 2, label: { text: 'Overbought (80)', align: 'right', style: { color: COLOR_RED, fontSize: '10px' } }, zIndex: 5 },
+                { value: RSI_LOW, color: COLOR_GREEN, dashStyle: 'ShortDash', width: 2, label: { text: 'Oversold (20)', align: 'right', style: { color: COLOR_GREEN, fontSize: '10px' } }, zIndex: 5 },
+                { value: 50, color: textColor, width: 1, zIndex: 1 }
+            ],
+            plotBands: [
+                { from: RSI_HIGH, to: 100, color: 'rgba(194, 84, 78, 0.08)' }, // Red with opacity
+                { from: 0, to: RSI_LOW, color: 'rgba(78, 132, 60, 0.08)' } // Green with opacity
+            ],
+            crosshair: { width: 1, color: crosshairColor, dashStyle: 'Dot', snap: false, zIndex: 5 }
+        },
+        tooltip: {
+            useHTML: true,
+            backgroundColor: isDark ? 'rgba(26, 28, 30, 0.98)' : 'rgba(255, 255, 255, 0.98)',
+            borderColor: gridColor,
+            borderRadius: 8,
+            style: { color: isDark ? '#fff' : '#000', zIndex: 9999 },
+            outside: true,
+            snap: 2,
+            positioner: function (labelWidth: number, labelHeight: number, point: any) {
+                return { x: point.plotX - labelWidth / 2, y: point.plotY - labelHeight - 40 };
+            },
+            formatter: function (this: any) {
+                const p = this.point;
+                const changeColor = p.options.change >= 0 ? COLOR_GREEN : COLOR_RED;
+                return `
+                    <div style="display:flex; align-items:center; gap:8px; min-width:140px; padding: 4px; z-index:9999;">
+                        <div style="font-weight:900; font-size:14px;">${p.name}</div>
+                    </div>
+                    <div style="font-size:12px; opacity:0.7; margin-bottom:4px;">$${formatCompactNumber(p.options.price)}</div>
+                    <div style="margin-top:4px; font-size:12px;">
+                        <span style="opacity:0.7;">RSI (${timeframe}):</span> <b>${p.y.toFixed(2)}</b>
+                    </div>
+                    <div style="font-size:12px;">
+                        <span style="opacity:0.7;">Var 24h:</span> <b style="color:${changeColor}">${p.options.change.toFixed(2)}%</b>
+                    </div>
+                `;
+            }
+        },
+        plotOptions: {
+            scatter: {
+                stickyTracking: false,
+                marker: {
+                    radius: 12, 
+                    fillColor: 'rgba(0,0,0,0)',
+                    lineWidth: 0,
+                    states: { hover: { enabled: false } }
+                },
+                dataLabels: {
+                    enabled: true,
+                    useHTML: true,
+                    allowOverlap: true,
+                    y: -12,
+                    x: -12,
+                    formatter: function (this: any) {
+                        const p = this.point;
+                        const isRising = p.options.isRising;
+                        const color = isRising ? COLOR_GREEN : COLOR_RED;
+                        const symbol = isRising ? '▲' : '▼'; 
+                        const logo = p.options.logoUrl;
+                        const short = p.options.symbolShort || '';
+                        return `
+                        <div style="position: relative; width: 24px; height: 24px;">
+                            <div style="position: absolute; inset: 0; background: #334155; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: bold; color: #fff; z-index: 1;">${short.charAt(0)}</div>
+                            <img src="${logo}" 
+                                 style="position: relative; width: 24px; height: 24px; border-radius: 50%; object-fit: cover; z-index: 2;" 
+                                 onerror="this.style.display='none'"
+                            />
+                            <div style="position: absolute; right: -4px; bottom: -2px; color: ${color}; font-size: 10px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.8); line-height: 1; z-index: 3;">
+                                ${symbol}
+                            </div>
+                        </div>`;
+                    },
+                    style: { textOutline: 'none' }
+                }
+            }
+        },
         series: [{ name: 'Coins', data: seriesData as any, color: 'rgba(156, 163, 175, 0.5)' }]
     } as any);
   }, [points, timeframe, xMode, isDark, limit, visibleZones]);
 
   return (
     <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm p-4 h-full flex flex-col relative overflow-hidden">
-        {/* ... Scatter Chart Render (same as before) ... */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.05] z-0">
             <img src="https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png" alt="watermark" className="w-1/2 h-auto grayscale filter" />
         </div>
@@ -304,17 +494,26 @@ export const RsiScatterChart: React.FC = () => {
                 <h3 className="font-bold text-gray-900 dark:text-white uppercase text-sm tracking-wider">RSI Scatter Map</h3>
                 <div className="flex bg-gray-100 dark:bg-[#2f3032] rounded p-0.5 ml-2 items-center">
                     <span className="text-[9px] font-bold text-gray-500 uppercase px-2">Nº Moedas:</span>
-                    <select value={limit} onChange={(e) => setLimit(parseInt(e.target.value))} className="bg-transparent text-[10px] font-bold outline-none text-gray-900 dark:text-white cursor-pointer px-1">
+                    <select 
+                        value={limit} 
+                        onChange={(e) => setLimit(parseInt(e.target.value))}
+                        className="bg-transparent text-[10px] font-bold outline-none text-gray-900 dark:text-white cursor-pointer px-1"
+                    >
                         {LIMIT_OPTIONS.map(opt => <option key={opt} value={opt} className="bg-white dark:bg-[#1a1c1e] text-gray-900 dark:text-white">{opt}</option>)}
                     </select>
                 </div>
                 <div className="flex bg-gray-100 dark:bg-[#2f3032] rounded p-0.5 ml-2">
                     {TIMEFRAMES.map(t => (
-                        <button key={t} onClick={() => setTimeframe(t)} className={`px-2 py-1 text-[10px] font-bold rounded transition-colors ${timeframe === t ? 'bg-white dark:bg-[#1a1c1e] text-[#dd9933] shadow-sm' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}>
+                        <button 
+                            key={t}
+                            onClick={() => setTimeframe(t)}
+                            className={`px-2 py-1 text-[10px] font-bold rounded transition-colors ${timeframe === t ? 'bg-white dark:bg-[#1a1c1e] text-[#dd9933] shadow-sm' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}
+                        >
                             {t}
                         </button>
                     ))}
                 </div>
+                {/* ZONE FILTERS - CORES ESCURAS */}
                 <div className="flex bg-gray-100 dark:bg-[#2f3032] rounded p-0.5 ml-2">
                      <button onClick={() => toggleZone('oversold')} className={`px-2 py-1 text-[10px] font-bold rounded transition-all flex items-center gap-1 ${visibleZones.includes('oversold') ? `bg-[${COLOR_GREEN}] text-white shadow-sm` : `text-[${COLOR_GREEN}] opacity-60 border border-[${COLOR_GREEN}]/30`}`}>
                         <Filter size={10} /> Oversold
@@ -328,59 +527,35 @@ export const RsiScatterChart: React.FC = () => {
                 </div>
             </div>
             <div className="flex items-center gap-2">
-                <button onClick={resetZoom} className="p-1.5 bg-gray-100 dark:bg-[#2f3032] hover:bg-gray-200 dark:hover:bg-white/10 rounded text-gray-500 hover:text-[#dd9933] transition-colors" title="Reset Zoom"><ZoomOut size={16} /></button>
+                <button onClick={resetZoom} className="p-1.5 bg-gray-100 dark:bg-[#2f3032] hover:bg-gray-200 dark:hover:bg-white/10 rounded text-gray-500 hover:text-[#dd9933] transition-colors" title="Reset Zoom">
+                    <ZoomOut size={16} />
+                </button>
                 <div className="w-px h-4 bg-gray-200 dark:bg-white/10 mx-1"></div>
                 <div className="flex bg-gray-100 dark:bg-[#2f3032] rounded p-0.5">
-                    <button onClick={() => setXMode('mcap')} className={`px-2 py-1 text-[10px] font-bold rounded flex items-center gap-1 ${xMode === 'mcap' ? 'bg-white dark:bg-[#1a1c1e] text-[#dd9933] shadow-sm' : 'text-gray-500'}`}><DollarSign size={10} /> MC</button>
-                    <button onClick={() => setXMode('change')} className={`px-2 py-1 text-[10px] font-bold rounded flex items-center gap-1 ${xMode === 'change' ? 'bg-white dark:bg-[#1a1c1e] text-[#dd9933] shadow-sm' : 'text-gray-500'}`}><Percent size={10} /> 24h</button>
-                    <button onClick={() => setXMode('volume')} className={`px-2 py-1 text-[10px] font-bold rounded flex items-center gap-1 ${xMode === 'volume' ? 'bg-white dark:bg-[#1a1c1e] text-[#dd9933] shadow-sm' : 'text-gray-500'}`}><BarChart2 size={10} /> Vol</button>
+                    <button onClick={() => setXMode('mcap')} className={`px-2 py-1 text-[10px] font-bold rounded flex items-center gap-1 ${xMode === 'mcap' ? 'bg-white dark:bg-[#1a1c1e] text-[#dd9933] shadow-sm' : 'text-gray-500'}`}>
+                        <DollarSign size={10} /> MC
+                    </button>
+                    <button onClick={() => setXMode('change')} className={`px-2 py-1 text-[10px] font-bold rounded flex items-center gap-1 ${xMode === 'change' ? 'bg-white dark:bg-[#1a1c1e] text-[#dd9933] shadow-sm' : 'text-gray-500'}`}>
+                        <Percent size={10} /> 24h
+                    </button>
+                    <button onClick={() => setXMode('volume')} className={`px-2 py-1 text-[10px] font-bold rounded flex items-center gap-1 ${xMode === 'volume' ? 'bg-white dark:bg-[#1a1c1e] text-[#dd9933] shadow-sm' : 'text-gray-500'}`}>
+                        <BarChart2 size={10} /> Vol
+                    </button>
                 </div>
             </div>
         </div>
         <div className="flex-1 w-full min-h-0 relative rounded-lg overflow-hidden border border-gray-100 dark:border-slate-800/50 z-10">
-            {points.length === 0 ? (<div className="absolute inset-0 flex items-center justify-center text-slate-500"><Loader2 className="animate-spin" /></div>) : (<div ref={chartRef} className="absolute inset-0" />)}
-            <div className="absolute bottom-2 left-2 flex items-center gap-1.5 px-2 py-1 bg-white/80 dark:bg-black/60 backdrop-blur rounded text-[9px] font-bold text-gray-500 pointer-events-none"><MousePointer2 size={10} /> Scroll to Zoom</div>
+            {points.length === 0 ? (
+                <div className="absolute inset-0 flex items-center justify-center text-slate-500"><Loader2 className="animate-spin" /></div>
+            ) : (
+                <div ref={chartRef} className="absolute inset-0" />
+            )}
+            <div className="absolute bottom-2 left-2 flex items-center gap-1.5 px-2 py-1 bg-white/80 dark:bg-black/60 backdrop-blur rounded text-[9px] font-bold text-gray-500 pointer-events-none">
+                <MousePointer2 size={10} /> Scroll to Zoom
+            </div>
         </div>
     </div>
   );
-};
-
-// === SMART LOGO COMPONENT FOR TABLE ===
-const SmartLogo: React.FC<{ symbol: string, chain: string[], className?: string }> = ({ symbol, chain, className }) => {
-    const [srcIndex, setSrcIndex] = useState(0);
-    const [hasError, setHasError] = useState(false);
-
-    useEffect(() => {
-        setSrcIndex(0);
-        setHasError(false);
-    }, [chain]);
-
-    const handleError = () => {
-        if (srcIndex < chain.length - 1) {
-            setSrcIndex(prev => prev + 1);
-        } else {
-            setHasError(true);
-        }
-    };
-
-    const currentSrc = chain && chain.length > 0 ? chain[srcIndex] : SITE_LOGO_FALLBACK;
-
-    if (hasError) {
-        return (
-            <div className={`${className} bg-gray-200 dark:bg-slate-700 flex items-center justify-center text-[9px] font-bold text-gray-500 dark:text-gray-300`}>
-                {symbol.charAt(0).toUpperCase()}
-            </div>
-        );
-    }
-
-    return (
-        <img 
-            src={currentSrc} 
-            className={className} 
-            alt="" 
-            onError={handleError}
-        />
-    );
 };
 
 export const RsiTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false }) => {
@@ -425,6 +600,7 @@ export const RsiTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false })
 
     const renderRsiCell = (r: RsiTableItem, tf: '15m'|'1h'|'4h'|'24h'|'7d') => {
         const val = r.rsi[tf];
+        // Use os limites 20/80 para determinar a seta
         let Icon = null;
         if (val >= RSI_HIGH) Icon = <TrendingUp size={12} />;
         if (val <= RSI_LOW) Icon = <TrendingDown size={12} />;
@@ -445,11 +621,18 @@ export const RsiTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false })
             case 'asset': return (
                 <td key={colId} className="p-3">
                     <div className="flex items-center gap-3">
-                        <SmartLogo 
-                            symbol={r.symbol}
-                            chain={r.logoChain || [r.logo || SITE_LOGO_FALLBACK]}
-                            className="w-6 h-6 rounded-full bg-white p-0.5 border border-gray-200 dark:border-white/10"
-                        />
+                        {r.logo ? (
+                            <img src={r.logo} className="w-6 h-6 rounded-full bg-white p-0.5 border border-gray-200 dark:border-white/10" alt="" onError={(e) => {
+                                const parent = e.currentTarget.parentElement;
+                                if (parent) {
+                                    e.currentTarget.style.display = 'none';
+                                    const fallback = document.createElement('div');
+                                    fallback.className = "w-6 h-6 rounded-full bg-gray-200 dark:bg-slate-700 flex items-center justify-center text-[9px] font-bold text-gray-500 dark:text-gray-300";
+                                    fallback.innerText = r.symbol.charAt(0).toUpperCase();
+                                    parent.prepend(fallback);
+                                }
+                            }} />
+                        ) : (<div className="w-6 h-6 rounded-full bg-gray-200 dark:bg-slate-700 flex items-center justify-center text-[9px] font-bold text-gray-500 dark:text-gray-300">{r.symbol.charAt(0).toUpperCase()}</div>)}
                         <div className="flex flex-col"><span className="font-bold text-gray-900 dark:text-slate-200 leading-none">{r.name}</span><span className="text-[10px] font-bold text-gray-500 uppercase">{r.symbol}</span></div>
                     </div>
                 </td>
@@ -490,7 +673,9 @@ export const RsiTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false })
     return (
         <div className={`bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm flex flex-col ${isPage ? 'w-full h-auto block' : 'h-full overflow-hidden min-h-[500px]'}`}>
             <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-3 bg-gray-50 dark:bg-black/20">
+                {/* Header Controls Reorganized */}
                 <div className="flex flex-wrap items-center justify-between gap-4 w-full">
+                    {/* Left Group: Search + Rows */}
                     <div className="flex items-center gap-4 flex-1">
                         <div className="relative w-full sm:max-w-xs">
                             <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
@@ -504,6 +689,8 @@ export const RsiTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false })
                             </select>
                         </div>
                     </div>
+                    
+                    {/* Right Group: Pagination */}
                     <div className="flex items-center gap-2">
                          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="p-1 hover:text-[#dd9933] transition-colors disabled:opacity-30 text-gray-600 dark:text-white"><ChevronLeft size={16}/></button>
                          <div className="flex items-center gap-1 text-xs font-bold text-gray-500 dark:text-gray-400">
