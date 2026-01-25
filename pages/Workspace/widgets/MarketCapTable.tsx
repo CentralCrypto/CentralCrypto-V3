@@ -31,7 +31,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 import { ApiCoin, Language } from '../../../types';
-import { fetchTopCoins, getLogoChain } from '../services/api';
+import { fetchTopCoins } from '../services/api';
 import { getTranslations } from '../../../locales';
 import { useBinanceWS } from '../../../services/BinanceWebSocketContext';
 
@@ -244,21 +244,7 @@ const LiveRow = React.memo(({ coin, colOrder, favorites, toggleFav }: any) => {
                   src={coin.image}
                   alt={coin.symbol}
                   className="w-9 h-9 rounded-full bg-slate-100 dark:bg-[#242628] p-1 border border-slate-200 dark:border-white/10 shadow-sm shrink-0"
-                  onError={(e) => {
-                     const target = e.currentTarget;
-                     // Obtém a cadeia de fallbacks
-                     const fallbacks = getLogoChain(coin.symbol, coin.image, coin.id); 
-                     // Encontra o índice da URL atual
-                     const currentSrc = target.getAttribute('src') || '';
-                     let nextIndex = fallbacks.indexOf(currentSrc) + 1;
-                     
-                     if (nextIndex < fallbacks.length) {
-                         target.src = fallbacks[nextIndex];
-                     } else {
-                         // Se falhar tudo, esconde
-                         target.style.display = 'none';
-                     }
-                  }}
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
                 />
                 <div className="flex flex-col min-w-0">
                   <span className="text-[15px] font-black text-gray-900 dark:text-white leading-none group-hover:text-[#dd9933] transition-colors truncate">
@@ -1158,20 +1144,7 @@ ${isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
             src={c.image}
             alt=""
             className="w-6 h-6 rounded-full bg-slate-100 dark:bg-[#242628] p-0.5 border border-slate-200 dark:border-white/10"
-            onError={(e) => {
-                 const target = e.currentTarget;
-                 // Obtém a cadeia de fallbacks
-                 const fallbacks = getLogoChain(c.symbol, c.image, c.id); 
-                 // Encontra o índice da URL atual
-                 const currentSrc = target.getAttribute('src') || '';
-                 let nextIndex = fallbacks.indexOf(currentSrc) + 1;
-                 
-                 if (nextIndex < fallbacks.length) {
-                     target.src = fallbacks[nextIndex];
-                 } else {
-                     target.style.display = 'none';
-                 }
-             }}
+            onError={(e) => { e.currentTarget.style.display = 'none'; }}
           />
         ))}
         {arr.length === 0 && <span className="text-xs font-bold text-gray-400 dark:text-slate-500">—</span>}

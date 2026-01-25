@@ -1,19 +1,19 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Loader2, Info, Search, ChevronLeft, ChevronRight, BarChart2, DollarSign, Percent, ZoomOut, MousePointer2, GripVertical, ChevronsUpDown, AlertTriangle } from 'lucide-react';
+import { Loader2, Info, Search, ChevronLeft, ChevronRight, BarChart2, DollarSign, Percent, ZoomOut, MousePointer2, GripVertical, ChevronsUpDown, ChevronDown, Coins } from 'lucide-react';
 import Highcharts from 'highcharts';
 import addMouseWheelZoom from 'highcharts/modules/mouse-wheel-zoom';
 import { Language, DashboardItem } from '../../../types';
+import { getTranslations } from '../../../locales';
 import {
   MacdAvgData,
   MacdTrackerPoint,
   fetchMacdAverage,
   fetchMacdTracker,
-  fetchMacdTablePage,
-  getHighchartsImgTag,
-  getLogoChain
+  fetchMacdTablePage
 } from '../services/api';
 
+// DND Kit Imports for Table
 import {
   DndContext,
   closestCenter,
@@ -31,7 +31,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 if (typeof addMouseWheelZoom === 'function') {
-    (addMouseWheelZoom as any)(Highcharts);
+    addMouseWheelZoom(Highcharts);
 }
 
 const TIMEFRAMES = ['15m', '1h', '4h', '24h', '7d'] as const;
@@ -41,6 +41,15 @@ const LIMIT_OPTIONS = [50, 100, 150, 200, 250];
 
 const COLOR_GREEN = '#4e843c';
 const COLOR_RED = '#C2544E';
+
+// Helper for Unicode-safe Base64 Encoding
+const safeEncodeBase64 = (str: string) => {
+    try {
+        return btoa(unescape(encodeURIComponent(str)));
+    } catch (e) {
+        return '';
+    }
+};
 
 const formatCompactNumber = (number: number) => {
   if (!number || number === 0) return "---";
@@ -114,7 +123,7 @@ const MacdGridWidget: React.FC<{ language: Language }> = ({ language }) => {
         fetchMacdAverage().then((avg) => {
             setAvgData(avg);
             setLoading(false);
-        }).catch(() => setLoading(false));
+        });
     }, []);
 
     const Watermark = () => <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden opacity-[0.05] z-0"><img src="https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png" alt="watermark" className="w-3/4 h-auto grayscale filter" /></div>;
@@ -160,6 +169,7 @@ const MacdGridWidget: React.FC<{ language: Language }> = ({ language }) => {
 };
 
 export const MacdSidebar: React.FC<{ language?: Language }> = ({ language = 'pt' }) => {
+    // ... existing ...
     const [avgData, setAvgData] = useState<MacdAvgData | null>(null);
     const [loading, setLoading] = useState(true);
 
@@ -167,10 +177,11 @@ export const MacdSidebar: React.FC<{ language?: Language }> = ({ language = 'pt'
         fetchMacdAverage().then((avg) => {
             setAvgData(avg);
             setLoading(false);
-        }).catch(() => setLoading(false));
+        });
     }, []);
 
     if (loading || !avgData) return <div className="h-full flex items-center justify-center"><Loader2 className="animate-spin text-gray-400" /></div>;
+    // ... render logic from before ...
     const bullishPct = avgData.bullishPercentage || 50;
     const bearishPct = avgData.bearishPercentage || 50;
     return (
@@ -225,17 +236,16 @@ export const MacdScatterChart: React.FC = () => {
   const chartInstance = useRef<Highcharts.Chart | null>(null);
   
   const [points, setPoints] = useState<MacdTrackerPoint[]>([]);
-  const [hasLoaded, setHasLoaded] = useState(false);
+  
+  // Controls
   const [timeframe, setTimeframe] = useState<Timeframe>('4h');
   const [xMode, setXMode] = useState<XAxisMode>('mcap');
   const [limit, setLimit] = useState(50); // New limit state
 
   useEffect(() => {
-      fetchMacdTracker()
-        .then(data => {
+      fetchMacdTracker().then(data => {
           if (data && Array.isArray(data) && data.length > 0) setPoints(data);
-        })
-        .finally(() => setHasLoaded(true));
+      });
   }, []);
 
   const resetZoom = () => {
@@ -252,6 +262,7 @@ export const MacdScatterChart: React.FC = () => {
     const gridColor = isDark ? '#334155' : '#e2e8f0';
     const crosshairColor = isDark ? '#64748b' : '#94a3b8'; 
 
+    // Apply slice limit here
     const seriesData = points
         .filter(r => r.marketCap && r.marketCap > 0 && r.macd?.[timeframe])
         .slice(0, limit)
@@ -264,12 +275,13 @@ export const MacdScatterChart: React.FC = () => {
             const yVal = macdData?.nmacd || 0; 
             const isBullish = yVal > 0;
             const symbolShort = (r.symbol || 'UNK').substring(0, 3).toUpperCase();
-            const logoUrl = r.logo || '';
+
+            const logoUrl = r.logo || `https://assets.coincap.io/assets/icons/${r.symbol.toLowerCase()}@2x.png`;
             
             return {
                 id: r.symbol, 
-                x: xVal, 
-                y: yVal, 
+                x: xVal, // X = Market Cap / Change
+                y: yVal, // Y = MACD
                 z: r.marketCap,
                 name: r.symbol,
                 fullName: r.name,
@@ -391,19 +403,17 @@ export const MacdScatterChart: React.FC = () => {
                         const isBullish = p.options.isBullish;
                         const color = isBullish ? COLOR_GREEN : COLOR_RED;
                         const symbol = isBullish ? '▲' : '▼'; 
+                        const logo = p.options.logoUrl;
                         const short = p.options.symbolShort || '';
-                        
-                        const imgHtml = getHighchartsImgTag(
-                           short, 
-                           p.options.logoUrl, 
-                           24, 
-                           "position: relative; border-radius: 50%; object-fit: cover; z-index: 2;"
-                        );
 
+                        // CSS Fallback Layering
                         return `
                         <div style="position: relative; width: 24px; height: 24px;">
                             <div style="position: absolute; inset: 0; background: #334155; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: bold; color: #fff; z-index: 1;">${short.charAt(0)}</div>
-                            ${imgHtml}
+                            <img src="${logo}" 
+                                 style="position: relative; width: 24px; height: 24px; border-radius: 50%; object-fit: cover; z-index: 2;" 
+                                 onerror="this.style.display='none'" 
+                            />
                             <div style="position: absolute; right: -4px; bottom: -2px; color: ${color}; font-size: 10px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.8); line-height: 1; z-index: 3;">
                                 ${symbol}
                             </div>
@@ -466,10 +476,8 @@ export const MacdScatterChart: React.FC = () => {
         </div>
         
         <div className="flex-1 w-full min-h-0 relative rounded-lg overflow-hidden border border-gray-100 dark:border-slate-800/50 z-10">
-            {(!hasLoaded || points.length === 0) ? (
-                <div className="absolute inset-0 flex items-center justify-center text-slate-500">
-                    {!hasLoaded ? <Loader2 className="animate-spin" /> : <div className="flex flex-col items-center"><AlertTriangle size={24} className="mb-2"/><span className="text-xs font-bold">Sem dados no momento</span></div>}
-                </div>
+            {points.length === 0 ? (
+                <div className="absolute inset-0 flex items-center justify-center text-slate-500"><Loader2 className="animate-spin" /></div>
             ) : (
                 <div ref={chartRef} className="absolute inset-0" />
             )}
@@ -534,18 +542,12 @@ export const MacdTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false }
   useEffect(() => {
     let mounted = true;
     setLoading(true);
-    fetchMacdTablePage({ page, limit: pageSize, sort: sortKey as any, timeframe: sortTf, ascendingOrder: sortAsc, filterText: search })
-      .then(res => {
+    fetchMacdTablePage({ page, limit: pageSize, sort: sortKey as any, timeframe: sortTf, ascendingOrder: sortAsc, filterText: search }).then(res => {
         if(!mounted) return;
         setRows(res.items);
         setTotalPages(res.totalPages);
         setLoading(false);
-      })
-      .catch(err => {
-        if(!mounted) return;
-        console.warn("MACD Table Fetch Error", err);
-        setLoading(false);
-      });
+    });
     return () => { mounted = false; };
   }, [page, pageSize, search, sortKey, sortTf, sortAsc]);
 
@@ -568,31 +570,21 @@ export const MacdTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false }
       }
   };
   const renderCell = (r: MacdTrackerPoint, colId: string) => {
+      const logoUrl = r.logo || `https://assets.coincap.io/assets/icons/${r.symbol.toLowerCase()}@2x.png`;
       switch (colId) {
           case 'asset': return (
               <td key={colId} className="p-3">
                   <div className="flex items-center gap-3">
-                      {/* 4-Layer Fallback Image */}
-                        <img 
-                            src={r.logo} 
-                            className="w-6 h-6 rounded-full bg-white p-0.5 border border-gray-200 dark:border-white/10" 
-                            alt="" 
-                            onError={(e) => {
-                                const target = e.currentTarget;
-                                // Obtém a cadeia de fallbacks
-                                const fallbacks = getLogoChain(r.symbol, undefined); 
-                                // Encontra o índice da URL atual
-                                const currentSrc = target.getAttribute('src') || '';
-                                let nextIndex = fallbacks.indexOf(currentSrc) + 1;
-                                
-                                if (nextIndex < fallbacks.length) {
-                                    target.src = fallbacks[nextIndex];
-                                } else {
-                                    // Se falhar tudo, esconde
-                                    target.style.display = 'none';
-                                }
-                            }} 
-                        />
+                      <img src={logoUrl} className="w-6 h-6 rounded-full bg-white p-0.5 border border-gray-200 dark:border-white/10" alt="" onError={(e) => {
+                            const parent = e.currentTarget.parentElement;
+                            if (parent) {
+                                e.currentTarget.style.display = 'none';
+                                const fallback = document.createElement('div');
+                                fallback.className = "w-6 h-6 rounded-full bg-gray-200 dark:bg-slate-700 flex items-center justify-center text-[9px] font-bold text-gray-500 dark:text-gray-300";
+                                fallback.innerText = r.symbol.charAt(0).toUpperCase();
+                                parent.prepend(fallback);
+                            }
+                       }} />
                       <div className="flex flex-col"><span className="font-bold text-gray-900 dark:text-slate-200 leading-none">{r.name}</span><span className="text-[10px] font-bold text-gray-500 uppercase">{r.symbol}</span></div>
                   </div>
               </td>

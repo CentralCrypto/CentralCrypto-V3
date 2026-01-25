@@ -2,14 +2,14 @@
 import * as React from 'react';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { CircleDashed, RefreshCw, ChevronDown, X } from 'lucide-react';
-import { fetchTopCoins, getHighchartsImgTag } from '../services/api';
+import { fetchTopCoins } from '../services/api';
 import { DashboardItem, Language, ApiCoin } from '../../../types';
 import Highcharts from 'highcharts';
 import addHighchartsMore from 'highcharts/highcharts-more';
 
 // Initialize Standard Module with protection
 if (typeof addHighchartsMore === 'function') {
-    (addHighchartsMore as any)(Highcharts);
+    addHighchartsMore(Highcharts);
 }
 
 declare global {
@@ -204,19 +204,10 @@ const BubbleHeatmapWidget: React.FC<Props> = ({ item, language = 'pt' }) => {
                 formatter: function (this: any) {
                     const p = this.point;
                     const changeColor = p.change >= 0 ? '#22c55e' : '#ef4444';
-                    
-                    // Fallback logo HTML
-                    const logoHtml = getHighchartsImgTag(
-                        p.name, 
-                        p.logo, 
-                        52, 
-                        "border-radius: 50%; background: #fff; border: 3px solid #dd9933;"
-                    );
-
                     return `
                         <div style="padding: 20px; min-width: 360px; color: #ffffff; pointer-events: none; font-family: Inter, sans-serif;">
                             <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px; border-bottom: 2px solid rgba(255,255,255,0.1); padding-bottom: 16px;">
-                                ${p.logo ? logoHtml : ''}
+                                ${p.logo ? `<img src="${p.logo}" style="width: 52px; height: 52px; border-radius: 50%; background: #fff; border: 3px solid #dd9933;">` : ''}
                                 <div>
                                     <div style="font-size: 24px; font-weight: 900; line-height: 1;">${p.name}</div>
                                     <div style="font-size: 13px; color: #dd9933; font-weight: 800; text-transform: uppercase; margin-top: 5px; tracking-widest: 1px;">${p.fullName}</div>
@@ -277,17 +268,9 @@ const BubbleHeatmapWidget: React.FC<Props> = ({ item, language = 'pt' }) => {
                             const logoSize = Math.min(Math.max(r * 0.62, 14), 130);
                             const fontSize = Math.min(Math.max(r * 0.55, 10), 64);
                             const subSize = Math.max(fontSize * 0.6, 9);
-                            
-                            const logoHtml = getHighchartsImgTag(
-                                p.name, 
-                                p.logo, 
-                                logoSize, 
-                                "border-radius: 50%; background: #fff; border: 2px solid rgba(255,255,255,0.6); margin-bottom: 4px; pointer-events: none; -webkit-user-drag: none;"
-                            );
-
                             return `
                                 <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; user-select: none; width: 100%;">
-                                    ${p.logo && r > 28 ? logoHtml : ''}
+                                    ${p.logo && r > 28 ? `<img src="${p.logo}" style="width: ${logoSize}px; height: ${logoSize}px; border-radius: 50%; background: #fff; border: 2px solid rgba(255,255,255,0.6); margin-bottom: 4px; pointer-events: none; -webkit-user-drag: none;">` : ''}
                                     <div style="font-size: ${fontSize}px; font-weight: 1000; color: #ffffff; text-shadow: 0 2px 10px rgba(0,0,0,1); line-height: 0.9; pointer-events: none;">${p.name}</div>
                                     <div style="font-size: ${subSize}px; font-weight: 900; color: #ffffff; opacity: 0.98; text-shadow: 0 2px 6px rgba(0,0,0,1); pointer-events: none; margin-top: 2px;">${labelValue}</div>
                                 </div>
