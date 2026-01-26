@@ -306,7 +306,8 @@ export const MacdScatterChart: React.FC = () => {
                 isBullish: isBullish,
                 logoUrl,
                 fallbackLogo,
-                symbolShort
+                symbolShort,
+                allMacd: r.macd // Pass ALL data for tooltip
             };
         });
     
@@ -375,27 +376,51 @@ export const MacdScatterChart: React.FC = () => {
             useHTML: true,
             backgroundColor: isDark ? 'rgba(26, 28, 30, 0.98)' : 'rgba(255, 255, 255, 0.98)',
             borderColor: gridColor,
-            borderRadius: 8,
+            borderRadius: 12,
             style: { color: isDark ? '#fff' : '#000', zIndex: 9999 },
             outside: true, 
-            // Strict Snap
             snap: 2,
-            // Position above the logo
             positioner: function (labelWidth: number, labelHeight: number, point: any) {
                 return { x: point.plotX - labelWidth / 2, y: point.plotY - labelHeight - 40 };
             },
             formatter: function (this: any) {
                 const p = this.point;
+                const logo = p.options.logoUrl || p.options.fallbackLogo;
+                const changeColor = p.options.change >= 0 ? COLOR_GREEN : COLOR_RED;
+
+                // Helper for color
+                const getValColor = (v: number) => (v > 0 ? COLOR_GREEN : v < 0 ? COLOR_RED : (isDark ? '#94a3b8' : '#64748b'));
+
+                const tfHtml = TIMEFRAMES.map(tf => {
+                    // Extract N-MACD from nested structure
+                    const val = p.options.allMacd?.[tf]?.nmacd || 0;
+                    const c = getValColor(val);
+                    return `
+                        <div style="display:flex; flex-direction:column; align-items:center;">
+                            <span style="font-size:9px; font-weight:700; color:${isDark ? '#555' : '#888'}; text-transform:uppercase;">${tf}</span>
+                            <span style="font-size:11px; font-weight:800; color:${c}; font-family:monospace;">${val.toFixed(3)}</span>
+                        </div>
+                    `;
+                }).join('');
+
                 return `
-                    <div style="display:flex; align-items:center; gap:8px; min-width:140px; padding: 4px; z-index:9999;">
-                        <div style="font-weight:900; font-size:14px;">${p.name}</div>
-                    </div>
-                    <div style="font-size:12px; opacity:0.7; margin-bottom:4px;">$${formatCompactNumber(p.options.price)}</div>
-                    <div style="margin-top:4px; font-size:12px;">
-                        <span style="opacity:0.7;">N-MACD (${timeframe}):</span> <b>${p.y.toFixed(4)}</b>
-                    </div>
-                    <div style="font-size:12px;">
-                        <span style="opacity:0.7;">Var 24h:</span> <b style="color:${p.options.change >= 0 ? COLOR_GREEN : COLOR_RED}">${p.options.change.toFixed(2)}%</b>
+                    <div style="padding: 8px; min-width: 180px;">
+                        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px; border-bottom:1px solid ${isDark ? '#334155' : '#e2e8f0'}; padding-bottom:8px;">
+                            <img src="${logo}" style="width:24px; height:24px; border-radius:50%; object-fit:cover;" />
+                            <div>
+                                <div style="font-weight:900; font-size:14px; line-height:1;">${p.name}</div>
+                                <div style="font-size:10px; font-weight:700; color:${isDark ? '#64748b' : '#94a3b8'}; text-transform:uppercase; margin-top:2px;">N-MACD Matrix</div>
+                            </div>
+                        </div>
+                        
+                        <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:12px;">
+                            <div style="font-size:16px; font-weight:800; font-family:monospace;">$${formatCompactNumber(p.options.price)}</div>
+                            <div style="font-size:12px; font-weight:800; color:${changeColor};">${p.options.change > 0 ? '+' : ''}${p.options.change.toFixed(2)}%</div>
+                        </div>
+
+                        <div style="display:grid; grid-template-columns: repeat(5, 1fr); gap:8px; background:${isDark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.05)'}; padding:6px; border-radius:6px;">
+                            ${tfHtml}
+                        </div>
                     </div>
                 `;
             }

@@ -157,10 +157,10 @@ const CustomTreemapContent = (props: any) => {
   const visualH = height * zoomLevel;
   const minVisual = Math.min(visualW, visualH);
 
-  // Adjusted Thresholds
+  // Thresholds
   const LOD_MICRO = 35;      
   const LOD_SMALL = 70;      
-  const LOD_MEDIUM = 120; // Increased to ensure space for both    
+  const LOD_MEDIUM = 120;
 
   const isMicro = minVisual < LOD_MICRO;
   if (isMicro) return rectEl;
@@ -173,27 +173,34 @@ const CustomTreemapContent = (props: any) => {
   // Visual Clamping
   const MAX_VISUAL_LOGO = 64; 
   const MIN_VISUAL_LOGO = 20;
-  let targetVisualLogo = minVisual * 0.45; // Slightly smaller ratio
+  let targetVisualLogo = minVisual * 0.45;
   targetVisualLogo = Math.min(Math.max(targetVisualLogo, MIN_VISUAL_LOGO), MAX_VISUAL_LOGO);
   const logoSize = targetVisualLogo / zoomLevel;
 
-  const MAX_VISUAL_FONT = 22; // Slightly smaller max font
+  const MAX_VISUAL_FONT = 22; 
   const MIN_VISUAL_FONT = 10;
   let targetVisualFont = minVisual * 0.2;
   targetVisualFont = Math.min(Math.max(targetVisualFont, MIN_VISUAL_FONT), MAX_VISUAL_FONT);
+  
   const fontSize = targetVisualFont / zoomLevel;
   const priceFontSize = fontSize * 0.85;
 
-  // Explicit Gap for Flexbox at SVG scale
-  const gapSize = 4 / zoomLevel;
+  // Explicit Gap for Flexbox (Increased to 6px visual)
+  const gapSize = 6 / zoomLevel;
+  const lineHeight = 1.3;
 
-  // Safety fallback logic
-  const estimatedContentHeight = logoSize + (showSymbol ? fontSize : 0) + (showPrice ? priceFontSize : 0) + (showSymbol ? gapSize : 0) + (showPrice ? gapSize : 0);
+  // Safety fallback logic (Strict)
+  // Calculate total required height for content with gaps and line height
+  const textHeight = showSymbol ? fontSize * lineHeight : 0;
+  const priceHeight = showPrice ? priceFontSize * lineHeight : 0;
+  const totalRequiredHeight = logoSize + textHeight + priceHeight + (showSymbol ? gapSize : 0) + (showPrice ? gapSize : 0);
   
-  if (estimatedContentHeight > height * 0.95) {
+  const paddingY = (4 / zoomLevel) * 2; // 4px top + 4px bottom padding
+  if (totalRequiredHeight + paddingY > height) {
       showPrice = false;
-      // If still too big, hide symbol (keep logo)
-      if (logoSize + (showSymbol ? fontSize + gapSize : 0) > height * 0.95) {
+      // Recalculate without price
+      const heightWithoutPrice = logoSize + textHeight + (showSymbol ? gapSize : 0);
+      if (heightWithoutPrice + paddingY > height) {
           showSymbol = false;
       }
   }
@@ -225,7 +232,7 @@ const CustomTreemapContent = (props: any) => {
       <foreignObject x={x} y={y} width={width} height={height} style={{ overflow: 'visible' }}>
           <div 
             className="w-full h-full flex items-center justify-center pointer-events-none"
-            style={{ padding: `${2/zoomLevel}px`, overflow: 'hidden' }}
+            style={{ padding: `${4/zoomLevel}px`, overflow: 'hidden' }}
           >
              <div
                 className="flex flex-col items-center justify-center pointer-events-auto cursor-pointer hover:scale-110 transition-transform duration-200"
@@ -236,14 +243,14 @@ const CustomTreemapContent = (props: any) => {
                     filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
                     maxWidth: '100%',
                     maxHeight: '100%',
-                    gap: `${gapSize}px` // Use explicit gap scaling
+                    gap: `${gapSize}px`
                 }}
              >
                 {showLogo && (
                     <div style={{ width: logoSize, height: logoSize, flexShrink: 0 }}>
                         <CoinLogo 
                             coin={{ id: props.id || symbol.toLowerCase(), symbol }} 
-                            className="w-full h-full rounded-full bg-transparent" // Removed p-[1px] and bg-white to prevent clipping/hiding
+                            className="w-full h-full rounded-full bg-transparent"
                         />
                     </div>
                 )}
@@ -253,7 +260,7 @@ const CustomTreemapContent = (props: any) => {
                         fontSize: fontSize, 
                         fontWeight: 800, 
                         color: '#fff', 
-                        lineHeight: 1,
+                        lineHeight: lineHeight,
                         textShadow: '0 1px 2px rgba(0,0,0,0.5)',
                         fontFamily: 'Inter, sans-serif',
                         whiteSpace: 'nowrap',
@@ -270,7 +277,7 @@ const CustomTreemapContent = (props: any) => {
                         color: 'rgba(255,255,255,0.9)',
                         fontFamily: 'monospace',
                         whiteSpace: 'nowrap',
-                        lineHeight: 1,
+                        lineHeight: lineHeight,
                         flexShrink: 0
                     }}>
                         {secondaryValue}
