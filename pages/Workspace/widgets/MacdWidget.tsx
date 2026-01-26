@@ -281,9 +281,9 @@ export const MacdScatterChart: React.FC = () => {
             const symbolShort = (r.symbol || 'UNK').substring(0, 3).toUpperCase();
 
             // Use CoinLogo logic directly in Highcharts formatter via image path construction
-            const id = r.id || r.symbol.toLowerCase();
+            const id = r.symbol.toLowerCase();
             const localLogo = `/cachecko/logos/${id}.webp`;
-            const fallbackLogo = r.logo || `https://assets.coincap.io/assets/icons/${r.symbol.toLowerCase()}@2x.png`;
+            const fallbackLogo = r.logo || `https://assets.coincap.io/assets/icons/${id}@2x.png`;
             
             return {
                 id: r.symbol, 
@@ -415,17 +415,15 @@ export const MacdScatterChart: React.FC = () => {
                         const fallbackLogo = p.options.fallbackLogo;
                         const short = p.options.symbolShort || '';
 
-                        // CSS Layering Trick for Robust Fallback
-                        // 1. Background Circle with Letter (Lowest z-index)
-                        // 2. Fallback Image (CoinCap) (Middle z-index) - Covers BG
-                        // 3. Local Image (VPS) (Highest z-index) - Covers Fallback
-                        
+                        // Robust Double Fallback Logic with Site Logo
                         return `
-                        <div style="position: relative; width: 24px; height: 24px; border-radius: 50%; overflow: hidden;">
-                            <div style="position: absolute; inset: 0; background: #334155; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: bold; color: #fff; z-index: 0;">${short.charAt(0)}</div>
-                            <img src="${fallbackLogo}" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1;" onerror="this.style.display='none'" />
-                            <img src="${localLogo}" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 2;" onerror="this.style.display='none'" />
-                            <div style="position: absolute; right: 0; bottom: 0; color: ${color}; font-size: 10px; font-weight: bold; line-height: 1; z-index: 3; text-shadow: 0px 1px 2px rgba(0,0,0,0.8);">
+                        <div style="position: relative; width: 24px; height: 24px;">
+                            <div style="position: absolute; inset: 0; background: #334155; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: bold; color: #fff; z-index: 1;">${short.charAt(0)}</div>
+                            <img src="${localLogo}" 
+                                 style="position: relative; width: 24px; height: 24px; border-radius: 50%; object-fit: cover; z-index: 2; background: transparent;" 
+                                 onerror="this.onerror=null;this.src='${fallbackLogo}';this.onerror=function(){this.src='${SITE_LOGO}'}" 
+                            />
+                            <div style="position: absolute; right: -4px; bottom: -2px; color: ${color}; font-size: 10px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.8); line-height: 1; z-index: 3;">
                                 ${symbol}
                             </div>
                         </div>`;
