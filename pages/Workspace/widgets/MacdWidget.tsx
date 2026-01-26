@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Loader2, Info, Search, ChevronLeft, ChevronRight, BarChart2, DollarSign, Percent, ZoomOut, MousePointer2, GripVertical, ChevronsUpDown, ChevronDown, Coins } from 'lucide-react';
 import Highcharts from 'highcharts';
-import addMouseWheelZoom from 'highcharts/modules/mouse-wheel-zoom';
 import { Language, DashboardItem } from '../../../types';
 import { getTranslations } from '../../../locales';
 import {
@@ -12,6 +11,7 @@ import {
   fetchMacdTracker,
   fetchMacdTablePage
 } from '../services/api';
+import CoinLogo from '../../../components/CoinLogo';
 
 // DND Kit Imports for Table
 import {
@@ -29,10 +29,6 @@ import {
   useSortable
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-
-if (typeof addMouseWheelZoom === 'function') {
-    addMouseWheelZoom(Highcharts);
-}
 
 const TIMEFRAMES = ['15m', '1h', '4h', '24h', '7d'] as const;
 type Timeframe = typeof TIMEFRAMES[number];
@@ -276,7 +272,10 @@ export const MacdScatterChart: React.FC = () => {
             const isBullish = yVal > 0;
             const symbolShort = (r.symbol || 'UNK').substring(0, 3).toUpperCase();
 
-            const logoUrl = r.logo || `https://assets.coincap.io/assets/icons/${r.symbol.toLowerCase()}@2x.png`;
+            // Use CoinLogo logic directly in Highcharts formatter via image path construction
+            const id = r.symbol.toLowerCase();
+            const localLogo = `/cachecko/logos/${id}.webp`;
+            const fallbackLogo = r.logo || `https://assets.coincap.io/assets/icons/${id}@2x.png`;
             
             return {
                 id: r.symbol, 
@@ -288,7 +287,8 @@ export const MacdScatterChart: React.FC = () => {
                 price: r.price,
                 change: r.change24h,
                 isBullish: isBullish,
-                logoUrl: logoUrl,
+                logoUrl: localLogo,
+                fallbackLogo: fallbackLogo,
                 symbolShort
             };
         });
@@ -321,7 +321,7 @@ export const MacdScatterChart: React.FC = () => {
             backgroundColor: bgColor,
             style: { fontFamily: 'Inter, sans-serif' },
             height: null, 
-            zooming: { mouseWheel: { enabled: true }, type: 'xy' },
+            zooming: { type: 'xy' }, // Standard zoom
             animation: { duration: 1000 }
         },
         title: { text: null },
@@ -403,16 +403,17 @@ export const MacdScatterChart: React.FC = () => {
                         const isBullish = p.options.isBullish;
                         const color = isBullish ? COLOR_GREEN : COLOR_RED;
                         const symbol = isBullish ? '▲' : '▼'; 
-                        const logo = p.options.logoUrl;
+                        const localLogo = p.options.logoUrl;
+                        const fallbackLogo = p.options.fallbackLogo;
                         const short = p.options.symbolShort || '';
 
                         // CSS Fallback Layering
                         return `
                         <div style="position: relative; width: 24px; height: 24px;">
                             <div style="position: absolute; inset: 0; background: #334155; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: bold; color: #fff; z-index: 1;">${short.charAt(0)}</div>
-                            <img src="${logo}" 
+                            <img src="${localLogo}" 
                                  style="position: relative; width: 24px; height: 24px; border-radius: 50%; object-fit: cover; z-index: 2;" 
-                                 onerror="this.style.display='none'" 
+                                 onerror="this.onerror=null;this.src='${fallbackLogo}';" 
                             />
                             <div style="position: absolute; right: -4px; bottom: -2px; color: ${color}; font-size: 10px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.8); line-height: 1; z-index: 3;">
                                 ${symbol}
@@ -570,21 +571,19 @@ export const MacdTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false }
       }
   };
   const renderCell = (r: MacdTrackerPoint, colId: string) => {
-      const logoUrl = r.logo || `https://assets.coincap.io/assets/icons/${r.symbol.toLowerCase()}@2x.png`;
       switch (colId) {
           case 'asset': return (
               <td key={colId} className="p-3">
                   <div className="flex items-center gap-3">
-                      <img src={logoUrl} className="w-6 h-6 rounded-full bg-white p-0.5 border border-gray-200 dark:border-white/10" alt="" onError={(e) => {
-                            const parent = e.currentTarget.parentElement;
-                            if (parent) {
-                                e.currentTarget.style.display = 'none';
-                                const fallback = document.createElement('div');
-                                fallback.className = "w-6 h-6 rounded-full bg-gray-200 dark:bg-slate-700 flex items-center justify-center text-[9px] font-bold text-gray-500 dark:text-gray-300";
-                                fallback.innerText = r.symbol.charAt(0).toUpperCase();
-                                parent.prepend(fallback);
-                            }
-                       }} />
+                      <CoinLogo 
+                        coin={{
+                            id: r.symbol ? r.symbol.toLowerCase() : 'unknown', 
+                            symbol: r.symbol,
+                            name: r.name,
+                            image: r.logo
+                        }}
+                        className="w-6 h-6 rounded-full bg-white p-0.5 border border-gray-200 dark:border-white/10"
+                      />
                       <div className="flex flex-col"><span className="font-bold text-gray-900 dark:text-slate-200 leading-none">{r.name}</span><span className="text-[10px] font-bold text-gray-500 uppercase">{r.symbol}</span></div>
                   </div>
               </td>
