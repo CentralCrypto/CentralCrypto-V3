@@ -14,6 +14,7 @@ import {
   fetchRsiTrackerHist
 } from '../services/api';
 import CoinLogo from '../../../components/CoinLogo';
+import { getBestLocalLogo, initLogoService } from '../../../services/logo';
 
 import {
   DndContext,
@@ -43,11 +44,12 @@ const LIMIT_OPTIONS = [50, 100, 150, 200, 250];
 // CORES EXATAS SOLICITADAS
 const COLOR_GREEN = '#4e843c';
 const COLOR_RED = '#C2544E';
-const COLOR_NEUTRAL = '#475569'; // Slate 600
+const COLOR_NEUTRAL = '#475569'; 
 
-// NOVOS LIMITES SOLICITADOS
 const RSI_LOW = 20;
 const RSI_HIGH = 80;
+
+const SITE_LOGO = 'https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png';
 
 const formatCompactNumber = (number: number) => {
   if (!number || number === 0) return "---";
@@ -137,29 +139,21 @@ const SidebarGauge: React.FC<{ value: number }> = ({ value }) => {
     );
 };
 
-// === COMPONENTE DEDICADO PARA GRID (MAIN BOARD) ===
+// ... RsiGridWidget ...
 const RsiGridWidget: React.FC<{ language: Language }> = ({ language }) => {
+    // ... (same implementation)
     const [avgData, setAvgData] = useState<RsiAvgData | null>(null);
     const [loading, setLoading] = useState(true);
-
     useEffect(() => {
-        fetchRsiAverage().then(data => {
-            setAvgData(data);
-            setLoading(false);
-        });
+        fetchRsiAverage().then(data => { setAvgData(data); setLoading(false); });
     }, []);
-
-    const Watermark = () => <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden opacity-[0.05] z-0"><img src="https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png" alt="watermark" className="w-3/4 h-auto grayscale filter" /></div>;
-
+    const Watermark = () => <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden opacity-[0.05] z-0"><img src={SITE_LOGO} alt="watermark" className="w-3/4 h-auto grayscale filter" /></div>;
     if (loading) return <div className="flex items-center justify-center h-full text-slate-500"><Loader2 className="animate-spin" /></div>;
-
     const rsiVal = avgData?.averageRsi || 50;
     const rotation = -90 + (clamp(rsiVal, 0, 100) / 100) * 180;
-    
     let label = "Neutro";
     if (rsiVal >= RSI_HIGH) label = "Sobrecompra";
     if (rsiVal <= RSI_LOW) label = "Sobrevenda";
-
     return (
         <div className="h-full flex flex-col justify-center gap-1 p-2 relative text-center bg-white dark:bg-[#2f3032]">
             <Watermark />
@@ -192,7 +186,6 @@ const RsiGridWidget: React.FC<{ language: Language }> = ({ language }) => {
     );
 };
 
-// === COMPONENTE SIDEBAR PARA PAGINA DE DETALHES (3 Cards) ===
 export const RsiGauge: React.FC<{ language?: Language }> = ({ language = 'pt' }) => {
   const [avgData, setAvgData] = useState<RsiAvgData | null>(null);
   const [tableData, setTableData] = useState<RsiTableItem[]>([]);
@@ -281,6 +274,8 @@ export const RsiScatterChart: React.FC = () => {
   const [visibleZones, setVisibleZones] = useState<string[]>(['oversold', 'neutral', 'overbought']);
 
   useEffect(() => {
+      // Inicia serviço de logos
+      initLogoService();
       fetchRsiTrackerHist().then(data => {
           if (data && Array.isArray(data)) setPoints(data);
       });
@@ -317,7 +312,6 @@ export const RsiScatterChart: React.FC = () => {
 
             const cur = r.rsi?.[timeframe];
             
-            // FIX: Filters match the 20/80 logic
             const isOversold = cur <= RSI_LOW;
             const isOverbought = cur >= RSI_HIGH;
             const isNeutral = !isOversold && !isOverbought;
@@ -330,10 +324,10 @@ export const RsiScatterChart: React.FC = () => {
             const isRising = (last !== undefined && cur > last);
             const symbolShort = (r.symbol || 'UNK').substring(0, 3).toUpperCase();
             
-            // Construct Image Paths with Fallback
-            const id = r.symbol.toLowerCase();
-            const localLogo = `/cachecko/logos/${id}.webp`;
-            const fallbackLogo = r.logo || `https://assets.coincap.io/assets/icons/${id}@2x.png`;
+            // USE HELPER: Resolve o melhor caminho local baseado no ID
+            const localLogo = getBestLocalLogo({ id: r.id, symbol: r.symbol });
+            // Fallback remoto
+            const fallbackLogo = r.logo || `https://assets.coincap.io/assets/icons/${r.symbol.toLowerCase()}@2x.png`;
             
             return {
                 id: r.symbol, 
@@ -350,7 +344,7 @@ export const RsiScatterChart: React.FC = () => {
                 symbolShort
             };
         })
-        .filter(p => p !== null); // Remove filtered out points
+        .filter(p => p !== null); 
 
     seriesData.sort((a, b) => a!.name.localeCompare(b!.name));
 
@@ -378,7 +372,7 @@ export const RsiScatterChart: React.FC = () => {
             backgroundColor: bgColor,
             style: { fontFamily: 'Inter, sans-serif' },
             height: null, 
-            zooming: { mouseWheel: { enabled: true }, type: 'xy' }, // Mouse Wheel Enabled
+            zooming: { mouseWheel: { enabled: true }, type: 'xy' },
             animation: { duration: 1000 }
         },
         title: { text: null },
@@ -408,15 +402,14 @@ export const RsiScatterChart: React.FC = () => {
             gridLineColor: gridColor,
             gridLineDashStyle: 'Dash',
             labels: { style: { color: textColor, fontSize: '10px' } },
-            // FIX: Lines at 20 and 80
             plotLines: [
                 { value: RSI_HIGH, color: COLOR_RED, dashStyle: 'ShortDash', width: 2, label: { text: 'Overbought (80)', align: 'right', style: { color: COLOR_RED, fontSize: '10px' } }, zIndex: 5 },
                 { value: RSI_LOW, color: COLOR_GREEN, dashStyle: 'ShortDash', width: 2, label: { text: 'Oversold (20)', align: 'right', style: { color: COLOR_GREEN, fontSize: '10px' } }, zIndex: 5 },
                 { value: 50, color: textColor, width: 1, zIndex: 1 }
             ],
             plotBands: [
-                { from: RSI_HIGH, to: 100, color: 'rgba(194, 84, 78, 0.08)' }, // Red with opacity
-                { from: 0, to: RSI_LOW, color: 'rgba(78, 132, 60, 0.08)' } // Green with opacity
+                { from: RSI_HIGH, to: 100, color: 'rgba(194, 84, 78, 0.08)' }, 
+                { from: 0, to: RSI_LOW, color: 'rgba(78, 132, 60, 0.08)' } 
             ],
             crosshair: { width: 1, color: crosshairColor, dashStyle: 'Dot', snap: false, zIndex: 5 }
         },
@@ -472,14 +465,14 @@ export const RsiScatterChart: React.FC = () => {
                         const fallbackLogo = p.options.fallbackLogo;
                         const short = p.options.symbolShort || '';
                         
-                        // Robust Double Fallback Logic
-                        // 1. Try local. 2. On error, try fallback. 3. On error, hide image and show only letter.
+                        // Robust Double Fallback Logic with Site Logo
+                        // Layer 2 is the ID-based local logo (Best guess)
                         return `
                         <div style="position: relative; width: 24px; height: 24px;">
                             <div style="position: absolute; inset: 0; background: #334155; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: bold; color: #fff; z-index: 1;">${short.charAt(0)}</div>
                             <img src="${localLogo}" 
                                  style="position: relative; width: 24px; height: 24px; border-radius: 50%; object-fit: cover; z-index: 2; background: transparent;" 
-                                 onerror="this.onerror=null;this.src='${fallbackLogo}';this.onerror=function(){this.style.display='none'};"
+                                 onerror="this.onerror=null;this.src='${fallbackLogo}';this.onerror=function(){this.src='${SITE_LOGO}'}"
                             />
                             <div style="position: absolute; right: -4px; bottom: -2px; color: ${color}; font-size: 10px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.8); line-height: 1; z-index: 3;">
                                 ${symbol}
@@ -497,7 +490,7 @@ export const RsiScatterChart: React.FC = () => {
   return (
     <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm p-4 h-full flex flex-col relative overflow-hidden">
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.05] z-0">
-            <img src="https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png" alt="watermark" className="w-1/2 h-auto grayscale filter" />
+            <img src={SITE_LOGO} alt="watermark" className="w-1/2 h-auto grayscale filter" />
         </div>
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3 z-10 relative">
             <div className="flex items-center gap-2">
@@ -569,6 +562,7 @@ export const RsiScatterChart: React.FC = () => {
 };
 
 export const RsiTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false }) => {
+    // ... rest of the file (RsiTableList, RsiWidget, etc)
     const [loading, setLoading] = useState(true);
     const [rows, setRows] = useState<RsiTableItem[]>([]);
     const [page, setPage] = useState(1);
@@ -610,7 +604,6 @@ export const RsiTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false })
 
     const renderRsiCell = (r: RsiTableItem, tf: '15m'|'1h'|'4h'|'24h'|'7d') => {
         const val = r.rsi[tf];
-        // Use os limites 20/80 para determinar a seta
         let Icon = null;
         if (val >= RSI_HIGH) Icon = <TrendingUp size={12} />;
         if (val <= RSI_LOW) Icon = <TrendingDown size={12} />;
