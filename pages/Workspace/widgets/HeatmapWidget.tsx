@@ -152,34 +152,55 @@ const CustomTreemapContent = (props: any) => {
       return rectEl;
   }
 
-  // Calculate visual size on screen (Level of Detail)
+  // --- VISUAL CALCULATION & LOD (Level Of Detail) ---
   const visualW = width * zoomLevel;
   const visualH = height * zoomLevel;
+  const minVisual = Math.min(visualW, visualH);
 
-  // STRICT LOD LOGIC - Preventing Overlap
-  const isMicro = visualW < 35 || visualH < 35; // Too small for anything
-  const isSmall = !isMicro && (visualW < 70 || visualH < 50); // Logo OR Text only
-  const isMedium = !isMicro && !isSmall && (visualW < 110 || visualH < 70); // Logo + Text
-  const isLarge = !isMicro && !isSmall && !isMedium; // Full detail
+  // LOD Thresholds (Screen Pixels)
+  const LOD_MICRO = 35;      // < 35px: Empty (just color)
+  const LOD_SMALL = 70;      // 35-70px: Logo Only
+  const LOD_MEDIUM = 110;    // 70-110px: Logo + Symbol
+                             // > 110px: Logo + Symbol + Price
 
+  const isMicro = minVisual < LOD_MICRO;
   if (isMicro) return rectEl;
 
-  // Layout Logic
-  const padding = 2 / zoomLevel; 
-  
-  // Font sizing constrained logic
-  const logoSizeRaw = Math.min(width * 0.5, height * 0.5);
-  // Adjusted logo size based on mode
-  const logoSize = isSmall 
-      ? Math.min(Math.max(logoSizeRaw, 20 / zoomLevel), 40 / zoomLevel) // Larger relative logo if alone
-      : Math.min(Math.max(logoSizeRaw, 16 / zoomLevel), 64 / zoomLevel);
+  // Determine what to show
+  let showLogo = true; 
+  let showSymbol = minVisual >= LOD_SMALL; 
+  let showPrice = minVisual >= LOD_MEDIUM;
 
-  // Font size calculation with stricter bounds
-  const fontSizeRaw = Math.min(width / (symbol.length * 0.6), height * 0.25);
-  const fontSize = Math.min(Math.max(fontSizeRaw, 10 / zoomLevel), 32 / zoomLevel);
-  const priceFontSize = Math.max(fontSize * 0.65, 9 / zoomLevel);
+  // Visual Clamping (Prevents giant text/logos on extreme zoom)
+  // We calculate target pixel size and divide by zoomLevel to get SVG units
+  const MAX_VISUAL_LOGO = 64; 
+  const MIN_VISUAL_LOGO = 20;
+  let targetVisualLogo = minVisual * 0.5; // Target 50% of cell
+  targetVisualLogo = Math.min(Math.max(targetVisualLogo, MIN_VISUAL_LOGO), MAX_VISUAL_LOGO);
+  const logoSize = targetVisualLogo / zoomLevel;
 
-  // Interaction Handler for Tooltip (Attached to CONTENT ONLY)
+  const MAX_VISUAL_FONT = 24;
+  const MIN_VISUAL_FONT = 10;
+  let targetVisualFont = minVisual * 0.22;
+  targetVisualFont = Math.min(Math.max(targetVisualFont, MIN_VISUAL_FONT), MAX_VISUAL_FONT);
+  const fontSize = targetVisualFont / zoomLevel;
+  const priceFontSize = fontSize * 0.75;
+
+  // Safety fallback: if logo + text height exceeds cell height, drop text
+  // (Estimating height in SVG units)
+  const estimatedContentHeight = logoSize + (showSymbol ? fontSize * 1.2 : 0) + (showPrice ? priceFontSize * 1.2 : 0);
+  if (estimatedContentHeight > height * 0.9) {
+      showPrice = false;
+      if (logoSize + fontSize * 1.2 > height * 0.9) {
+          showSymbol = false;
+      }
+  }
+
+  const secondaryValue = metric === 'mcap' 
+      ? formatPrice(price)
+      : `${(change || 0) > 0 ? '+' : ''}${(change || 0).toFixed(2)}%`;
+
+  // Interaction Handler
   const handleMouseMove = (e: React.MouseEvent) => {
     e.stopPropagation(); 
     onContentHover({
@@ -195,19 +216,14 @@ const CustomTreemapContent = (props: any) => {
     }, e.clientX, e.clientY);
   };
 
-  const secondaryValue = metric === 'mcap' 
-      ? formatPrice(price)
-      : `${(change || 0) > 0 ? '+' : ''}${(change || 0).toFixed(2)}%`;
-
   return (
     <g>
       {rectEl}
       
-      {/* ForeignObject allows HTML inside SVG */}
       <foreignObject x={x} y={y} width={width} height={height} style={{ overflow: 'visible' }}>
           <div 
             className="w-full h-full flex items-center justify-center pointer-events-none"
-            style={{ padding: `${padding}px`, overflow: 'hidden' }}
+            style={{ padding: `${2/zoomLevel}px`, overflow: 'hidden' }}
           >
              <div
                 className="flex flex-col items-center justify-center pointer-events-auto cursor-pointer hover:scale-110 transition-transform duration-200"
@@ -220,9 +236,9 @@ const CustomTreemapContent = (props: any) => {
                     maxHeight: '100%'
                 }}
              >
-                {/* 1. Small Mode: Just Logo (or Text if no logo space, but mostly logo) */}
-                {isSmall && (
-                    <div style={{ width: logoSize, height: logoSize }}>
+                {/* Logo is always primary anchor */}
+                {showLogo && (
+                    <div style={{ width: logoSize, height: logoSize, marginBottom: showSymbol ? logoSize * 0.1 : 0 }}>
                         <CoinLogo 
                             coin={{ id: props.id || symbol.toLowerCase(), symbol }} 
                             className="w-full h-full rounded-full bg-white/20 p-[1px]" 
@@ -230,31 +246,21 @@ const CustomTreemapContent = (props: any) => {
                     </div>
                 )}
 
-                {/* 2. Medium/Large: Logo + Text */}
-                {(isMedium || isLarge) && (
-                    <>
-                        <div style={{ width: logoSize, height: logoSize, marginBottom: logoSize * 0.1 }}>
-                            <CoinLogo 
-                                coin={{ id: props.id || symbol.toLowerCase(), symbol }} 
-                                className="w-full h-full rounded-full bg-white/20 p-[1px]" 
-                            />
-                        </div>
-                        <span style={{ 
-                            fontSize: fontSize, 
-                            fontWeight: 800, 
-                            color: '#fff', 
-                            lineHeight: 1,
-                            textShadow: '0 1px 2px rgba(0,0,0,0.5)',
-                            fontFamily: 'Inter, sans-serif',
-                            whiteSpace: 'nowrap'
-                        }}>
-                            {symbol}
-                        </span>
-                    </>
+                {showSymbol && (
+                    <span style={{ 
+                        fontSize: fontSize, 
+                        fontWeight: 800, 
+                        color: '#fff', 
+                        lineHeight: 1,
+                        textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+                        fontFamily: 'Inter, sans-serif',
+                        whiteSpace: 'nowrap'
+                    }}>
+                        {symbol}
+                    </span>
                 )}
 
-                {/* 3. Large Only: Detail */}
-                {isLarge && (
+                {showPrice && (
                     <span style={{ 
                         fontSize: priceFontSize, 
                         fontWeight: 600, 
