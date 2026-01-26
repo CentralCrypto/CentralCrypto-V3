@@ -309,7 +309,16 @@ export const RsiScatterChart: React.FC = () => {
     const crosshairColor = isDark ? '#64748b' : '#94a3b8'; 
 
     const seriesData = points
-        .filter(r => r.marketCap && r.marketCap > 0 && r.rsi?.[timeframe])
+        .filter(r => {
+            // Data validation for chart rendering
+            if (!r.rsi?.[timeframe]) return false;
+            
+            // Critical check for Logarithmic Axis (Highcharts errors on 0 or negative log input)
+            if (xMode === 'mcap' && (!r.marketCap || r.marketCap <= 0)) return false;
+            if (xMode === 'volume' && (!r.volume24h || r.volume24h <= 0)) return false;
+            
+            return true;
+        })
         .slice(0, limit)
         .map(r => {
             let xVal = 0;
@@ -319,7 +328,6 @@ export const RsiScatterChart: React.FC = () => {
 
             const cur = r.rsi?.[timeframe];
             
-            // FIX: Filters match the 20/80 logic
             const isOversold = cur <= RSI_LOW;
             const isOverbought = cur >= RSI_HIGH;
             const isNeutral = !isOversold && !isOverbought;
