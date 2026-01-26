@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { getCandidateLogoUrls, validatedLogoCache, initLogoService } from '../services/logo';
 
@@ -22,24 +21,20 @@ const CoinLogo: React.FC<CoinLogoProps> = ({ coin, className, alt, style }) => {
 
   useEffect(() => {
     mountedRef.current = true;
-    
-    // Inicia o serviço de logos se necessário (lazy load)
-    initLogoService();
 
-    // Se já temos no cache validado, usa direto
+    // dispara init (async), mas não bloqueia
+    initLogoService().catch(() => {});
+
+    // cache validado
     if (validatedLogoCache.has(coin.id)) {
       setCurrentUrl(validatedLogoCache.get(coin.id)!);
-      return;
+      return () => { mountedRef.current = false; };
     }
 
-    // Gera lista de candidatos
     candidatesRef.current = getCandidateLogoUrls(coin);
     attemptRef.current = 0;
-    
-    // Tenta o primeiro
-    if (candidatesRef.current.length > 0) {
-      setCurrentUrl(candidatesRef.current[0]);
-    }
+
+    setCurrentUrl(candidatesRef.current[0] || '');
 
     return () => {
       mountedRef.current = false;
@@ -48,28 +43,23 @@ const CoinLogo: React.FC<CoinLogoProps> = ({ coin, className, alt, style }) => {
 
   const handleError = () => {
     const nextIndex = attemptRef.current + 1;
-    
     if (nextIndex < candidatesRef.current.length) {
       attemptRef.current = nextIndex;
       if (mountedRef.current) {
         setCurrentUrl(candidatesRef.current[nextIndex]);
       }
-    } else {
-      // Se falhou tudo, não faz nada (deixa a última url quebrada ou placeholder)
-      // O último item de getCandidateLogoUrls é sempre o placeholder do site
     }
   };
 
   const handleLoad = () => {
-    // Sucesso! Cacheia esta URL para este ID para não tentar as outras na próxima vez
-    if (currentUrl && !validatedLogoCache.has(coin.id)) {
+    if (currentUrl) {
       validatedLogoCache.set(coin.id, currentUrl);
     }
   };
 
-  // Se não tiver URL ainda, renderiza um placeholder transparente ou skeleton
+  // placeholder transparente (sem caixa cinza)
   if (!currentUrl) {
-    return <div className={`bg-gray-200 dark:bg-gray-800 rounded-full animate-pulse ${className}`} style={style} />;
+    return <span className={className} style={style} />;
   }
 
   return (
@@ -81,6 +71,7 @@ const CoinLogo: React.FC<CoinLogoProps> = ({ coin, className, alt, style }) => {
       onError={handleError}
       onLoad={handleLoad}
       loading="lazy"
+      decoding="async"
     />
   );
 };

@@ -1,83 +1,174 @@
-
 import { httpGetJson } from './http';
 import { LOGO_URL as SITE_LOGO } from '../pages/Workspace/constants';
 
-// Caminho base no VPS
 const VPS_LOGO_BASE = '/cachecko/logos';
 
-// Cache em memória: ID -> URL que funcionou
+// Cache em memória: ID -> URL que funcionou (para <img/>)
 export const validatedLogoCache = new Map<string, string>();
 
-// Cache do mapa de IDs do CoinGecko (carregado de coins_min.json)
-let coinGeckoMap: Record<string, string> | null = null;
+// Mapa remoto (CoinGecko etc): id -> url remota
+let remoteUrlById: Record<string, string> = {};
+
+// Mapa local garantido (vindo do manifest): id -> url pública local (/cachecko/logos/xxx.webp)
+let localUrlById: Record<string, string> = {};
+
 let isInitializing = false;
+let initPromise: Promise<void> | null = null;
+
+const isHttp = (s: any) => typeof s === 'string' && /^https?:\/\//i.test(s);
+
+function toPublicLogoUrl(p: string): string {
+  if (!p) return '';
+  // Já está em URL pública
+  if (p.startsWith(`${VPS_LOGO_BASE}/`)) return p;
+
+  // Se vier com caminho absoluto do FS, pega só o que interessa
+  const idx = p.indexOf(`${VPS_LOGO_BASE}/`);
+  if (idx >= 0) return p.slice(idx);
+
+  // Se vier no formato "/cachecko/logos/..."
+  if (p.startsWith('/cachecko/logos/')) return p;
+
+  // Se vier só "dogecoin.webp"
+  if (!p.includes('/')) return `${VPS_LOGO_BASE}/${p}`;
+
+  // Último recurso: tenta usar basename
+  const base = p.split('/').pop() || '';
+  return base ? `${VPS_LOGO_BASE}/${base}` : '';
+}
+
+function normalizeCoinsContainer(data: any): any[] {
+  // Aceita:
+  // - array direto
+  // - { coins: [...] }
+  // - { data: [...] } (dependendo do httpGetJson)
+  if (Array.isArray(data)) return data;
+  if (data && Array.isArray(data.coins)) return data.coins;
+  if (data && Array.isArray(data.data)) return data.data;
+  return [];
+}
 
 /**
- * Inicializa o mapa de logos externos (CoinGecko) buscando do VPS.
- * Isso evita requisições diretas à API do CG.
+ * Inicializa (uma vez) os mapas local/remoto.
+ * - localUrlById vem do manifest (fileName/localFsPath)
+ * - remoteUrlById vem do coins_min (id->imageUrl) e complementa com manifest.imageUrl
  */
-export const initLogoService = async () => {
-  if (coinGeckoMap || isInitializing) return;
+export const initLogoService = async (): Promise<void> => {
+  if (isInitializing) return initPromise ?? Promise.resolve();
+  if (Object.keys(remoteUrlById).length || Object.keys(localUrlById).length) return;
+
   isInitializing = true;
 
-  try {
-    // Busca paralela dos mapas
-    const [minRes, manifestRes] = await Promise.all([
-      httpGetJson(`${VPS_LOGO_BASE}/coins_min.json`, { timeoutMs: 3000 }).catch(() => ({ data: {} })),
-      httpGetJson(`${VPS_LOGO_BASE}/manifest.json`, { timeoutMs: 3000 }).catch(() => ({ data: [] }))
-    ]);
+  initPromise = (async () => {
+    try {
+      const [minRes, manifestRes] = await Promise.all([
+        httpGetJson(`${VPS_LOGO_BASE}/coins_min.json`, { timeoutMs: 4000 }).catch(() => ({ data: null })),
+        httpGetJson(`${VPS_LOGO_BASE}/manifest.json`, { timeoutMs: 4000 }).catch(() => ({ data: null })),
+      ]);
 
-    coinGeckoMap = {};
+      const minData = minRes?.data;
+      const manifestData = manifestRes?.data;
 
-    // 1. Popula com coins_min (Mapa ID -> URL)
-    if (minRes.data) {
-      Object.assign(coinGeckoMap, minRes.data);
-    }
+      // ---- coins_min.json ----
+      // Pode ser:
+      // - mapa { [id]: url }
+      // - array [{id,image},{id,imageUrl},...]
+      // - objeto { coins: [...] } (menos comum)
+      const minCoins = normalizeCoinsContainer(minData);
 
-    // 2. Complementa com manifest (Array de Objetos)
-    const manifestData = Array.isArray(manifestRes.data) ? manifestRes.data : [];
-    manifestData.forEach((item: any) => {
-      if (item.id && item.imageUrl && coinGeckoMap) {
-        // Manifest tem prioridade se existir, pois presume-se mais recente
-        coinGeckoMap[item.id] = item.imageUrl;
+      if (minData && typeof minData === 'object' && !Array.isArray(minData) && !Array.isArray(minData.coins)) {
+        // Parece mapa id->url
+        for (const [k, v] of Object.entries(minData)) {
+          if (typeof k === 'string' && isHttp(v)) {
+            remoteUrlById[k] = String(v);
+          }
+        }
+      } else if (minCoins.length) {
+        for (const c of minCoins) {
+          const id = c?.id;
+          const url = c?.imageUrl ?? c?.image;
+          if (id && isHttp(url)) {
+            remoteUrlById[id] = String(url);
+          }
+        }
       }
-    });
 
-  } catch (e) {
-    console.warn("[LogoService] Falha ao carregar mapas de logo locais.", e);
-    coinGeckoMap = {}; // Fallback vazio para não travar
-  } finally {
-    isInitializing = false;
-  }
+      // ---- manifest.json ----
+      // Seu manifest real costuma ser:
+      // { generatedAt, ..., coins:[ {id,imageUrl,fileName,localFsPath}, ... ] }
+      const manifestCoins = normalizeCoinsContainer(manifestData);
+
+      for (const c of manifestCoins) {
+        const id = c?.id;
+        if (!id) continue;
+
+        // 1) Local (preferência total)
+        const fileName = c?.fileName || c?.localFsPath;
+        const publicLocal = typeof fileName === 'string' ? toPublicLogoUrl(fileName) : '';
+        if (publicLocal) {
+          localUrlById[id] = publicLocal;
+        }
+
+        // 2) Remoto (fallback)
+        const imgUrl = c?.imageUrl;
+        if (isHttp(imgUrl)) {
+          remoteUrlById[id] = String(imgUrl);
+        }
+      }
+    } catch (e) {
+      console.warn('[LogoService] Falha ao carregar maps.', e);
+      // mantém maps vazios, mas não quebra o app
+    } finally {
+      isInitializing = false;
+    }
+  })();
+
+  return initPromise;
 };
 
 /**
- * Gera a lista de URLs candidatas na ordem de prioridade solicitada.
+ * Retorna candidatos para <img/> com fallback em cadeia.
+ * (Aqui pode tentar várias URLs porque o <img onError> resolve.)
  */
 export const getCandidateLogoUrls = (coin: { id: string; symbol?: string; image?: string }): string[] => {
-  const id = coin.id;
+  const id = coin?.id;
   const urls: string[] = [];
 
-  // 1. Tenta Cache validado primeiro (se já tivermos)
-  if (validatedLogoCache.has(id)) {
-    return [validatedLogoCache.get(id)!];
-  }
+  if (!id) return [SITE_LOGO];
 
-  // 2. Prioridade: Arquivos locais no VPS (WebP -> PNG -> JPG)
+  // 1) cache validado
+  if (validatedLogoCache.has(id)) return [validatedLogoCache.get(id)!];
+
+  // 2) local exato (manifest)
+  if (localUrlById[id]) urls.push(localUrlById[id]);
+
+  // 3) chute local (caso map ainda não carregou)
   urls.push(`${VPS_LOGO_BASE}/${id}.webp`);
   urls.push(`${VPS_LOGO_BASE}/${id}.png`);
   urls.push(`${VPS_LOGO_BASE}/${id}.jpg`);
+  urls.push(`${VPS_LOGO_BASE}/${id}.jpeg`);
 
-  // 3. Fallback: URL do CoinGecko (via mapa local json ou propriedade do objeto)
-  if (coinGeckoMap && coinGeckoMap[id]) {
-    urls.push(coinGeckoMap[id]);
-  } else if (coin.image) {
-    // Se o mapa não carregou ainda, usa a do objeto se existir
-    urls.push(coin.image);
-  }
+  // 4) remoto (map ou campo do objeto)
+  if (remoteUrlById[id]) urls.push(remoteUrlById[id]);
+  if (coin.image && isHttp(coin.image)) urls.push(coin.image);
 
-  // 4. Fallback Final: Logo do Site
+  // 5) site logo (último)
   urls.push(SITE_LOGO);
 
-  return urls;
+  // remove duplicadas mantendo ordem
+  return Array.from(new Set(urls.filter(Boolean)));
+};
+
+/**
+ * IMPORTANTÍSSIMO para Highcharts:
+ * precisa ser síncrono e retornar um caminho "provável" que NÃO quebre.
+ *
+ * Aqui a regra é:
+ * - se temos localUrlById => usa ele (garantido)
+ * - senão, já retorna SITE_LOGO (para não ficar ícone quebrado no scatter)
+ */
+export const getBestLocalLogo = (coin: { id: string }): string => {
+  const id = coin?.id;
+  if (!id) return SITE_LOGO;
+  return localUrlById[id] || SITE_LOGO;
 };
