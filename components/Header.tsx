@@ -10,25 +10,26 @@ import {
   X as CloseIcon, 
   Twitter, 
   LogIn,
-  TikTok,
-  Spotify,
-  Activity,
-  BarChart3,
-  Globe,
-  Sun,
-  Moon,
-  User,
-  Power,
-  CreditCard,
-  Lock,
-  MessageCircle,
-  Menu
+  TikTok, 
+  Spotify, 
+  Activity, 
+  BarChart3, 
+  Globe, 
+  Sun, 
+  Moon, 
+  User, 
+  Power, 
+  CreditCard, 
+  Lock, 
+  MessageCircle, 
+  Menu 
 } from './Icons';
 import { ViewMode, Language } from '../types';
 import { UserData } from '../services/auth';
 import { getTranslations, LANGUAGES_CONFIG } from '../locales';
 import { fetchTopCoins } from '../pages/Workspace/services/api';
 import { useBinanceWS } from '../services/BinanceWebSocketContext';
+import CoinLogo from './CoinLogo';
 
 const TICKER_COINS = [
   'BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'DOGE', 'ADA', 'AVAX', 'SHIB', 'DOT', 
@@ -38,7 +39,7 @@ const TICKER_COINS = [
 ];
 
 interface DisplayTickerData { p: string; rawPrice: number; c: number; v: string; }
-interface CoinMeta { name: string; mcap: number; rank: number; }
+interface CoinMeta { id: string; name: string; mcap: number; rank: number; }
 interface TooltipData { visible: boolean; x: number; y: number; symbol: string; data: DisplayTickerData | null; meta: CoinMeta | null; }
 
 // Cores de flash padronizadas com o MarketCapTable
@@ -77,7 +78,12 @@ const TickerItem: React.FC<{ symbol: string; data: DisplayTickerData; meta: Coin
   if (!p || p === '---' || p === '$0.00' || p === '0') return null;
   const isPositive = c >= 0;
   
-  const iconUrl = `https://assets.coincap.io/assets/icons/${symbol.toLowerCase()}@2x.png`;
+  // Constrói objeto de moeda para o CoinLogo
+  const coinObj = {
+      id: meta.id || symbol.toLowerCase(), // Tenta usar ID real ou fallback para symbol
+      symbol: symbol,
+      name: meta.name
+  };
   
   return (
     <div 
@@ -85,7 +91,7 @@ const TickerItem: React.FC<{ symbol: string; data: DisplayTickerData; meta: Coin
       onMouseEnter={(e) => onHover(e, symbol, data, meta)} 
       onMouseMove={(e) => onHover(e, symbol, data, meta)}
     >
-        <img src={iconUrl} alt={symbol} className="w-6 h-6 rounded-full shrink-0 mr-2 shadow-sm" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+        <CoinLogo coin={coinObj} className="w-6 h-6 rounded-full shrink-0 mr-2 shadow-sm" />
         <div className="flex items-baseline gap-2 mr-auto">
             <span className="text-gray-900 dark:text-gray-200 font-bold text-sm tracking-tight">{symbol}</span>
             <span className="text-gray-700 dark:text-gray-300 font-mono text-sm font-semibold">{p}</span>
@@ -131,12 +137,15 @@ const TickerList: React.FC<{
                     };
                 }
 
+                // Fallback de meta se não carregou ainda
+                const meta = coinMeta[s] || { id: s.toLowerCase(), name: s, mcap: 0, rank: 0 };
+
                 return (
                     <TickerItem 
                       key={s} 
                       symbol={s} 
                       data={displayData} 
-                      meta={coinMeta[s] || { name: s, mcap: 0, rank: 0 }} 
+                      meta={meta} 
                       onHover={onHover} 
                       onLeave={onLeave} 
                     />
@@ -197,6 +206,7 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
         coins.forEach(c => {
           if (c.symbol) {
             meta[c.symbol.toUpperCase()] = {
+              id: c.id,
               name: c.name || c.symbol,
               mcap: c.market_cap || 0,
               rank: c.market_cap_rank || 0
@@ -219,7 +229,7 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
         y: e.clientY + 20, 
         symbol,
         data,
-        meta: meta || { name: symbol, mcap: 0, rank: 0 }
+        meta: meta || { id: symbol.toLowerCase(), name: symbol, mcap: 0, rank: 0 }
     });
   }, []);
 
@@ -255,7 +265,14 @@ const Header: React.FC<{ currentView: ViewMode; setView: (v: ViewMode) => void; 
             <div className="w-68 bg-white dark:bg-[#1e2022] backdrop-blur-xl border border-gray-100 dark:border-white/5 shadow-[0_20px_50px_rgba(0,0,0,0.3)] rounded-2xl p-5 overflow-hidden">
                 <div className="flex items-center gap-4 mb-4 border-b border-gray-100 dark:border-white/5 pb-4">
                     <div className="relative">
-                        <img src={`https://assets.coincap.io/assets/icons/${tooltip.symbol.toLowerCase()}@2x.png`} className="w-12 h-12 rounded-full bg-white p-1 shadow-md" alt="" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                        <CoinLogo 
+                            coin={{
+                                id: tooltip.meta?.id || tooltip.symbol.toLowerCase(),
+                                symbol: tooltip.symbol,
+                                name: tooltip.meta?.name
+                            }} 
+                            className="w-12 h-12 rounded-full bg-white p-1 shadow-md" 
+                        />
                     </div>
                     <div className="flex flex-col">
                         <div className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-tighter leading-none">{tooltip.meta?.name || tooltip.symbol}</div>
