@@ -13,6 +13,7 @@ import {
   fetchMacdTablePage
 } from '../services/api';
 import CoinLogo from '../../../components/CoinLogo';
+import { initLogoService, getBestLocalLogo } from '../../../services/logo';
 
 // DND Kit Imports for Table
 import {
@@ -32,7 +33,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 if (typeof addMouseWheelZoom === 'function') {
-    addMouseWheelZoom(Highcharts);
+    (addMouseWheelZoom as any)(Highcharts);
 }
 
 const TIMEFRAMES = ['15m', '1h', '4h', '24h', '7d'] as const;
@@ -238,6 +239,7 @@ export const MacdScatterChart: React.FC = () => {
   const isDark = useIsDark();
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<Highcharts.Chart | null>(null);
+  const [logoReady, setLogoReady] = useState(false);
   
   const [points, setPoints] = useState<MacdTrackerPoint[]>([]);
   
@@ -245,6 +247,14 @@ export const MacdScatterChart: React.FC = () => {
   const [timeframe, setTimeframe] = useState<Timeframe>('4h');
   const [xMode, setXMode] = useState<XAxisMode>('mcap');
   const [limit, setLimit] = useState(50); // New limit state
+
+  useEffect(() => {
+    let mounted = true;
+    initLogoService()
+      .then(() => { if (mounted) setLogoReady(true); })
+      .catch(() => { if (mounted) setLogoReady(true); });
+    return () => { mounted = false; };
+  }, []);
 
   useEffect(() => {
       fetchMacdTracker().then(data => {
@@ -280,13 +290,12 @@ export const MacdScatterChart: React.FC = () => {
             const isBullish = yVal > 0;
             const symbolShort = (r.symbol || 'UNK').substring(0, 3).toUpperCase();
 
-            // Use CoinLogo logic directly in Highcharts formatter via image path construction
-            const id = r.symbol.toLowerCase();
-            const localLogo = `/cachecko/logos/${id}.webp`;
-            const fallbackLogo = r.logo || `https://assets.coincap.io/assets/icons/${id}@2x.png`;
+            const coinId = (r as any).id || (r.symbol ? r.symbol.toLowerCase() : 'unknown');
+            const logoUrl = getBestLocalLogo({ id: coinId });
+            const fallbackLogo = r.logo || SITE_LOGO;
             
             return {
-                id: r.symbol, 
+                id: coinId,
                 x: xVal, // X = Market Cap / Change
                 y: yVal, // Y = MACD
                 z: r.marketCap,
@@ -295,8 +304,8 @@ export const MacdScatterChart: React.FC = () => {
                 price: r.price,
                 change: r.change24h,
                 isBullish: isBullish,
-                logoUrl: localLogo,
-                fallbackLogo: fallbackLogo,
+                logoUrl,
+                fallbackLogo,
                 symbolShort
             };
         });
@@ -411,17 +420,15 @@ export const MacdScatterChart: React.FC = () => {
                         const isBullish = p.options.isBullish;
                         const color = isBullish ? COLOR_GREEN : COLOR_RED;
                         const symbol = isBullish ? '▲' : '▼'; 
-                        const localLogo = p.options.logoUrl;
-                        const fallbackLogo = p.options.fallbackLogo;
+                        const logo = p.options.logoUrl || SITE_LOGO;
                         const short = p.options.symbolShort || '';
 
-                        // Robust Double Fallback Logic with Site Logo
+                        // Fallback Logic with Site Logo
                         return `
                         <div style="position: relative; width: 24px; height: 24px;">
                             <div style="position: absolute; inset: 0; background: #334155; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: bold; color: #fff; z-index: 1;">${short.charAt(0)}</div>
-                            <img src="${localLogo}" 
+                            <img src="${logo}" 
                                  style="position: relative; width: 24px; height: 24px; border-radius: 50%; object-fit: cover; z-index: 2; background: transparent;" 
-                                 onerror="this.onerror=null;this.src='${fallbackLogo}';this.onerror=function(){this.src='${SITE_LOGO}'}" 
                             />
                             <div style="position: absolute; right: -4px; bottom: -2px; color: ${color}; font-size: 10px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.8); line-height: 1; z-index: 3;">
                                 ${symbol}
@@ -435,7 +442,7 @@ export const MacdScatterChart: React.FC = () => {
         series: [{ name: 'Coins', data: seriesData, color: 'rgba(156, 163, 175, 0.5)' }]
     } as any);
 
-  }, [points, timeframe, xMode, isDark, limit]);
+  }, [points, timeframe, xMode, isDark, limit, logoReady]);
 
   return (
     <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm p-4 h-full flex flex-col relative overflow-hidden">
@@ -498,94 +505,30 @@ export const MacdScatterChart: React.FC = () => {
   );
 };
 
-// ... Table logic ...
-const COLS = {
-    asset: { id: 'asset', label: 'Ativo' },
-    price: { id: 'price', label: 'Preço' },
-    mcap: { id: 'mcap', label: 'Mkt Cap' },
-    macd15m: { id: 'macd15m', label: '15m' },
-    macd1h: { id: 'macd1h', label: '1h' },
-    macd4h: { id: 'macd4h', label: '4h' },
-    macd24h: { id: 'macd24h', label: '24h' },
-    macd7d: { id: 'macd7d', label: '7d' },
-};
-
-const sortKeyMap: Record<string, string> = {
-    asset: 'mcap',
-    price: 'price',
-    mcap: 'mcap',
-    macd15m: 'macd15m',
-    macd1h: 'macd1h',
-    macd4h: 'macd4h',
-    macd24h: 'macd24h',
-    macd7d: 'macd7d'
-};
-
-const SortableTh = ({ colId, label, sortKey, activeKey, onSort }: any) => {
-    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: colId });
-    const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1, zIndex: isDragging ? 100 : 'auto' };
-    return (
-        <th ref={setNodeRef} style={style} className={`p-3 text-center bg-gray-100 dark:bg-[#2f3032] cursor-pointer group select-none ${colId === 'asset' ? 'text-left' : 'text-center'}`} onClick={() => onSort(sortKey)}>
-            <div className={`flex items-center gap-1 ${colId === 'asset' ? 'justify-start' : 'justify-center'}`}>
-                <span className={`p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 cursor-grab ${isDragging ? 'cursor-grabbing' : ''}`} {...attributes} {...listeners} onClick={e => e.stopPropagation()}><GripVertical size={12} className="text-gray-400" /></span>
-                <span className="text-[10px] uppercase font-black text-gray-500 dark:text-slate-400">{label}</span>
-                <ChevronsUpDown size={12} className={`text-gray-400 transition-colors ${activeKey === sortKey ? 'text-[#dd9933]' : 'opacity-0 group-hover:opacity-100'}`} />
-            </div>
-        </th>
-    );
-};
-
+// ... MacdTableList ...
 export const MacdTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false }) => {
-  const [loading, setLoading] = useState(true);
-  const [rows, setRows] = useState<MacdTrackerPoint[]>([]);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
-  const [totalPages, setTotalPages] = useState(1);
-  const [search, setSearch] = useState('');
-  const [sortKey, setSortKey] = useState('nmacd');
-  const [sortTf, setSortTf] = useState<Timeframe>('4h');
-  const [sortAsc, setSortAsc] = useState(false);
-  const [colOrder, setColOrder] = useState<string[]>(['asset', 'price', 'mcap', 'macd15m', 'macd1h', 'macd4h', 'macd24h', 'macd7d']);
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+    
+    const renderMacdCell = (r: MacdTrackerPoint, tf: string) => {
+        const val = r.macd?.[tf]?.nmacd;
+        let colorClass = 'text-gray-500 dark:text-slate-400';
+        if (val > 0) colorClass = 'text-green-600 dark:text-green-400';
+        if (val < 0) colorClass = 'text-red-600 dark:text-red-400';
+        
+        return (
+            <td key={`macd${tf}`} className={`p-3 text-center font-mono font-black ${colorClass}`}>
+                {val?.toFixed(4)}
+            </td>
+        );
+    };
 
-  useEffect(() => {
-    let mounted = true;
-    setLoading(true);
-    fetchMacdTablePage({ page, limit: pageSize, sort: sortKey as any, timeframe: sortTf, ascendingOrder: sortAsc, filterText: search }).then(res => {
-        if(!mounted) return;
-        setRows(res.items);
-        setTotalPages(res.totalPages);
-        setLoading(false);
-    });
-    return () => { mounted = false; };
-  }, [page, pageSize, search, sortKey, sortTf, sortAsc]);
-
-  // ... rest of table sort/drag handlers ...
-  const handleSort = (key: string) => {
-      let tf: Timeframe = '4h';
-      if (key.includes('15m')) tf = '15m'; else if (key.includes('1h')) tf = '1h'; else if (key.includes('4h')) tf = '4h'; else if (key.includes('24h')) tf = '24h'; else if (key.includes('7d')) tf = '7d';
-      let sk = 'nmacd';
-      if (key === 'mcap') sk = 'marketCap'; else if (key === 'price') sk = 'change24h';
-      if (sortKey === sk && sortTf === tf) { setSortAsc(!sortAsc); } else { setSortKey(sk); setSortTf(tf); setSortAsc(false); }
-  };
-  const handleDragEnd = (event: DragEndEvent) => {
-      const { active, over } = event;
-      if (over && active.id !== over.id) {
-          setColOrder((items) => {
-              const oldIndex = items.indexOf(active.id as string);
-              const newIndex = items.indexOf(over.id as string);
-              return arrayMove(items, oldIndex, newIndex);
-          });
-      }
-  };
-  const renderCell = (r: MacdTrackerPoint, colId: string) => {
+    const renderCell = (r: MacdTrackerPoint, colId: string) => {
       switch (colId) {
           case 'asset': return (
               <td key={colId} className="p-3">
                   <div className="flex items-center gap-3">
                       <CoinLogo 
                         coin={{
-                            id: r.symbol ? r.symbol.toLowerCase() : 'unknown', 
+                            id: r.id || (r.symbol ? r.symbol.toLowerCase() : 'unknown'), 
                             symbol: r.symbol,
                             name: r.name,
                             image: r.logo
@@ -598,74 +541,147 @@ export const MacdTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false }
           );
           case 'price': return <td key={colId} className="p-3 text-center font-mono font-bold text-gray-700 dark:text-slate-300">${r.price < 1 ? r.price.toFixed(5) : r.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>;
           case 'mcap': return <td key={colId} className="p-3 text-center font-mono text-gray-500 dark:text-slate-400 text-xs">${formatCompactNumber(r.marketCap || 0)}</td>;
-          case 'macd15m': return <td key={colId} className={`p-3 text-center font-mono font-bold ${getMacdColor(r.macd?.["15m"]?.nmacd, true)}`}>{r.macd?.["15m"]?.nmacd?.toFixed(3) || '-'}</td>;
-          case 'macd1h': return <td key={colId} className={`p-3 text-center font-mono font-bold ${getMacdColor(r.macd?.["1h"]?.nmacd, true)}`}>{r.macd?.["1h"]?.nmacd?.toFixed(3) || '-'}</td>;
-          case 'macd4h': return <td key={colId} className={`p-3 text-center font-mono font-bold bg-gray-50 dark:bg-white/5 ${getMacdColor(r.macd?.["4h"]?.nmacd, true)}`}>{r.macd?.["4h"]?.nmacd?.toFixed(3) || '-'}</td>;
-          case 'macd24h': return <td key={colId} className={`p-3 text-center font-mono font-bold ${getMacdColor(r.macd?.["24h"]?.nmacd, true)}`}>{r.macd?.["24h"]?.nmacd?.toFixed(3) || '-'}</td>;
-          case 'macd7d': return <td key={colId} className={`p-3 text-center font-mono font-bold ${getMacdColor(r.macd?.["7d"]?.nmacd, true)}`}>{r.macd?.["7d"]?.nmacd?.toFixed(3) || '-'}</td>;
+          case 'macd15m': return renderMacdCell(r, '15m');
+          case 'macd1h': return renderMacdCell(r, '1h');
+          case 'macd4h': return renderMacdCell(r, '4h');
+          case 'macd24h': return renderMacdCell(r, '24h');
+          case 'macd7d': return renderMacdCell(r, '7d');
           default: return <td key={colId}></td>;
       }
-  };
+    };
+    
+    const [loading, setLoading] = useState(true);
+    const [rows, setRows] = useState<MacdTrackerPoint[]>([]);
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(50);
+    const [totalPages, setTotalPages] = useState(1);
+    const [search, setSearch] = useState('');
+    const [sortKey, setSortKey] = useState('nmacd');
+    const [sortTf, setSortTf] = useState<Timeframe>('4h');
+    const [sortAsc, setSortAsc] = useState(false);
+    const [colOrder, setColOrder] = useState<string[]>(['asset', 'price', 'mcap', 'macd15m', 'macd1h', 'macd4h', 'macd24h', 'macd7d']);
+    const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  return (
-      <div className={`bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm flex flex-col ${isPage ? 'w-full h-auto block' : 'h-full overflow-hidden min-h-[500px]'}`}>
-        <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-3 bg-gray-50 dark:bg-black/20">
-            {/* Header Controls Reorganized */}
-            <div className="flex flex-wrap items-center justify-between gap-4 w-full">
-                {/* Left Group: Search + Rows */}
-                <div className="flex items-center gap-4 flex-1">
-                    <div className="relative w-full sm:max-w-xs">
-                        <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
-                        <input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Buscar ativo..." className="w-full bg-white dark:bg-[#2f3032] border border-gray-200 dark:border-slate-700 text-gray-900 dark:text-slate-200 text-xs py-2 pl-9 pr-3 rounded focus:border-[#dd9933] outline-none transition-colors"/>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs font-bold text-gray-500 dark:text-gray-400">
-                         <span>Linhas:</span>
-                         <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }} className="bg-transparent text-gray-900 dark:text-white outline-none cursor-pointer font-black hover:text-[#dd9933] transition-colors">
-                            <option value={50} className="bg-white dark:bg-[#2f3032] text-black dark:text-white">50</option>
-                            <option value={100} className="bg-white dark:bg-[#2f3032] text-black dark:text-white">100</option>
-                        </select>
-                    </div>
+    useEffect(() => {
+        let mounted = true;
+        setLoading(true);
+        fetchMacdTablePage({ page, limit: pageSize, sort: sortKey as any, timeframe: sortTf, ascendingOrder: sortAsc, filterText: search })
+        .then(res => {
+            if(!mounted) return;
+            setRows(res.items);
+            setTotalPages(res.totalPages);
+            setLoading(false);
+        });
+        return () => { mounted = false; };
+    }, [page, pageSize, search, sortKey, sortTf, sortAsc]);
+
+    const handleSort = (key: string) => {
+        let tf: Timeframe = '4h';
+        if (key.includes('15m')) tf = '15m'; else if (key.includes('1h')) tf = '1h'; else if (key.includes('4h')) tf = '4h'; else if (key.includes('24h')) tf = '24h'; else if (key.includes('7d')) tf = '7d';
+        let sk = 'nmacd';
+        if (key === 'mcap') sk = 'marketCap'; else if (key === 'price') sk = 'change24h';
+        if (sortKey === sk && sortTf === tf) { setSortAsc(!sortAsc); } else { setSortKey(sk); setSortTf(tf); setSortAsc(false); }
+    };
+    const handleDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
+        if (over && active.id !== over.id) {
+            setColOrder((items) => {
+                const oldIndex = items.indexOf(active.id as string);
+                const newIndex = items.indexOf(over.id as string);
+                return arrayMove(items, oldIndex, newIndex);
+            });
+        }
+    };
+    
+    const sortKeyMap: Record<string, string> = { 
+        asset: 'asset', price: 'change24h', mcap: 'marketCap', 
+        macd15m: 'macd15m', macd1h: 'macd1h', macd4h: 'macd4h', macd24h: 'macd24h', macd7d: 'macd7d' 
+    };
+    
+    const COLS: Record<string, { id: string; label: string }> = {
+        asset: { id: 'asset', label: 'Ativo' },
+        price: { id: 'price', label: 'Preço' },
+        mcap: { id: 'mcap', label: 'Mkt Cap' },
+        macd15m: { id: 'macd15m', label: '15m' },
+        macd1h: { id: 'macd1h', label: '1h' },
+        macd4h: { id: 'macd4h', label: '4h' },
+        macd24h: { id: 'macd24h', label: '24h' },
+        macd7d: { id: 'macd7d', label: '7d' },
+    };
+
+    const SortableTh = ({ colId, label, sortKey, activeKey, onSort }: any) => {
+        const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: colId });
+        const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1, zIndex: isDragging ? 100 : 'auto' };
+        return (
+            <th ref={setNodeRef} style={style} className={`p-3 text-center bg-gray-100 dark:bg-[#2f3032] cursor-pointer group select-none ${colId === 'asset' ? 'text-left' : 'text-center'}`} onClick={() => onSort(sortKey)}>
+                <div className={`flex items-center gap-1 ${colId === 'asset' ? 'justify-start' : 'justify-center'}`}>
+                    <span className={`p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 cursor-grab ${isDragging ? 'cursor-grabbing' : ''}`} {...attributes} {...listeners} onClick={e => e.stopPropagation()}><GripVertical size={12} className="text-gray-400" /></span>
+                    <span className="text-[10px] uppercase font-black text-gray-500 dark:text-slate-400">{label}</span>
+                    <ChevronsUpDown size={12} className={`text-gray-400 transition-colors ${activeKey === sortKey ? 'text-[#dd9933]' : 'opacity-0 group-hover:opacity-100'}`} />
                 </div>
-                
-                {/* Right Group: Pagination */}
-                <div className="flex items-center gap-2">
-                     <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="p-1 hover:text-[#dd9933] transition-colors disabled:opacity-30 text-gray-600 dark:text-white"><ChevronLeft size={16}/></button>
-                     <div className="flex items-center gap-1 text-xs font-bold text-gray-500 dark:text-gray-400">
-                        <span>Pág</span>
-                        <select value={page} onChange={(e) => setPage(Number(e.target.value))} className="bg-transparent text-gray-900 dark:text-white outline-none cursor-pointer font-black hover:text-[#dd9933] transition-colors">
-                            {Array.from({length: totalPages}, (_, i) => i + 1).map(p => <option key={p} value={p} className="bg-white dark:bg-[#2f3032] text-black dark:text-white">{p}</option>)}
-                        </select>
-                        <span>de {totalPages}</span>
-                     </div>
-                     <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="p-1 hover:text-[#dd9933] transition-colors disabled:opacity-30 text-gray-600 dark:text-white"><ChevronRight size={16}/></button>
+            </th>
+        );
+    };
+    
+    return (
+        <div className={`bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm flex flex-col ${isPage ? 'w-full h-auto block' : 'h-full overflow-hidden min-h-[500px]'}`}>
+            <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-3 bg-gray-50 dark:bg-black/20">
+                {/* Header Controls Reorganized */}
+                <div className="flex flex-wrap items-center justify-between gap-4 w-full">
+                    {/* Left Group: Search + Rows */}
+                    <div className="flex items-center gap-4 flex-1">
+                        <div className="relative w-full sm:max-w-xs">
+                            <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
+                            <input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Buscar ativo..." className="w-full bg-white dark:bg-[#2f3032] border border-gray-200 dark:border-slate-700 text-gray-900 dark:text-slate-200 text-xs py-2 pl-9 pr-3 rounded focus:border-[#dd9933] outline-none transition-colors"/>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs font-bold text-gray-500 dark:text-gray-400">
+                             <span>Linhas:</span>
+                             <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }} className="bg-transparent text-gray-900 dark:text-white outline-none cursor-pointer font-black hover:text-[#dd9933] transition-colors">
+                                <option value={50} className="bg-white dark:bg-[#2f3032] text-black dark:text-white">50</option>
+                                <option value={100} className="bg-white dark:bg-[#2f3032] text-black dark:text-white">100</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    {/* Right Group: Pagination */}
+                    <div className="flex items-center gap-2">
+                         <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="p-1 hover:text-[#dd9933] transition-colors disabled:opacity-30 text-gray-600 dark:text-white"><ChevronLeft size={16}/></button>
+                         <div className="flex items-center gap-1 text-xs font-bold text-gray-500 dark:text-gray-400">
+                            <span>Pág</span>
+                            <select value={page} onChange={(e) => setPage(Number(e.target.value))} className="bg-transparent text-gray-900 dark:text-white outline-none cursor-pointer font-black hover:text-[#dd9933] transition-colors">
+                                {Array.from({length: totalPages}, (_, i) => i + 1).map(p => <option key={p} value={p} className="bg-white dark:bg-[#2f3032] text-black dark:text-white">{p}</option>)}
+                            </select>
+                            <span>de {totalPages}</span>
+                         </div>
+                         <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="p-1 hover:text-[#dd9933] transition-colors disabled:opacity-30 text-gray-600 dark:text-white"><ChevronRight size={16}/></button>
+                    </div>
                 </div>
             </div>
+            <div className={isPage ? 'w-full overflow-visible' : 'flex-1 overflow-auto custom-scrollbar'}>
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                    <table className="w-full text-left border-collapse">
+                        <thead className="sticky top-0 z-10">
+                            <tr className="bg-gray-100 dark:bg-[#2f3032] border-b border-gray-200 dark:border-slate-800">
+                                <SortableContext items={colOrder} strategy={horizontalListSortingStrategy}>
+                                    {colOrder.map(colId => (
+                                        <SortableTh key={colId} colId={colId} label={COLS[colId as keyof typeof COLS].label} sortKey={sortKeyMap[colId]} activeKey={sortKey} onSort={handleSort} />
+                                    ))}
+                                </SortableContext>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 dark:divide-slate-800 text-sm">
+                            {loading ? <tr><td colSpan={colOrder.length} className="p-10 text-center"><Loader2 className="animate-spin mx-auto text-[#dd9933]" /></td></tr> : rows.map(r => <tr key={r.symbol} className="hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">{colOrder.map(colId => renderCell(r, colId))}</tr>)}
+                        </tbody>
+                    </table>
+                </DndContext>
+            </div>
+            <div className="p-3 border-t border-gray-200 dark:border-slate-800 flex justify-between items-center bg-gray-50 dark:bg-[#2f3032]">
+                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="p-2 hover:bg-white dark:hover:bg-white/10 rounded disabled:opacity-50 text-gray-600 dark:text-white transition-colors border border-transparent hover:border-gray-200 dark:hover:border-slate-700"><ChevronLeft size={16}/></button>
+                <span className="text-xs font-bold text-gray-500 dark:text-slate-400">Página {page} de {totalPages}</span>
+                <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="p-2 hover:bg-white dark:hover:bg-white/10 rounded disabled:opacity-50 text-gray-600 dark:text-white transition-colors border border-transparent hover:border-gray-200 dark:hover:border-slate-700"><ChevronRight size={16}/></button>
+            </div>
         </div>
-        <div className={isPage ? 'w-full overflow-visible' : 'flex-1 overflow-auto custom-scrollbar'}>
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                <table className="w-full text-left border-collapse">
-                    <thead className="sticky top-0 z-10">
-                        <tr className="bg-gray-100 dark:bg-[#2f3032] border-b border-gray-200 dark:border-slate-800">
-                            <SortableContext items={colOrder} strategy={horizontalListSortingStrategy}>
-                                {colOrder.map(colId => (
-                                    <SortableTh key={colId} colId={colId} label={COLS[colId as keyof typeof COLS].label} sortKey={sortKeyMap[colId]} activeKey={sortKey} onSort={handleSort} />
-                                ))}
-                            </SortableContext>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100 dark:divide-slate-800 text-sm">
-                        {loading ? <tr><td colSpan={colOrder.length} className="p-10 text-center"><Loader2 className="animate-spin mx-auto text-[#dd9933]" /></td></tr> : rows.map(r => <tr key={r.symbol} className="hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">{colOrder.map(colId => renderCell(r, colId))}</tr>)}
-                    </tbody>
-                </table>
-            </DndContext>
-        </div>
-        <div className="p-3 border-t border-gray-200 dark:border-slate-800 flex justify-between items-center bg-gray-50 dark:bg-[#2f3032]">
-            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="p-2 hover:bg-white dark:hover:bg-white/10 rounded disabled:opacity-50 text-gray-600 dark:text-white transition-colors border border-transparent hover:border-gray-200 dark:hover:border-slate-700"><ChevronLeft size={16}/></button>
-            <span className="text-xs font-bold text-gray-500 dark:text-slate-400">Página {page} de {totalPages}</span>
-            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="p-2 hover:bg-white dark:hover:bg-white/10 rounded disabled:opacity-50 text-gray-600 dark:text-white transition-colors border border-transparent hover:border-gray-200 dark:hover:border-slate-700"><ChevronRight size={16}/></button>
-        </div>
-      </div>
-  );
+    );
 };
 export const MacdFaq: React.FC = () => { return null; }; 
 

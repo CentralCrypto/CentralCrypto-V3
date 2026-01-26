@@ -9,7 +9,7 @@ import addHighchartsMore from 'highcharts/highcharts-more';
 
 // Initialize Standard Module with protection
 if (typeof addHighchartsMore === 'function') {
-    addHighchartsMore(Highcharts);
+    (addHighchartsMore as any)(Highcharts);
 }
 
 declare global {

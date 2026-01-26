@@ -14,6 +14,7 @@ import {
   fetchRsiTrackerHist
 } from '../services/api';
 import CoinLogo from '../../../components/CoinLogo';
+import { initLogoService, getBestLocalLogo } from '../../../services/logo';
 
 import {
   DndContext,
@@ -32,7 +33,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 if (typeof addMouseWheelZoom === 'function') {
-    addMouseWheelZoom(Highcharts);
+    (addMouseWheelZoom as any)(Highcharts);
 }
 
 const TIMEFRAMES = ['15m', '1h', '4h', '24h', '7d'] as const;
@@ -274,6 +275,7 @@ export const RsiScatterChart: React.FC = () => {
   const isDark = useIsDark();
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<Highcharts.Chart | null>(null);
+  const [logoReady, setLogoReady] = useState(false);
   
   const [points, setPoints] = useState<RsiTrackerPoint[]>([]);
   const [timeframe, setTimeframe] = useState<Timeframe>('4h');
@@ -282,6 +284,14 @@ export const RsiScatterChart: React.FC = () => {
   
   // Filters
   const [visibleZones, setVisibleZones] = useState<string[]>(['oversold', 'neutral', 'overbought']);
+
+  useEffect(() => {
+    let mounted = true;
+    initLogoService()
+      .then(() => { if (mounted) setLogoReady(true); })
+      .catch(() => { if (mounted) setLogoReady(true); });
+    return () => { mounted = false; };
+  }, []);
 
   useEffect(() => {
       fetchRsiTrackerHist().then(data => {
@@ -333,13 +343,12 @@ export const RsiScatterChart: React.FC = () => {
             const isRising = (last !== undefined && cur > last);
             const symbolShort = (r.symbol || 'UNK').substring(0, 3).toUpperCase();
             
-            // Use CoinLogo logic directly in Highcharts formatter via image path construction
-            const id = r.symbol.toLowerCase();
-            const localLogo = `/cachecko/logos/${id}.webp`;
-            const fallbackLogo = r.logo || `https://assets.coincap.io/assets/icons/${id}@2x.png`;
+            const coinId = (r as any).id || (r.symbol ? r.symbol.toLowerCase() : 'unknown');
+            const logoUrl = getBestLocalLogo({ id: coinId });
+            const fallbackLogo = r.logo || SITE_LOGO;
             
             return {
-                id: r.symbol, 
+                id: coinId,
                 x: xVal, // X Axis = Metric (Mcap/Vol/Change)
                 y: cur,  // Y Axis = RSI
                 z: r.volume24h,
@@ -348,8 +357,8 @@ export const RsiScatterChart: React.FC = () => {
                 price: r.price,
                 change: r.change24h,
                 isRising: isRising,
-                logoUrl: localLogo,
-                fallbackLogo: fallbackLogo,
+                logoUrl,
+                fallbackLogo,
                 symbolShort
             };
         })
@@ -471,17 +480,15 @@ export const RsiScatterChart: React.FC = () => {
                         const isRising = p.options.isRising;
                         const color = isRising ? COLOR_GREEN : COLOR_RED;
                         const symbol = isRising ? '▲' : '▼'; 
-                        const localLogo = p.options.logoUrl;
-                        const fallbackLogo = p.options.fallbackLogo;
+                        const logo = p.options.logoUrl || SITE_LOGO;
                         const short = p.options.symbolShort || '';
                         
                         // Fallback Logic with Site Logo
                         return `
                         <div style="position: relative; width: 24px; height: 24px;">
                             <div style="position: absolute; inset: 0; background: #334155; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: bold; color: #fff; z-index: 1;">${short.charAt(0)}</div>
-                            <img src="${localLogo}" 
+                            <img src="${logo}" 
                                  style="position: relative; width: 24px; height: 24px; border-radius: 50%; object-fit: cover; z-index: 2; background: transparent;" 
-                                 onerror="this.onerror=null;this.src='${fallbackLogo}';this.onerror=function(){this.src='${SITE_LOGO}'}"
                             />
                             <div style="position: absolute; right: -4px; bottom: -2px; color: ${color}; font-size: 10px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.8); line-height: 1; z-index: 3;">
                                 ${symbol}
@@ -494,7 +501,7 @@ export const RsiScatterChart: React.FC = () => {
         },
         series: [{ name: 'Coins', data: seriesData as any, color: 'rgba(156, 163, 175, 0.5)' }]
     } as any);
-  }, [points, timeframe, xMode, isDark, limit, visibleZones]);
+  }, [points, timeframe, xMode, isDark, limit, visibleZones, logoReady]);
 
   return (
     <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm p-4 h-full flex flex-col relative overflow-hidden">
@@ -659,11 +666,17 @@ export const RsiTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false })
     };
     
     const sortKeyMap: Record<string, string> = { rank: 'rank', asset: 'rank', price: 'price24h', mcap: 'marketCap', vol: 'volume24h', rsi15m: 'rsi15m', rsi1h: 'rsi1h', rsi4h: 'rsi4h', rsi24h: 'rsi24h', rsi7d: 'rsi7d' };
-    const COLS = {
-        rank: { id: 'rank', label: '#' }, asset: { id: 'asset', label: 'Ativo' }, price: { id: 'price', label: 'Preço' },
-        mcap: { id: 'mcap', label: 'Mkt Cap' }, vol: { id: 'vol', label: 'Vol 24h' },
-        rsi15m: { id: 'rsi15m', label: '15m' }, rsi1h: { id: 'rsi1h', label: '1h' },
-        rsi4h: { id: 'rsi4h', label: '4h' }, rsi24h: { id: 'rsi24h', label: '24h' }, rsi7d: { id: 'rsi7d', label: '7d' },
+    const COLS: Record<string, { id: string; label: string }> = {
+        rank: { id: 'rank', label: '#' },
+        asset: { id: 'asset', label: 'Ativo' },
+        price: { id: 'price', label: 'Preço' },
+        mcap: { id: 'mcap', label: 'Mkt Cap' },
+        vol: { id: 'vol', label: 'Vol 24h' },
+        rsi15m: { id: 'rsi15m', label: '15m' },
+        rsi1h: { id: 'rsi1h', label: '1h' },
+        rsi4h: { id: 'rsi4h', label: '4h' },
+        rsi24h: { id: 'rsi24h', label: '24h' },
+        rsi7d: { id: 'rsi7d', label: '7d' },
     };
     const SortableTh = ({ colId, label, sortKey, activeKey, onSort }: any) => {
         const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: colId });
