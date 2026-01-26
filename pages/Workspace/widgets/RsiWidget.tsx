@@ -14,7 +14,6 @@ import {
   fetchRsiTrackerHist
 } from '../services/api';
 import CoinLogo from '../../../components/CoinLogo';
-import { getBestLocalLogo, initLogoService } from '../../../services/logo';
 
 import {
   DndContext,
@@ -285,8 +284,6 @@ export const RsiScatterChart: React.FC = () => {
   const [visibleZones, setVisibleZones] = useState<string[]>(['oversold', 'neutral', 'overbought']);
 
   useEffect(() => {
-      // Inicia serviço de logos
-      initLogoService();
       fetchRsiTrackerHist().then(data => {
           if (data && Array.isArray(data)) setPoints(data);
       });
@@ -336,11 +333,10 @@ export const RsiScatterChart: React.FC = () => {
             const isRising = (last !== undefined && cur > last);
             const symbolShort = (r.symbol || 'UNK').substring(0, 3).toUpperCase();
             
-            // USE HELPER: Resolve o melhor caminho local baseado no ID
-            // Passa id e symbol para tentar match exato
-            const localLogo = getBestLocalLogo({ id: r.id || r.symbol?.toLowerCase(), symbol: r.symbol });
-            // Fallback remoto
-            const fallbackLogo = r.logo || `https://assets.coincap.io/assets/icons/${r.symbol?.toLowerCase()}@2x.png`;
+            // Use CoinLogo logic directly in Highcharts formatter via image path construction
+            const id = r.id || r.symbol.toLowerCase(); // Use Mapped ID (e.g. bitcoin) or symbol (btc)
+            const localLogo = `/cachecko/logos/${id}.webp`;
+            const fallbackLogo = r.logo || `https://assets.coincap.io/assets/icons/${r.symbol.toLowerCase()}@2x.png`;
             
             return {
                 id: r.symbol, 
@@ -481,7 +477,7 @@ export const RsiScatterChart: React.FC = () => {
                         
                         // CSS Layering Trick for Robust Fallback
                         // 1. Background Circle with Letter (Lowest z-index)
-                        // 2. Fallback Image (CoinCap/API) (Middle z-index) - Covers BG
+                        // 2. Fallback Image (CoinCap) (Middle z-index) - Covers BG
                         // 3. Local Image (VPS) (Highest z-index) - Covers Fallback
                         // If any image fails, display='none' reveals layer below.
                         

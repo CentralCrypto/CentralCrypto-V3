@@ -13,7 +13,6 @@ import {
   fetchMacdTablePage
 } from '../services/api';
 import CoinLogo from '../../../components/CoinLogo';
-import { getBestLocalLogo, initLogoService } from '../../../services/logo';
 
 // DND Kit Imports for Table
 import {
@@ -248,8 +247,6 @@ export const MacdScatterChart: React.FC = () => {
   const [limit, setLimit] = useState(50); // New limit state
 
   useEffect(() => {
-      // Inicia serviço de logos
-      initLogoService();
       fetchMacdTracker().then(data => {
           if (data && Array.isArray(data) && data.length > 0) setPoints(data);
       });
@@ -283,10 +280,9 @@ export const MacdScatterChart: React.FC = () => {
             const isBullish = yVal > 0;
             const symbolShort = (r.symbol || 'UNK').substring(0, 3).toUpperCase();
 
-            // USE HELPER: Resolve o melhor caminho local baseado no ID
-            // Passa id e symbol para tentar match exato
-            const localLogo = getBestLocalLogo({ id: r.id || r.symbol?.toLowerCase(), symbol: r.symbol });
-            // Fallback remoto
+            // Use CoinLogo logic directly in Highcharts formatter via image path construction
+            const id = r.id || r.symbol.toLowerCase();
+            const localLogo = `/cachecko/logos/${id}.webp`;
             const fallbackLogo = r.logo || `https://assets.coincap.io/assets/icons/${r.symbol.toLowerCase()}@2x.png`;
             
             return {
@@ -421,9 +417,8 @@ export const MacdScatterChart: React.FC = () => {
 
                         // CSS Layering Trick for Robust Fallback
                         // 1. Background Circle with Letter (Lowest z-index)
-                        // 2. Fallback Image (CoinCap/API) (Middle z-index) - Covers BG
+                        // 2. Fallback Image (CoinCap) (Middle z-index) - Covers BG
                         // 3. Local Image (VPS) (Highest z-index) - Covers Fallback
-                        // If any image fails, display='none' reveals layer below.
                         
                         return `
                         <div style="position: relative; width: 24px; height: 24px; border-radius: 50%; overflow: hidden;">
@@ -592,7 +587,7 @@ export const MacdTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false }
                   <div className="flex items-center gap-3">
                       <CoinLogo 
                         coin={{
-                            id: r.id || (r.symbol ? r.symbol.toLowerCase() : 'unknown'), 
+                            id: r.symbol ? r.symbol.toLowerCase() : 'unknown', 
                             symbol: r.symbol,
                             name: r.name,
                             image: r.logo
