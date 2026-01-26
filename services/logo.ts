@@ -81,3 +81,27 @@ export const getCandidateLogoUrls = (coin: { id: string; symbol?: string; image?
 
   return urls;
 };
+
+/**
+ * Retorna a melhor URL de logo possível de forma síncrona.
+ * Se já houver uma validada no cache, retorna ela.
+ * Se não, retorna a candidata local (webp) ou a imagem do objeto.
+ */
+export const getBestLocalLogo = (coin: { id: string; symbol?: string; image?: string }): string => {
+  const id = coin.id;
+  
+  if (validatedLogoCache.has(id)) {
+    return validatedLogoCache.get(id)!;
+  }
+
+  // Tenta o mapa do CoinGecko se disponível
+  if (coinGeckoMap && coinGeckoMap[id]) {
+      return coinGeckoMap[id];
+  }
+
+  // Se tem imagem no objeto (remota), usa ela como fallback razoável
+  if (coin.image) return coin.image;
+
+  // Se não tem nada, assume local webp (tentativa otimista)
+  return `${VPS_LOGO_BASE}/${id}.webp`;
+};
