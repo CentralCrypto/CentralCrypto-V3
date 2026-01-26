@@ -291,7 +291,7 @@ export const MacdScatterChart: React.FC = () => {
             const symbolShort = (r.symbol || 'UNK').substring(0, 3).toUpperCase();
 
             const coinId = (r as any).id || (r.symbol ? r.symbol.toLowerCase() : 'unknown');
-            const logoUrl = getBestLocalLogo({ id: coinId });
+            const logoUrl = `https://s2.coinmarketcap.com/static/img/coins/64x64/${coinId}.png`;
             const fallbackLogo = r.logo || SITE_LOGO;
             
             return {
@@ -420,10 +420,9 @@ export const MacdScatterChart: React.FC = () => {
                         const isBullish = p.options.isBullish;
                         const color = isBullish ? COLOR_GREEN : COLOR_RED;
                         const symbol = isBullish ? '▲' : '▼'; 
-                        const logo = p.options.logoUrl || SITE_LOGO;
+                        const logo = p.options.logoUrl;
                         const short = p.options.symbolShort || '';
 
-                        // Fallback Logic with Site Logo
                         return `
                         <div style="position: relative; width: 24px; height: 24px;">
                             <div style="position: absolute; inset: 0; background: #334155; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: bold; color: #fff; z-index: 1;">${short.charAt(0)}</div>
@@ -526,14 +525,11 @@ export const MacdTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false }
           case 'asset': return (
               <td key={colId} className="p-3">
                   <div className="flex items-center gap-3">
-                      <CoinLogo 
-                        coin={{
-                            id: r.id || (r.symbol ? r.symbol.toLowerCase() : 'unknown'), 
-                            symbol: r.symbol,
-                            name: r.name,
-                            image: r.logo
-                        }}
-                        className="w-6 h-6 rounded-full border border-gray-200 dark:border-white/10"
+                      <img 
+                            src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${r.id}.png`}
+                            className="w-6 h-6 rounded-full border border-gray-200 dark:border-white/10"
+                            alt={r.symbol}
+                            onError={(e) => { e.currentTarget.src = SITE_LOGO; }}
                       />
                       <div className="flex flex-col"><span className="font-bold text-gray-900 dark:text-slate-200 leading-none">{r.name}</span><span className="text-[10px] font-bold text-gray-500 uppercase">{r.symbol}</span></div>
                   </div>

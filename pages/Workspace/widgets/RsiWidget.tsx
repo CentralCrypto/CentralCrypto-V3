@@ -13,8 +13,6 @@ import {
   fetchRsiTablePage,
   fetchRsiTrackerHist
 } from '../services/api';
-import CoinLogo from '../../../components/CoinLogo';
-import { initLogoService, getBestLocalLogo } from '../../../services/logo';
 
 import {
   DndContext,
@@ -275,7 +273,6 @@ export const RsiScatterChart: React.FC = () => {
   const isDark = useIsDark();
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<Highcharts.Chart | null>(null);
-  const [logoReady, setLogoReady] = useState(false);
   
   const [points, setPoints] = useState<RsiTrackerPoint[]>([]);
   const [timeframe, setTimeframe] = useState<Timeframe>('4h');
@@ -284,14 +281,6 @@ export const RsiScatterChart: React.FC = () => {
   
   // Filters
   const [visibleZones, setVisibleZones] = useState<string[]>(['oversold', 'neutral', 'overbought']);
-
-  useEffect(() => {
-    let mounted = true;
-    initLogoService()
-      .then(() => { if (mounted) setLogoReady(true); })
-      .catch(() => { if (mounted) setLogoReady(true); });
-    return () => { mounted = false; };
-  }, []);
 
   useEffect(() => {
       fetchRsiTrackerHist().then(data => {
@@ -344,8 +333,7 @@ export const RsiScatterChart: React.FC = () => {
             const symbolShort = (r.symbol || 'UNK').substring(0, 3).toUpperCase();
             
             const coinId = (r as any).id || (r.symbol ? r.symbol.toLowerCase() : 'unknown');
-            const logoUrl = getBestLocalLogo({ id: coinId });
-            const fallbackLogo = r.logo || SITE_LOGO;
+            const logoUrl = `https://s2.coinmarketcap.com/static/img/coins/64x64/${coinId}.png`;
             
             return {
                 id: coinId,
@@ -358,7 +346,6 @@ export const RsiScatterChart: React.FC = () => {
                 change: r.change24h,
                 isRising: isRising,
                 logoUrl,
-                fallbackLogo,
                 symbolShort
             };
         })
@@ -483,7 +470,6 @@ export const RsiScatterChart: React.FC = () => {
                         const logo = p.options.logoUrl || SITE_LOGO;
                         const short = p.options.symbolShort || '';
                         
-                        // Fallback Logic with Site Logo
                         return `
                         <div style="position: relative; width: 24px; height: 24px;">
                             <div style="position: absolute; inset: 0; background: #334155; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: bold; color: #fff; z-index: 1;">${short.charAt(0)}</div>
@@ -501,7 +487,7 @@ export const RsiScatterChart: React.FC = () => {
         },
         series: [{ name: 'Coins', data: seriesData as any, color: 'rgba(156, 163, 175, 0.5)' }]
     } as any);
-  }, [points, timeframe, xMode, isDark, limit, visibleZones, logoReady]);
+  }, [points, timeframe, xMode, isDark, limit, visibleZones]);
 
   return (
     <div className="bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm p-4 h-full flex flex-col relative overflow-hidden">
@@ -640,14 +626,11 @@ export const RsiTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false })
             case 'asset': return (
                 <td key={colId} className="p-3">
                     <div className="flex items-center gap-3">
-                        <CoinLogo 
-                            coin={{
-                                id: r.id || (r.symbol ? r.symbol.toLowerCase() : 'unknown'), 
-                                symbol: r.symbol,
-                                name: r.name,
-                                image: r.logo
-                            }}
+                        <img 
+                            src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${r.id}.png`}
                             className="w-6 h-6 rounded-full border border-gray-200 dark:border-white/10"
+                            alt={r.symbol}
+                            onError={(e) => { e.currentTarget.src = SITE_LOGO; }}
                         />
                         <div className="flex flex-col"><span className="font-bold text-gray-900 dark:text-slate-200 leading-none">{r.name}</span><span className="text-[10px] font-bold text-gray-500 uppercase">{r.symbol}</span></div>
                     </div>
@@ -666,17 +649,11 @@ export const RsiTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false })
     };
     
     const sortKeyMap: Record<string, string> = { rank: 'rank', asset: 'rank', price: 'price24h', mcap: 'marketCap', vol: 'volume24h', rsi15m: 'rsi15m', rsi1h: 'rsi1h', rsi4h: 'rsi4h', rsi24h: 'rsi24h', rsi7d: 'rsi7d' };
-    const COLS: Record<string, { id: string; label: string }> = {
-        rank: { id: 'rank', label: '#' },
-        asset: { id: 'asset', label: 'Ativo' },
-        price: { id: 'price', label: 'Preço' },
-        mcap: { id: 'mcap', label: 'Mkt Cap' },
-        vol: { id: 'vol', label: 'Vol 24h' },
-        rsi15m: { id: 'rsi15m', label: '15m' },
-        rsi1h: { id: 'rsi1h', label: '1h' },
-        rsi4h: { id: 'rsi4h', label: '4h' },
-        rsi24h: { id: 'rsi24h', label: '24h' },
-        rsi7d: { id: 'rsi7d', label: '7d' },
+    const COLS = {
+        rank: { id: 'rank', label: '#' }, asset: { id: 'asset', label: 'Ativo' }, price: { id: 'price', label: 'Preço' },
+        mcap: { id: 'mcap', label: 'Mkt Cap' }, vol: { id: 'vol', label: 'Vol 24h' },
+        rsi15m: { id: 'rsi15m', label: '15m' }, rsi1h: { id: 'rsi1h', label: '1h' },
+        rsi4h: { id: 'rsi4h', label: '4h' }, rsi24h: { id: 'rsi24h', label: '24h' }, rsi7d: { id: 'rsi7d', label: '7d' },
     };
     const SortableTh = ({ colId, label, sortKey, activeKey, onSort }: any) => {
         const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: colId });
