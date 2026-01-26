@@ -136,7 +136,7 @@ const CustomTreemapContent = (props: any) => {
   const isDark = document.documentElement.classList.contains('dark');
   const strokeColor = isDark ? '#0f1011' : '#ffffff'; 
 
-  // Background rect (always visible if culling allows)
+  // Background rect
   const rectEl = (
       <rect
         x={x}
@@ -152,46 +152,48 @@ const CustomTreemapContent = (props: any) => {
       return rectEl;
   }
 
-  // --- VISUAL CALCULATION & LOD (Level Of Detail) ---
+  // --- VISUAL CALCULATION & LOD ---
   const visualW = width * zoomLevel;
   const visualH = height * zoomLevel;
   const minVisual = Math.min(visualW, visualH);
 
-  // LOD Thresholds (Screen Pixels)
-  const LOD_MICRO = 35;      // < 35px: Empty (just color)
-  const LOD_SMALL = 70;      // 35-70px: Logo Only
-  const LOD_MEDIUM = 110;    // 70-110px: Logo + Symbol
-                             // > 110px: Logo + Symbol + Price
+  // Adjusted Thresholds
+  const LOD_MICRO = 35;      
+  const LOD_SMALL = 70;      
+  const LOD_MEDIUM = 120; // Increased to ensure space for both    
 
   const isMicro = minVisual < LOD_MICRO;
   if (isMicro) return rectEl;
 
   // Determine what to show
-  let showLogo = true; 
+  const showLogo = true; 
   let showSymbol = minVisual >= LOD_SMALL; 
   let showPrice = minVisual >= LOD_MEDIUM;
 
-  // Visual Clamping (Prevents giant text/logos on extreme zoom)
-  // We calculate target pixel size and divide by zoomLevel to get SVG units
+  // Visual Clamping
   const MAX_VISUAL_LOGO = 64; 
   const MIN_VISUAL_LOGO = 20;
-  let targetVisualLogo = minVisual * 0.5; // Target 50% of cell
+  let targetVisualLogo = minVisual * 0.45; // Slightly smaller ratio
   targetVisualLogo = Math.min(Math.max(targetVisualLogo, MIN_VISUAL_LOGO), MAX_VISUAL_LOGO);
   const logoSize = targetVisualLogo / zoomLevel;
 
-  const MAX_VISUAL_FONT = 24;
+  const MAX_VISUAL_FONT = 22; // Slightly smaller max font
   const MIN_VISUAL_FONT = 10;
-  let targetVisualFont = minVisual * 0.22;
+  let targetVisualFont = minVisual * 0.2;
   targetVisualFont = Math.min(Math.max(targetVisualFont, MIN_VISUAL_FONT), MAX_VISUAL_FONT);
   const fontSize = targetVisualFont / zoomLevel;
-  const priceFontSize = fontSize * 0.75;
+  const priceFontSize = fontSize * 0.85;
 
-  // Safety fallback: if logo + text height exceeds cell height, drop text
-  // (Estimating height in SVG units)
-  const estimatedContentHeight = logoSize + (showSymbol ? fontSize * 1.2 : 0) + (showPrice ? priceFontSize * 1.2 : 0);
-  if (estimatedContentHeight > height * 0.9) {
+  // Explicit Gap for Flexbox at SVG scale
+  const gapSize = 4 / zoomLevel;
+
+  // Safety fallback logic
+  const estimatedContentHeight = logoSize + (showSymbol ? fontSize : 0) + (showPrice ? priceFontSize : 0) + (showSymbol ? gapSize : 0) + (showPrice ? gapSize : 0);
+  
+  if (estimatedContentHeight > height * 0.95) {
       showPrice = false;
-      if (logoSize + fontSize * 1.2 > height * 0.9) {
+      // If still too big, hide symbol (keep logo)
+      if (logoSize + (showSymbol ? fontSize + gapSize : 0) > height * 0.95) {
           showSymbol = false;
       }
   }
@@ -233,15 +235,15 @@ const CustomTreemapContent = (props: any) => {
                 style={{ 
                     filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
                     maxWidth: '100%',
-                    maxHeight: '100%'
+                    maxHeight: '100%',
+                    gap: `${gapSize}px` // Use explicit gap scaling
                 }}
              >
-                {/* Logo is always primary anchor */}
                 {showLogo && (
-                    <div style={{ width: logoSize, height: logoSize, marginBottom: showSymbol ? logoSize * 0.1 : 0 }}>
+                    <div style={{ width: logoSize, height: logoSize, flexShrink: 0 }}>
                         <CoinLogo 
                             coin={{ id: props.id || symbol.toLowerCase(), symbol }} 
-                            className="w-full h-full rounded-full bg-white/20 p-[1px]" 
+                            className="w-full h-full rounded-full bg-transparent" // Removed p-[1px] and bg-white to prevent clipping/hiding
                         />
                     </div>
                 )}
@@ -254,7 +256,8 @@ const CustomTreemapContent = (props: any) => {
                         lineHeight: 1,
                         textShadow: '0 1px 2px rgba(0,0,0,0.5)',
                         fontFamily: 'Inter, sans-serif',
-                        whiteSpace: 'nowrap'
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0
                     }}>
                         {symbol}
                     </span>
@@ -265,9 +268,10 @@ const CustomTreemapContent = (props: any) => {
                         fontSize: priceFontSize, 
                         fontWeight: 600, 
                         color: 'rgba(255,255,255,0.9)',
-                        marginTop: fontSize * 0.1,
                         fontFamily: 'monospace',
-                        whiteSpace: 'nowrap'
+                        whiteSpace: 'nowrap',
+                        lineHeight: 1,
+                        flexShrink: 0
                     }}>
                         {secondaryValue}
                     </span>
