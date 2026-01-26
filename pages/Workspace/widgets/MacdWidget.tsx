@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Loader2, Info, Search, ChevronLeft, ChevronRight, BarChart2, DollarSign, Percent, ZoomOut, MousePointer2, GripVertical, ChevronsUpDown, ChevronDown, Coins } from 'lucide-react';
 import Highcharts from 'highcharts';
+import addMouseWheelZoom from 'highcharts/modules/mouse-wheel-zoom';
 import { Language, DashboardItem } from '../../../types';
 import { getTranslations } from '../../../locales';
 import {
@@ -29,6 +30,10 @@ import {
   useSortable
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+
+if (typeof addMouseWheelZoom === 'function') {
+    addMouseWheelZoom(Highcharts);
+}
 
 const TIMEFRAMES = ['15m', '1h', '4h', '24h', '7d'] as const;
 type Timeframe = typeof TIMEFRAMES[number];
@@ -321,7 +326,7 @@ export const MacdScatterChart: React.FC = () => {
             backgroundColor: bgColor,
             style: { fontFamily: 'Inter, sans-serif' },
             height: null, 
-            zooming: { type: 'xy' }, // Standard zoom
+            zooming: { mouseWheel: { enabled: true }, type: 'xy' }, // Mouse Wheel Enabled
             animation: { duration: 1000 }
         },
         title: { text: null },
@@ -407,13 +412,13 @@ export const MacdScatterChart: React.FC = () => {
                         const fallbackLogo = p.options.fallbackLogo;
                         const short = p.options.symbolShort || '';
 
-                        // CSS Fallback Layering
+                        // Robust Double Fallback Logic
                         return `
                         <div style="position: relative; width: 24px; height: 24px;">
                             <div style="position: absolute; inset: 0; background: #334155; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: bold; color: #fff; z-index: 1;">${short.charAt(0)}</div>
                             <img src="${localLogo}" 
-                                 style="position: relative; width: 24px; height: 24px; border-radius: 50%; object-fit: cover; z-index: 2;" 
-                                 onerror="this.onerror=null;this.src='${fallbackLogo}';" 
+                                 style="position: relative; width: 24px; height: 24px; border-radius: 50%; object-fit: cover; z-index: 2; background: transparent;" 
+                                 onerror="this.onerror=null;this.src='${fallbackLogo}';this.onerror=function(){this.style.display='none'};" 
                             />
                             <div style="position: absolute; right: -4px; bottom: -2px; color: ${color}; font-size: 10px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.8); line-height: 1; z-index: 3;">
                                 ${symbol}
@@ -582,7 +587,7 @@ export const MacdTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false }
                             name: r.name,
                             image: r.logo
                         }}
-                        className="w-6 h-6 rounded-full bg-white p-0.5 border border-gray-200 dark:border-white/10"
+                        className="w-6 h-6 rounded-full border border-gray-200 dark:border-white/10"
                       />
                       <div className="flex flex-col"><span className="font-bold text-gray-900 dark:text-slate-200 leading-none">{r.name}</span><span className="text-[10px] font-bold text-gray-500 uppercase">{r.symbol}</span></div>
                   </div>

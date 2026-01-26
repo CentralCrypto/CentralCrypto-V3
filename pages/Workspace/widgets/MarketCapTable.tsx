@@ -243,7 +243,7 @@ const LiveRow = React.memo(({ coin, colOrder, favorites, toggleFav }: any) => {
               <div className="flex items-center gap-3 min-w-0">
                 <CoinLogo 
                   coin={coin} 
-                  className="w-9 h-9 rounded-full bg-slate-100 dark:bg-[#242628] p-1 border border-slate-200 dark:border-white/10 shadow-sm shrink-0" 
+                  className="w-9 h-9 rounded-full p-1 border border-slate-200 dark:border-white/10 shadow-sm shrink-0" 
                 />
                 <div className="flex flex-col min-w-0">
                   <span className="text-[15px] font-black text-gray-900 dark:text-white leading-none group-hover:text-[#dd9933] transition-colors truncate">
