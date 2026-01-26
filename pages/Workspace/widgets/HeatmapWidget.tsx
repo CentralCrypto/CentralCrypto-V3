@@ -122,7 +122,7 @@ const CustomTreemapContent = (props: any) => {
       const worldY = y * containerTransform.k + containerTransform.y;
       const worldW = width * containerTransform.k;
       const worldH = height * containerTransform.k;
-      const BUFFER = 200; // Menor buffer para performance
+      const BUFFER = 200; 
       isVisible = (
           worldX + worldW > -BUFFER && 
           worldX < containerSize.w + BUFFER &&
@@ -152,40 +152,38 @@ const CustomTreemapContent = (props: any) => {
       return rectEl;
   }
 
-  // Calculate visual size on screen
+  // Calculate visual size on screen (Level of Detail)
   const visualW = width * zoomLevel;
   const visualH = height * zoomLevel;
 
+  // STRICT LOD LOGIC - Preventing Overlap
+  const isMicro = visualW < 35 || visualH < 35; // Too small for anything
+  const isSmall = !isMicro && (visualW < 70 || visualH < 50); // Logo OR Text only
+  const isMedium = !isMicro && !isSmall && (visualW < 110 || visualH < 70); // Logo + Text
+  const isLarge = !isMicro && !isSmall && !isMedium; // Full detail
+
+  if (isMicro) return rectEl;
+
   // Layout Logic
-  const padding = 4 / zoomLevel; 
-  const contentW = width - padding * 2;
-  const contentH = height - padding * 2;
-
-  // Determinar o que cabe
-  const minSizeForText = 40;
-  const minSizeForLogo = 50;
-  const minSizeForDetail = 80;
-
-  const showText = visualW > minSizeForText && visualH > minSizeForText;
-  const showLogo = visualW > minSizeForLogo && visualH > minSizeForLogo;
-  const showDetail = visualW > minSizeForDetail && visualH > minSizeForDetail;
-
-  if (!showText && !showLogo) return rectEl;
-
+  const padding = 2 / zoomLevel; 
+  
   // Font sizing constrained logic
-  const logoSizeRaw = Math.min(contentW * 0.5, contentH * 0.5);
-  const logoSize = Math.min(Math.max(logoSizeRaw, 16 / zoomLevel), 64 / zoomLevel); // Cap max size visually
+  const logoSizeRaw = Math.min(width * 0.5, height * 0.5);
+  // Adjusted logo size based on mode
+  const logoSize = isSmall 
+      ? Math.min(Math.max(logoSizeRaw, 20 / zoomLevel), 40 / zoomLevel) // Larger relative logo if alone
+      : Math.min(Math.max(logoSizeRaw, 16 / zoomLevel), 64 / zoomLevel);
 
-  const fontSizeRaw = Math.min(contentW / (symbol.length * 0.6), contentH * 0.25);
-  const fontSize = Math.min(Math.max(fontSizeRaw, 10 / zoomLevel), 24 / zoomLevel); // Cap max font
-
-  const priceFontSize = Math.max(fontSize * 0.7, 8 / zoomLevel);
+  // Font size calculation with stricter bounds
+  const fontSizeRaw = Math.min(width / (symbol.length * 0.6), height * 0.25);
+  const fontSize = Math.min(Math.max(fontSizeRaw, 10 / zoomLevel), 32 / zoomLevel);
+  const priceFontSize = Math.max(fontSize * 0.65, 9 / zoomLevel);
 
   // Interaction Handler for Tooltip (Attached to CONTENT ONLY)
   const handleMouseMove = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Stop bubbling to prevent parent interference if any
+    e.stopPropagation(); 
     onContentHover({
-        id: props.id || symbol.toLowerCase(), // Ensure ID is passed for logo fallback
+        id: props.id || symbol.toLowerCase(), 
         symbol,
         price,
         change,
@@ -205,11 +203,11 @@ const CustomTreemapContent = (props: any) => {
     <g>
       {rectEl}
       
-      {/* ForeignObject allows HTML inside SVG - Crucial for robust Images (CoinLogo) and Text Layout */}
+      {/* ForeignObject allows HTML inside SVG */}
       <foreignObject x={x} y={y} width={width} height={height} style={{ overflow: 'visible' }}>
           <div 
             className="w-full h-full flex items-center justify-center pointer-events-none"
-            style={{ padding: `${padding}px` }}
+            style={{ padding: `${padding}px`, overflow: 'hidden' }}
           >
              <div
                 className="flex flex-col items-center justify-center pointer-events-auto cursor-pointer hover:scale-110 transition-transform duration-200"
@@ -217,38 +215,53 @@ const CustomTreemapContent = (props: any) => {
                 onMouseMove={handleMouseMove}
                 onMouseLeave={onContentLeave}
                 style={{ 
-                    filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))'
+                    filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
+                    maxWidth: '100%',
+                    maxHeight: '100%'
                 }}
              >
-                {showLogo && (
-                    <div style={{ width: logoSize, height: logoSize, marginBottom: logoSize * 0.1 }}>
+                {/* 1. Small Mode: Just Logo (or Text if no logo space, but mostly logo) */}
+                {isSmall && (
+                    <div style={{ width: logoSize, height: logoSize }}>
                         <CoinLogo 
                             coin={{ id: props.id || symbol.toLowerCase(), symbol }} 
                             className="w-full h-full rounded-full bg-white/20 p-[1px]" 
                         />
                     </div>
                 )}
-                
-                {showText && (
-                    <span style={{ 
-                        fontSize: fontSize, 
-                        fontWeight: 800, 
-                        color: '#fff', 
-                        lineHeight: 1,
-                        textShadow: '0 1px 2px rgba(0,0,0,0.5)',
-                        fontFamily: 'Inter, sans-serif'
-                    }}>
-                        {symbol}
-                    </span>
+
+                {/* 2. Medium/Large: Logo + Text */}
+                {(isMedium || isLarge) && (
+                    <>
+                        <div style={{ width: logoSize, height: logoSize, marginBottom: logoSize * 0.1 }}>
+                            <CoinLogo 
+                                coin={{ id: props.id || symbol.toLowerCase(), symbol }} 
+                                className="w-full h-full rounded-full bg-white/20 p-[1px]" 
+                            />
+                        </div>
+                        <span style={{ 
+                            fontSize: fontSize, 
+                            fontWeight: 800, 
+                            color: '#fff', 
+                            lineHeight: 1,
+                            textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+                            fontFamily: 'Inter, sans-serif',
+                            whiteSpace: 'nowrap'
+                        }}>
+                            {symbol}
+                        </span>
+                    </>
                 )}
 
-                {showDetail && showText && (
+                {/* 3. Large Only: Detail */}
+                {isLarge && (
                     <span style={{ 
                         fontSize: priceFontSize, 
                         fontWeight: 600, 
                         color: 'rgba(255,255,255,0.9)',
                         marginTop: fontSize * 0.1,
-                        fontFamily: 'monospace'
+                        fontFamily: 'monospace',
+                        whiteSpace: 'nowrap'
                     }}>
                         {secondaryValue}
                     </span>
