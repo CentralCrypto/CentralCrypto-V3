@@ -20,6 +20,7 @@ import {
     fetchEconomicCalendar,
     fetchFearAndGreed
 } from './Workspace/services/api';
+import CoinLogo from '../components/CoinLogo';
 
 interface DashboardProps {
   onPostClick: (postId: number) => void;
@@ -845,7 +846,7 @@ const LiveCoinRow: React.FC<{ coin: any; color: string }> = ({ coin, color }) =>
     return (
         <div className={`flex items-center justify-between px-2 py-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded transition-all duration-500 group ${flashClass}`}>
             <div className="flex items-center gap-3">
-                <img src={coin.image} className="w-7 h-7 rounded-full bg-white p-0.5 border border-gray-100 dark:border-transparent" alt="" />
+                <CoinLogo coin={coin} className="w-7 h-7 rounded-full bg-white p-0.5 border border-gray-100 dark:border-transparent" />
                 <div className="flex flex-col">
                     <span className="text-lg font-bold text-gray-900 dark:text-white leading-none group-hover:text-tech-accent transition-colors">
                         {coin.symbol?.toUpperCase()}
@@ -958,7 +959,10 @@ const MarketCapWidget = ({ language, onNavigate }: { language: Language; onNavig
                 {list.map((coin, i) => (
                     <div key={i} className="flex items-center justify-between px-2 py-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded transition-colors group">
                         <div className="flex items-center gap-3">
-                            <img src={coin.image} className="w-7 h-7 rounded-full bg-white p-0.5 border border-gray-100 dark:border-transparent" alt="" />
+                            <CoinLogo 
+                                coin={coin} 
+                                className="w-7 h-7 rounded-full bg-white p-0.5 border border-gray-100 dark:border-transparent" 
+                            />
                             <div className="flex flex-col"><span className="text-lg font-bold text-gray-900 dark:text-white leading-none group-hover:text-tech-accent">{coin.name}</span><span className="text-[11px] font-bold text-gray-500 uppercase">{coin.symbol}</span></div>
                         </div>
                         <div className="text-right">
