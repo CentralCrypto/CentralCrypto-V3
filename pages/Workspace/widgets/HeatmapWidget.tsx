@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { Loader2, Maximize2, RefreshCw, AlertTriangle, BarChart2, PieChart, Minimize2, Layers, ZoomOut } from 'lucide-react';
 import { fetchWithFallback } from '../services/api';
 import { DashboardItem } from '../../../types';
+import CoinLogo from '../../../components/CoinLogo';
 
 interface Props {
   item?: DashboardItem;
@@ -73,7 +74,7 @@ const ManualTooltip = ({ data, x, y }: { data: any, x: number, y: number }) => {
             <div className="bg-white/95 dark:bg-[#121314]/95 backdrop-blur-xl rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.15)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.5)] overflow-hidden flex flex-col border border-transparent dark:border-gray-700/50">
                 <div className="bg-gray-50 dark:bg-white/5 p-2.5 flex items-center justify-between border-b border-gray-100 dark:border-white/5">
                     <div className="flex items-center gap-2.5">
-                        {data.image && <img src={data.image} className="w-8 h-8 rounded-full bg-white p-0.5 shadow-sm" alt="" onError={(e) => (e.currentTarget.style.display = 'none')} />}
+                        <CoinLogo coin={data} className="w-8 h-8 rounded-full bg-white p-0.5 shadow-sm" />
                         <div className="min-w-0">
                             <div className="flex items-center gap-1.5">
                                 <span className="text-sm font-black text-gray-900 dark:text-white leading-none truncate">{data.symbol}</span>
@@ -102,7 +103,7 @@ const ManualTooltip = ({ data, x, y }: { data: any, x: number, y: number }) => {
 const CustomTreemapContent = (props: any) => {
   const { 
       x, y, width, height, 
-      change, image, symbol, price, 
+      change, symbol, price, 
       onClick, zoomLevel = 1,
       onContentHover, 
       onContentLeave,
@@ -121,7 +122,7 @@ const CustomTreemapContent = (props: any) => {
       const worldY = y * containerTransform.k + containerTransform.y;
       const worldW = width * containerTransform.k;
       const worldH = height * containerTransform.k;
-      const BUFFER = 1000;
+      const BUFFER = 200; // Menor buffer para performance
       isVisible = (
           worldX + worldW > -BUFFER && 
           worldX < containerSize.w + BUFFER &&
@@ -131,113 +132,12 @@ const CustomTreemapContent = (props: any) => {
   }
 
   const color = getColorForChange(change || 0);
-
-  // Border logic: Constant visual 1px width, regardless of zoom level
   const strokeWidth = (1 / zoomLevel);
-  // Stroke color - white in light mode, dark in dark mode
   const isDark = document.documentElement.classList.contains('dark');
   const strokeColor = isDark ? '#0f1011' : '#ffffff'; 
-  
-  // Interaction Handler for Tooltip
-  const handleMouseMove = (e: React.MouseEvent) => {
-    // Reconstruct data for tooltip
-    onContentHover({
-        symbol,
-        price,
-        change,
-        image,
-        fullName: props.fullName || props.name,
-        mcap: props.mcap,
-        vol: props.vol,
-        rank: props.rank
-    }, e.clientX, e.clientY);
-  };
 
-  if (!isVisible) {
-      return <rect x={x} y={y} width={width} height={height} fill={color} stroke={strokeColor} strokeWidth={strokeWidth} />;
-  }
-
-  // Calculate visual size on screen
-  const visualW = width * zoomLevel;
-  const visualH = height * zoomLevel;
-
-  // Rendering thresholds
-  const isTiny = visualW < 30 || visualH < 25;
-  
-  // Layout Logic - Vertical Stacking
-  // Available space for content (keeping a small padding)
-  const padding = Math.min(width, height) * 0.08;
-  const contentW = width - padding * 2;
-  const contentH = height - padding * 2;
-
-  // Dynamic Font Sizing
-  const charLen = symbol ? symbol.length : 3;
-  // Base font size on width, clamped by max reasonable size
-  let symbolFontSize = Math.min(contentW / (charLen * 0.7), 120);
-  
-  // Also constrain by height (assume it takes ~30% of height max if alone)
-  symbolFontSize = Math.min(symbolFontSize, contentH * 0.6);
-  symbolFontSize = Math.max(symbolFontSize, 8); // Min absolute size
-
-  let priceFontSize = symbolFontSize * 0.45;
-  priceFontSize = Math.max(priceFontSize, 8); // Min price size
-
-  let logoSize = Math.min(contentW * 0.6, contentH * 0.5);
-  logoSize = Math.min(logoSize, 80); // Max absolute logo size
-
-  // Determine what fits
-  // Stack: Logo + Symbol + Price
-  const gap = symbolFontSize * 0.2;
-  const fullStackH = logoSize + gap + symbolFontSize + gap + priceFontSize;
-  
-  let showLogo = image && (visualH > 60) && (visualW > 60) && (fullStackH <= contentH);
-  let showPrice = (fullStackH <= contentH) || ((symbolFontSize + gap + priceFontSize) <= contentH);
-  
-  // If we can't show everything, try dropping elements
-  if (!showLogo && !showPrice) {
-      // Just Symbol
-      // Recalculate font size to center perfectly
-      symbolFontSize = Math.min(contentW / (charLen * 0.6), contentH * 0.8);
-  } else if (!showLogo && showPrice) {
-      // Symbol + Price (Vertical)
-      // Check if it really fits
-      if ((symbolFontSize + gap + priceFontSize) > contentH) {
-          showPrice = false; // Drop price if it clashes
-      }
-  }
-
-  // Positioning
-  const centerX = x + width / 2;
-  const centerY = y + height / 2;
-
-  // Calculate Y offsets based on what is visible
-  let currentY = 0;
-  let totalVisibleH = 0;
-
-  if (showLogo) totalVisibleH += logoSize + gap;
-  totalVisibleH += symbolFontSize;
-  if (showPrice) totalVisibleH += gap + priceFontSize;
-
-  let startY = centerY - totalVisibleH / 2;
-
-  const logoY = startY;
-  const symbolY = showLogo ? logoY + logoSize + gap + symbolFontSize * 0.75 : startY + symbolFontSize * 0.75; // text baseline correction
-  const priceY = symbolY + gap + priceFontSize * 0.8;
-
-  // Unique clip path ID for this cell
-  const clipId = `clip-${symbol}-${x}-${y}`;
-  const secondaryValue = metric === 'mcap' 
-      ? formatPrice(price)
-      : `${(change || 0) > 0 ? '+' : ''}${(change || 0).toFixed(2)}%`;
-
-  return (
-    <g>
-      <defs>
-        <clipPath id={clipId}>
-            <rect x={x} y={y} width={width} height={height} />
-        </clipPath>
-      </defs>
-
+  // Background rect (always visible if culling allows)
+  const rectEl = (
       <rect
         x={x}
         y={y}
@@ -246,66 +146,116 @@ const CustomTreemapContent = (props: any) => {
         style={{ fill: color, stroke: strokeColor, strokeWidth: strokeWidth }}
         shapeRendering="crispEdges"
       />
+  );
+
+  if (!isVisible) {
+      return rectEl;
+  }
+
+  // Calculate visual size on screen
+  const visualW = width * zoomLevel;
+  const visualH = height * zoomLevel;
+
+  // Layout Logic
+  const padding = 4 / zoomLevel; 
+  const contentW = width - padding * 2;
+  const contentH = height - padding * 2;
+
+  // Determinar o que cabe
+  const minSizeForText = 40;
+  const minSizeForLogo = 50;
+  const minSizeForDetail = 80;
+
+  const showText = visualW > minSizeForText && visualH > minSizeForText;
+  const showLogo = visualW > minSizeForLogo && visualH > minSizeForLogo;
+  const showDetail = visualW > minSizeForDetail && visualH > minSizeForDetail;
+
+  if (!showText && !showLogo) return rectEl;
+
+  // Font sizing constrained logic
+  const logoSizeRaw = Math.min(contentW * 0.5, contentH * 0.5);
+  const logoSize = Math.min(Math.max(logoSizeRaw, 16 / zoomLevel), 64 / zoomLevel); // Cap max size visually
+
+  const fontSizeRaw = Math.min(contentW / (symbol.length * 0.6), contentH * 0.25);
+  const fontSize = Math.min(Math.max(fontSizeRaw, 10 / zoomLevel), 24 / zoomLevel); // Cap max font
+
+  const priceFontSize = Math.max(fontSize * 0.7, 8 / zoomLevel);
+
+  // Interaction Handler for Tooltip (Attached to CONTENT ONLY)
+  const handleMouseMove = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Stop bubbling to prevent parent interference if any
+    onContentHover({
+        id: props.id || symbol.toLowerCase(), // Ensure ID is passed for logo fallback
+        symbol,
+        price,
+        change,
+        image: props.image,
+        fullName: props.fullName || props.name,
+        mcap: props.mcap,
+        vol: props.vol,
+        rank: props.rank
+    }, e.clientX, e.clientY);
+  };
+
+  const secondaryValue = metric === 'mcap' 
+      ? formatPrice(price)
+      : `${(change || 0) > 0 ? '+' : ''}${(change || 0).toFixed(2)}%`;
+
+  return (
+    <g>
+      {rectEl}
       
-      {/* Interactive Layer - FIXED: Added onMouseMove */}
-      <rect 
-        x={x} 
-        y={y} 
-        width={width} 
-        height={height} 
-        style={{ fill: 'transparent', cursor: 'grab' }} 
-        onClick={onClick} 
-        onMouseMove={handleMouseMove} 
-        onMouseLeave={onContentLeave} 
-      />
-
-      {!isTiny && (
-        <g clipPath={`url(#${clipId})`} style={{ pointerEvents: 'none' }}>
-            
-            {showLogo && (
-                <image
-                    x={centerX - logoSize / 2}
-                    y={logoY}
-                    width={logoSize}
-                    height={logoSize}
-                    href={image}
-                    style={{ opacity: 0.9 }}
-                />
-            )}
-
-            <text
-                x={centerX}
-                y={symbolY}
-                textAnchor="middle"
-                fill="#ffffff"
+      {/* ForeignObject allows HTML inside SVG - Crucial for robust Images (CoinLogo) and Text Layout */}
+      <foreignObject x={x} y={y} width={width} height={height} style={{ overflow: 'visible' }}>
+          <div 
+            className="w-full h-full flex items-center justify-center pointer-events-none"
+            style={{ padding: `${padding}px` }}
+          >
+             <div
+                className="flex flex-col items-center justify-center pointer-events-auto cursor-pointer hover:scale-110 transition-transform duration-200"
+                onClick={onClick}
+                onMouseMove={handleMouseMove}
+                onMouseLeave={onContentLeave}
                 style={{ 
-                    fontSize: `${symbolFontSize}px`, 
-                    fontWeight: 900, 
-                    textShadow: '0px 1px 3px rgba(0,0,0,0.5)',
-                    fontFamily: 'Inter, sans-serif'
+                    filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))'
                 }}
-            >
-                {symbol}
-            </text>
+             >
+                {showLogo && (
+                    <div style={{ width: logoSize, height: logoSize, marginBottom: logoSize * 0.1 }}>
+                        <CoinLogo 
+                            coin={{ id: props.id || symbol.toLowerCase(), symbol }} 
+                            className="w-full h-full rounded-full bg-white/20 p-[1px]" 
+                        />
+                    </div>
+                )}
+                
+                {showText && (
+                    <span style={{ 
+                        fontSize: fontSize, 
+                        fontWeight: 800, 
+                        color: '#fff', 
+                        lineHeight: 1,
+                        textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+                        fontFamily: 'Inter, sans-serif'
+                    }}>
+                        {symbol}
+                    </span>
+                )}
 
-            {showPrice && (
-                <text
-                    x={centerX}
-                    y={priceY}
-                    textAnchor="middle"
-                    fill="rgba(255,255,255,0.9)"
-                    style={{ 
-                        fontSize: `${priceFontSize}px`, 
-                        fontWeight: 700,
-                        textShadow: '0px 1px 2px rgba(0,0,0,0.5)',
-                        fontFamily: 'JetBrains Mono, monospace'
-                    }}
-                >
-                    {secondaryValue}
-                </text>
-            )}
-        </g>
-      )}
+                {showDetail && showText && (
+                    <span style={{ 
+                        fontSize: priceFontSize, 
+                        fontWeight: 600, 
+                        color: 'rgba(255,255,255,0.9)',
+                        marginTop: fontSize * 0.1,
+                        fontFamily: 'monospace'
+                    }}>
+                        {secondaryValue}
+                    </span>
+                )}
+             </div>
+          </div>
+      </foreignObject>
     </g>
   );
 };
@@ -440,7 +390,7 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
               const sym = coin.symbol.toUpperCase();
               if (!uniqueMap.has(sym)) {
                   uniqueMap.set(sym, {
-                      id: coin.id || sym, 
+                      id: coin.id || sym.toLowerCase(), // Ensure ID is present for logo fallback
                       name: (coin.s || coin.symbol || '').toUpperCase(),
                       fullName: coin.n || coin.name,
                       symbol: sym,
@@ -457,10 +407,6 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
           });
           const mapped = Array.from(uniqueMap.values()).filter(c => c.mcap > 0);
           setData(mapped);
-          
-          if (mapped.length > 0) {
-              mapped.slice(0, 100).forEach(coin => { if (coin.image) { const img = new Image(); img.src = coin.image; } });
-          }
         } else setError('Sem dados.');
       } catch (e) { setError('Erro ao carregar.'); } finally { setLoading(false); }
     };
@@ -505,7 +451,6 @@ const HeatmapWidget: React.FC<Props> = ({ item, title = "Crypto Heatmap", onClos
             </div>
             
             <div className="flex items-center gap-2">
-                {/* Reset Zoom Button in Header */}
                 {transform.k > 1 && (
                     <button onClick={resetZoom} className="p-1.5 bg-[#dd9933]/20 hover:bg-[#dd9933] rounded text-[#dd9933] hover:text-black transition-colors" title="Reset Zoom">
                         <ZoomOut size={14} />
