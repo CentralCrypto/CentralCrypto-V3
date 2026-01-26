@@ -6,6 +6,7 @@ import { fetchWithFallback } from '../services/api';
 import { DashboardItem, Language, ApiCoin } from '../../../types';
 import { getTranslations } from '../../../locales';
 import { getCacheckoUrl, ENDPOINTS } from '../../../services/endpoints';
+import CoinLogo from '../../../components/CoinLogo';
 
 const formatCompactNumber = (number: number) => {
   if (!number || number === 0) return "---";
@@ -27,7 +28,7 @@ const TickerList: React.FC<{ tickers: ApiCoin[], type: 'gainers' | 'losers' }> =
                 return (
                     <div key={t.id} className="flex items-center justify-between text-sm px-2 py-1.5 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors rounded">
                         <div className="flex items-center gap-2.5">
-                            <img src={t.image} alt={t.symbol} className="w-6 h-6 rounded-full" onError={(e) => (e.target as HTMLImageElement).style.display = 'none'} />
+                            <CoinLogo coin={t} className="w-6 h-6 rounded-full" />
                             <span className="font-black text-gray-900 dark:text-white uppercase">{t.symbol}</span>
                         </div>
                         <div className="text-right">
@@ -102,7 +103,7 @@ const MaximizedTable: React.FC<{ data: ApiCoin[], type: 'gainers' | 'losers' }> 
                         <div key={coin.id} className="grid grid-cols-[1.5fr_1fr_1fr_1fr_1fr_1.5fr] gap-4 px-4 py-4 border-b border-gray-50 dark:border-slate-800 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors items-center">
                             <div className="flex items-center gap-4">
                                 <span className="text-gray-400 text-xs font-bold w-4">#{index + 1}</span>
-                                <img src={coin.image} alt={coin.symbol} className="w-9 h-9 rounded-full bg-white p-0.5" onError={(e) => (e.target as HTMLImageElement).style.display = 'none'} />
+                                <CoinLogo coin={coin} className="w-9 h-9 rounded-full bg-white p-0.5" />
                                 <div className="flex flex-col">
                                     <span className="font-black text-gray-900 dark:text-white text-base leading-none group-hover:text-[#dd9933] transition-colors">{coin.name}</span>
                                     <span className="text-xs text-gray-500 font-bold uppercase mt-1">{coin.symbol}</span>

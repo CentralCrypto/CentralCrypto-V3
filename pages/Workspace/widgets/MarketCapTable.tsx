@@ -34,6 +34,7 @@ import { ApiCoin, Language } from '../../../types';
 import { fetchTopCoins } from '../services/api';
 import { getTranslations } from '../../../locales';
 import { useBinanceWS } from '../../../services/BinanceWebSocketContext';
+import CoinLogo from '../../../components/CoinLogo';
 
 // ======================
 // CORES PADRONIZADAS (FIXAS)
@@ -240,11 +241,9 @@ const LiveRow = React.memo(({ coin, colOrder, favorites, toggleFav }: any) => {
           return (
             <td key={cid} className="p-2">
               <div className="flex items-center gap-3 min-w-0">
-                <img
-                  src={coin.image}
-                  alt={coin.symbol}
-                  className="w-9 h-9 rounded-full bg-slate-100 dark:bg-[#242628] p-1 border border-slate-200 dark:border-white/10 shadow-sm shrink-0"
-                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                <CoinLogo 
+                  coin={coin} 
+                  className="w-9 h-9 rounded-full bg-slate-100 dark:bg-[#242628] p-1 border border-slate-200 dark:border-white/10 shadow-sm shrink-0" 
                 />
                 <div className="flex flex-col min-w-0">
                   <span className="text-[15px] font-black text-gray-900 dark:text-white leading-none group-hover:text-[#dd9933] transition-colors truncate">
@@ -1139,12 +1138,10 @@ ${isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
     return (
       <div className="flex items-center justify-center gap-1">
         {arr.slice(0, 3).map((c, i) => (
-          <img
+          <CoinLogo 
             key={`${c.id}_${i}`}
-            src={c.image}
-            alt=""
+            coin={c}
             className="w-6 h-6 rounded-full bg-slate-100 dark:bg-[#242628] p-0.5 border border-slate-200 dark:border-white/10"
-            onError={(e) => { e.currentTarget.style.display = 'none'; }}
           />
         ))}
         {arr.length === 0 && <span className="text-xs font-bold text-gray-400 dark:text-slate-500">—</span>}
