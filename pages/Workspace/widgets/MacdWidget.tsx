@@ -413,8 +413,10 @@ export const MacdScatterChart: React.FC = () => {
                     enabled: true,
                     useHTML: true,
                     allowOverlap: true,
-                    y: -12,
-                    x: -12,
+                    align: 'center',
+                    verticalAlign: 'middle',
+                    y: 0,
+                    x: 0,
                     formatter: function (this: any) {
                         const p = this.point;
                         const isBullish = p.options.isBullish;

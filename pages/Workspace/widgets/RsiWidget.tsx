@@ -460,8 +460,10 @@ export const RsiScatterChart: React.FC = () => {
                     enabled: true,
                     useHTML: true,
                     allowOverlap: true,
-                    y: -12,
-                    x: -12,
+                    align: 'center',
+                    verticalAlign: 'middle',
+                    y: 0,
+                    x: 0,
                     formatter: function (this: any) {
                         const p = this.point;
                         const isRising = p.options.isRising;
@@ -470,6 +472,7 @@ export const RsiScatterChart: React.FC = () => {
                         const logo = p.options.logoUrl || SITE_LOGO;
                         const short = p.options.symbolShort || '';
                         
+                        // Fallback Logic with Site Logo
                         return `
                         <div style="position: relative; width: 24px; height: 24px;">
                             <div style="position: absolute; inset: 0; background: #334155; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: bold; color: #fff; z-index: 1;">${short.charAt(0)}</div>
