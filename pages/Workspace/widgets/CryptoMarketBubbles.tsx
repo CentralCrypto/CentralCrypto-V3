@@ -581,7 +581,9 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       let norm = 0;
       if (chartMode === 'valuation') {
         if (v <= 0) return originX;
-        norm = (Math.log10(v) - s.logMinX) / (s.logMaxX - s.logMinX || 1);
+        // Guard against divide by zero or NaN
+        const denom = (s.logMaxX - s.logMinX) || 1;
+        norm = (Math.log10(Math.max(v, 1)) - s.logMinX) / denom;
       } else {
         norm = (v - s.minX) / (s.maxX - s.minX || 1);
       }
@@ -590,7 +592,9 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
     const projectY = (v: number) => {
       if (v <= 0) return originY;
-      const norm = (Math.log10(v) - s.logMinY) / (s.logMaxY - s.logMinY || 1);
+      // Guard against divide by zero
+      const denom = (s.logMaxY - s.logMinY) || 1;
+      const norm = (Math.log10(Math.max(v, 1)) - s.logMinY) / denom;
       return margin.top + (1 - norm) * chartH;
     };
 
@@ -792,19 +796,28 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     if (!canvas || !stage) return;
 
     const resizeCanvas = () => {
-      const ratio = window.devicePixelRatio || 1;
-      dprRef.current = ratio;
+      // DEBOUNCE RESIZE: Use requestAnimationFrame to prevent loop
+      if (reqIdRef.current) return;
+      
+      reqIdRef.current = requestAnimationFrame(() => {
+          const ratio = window.devicePixelRatio || 1;
+          dprRef.current = ratio;
 
-      const rect = stage.getBoundingClientRect();
-      const cssW = Math.max(1, Math.floor(rect.width));
-      const cssH = Math.max(1, Math.floor(rect.height));
+          const rect = stage.getBoundingClientRect();
+          const cssW = Math.max(1, Math.floor(rect.width));
+          const cssH = Math.max(1, Math.floor(rect.height));
 
-      canvas.width = Math.max(1, Math.floor(cssW * ratio));
-      canvas.height = Math.max(1, Math.floor(cssH * ratio));
-      canvas.style.width = `${cssW}px`;
-      canvas.style.height = `${cssH}px`;
+          if (canvas.width !== Math.max(1, Math.floor(cssW * ratio)) || canvas.height !== Math.max(1, Math.floor(cssH * ratio))) {
+               canvas.width = Math.max(1, Math.floor(cssW * ratio));
+               canvas.height = Math.max(1, Math.floor(cssH * ratio));
+               canvas.style.width = `${cssW}px`;
+               canvas.style.height = `${cssH}px`;
+          }
+          reqIdRef.current = 0; // Release lock
+      });
     };
 
+    // Initial resize
     resizeCanvas();
 
     const ro = new ResizeObserver(() => resizeCanvas());
@@ -820,6 +833,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       ro.disconnect();
       observer.disconnect();
       window.removeEventListener('resize', resizeCanvas);
+      if (reqIdRef.current) cancelAnimationFrame(reqIdRef.current);
     };
   }, [loadData]);
 
@@ -1776,6 +1790,9 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           drawRadius = p.radius * (1 - t);
           alpha = 1 - t;
         }
+        
+        // Skip tiny particles entirely from drawing
+        if (drawRadius < 2) continue;
 
         const isHovered = hoveredParticleRef.current?.id === p.id;
         const isSelected = selectedParticleRef.current?.id === p.id;
@@ -1818,8 +1835,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           p.trail = [];
         }
 
-        if (drawRadius <= 0.5) continue;
-
         const isBTC = String(p.coin.id).toLowerCase() === 'bitcoin';
 
         ctx.save();
@@ -1830,11 +1845,22 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
         // Updated Image Logic using Local Cache (Coin ID as key)
         const img = imageCache.current.get(p.coin.id);
+        
+        // OPTIMIZED DRAW: Only clip if radius is large enough to matter
+        // Small particles just draw image rect inside (faster)
+        const useClip = drawRadius > 8; 
+
         if (img?.complete) {
-          ctx.save();
-          ctx.clip();
-          ctx.drawImage(img, p.x - drawRadius, p.y - drawRadius, drawRadius * 2, drawRadius * 2);
-          ctx.restore();
+          if (useClip) {
+            ctx.save();
+            ctx.clip();
+            ctx.drawImage(img, p.x - drawRadius, p.y - drawRadius, drawRadius * 2, drawRadius * 2);
+            ctx.restore();
+          } else {
+             // Draw slightly smaller rect inside to simulate circle visually for tiny dots
+             const s = drawRadius * 1.5; 
+             ctx.drawImage(img, p.x - s/2, p.y - s/2, s, s);
+          }
 
           ctx.strokeStyle = isBTC && rs.isGameMode ? (rs.isDark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.35)') : p.color;
           ctx.lineWidth = (isSelected ? 4 : 2) / k;
@@ -1981,7 +2007,11 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       reqIdRef.current = requestAnimationFrame(loop);
     };
 
-    reqIdRef.current = requestAnimationFrame(loop);
+    // DELAY STARTUP LOOP TO PREVENT FREEZE ON MOUNT
+    setTimeout(() => {
+        reqIdRef.current = requestAnimationFrame(loop);
+    }, 100);
+
     return () => cancelAnimationFrame(reqIdRef.current);
   }, [playPocket]);
 
@@ -2422,24 +2452,13 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
               {magPosts.length === 0 && (
                 <div className="mt-2 text-xs font-bold text-gray-500 dark:text-gray-400">
-                  Nenhum post carregado (verifique /2/wp-json/wp/v2/posts).
+                  Nenhum post carregado.
                 </div>
               )}
             </div>
           </div>
         </div>
       )}
-
-      <div ref={stageRef} className="flex-1 w-full relative cursor-crosshair overflow-hidden">
-        <canvas
-          ref={canvasRef}
-          onPointerMove={handlePointerMove}
-          onPointerDown={(e) => { e.preventDefault(); handlePointerDown(e); }}
-          onPointerLeave={() => { setHoveredParticle(null); handlePointerUp(); }}
-          onWheel={handleWheel}
-          className="absolute inset-0 w-full h-full block"
-        />
-      </div>
     </div>
   );
 };
