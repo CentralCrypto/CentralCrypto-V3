@@ -9,7 +9,6 @@ import {
   X as CloseIcon,
   Atom,
   Coins,
-  Maximize,
   Wind,
   Info,
   ChevronLeft,
@@ -52,7 +51,7 @@ interface Particle {
   fallFromY?: number;
 
   // Game Logic Flags
-  isProcessed?: boolean; // Prevents double counting
+  isDead?: boolean; // Mark for removal
 
   // map transition
   mapFromX?: number;
@@ -140,6 +139,8 @@ const computeSparkChange = (coin: any, tf: Timeframe) => {
   };
 };
 
+const perfColor = (v?: number) => (v && v >= 0 ? '#22c55e' : '#ef4444');
+
 const WATERMARK_URL = 'https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png';
 
 const drawWatermark = (
@@ -206,7 +207,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   const settingsBtnRef = useRef<HTMLButtonElement>(null);
 
   const particlesRef = useRef<Particle[]>([]);
-  // CHANGED: Image cache now keys by COIN ID (string), not URL
   const imageCache = useRef(new Map<string, HTMLImageElement>());
   const reqIdRef = useRef<number>(0);
   const dprRef = useRef(1);
@@ -231,18 +231,21 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   
   // Game states
   const [gameOver, setGameOver] = useState(false);
-  const [gameWon, setGameWon] = useState(false); // New Win State
+  const [gameWon, setGameWon] = useState(false);
   const [showGameIntro, setShowGameIntro] = useState(false);
   
   // Commentary System
   const [commentary, setCommentary] = useState<Commentary | null>(null);
   
-  // Game Refs (Prevents Re-renders in Loop)
-  const turnStatsRef = useRef({ 
-      active: false, 
-      startCount: 0, 
-      consecutiveHits: 0, 
-      consecutiveMisses: 0 
+  // Physics & Game Refs (Avoids re-renders)
+  const gameLogicRef = useRef({
+      pocketedCount: 0,
+      pocketedMax: 0,
+      turnActive: false,
+      turnStartScore: 0,
+      consecutiveHits: 0,
+      consecutiveMisses: 0,
+      isMoving: false
   });
 
   const isMaximized = item?.isMaximized ?? !isWidget;
@@ -292,8 +295,17 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   const detailOpenRef = useRef(detailOpen);
   detailOpenRef.current = detailOpen;
 
-  const pocketedCountRef = useRef(0);
-  const pocketedMaxRef = useRef(0);
+  // Add renderStateRef for animation loop access to current state
+  const renderStateRef = useRef({
+    isDark, isGameMode, isFreeMode, chartMode, timeframe, floatStrengthRaw, trailLength, searchTerm
+  });
+
+  useEffect(() => {
+    renderStateRef.current = {
+        isDark, isGameMode, isFreeMode, chartMode, timeframe, floatStrengthRaw, trailLength, searchTerm
+    };
+  }, [isDark, isGameMode, isFreeMode, chartMode, timeframe, floatStrengthRaw, trailLength, searchTerm]);
+
   const [pocketedUI, setPocketedUI] = useState({ count: 0, max: 0 });
 
   const sfxHitRef = useRef<HTMLAudioElement | null>(null);
@@ -628,7 +640,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       p.trail = [];
       p.isFixed = false;
       p.isFalling = false;
-      p.isProcessed = false; // Reset processed flag
+      p.isDead = false; // Reset dead flag
       p.fallT = 0;
       p.fallPocket = null;
       p.mapT = 1;
@@ -671,23 +683,23 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       p.y = clamp(p.y, minY, maxY);
     }
 
-    pocketedCountRef.current = 0;
-    const maxPocket = Math.max(0, others.length);
-    pocketedMaxRef.current = maxPocket;
-    setPocketedUI({ count: 0, max: maxPocket });
+    // Reset logic refs
+    gameLogicRef.current = {
+        pocketedCount: 0,
+        pocketedMax: Math.max(0, others.length),
+        turnActive: false,
+        turnStartScore: 0,
+        consecutiveHits: 0,
+        consecutiveMisses: 0,
+        isMoving: false
+    };
+
+    setPocketedUI({ count: 0, max: gameLogicRef.current.pocketedMax });
 
     gameCtlRef.current.phase = 0;
     gameCtlRef.current.powerPull = 0;
     cueHideUntilRef.current = 0;
     pointerDownRef.current = false;
-
-    // Reset Turn Stats
-    turnStatsRef.current = {
-        active: false,
-        startCount: 0,
-        consecutiveHits: 0,
-        consecutiveMisses: 0
-    };
 
     setGameHasShot(false);
   }, []);
@@ -716,7 +728,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
     if (isGameMode) {
       setNumCoins(16);
-      setGameWon(false); // Reset Win State
+      setGameWon(false);
       setGameOver(false);
       setShowGameIntro(true);
       setTimeout(() => {
@@ -756,6 +768,20 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     const slides = Math.max(1, Math.ceil((magPosts.length || 0) / 3));
     setMagIndex(i => clamp(i, 0, slides - 1));
   }, [magPosts]);
+
+  // Fix 2: magSlides
+  const magSlides = useMemo(() => {
+    const res = [];
+    for (let i = 0; i < magPosts.length; i += 3) {
+        res.push(magPosts.slice(i, i + 3));
+    }
+    return res;
+  }, [magPosts]);
+
+  // Fix 3: detailPerf stats (when detailCoin changes)
+  const detailPerf1h = useMemo(() => detailCoin ? computeSparkChange(detailCoin, '1h') : null, [detailCoin]);
+  const detailPerf24 = useMemo(() => detailCoin ? computeSparkChange(detailCoin, '24h') : null, [detailCoin]);
+  const detailPerf7d = useMemo(() => detailCoin ? computeSparkChange(detailCoin, '7d') : null, [detailCoin]);
 
   useEffect(() => {
     loadData();
@@ -811,7 +837,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     for (const c of topCoins) {
       if (c?.id && !imageCache.current.has(c.id)) {
         const img = new Image();
-        // Use Logo Service to find best URL (Local Cache Priority)
+        // Use Logo Service to find best URL
         const candidates = getCandidateLogoUrls(c);
         img.src = candidates[0] || ''; 
         // Cache by ID to be robust
@@ -862,7 +888,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         fallT: 0,
         fallPocket: null,
         mapT: 0,
-        isProcessed: false // ATOMIC FLAG INIT
+        isDead: false
       };
     });
 
@@ -1116,12 +1142,8 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         setGameHasShot(true);
         
         // TURN START LOGIC
-        turnStatsRef.current = {
-            active: true,
-            startCount: pocketedCountRef.current,
-            consecutiveHits: turnStatsRef.current.consecutiveHits,
-            consecutiveMisses: turnStatsRef.current.consecutiveMisses
-        };
+        gameLogicRef.current.turnActive = true;
+        gameLogicRef.current.turnStartScore = gameLogicRef.current.pocketedCount;
 
         gameCtlRef.current.phase = 0;
         gameCtlRef.current.powerPull = 0;
@@ -1166,82 +1188,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     transformRef.current = { k: clampedK, x: newX, y: newY };
   };
 
-  const legendText = useMemo(() => {
-    if (isGameMode) {
-      return (
-        <>
-          <div><span className="font-black">Modo Game (2 cliques)</span></div>
-          <div>• 1º clique: fixa a mira.</div>
-          <div>• 2º clique: segure e arraste o taco para trás para regular a força. Solte para dar a tacada.</div>
-          <div>• Bolas encaçapadas saem definitivamente.</div>
-        </>
-      );
-    }
-    if (isFreeMode) {
-      return (
-        <>
-          <div><span className="font-black">Modo Livre</span></div>
-          <div>• Bolhas flutuam com colisão (não atravessa).</div>
-          <div>• Market Cap / Variação alteram tamanho e cor.</div>
-        </>
-      );
-    }
-    if (chartMode === 'performance') {
-      return (
-        <>
-          <div><span className="font-black">Modo Variação</span></div>
-          <div>• X: Variação {timeframe} (%)</div>
-          <div>• Y: Volume 24h (log)</div>
-          <div>• Tamanho: |%| × log(volume)</div>
-        </>
-      );
-    }
-    return (
-      <>
-        <div><span className="font-black">Modo Market Cap</span></div>
-        <div>• X: Market Cap (log)</div>
-        <div>• Y: Volume 24h (log)</div>
-        <div>• Tamanho: Market Cap (escala log)</div>
-      </>
-    );
-  }, [chartMode, timeframe, isGameMode, isFreeMode]);
-
-  const detailPerf24 = useMemo(() => detailCoin ? computeSparkChange(detailCoin, '24h') : null, [detailCoin]);
-  const detailPerf1h = useMemo(() => detailCoin ? computeSparkChange(detailCoin, '1h') : null, [detailCoin]);
-  const detailPerf7d = useMemo(() => detailCoin ? computeSparkChange(detailCoin, '7d') : null, [detailCoin]);
-
-  const perfColor = (pct?: number) => (Number(pct) >= 0 ? '#089981' : '#f23645');
-
-  const magSlides = useMemo(() => {
-    const out: MagazinePost[][] = [];
-    for (let i = 0; i < magPosts.length; i += 3) out.push(magPosts.slice(i, i + 3));
-    return out.length ? out : [[]];
-  }, [magPosts]);
-
-  const renderStateRef = useRef({
-    isDark,
-    chartMode,
-    isGameMode,
-    isFreeMode,
-    timeframe,
-    floatStrengthRaw,
-    trailLength,
-    searchTerm
-  });
-
-  useEffect(() => {
-    renderStateRef.current = {
-      isDark,
-      chartMode,
-      isGameMode,
-      isFreeMode,
-      timeframe,
-      floatStrengthRaw,
-      trailLength,
-      searchTerm
-    };
-  }, [isDark, chartMode, isGameMode, isFreeMode, timeframe, floatStrengthRaw, trailLength, searchTerm]);
-
   // TRIGGER COMMENTARY LOGIC
   const showCommentary = (text: string, type: CommentaryType) => {
       setCommentary({ text, type, id: Date.now() });
@@ -1255,6 +1201,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
     let lastTime = performance.now();
 
+    // Helper functions moved inside effect to avoid deps
     const drawAimMarker = (ctx2: CanvasRenderingContext2D, x: number, y: number, k: number, isLocked: boolean, isDarkMode: boolean) => {
       const pulse = isLocked ? (1 + Math.sin(performance.now() * 0.012) * 0.12) : 1;
       ctx2.save();
@@ -1367,6 +1314,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       ctx.translate(panX, panY);
       ctx.scale(k, k);
 
+      // Access current particles array
       const particles = particlesRef.current;
 
       for (const p of particles) {
@@ -1508,6 +1456,11 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
       // PHYSICS
       let totalKineticEnergy = 0;
+      let deadCount = 0;
+      let gameOverEvent = false;
+      let gameWonEvent = false;
+      
+      const logic = gameLogicRef.current;
 
       if (rs.isGameMode) {
         const subSteps = 3;
@@ -1519,8 +1472,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           const drag = Math.pow(GAME_LINEAR_DAMP, stepDt * 60);
 
           for (const p of particles) {
-            if (p.isFalling) continue;
-            if (p.isFixed) continue;
+            if (p.isFalling || p.isFixed || p.isDead) continue;
 
             p.vx *= drag;
             p.vy *= drag;
@@ -1541,11 +1493,11 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
           for (let i = 0; i < particles.length; i++) {
             const p1 = particles[i];
-            if (p1.isFalling) continue;
+            if (p1.isFalling || p1.isDead) continue;
 
             for (let j = i + 1; j < particles.length; j++) {
               const p2 = particles[j];
-              if (p2.isFalling) continue;
+              if (p2.isFalling || p2.isDead) continue;
 
               const dx = p2.x - p1.x;
               const dy = p2.y - p1.y;
@@ -1583,7 +1535,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           }
 
           for (const p of particles) {
-            if (p.isFalling || p.isFixed) continue;
+            if (p.isFalling || p.isFixed || p.isDead) continue;
 
             for (const pk of pockets) {
               const dist = Math.hypot(p.x - pk.x, p.y - pk.y);
@@ -1600,8 +1552,8 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
             }
           }
 
-          for (const p of [...particles]) {
-            if (!p.isFalling) continue;
+          for (const p of particles) {
+            if (!p.isFalling || p.isDead) continue;
             p.fallT = (p.fallT || 0) + stepDt;
 
             const t = clamp((p.fallT || 0) / 0.35, 0, 1);
@@ -1615,52 +1567,69 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
               p.y = fy + (pk.y - fy) * ease;
             }
 
-            if (t >= 1) {
-              // ATOMIC SCORE UPDATE - FIXES DOUBLE COUNTING
-              if (p.isProcessed) continue;
-              p.isProcessed = true;
-
+            if (t >= 1 && !p.isDead) {
+              p.isDead = true; // Mark as dead so we don't process again
+              deadCount++;
+              
               const wasCue = String(p.coin.id).toLowerCase() === 'bitcoin';
-              particlesRef.current = particlesRef.current.filter(pp => pp.id !== p.id);
-
+              
               if (wasCue) {
-                setGameOver(true);
+                  gameOverEvent = true;
               } else {
-                pocketedCountRef.current += 1;
-                setPocketedUI({ count: pocketedCountRef.current, max: pocketedMaxRef.current });
+                  logic.pocketedCount += 1;
               }
               playPocket();
-              
-              // CHECK WIN STATE
-              // If only 1 particle remains AND it is Bitcoin (Cue)
-              const remaining = particlesRef.current;
-              if (remaining.length === 1 && String(remaining[0].coin.id).toLowerCase() === 'bitcoin' && !wasCue) {
-                  setGameWon(true);
-              }
             }
           }
         }
         
-        // COMMENTARY LOGIC: Check if turn ended
-        if (turnStatsRef.current.active && totalKineticEnergy < 20) {
-            turnStatsRef.current.active = false;
-            const diff = pocketedCountRef.current - turnStatsRef.current.startCount;
-            
-            if (diff > 0) {
-                turnStatsRef.current.consecutiveHits += 1;
-                turnStatsRef.current.consecutiveMisses = 0;
-                if (turnStatsRef.current.consecutiveHits >= 3) {
-                    showCommentary("3 SEGUIDAS! BITCOIN CAPTURANDO LIQUIDEZ!!", 'good');
-                } else if (diff >= 2) {
-                    showCommentary("MULTI-KILL! O TOURO TÁ BRABO!", 'good');
-                }
-            } else {
-                turnStatsRef.current.consecutiveMisses += 1;
-                turnStatsRef.current.consecutiveHits = 0;
-                if (turnStatsRef.current.consecutiveMisses >= 3) {
-                    showCommentary("O BITCOIN TÁ TESTANDO SUPORTE... JÁ JÁ CAI...", 'bad');
-                }
-            }
+        // Remove dead particles from array for next frame (Critical Fix)
+        if (deadCount > 0) {
+            particlesRef.current = particlesRef.current.filter(p => !p.isDead);
+        }
+
+        // Logic Updates (Outside of physics loop)
+        const livingParticles = particlesRef.current;
+        
+        if (gameWonEvent || (livingParticles.length === 1 && String(livingParticles[0].coin.id).toLowerCase() === 'bitcoin')) {
+            setGameWon(true);
+        }
+        
+        if (gameOverEvent) {
+            setGameOver(true);
+        }
+        
+        if (deadCount > 0) {
+            setPocketedUI({ count: logic.pocketedCount, max: logic.pocketedMax });
+        }
+
+        // Turn Logic
+        const isMovingNow = totalKineticEnergy > 20;
+        
+        // Falling edge of movement (Just stopped)
+        if (logic.turnActive && logic.isMoving && !isMovingNow) {
+             logic.turnActive = false;
+             logic.isMoving = false;
+             
+             const diff = logic.pocketedCount - logic.turnStartScore;
+             
+             if (diff > 0) {
+                 logic.consecutiveHits += 1;
+                 logic.consecutiveMisses = 0;
+                 if (logic.consecutiveHits >= 3) {
+                     showCommentary("3 SEGUIDAS! BITCOIN CAPTURANDO LIQUIDEZ!!", 'good');
+                 } else if (diff >= 2) {
+                     showCommentary("MULTI-KILL! O TOURO TÁ BRABO!", 'good');
+                 }
+             } else {
+                 logic.consecutiveMisses += 1;
+                 logic.consecutiveHits = 0;
+                 if (logic.consecutiveMisses >= 3) {
+                     showCommentary("O BITCOIN TÁ TESTANDO SUPORTE... JÁ JÁ CAI...", 'bad');
+                 }
+             }
+        } else if (isMovingNow) {
+            logic.isMoving = true;
         }
 
       } else if (rs.isFreeMode) {
