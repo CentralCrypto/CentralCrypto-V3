@@ -1278,8 +1278,13 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       const dt = Math.min(dtRaw, 1 / 30);
       lastTime = now;
 
+      // Access Refs Safely inside loop
+      if (!renderStateRef.current) {
+          reqIdRef.current = requestAnimationFrame(loop);
+          return;
+      }
+      
       const rs = renderStateRef.current;
-
       const dpr = dprRef.current || 1;
       const width = canvas.width / dpr;
       const height = canvas.height / dpr;
@@ -1382,7 +1387,9 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           let norm = 0;
           if (rs.chartMode === 'valuation') {
             if (v <= 0) return originX;
-            norm = (Math.log10(v) - s.logMinX) / (s.logMaxX - s.logMinX || 1);
+            // Guard against divide by zero or NaN
+            const denom = (s.logMaxX - s.logMinX) || 1;
+            norm = (Math.log10(Math.max(v, 1)) - s.logMinX) / denom;
           } else {
             norm = (v - s.minX) / (s.maxX - s.minX || 1);
           }
@@ -1397,6 +1404,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           else val = s.minX + percent * (s.maxX - s.minX);
 
           const worldX = projectX(val);
+          if (isNaN(worldX)) continue; // Safety check
 
           ctx.beginPath();
           ctx.moveTo(worldX, margin.top);
@@ -1411,7 +1419,9 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         const ySteps = 5;
         const projectY = (v: number) => {
           if (v <= 0) return originY;
-          const norm = (Math.log10(v) - s.logMinY) / (s.logMaxY - s.logMinY || 1);
+          // Guard against divide by zero
+          const denom = (s.logMaxY - s.logMinY) || 1;
+          const norm = (Math.log10(Math.max(v, 1)) - s.logMinY) / denom;
           return margin.top + (1 - norm) * chartH;
         };
 
@@ -1419,6 +1429,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           const percent = i / ySteps;
           const val = Math.pow(10, s.logMinY + percent * (s.logMaxY - s.logMinY));
           const worldY = projectY(val);
+          if (isNaN(worldY)) continue; // Safety check
 
           ctx.beginPath();
           ctx.moveTo(originX, worldY);
@@ -1483,6 +1494,10 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
             p.x += p.vx * stepDt;
             p.y += p.vy * stepDt;
+            
+            // Safety clamp
+            if (isNaN(p.x)) p.x = 100;
+            if (isNaN(p.y)) p.y = 100;
 
             if (p.x < p.radius + GAME_WALL_PAD) { p.x = p.radius + GAME_WALL_PAD; p.vx *= -0.98; }
             else if (p.x > worldW - p.radius - GAME_WALL_PAD) { p.x = worldW - p.radius - GAME_WALL_PAD; p.vx *= -0.98; }
@@ -1637,6 +1652,9 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         const stepDt = dt / subSteps;
         const worldW = width / k;
         const worldH = height / k;
+        
+        // OPTIMIZATION: If too many particles, reduce collision checks
+        const shouldCheckCollisions = particles.length <= 50;
 
         for (let step = 0; step < subSteps; step++) {
           const drag = Math.pow(FREE_LINEAR_DAMP, stepDt * 60);
@@ -1660,6 +1678,10 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
             p.x += p.vx * stepDt;
             p.y += p.vy * stepDt;
+            
+            // Safety
+            if (isNaN(p.x)) p.x = 100;
+            if (isNaN(p.y)) p.y = 100;
 
             if (p.x < p.radius) { p.x = p.radius; p.vx *= -0.92; }
             else if (p.x > worldW - p.radius) { p.x = worldW - p.radius; p.vx *= -0.92; }
@@ -1667,48 +1689,50 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
             if (p.y < p.radius) { p.y = p.radius; p.vy *= -0.92; }
             else if (p.y > worldH - p.radius) { p.y = worldH - p.radius; p.vy *= -0.92; }
           }
+          
+          if (shouldCheckCollisions) {
+              for (let i = 0; i < particles.length; i++) {
+                const p1 = particles[i];
+                if (p1.isFalling) continue;
 
-          for (let i = 0; i < particles.length; i++) {
-            const p1 = particles[i];
-            if (p1.isFalling) continue;
+                for (let j = i + 1; j < particles.length; j++) {
+                  const p2 = particles[j];
+                  if (p2.isFalling) continue;
 
-            for (let j = i + 1; j < particles.length; j++) {
-              const p2 = particles[j];
-              if (p2.isFalling) continue;
+                  const dx = p2.x - p1.x;
+                  const dy = p2.y - p1.y;
+                  const minDist = p1.radius + p2.radius;
+                  const distSq = dx * dx + dy * dy;
+                  if (distSq >= minDist * minDist) continue;
 
-              const dx = p2.x - p1.x;
-              const dy = p2.y - p1.y;
-              const minDist = p1.radius + p2.radius;
-              const distSq = dx * dx + dy * dy;
-              if (distSq >= minDist * minDist) continue;
+                  const dist = Math.sqrt(distSq) || 0.001;
+                  const nx = dx / dist;
+                  const ny = dy / dist;
 
-              const dist = Math.sqrt(distSq) || 0.001;
-              const nx = dx / dist;
-              const ny = dy / dist;
+                  const overlap = minDist - dist;
+                  const totalMass = (p1.mass + p2.mass) || 1;
+                  const move1 = (p2.mass / totalMass);
+                  const move2 = (p1.mass / totalMass);
 
-              const overlap = minDist - dist;
-              const totalMass = (p1.mass + p2.mass) || 1;
-              const move1 = (p2.mass / totalMass);
-              const move2 = (p1.mass / totalMass);
+                  if (!p1.isFixed) { p1.x -= nx * overlap * move1 * FREE_REPULSE; p1.y -= ny * overlap * move1 * FREE_REPULSE; }
+                  if (!p2.isFixed) { p2.x += nx * overlap * move2 * FREE_REPULSE; p2.y += ny * overlap * move2 * FREE_REPULSE; }
 
-              if (!p1.isFixed) { p1.x -= nx * overlap * move1 * FREE_REPULSE; p1.y -= ny * overlap * move1 * FREE_REPULSE; }
-              if (!p2.isFixed) { p2.x += nx * overlap * move2 * FREE_REPULSE; p2.y += ny * overlap * move2 * FREE_REPULSE; }
+                  const rvx = p2.vx - p1.vx;
+                  const rvy = p2.vy - p1.vy;
+                  const velAlongNormal = rvx * nx + rvy * ny;
+                  if (velAlongNormal > 0) continue;
 
-              const rvx = p2.vx - p1.vx;
-              const rvy = p2.vy - p1.vy;
-              const velAlongNormal = rvx * nx + rvy * ny;
-              if (velAlongNormal > 0) continue;
+                  const restitution = 0.90;
+                  let impulse = -(1 + restitution) * velAlongNormal;
+                  impulse /= (1 / p1.mass + 1 / p2.mass);
 
-              const restitution = 0.90;
-              let impulse = -(1 + restitution) * velAlongNormal;
-              impulse /= (1 / p1.mass + 1 / p2.mass);
+                  const ix = impulse * nx;
+                  const iy = impulse * ny;
 
-              const ix = impulse * nx;
-              const iy = impulse * ny;
-
-              if (!p1.isFixed) { p1.vx -= ix / p1.mass; p1.vy -= iy / p1.mass; }
-              if (!p2.isFixed) { p2.vx += ix / p2.mass; p2.vy += iy / p2.mass; }
-            }
+                  if (!p1.isFixed) { p1.vx -= ix / p1.mass; p1.vy -= iy / p1.mass; }
+                  if (!p2.isFixed) { p2.vx += ix / p2.mass; p2.vy += iy / p2.mass; }
+                }
+              }
           }
         }
       } else {
@@ -1724,8 +1748,12 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           const tx = p.mapToX ?? p.x;
           const ty = p.mapToY ?? p.y;
 
-          const baseX = fx + (tx - fx) * ease;
-          const baseY = fy + (ty - fy) * ease;
+          // Safe math
+          const safeTx = isNaN(tx) ? p.x : tx;
+          const safeTy = isNaN(ty) ? p.y : ty;
+
+          const baseX = fx + (safeTx - fx) * ease;
+          const baseY = fy + (safeTy - fy) * ease;
 
           const jitterAmp = 1.6 * rs.floatStrengthRaw;
           const jx = Math.sin(now * 0.002 + p.phase) * jitterAmp;
@@ -1738,6 +1766,8 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       
       // DRAW particles
       for (const p of particlesRef.current) {
+        if (isNaN(p.x) || isNaN(p.y)) continue;
+        
         let drawRadius = p.radius;
         let alpha = 1.0;
 
