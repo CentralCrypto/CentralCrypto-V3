@@ -35,8 +35,7 @@ import {
 import { fetchTopCoins } from '../services/api';
 
 // --- SOUND PATHS (served from /public) ---
-// Coloque os arquivos em: /public/sfx/
-const BASE = (import.meta as any).env?.BASE_URL || '/'; // "/" no dev, e "/v3/" ou similar no build se você configurar base
+const BASE = import.meta.env.BASE_URL || '/';
 
 const SND_FUNDO = `${BASE}sfx/fundo.mp3`;
 const SND_BOLAS = `${BASE}sfx/bolas.mp3`;
@@ -44,6 +43,7 @@ const SND_CACAPA = `${BASE}sfx/cacapa.mp3`;
 const SND_GAMEOVER = `${BASE}sfx/gameover.mp3`;
 const SND_VITORIA = `${BASE}sfx/vitoria.mp3`;
 const SND_FALL = `${BASE}sfx/fall.mp3`;
+
 
 // --- INTERFACES ---
 interface Particle {
