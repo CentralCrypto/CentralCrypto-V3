@@ -18,7 +18,9 @@ import {
   RefreshCw,
   Trophy,
   LogOut,
-  RotateCcw
+  RotateCcw,
+  Target,
+  Crosshair
 } from 'lucide-react';
 import { 
   Twitter, 
@@ -249,6 +251,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   
   // Game states
   const [gameOver, setGameOver] = useState(false);
+  const [gameWon, setGameWon] = useState(false);
   const [showGameIntro, setShowGameIntro] = useState(false);
 
   // Widget specific: Fewer coins when minimized
@@ -311,14 +314,21 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   const sfxHitRef = useRef<HTMLAudioElement | null>(null);
   const sfxPocketRef = useRef<HTMLAudioElement | null>(null);
 
-  // ====== GAME 2-CLICK MECHANIC ======
-  const gameCtlRef = useRef<{
-    phase: 0 | 1 | 2 | 3;
-    aimX: number; aimY: number;
-    aimPulseT: number;
-    powerPull: number;
-    holdStart: number;
-  }>({ phase: 0, aimX: 0, aimY: 0, aimPulseT: 0, powerPull: 0, holdStart: 0 });
+  // ====== GAME NEW MECHANIC ======
+  // aimLocked: true when user clicks once. Then the slider UI appears.
+  const [isAimLocked, setIsAimLocked] = useState(false);
+  // shotPower: 0 to 100, controlled by UI Slider
+  const [shotPower, setShotPower] = useState(50);
+  
+  // Refs for loop access
+  const isAimLockedRef = useRef(false);
+  const shotPowerRef = useRef(50);
+  
+  useEffect(() => { isAimLockedRef.current = isAimLocked; }, [isAimLocked]);
+  useEffect(() => { shotPowerRef.current = shotPower; }, [shotPower]);
+
+  // Game Aim State (Position of aim target)
+  const gameAimRef = useRef<{ x: number, y: number }>({ x: 0, y: 0 });
 
   const cueHideUntilRef = useRef<number>(0);
   const pointerDownRef = useRef(false);
@@ -448,16 +458,22 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         setDetailOpen(false);
         setSettingsOpen(false);
         setLegendTipOpen(false);
+        
+        // Cancel Aim
+        setIsAimLocked(false);
 
         if (draggedParticleRef.current) {
           draggedParticleRef.current.isFixed = false;
           draggedParticleRef.current = null;
         }
         isPanningRef.current = false;
-
-        gameCtlRef.current.phase = 0;
-        gameCtlRef.current.powerPull = 0;
         pointerDownRef.current = false;
+      }
+      
+      // Fire on Spacebar if Aim Locked
+      if (e.code === 'Space' && isAimLockedRef.current) {
+          e.preventDefault();
+          executeShot();
       }
     };
     window.addEventListener('keydown', onKey);
@@ -713,18 +729,21 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     setPocketedUI({ count: 0, max: maxPocket });
     floatingTextsRef.current = [];
 
-    gameCtlRef.current.phase = 0;
-    gameCtlRef.current.powerPull = 0;
+    // Reset Controls
+    setIsAimLocked(false);
+    setShotPower(50);
+    gameAimRef.current = { x: 0, y: 0 };
     cueHideUntilRef.current = 0;
     pointerDownRef.current = false;
 
     setGameHasShot(false);
+    setGameWon(false);
   }, []);
 
   // ===== Reset button: reset zoom + also resets free mode to map start + resets game =====
   const hardResetView = useCallback(() => {
-    gameCtlRef.current.phase = 0;
-    gameCtlRef.current.powerPull = 0;
+    setIsAimLocked(false);
+    setShotPower(50);
     pointerDownRef.current = false;
 
     if (draggedParticleRef.current) {
@@ -750,6 +769,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         setupGameLayout();
       }, 0);
       setGameOver(false);
+      setGameWon(false);
       setShowGameIntro(true);
     }
   }, [animateTransformTo, isFreeMode, computeMapTargets, isGameMode, setupGameLayout, isWidget]);
@@ -757,6 +777,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   // NEW: Quick Retry Handler (Instantly resets physics, no re-fetching)
   const handleQuickRetry = useCallback(() => {
       setGameOver(false);
+      setGameWon(false);
       setGameHasShot(false);
       
       // Reset score
@@ -764,8 +785,8 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       setPocketedUI(prev => ({ ...prev, count: 0 }));
 
       // Reset Physics Refs
-      gameCtlRef.current.phase = 0;
-      gameCtlRef.current.powerPull = 0;
+      setIsAimLocked(false);
+      setShotPower(50);
       pointerDownRef.current = false;
 
       // Force instant layout reset without waiting for state/effect chain
@@ -777,7 +798,41 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   const handleExitGame = useCallback(() => {
       setIsGameMode(false);
       setGameOver(false);
+      setGameWon(false);
   }, []);
+
+  // === NEW SHOOT MECHANISM ===
+  const executeShot = useCallback(() => {
+      if (!isAimLocked) return;
+      
+      const cue = particlesRef.current.find(pp => String(pp.coin.id).toLowerCase() === 'bitcoin');
+      if (!cue || cue.isFalling) return;
+
+      const aimTx = gameAimRef.current.x;
+      const aimTy = gameAimRef.current.y;
+      
+      const dx = aimTx - cue.x;
+      const dy = aimTy - cue.y;
+      const dist = Math.hypot(dx, dy) || 0.0001;
+
+      const nx = dx / dist;
+      const ny = dy / dist;
+
+      // Power is derived from the slider (0-100) mapped to game physics force
+      const pullNorm = clamp(shotPower / 100, 0.01, 1);
+      const basePower = 42000;
+      const power = basePower * pullNorm;
+
+      cue.vx += nx * (power / Math.max(1, cue.mass));
+      cue.vy += ny * (power / Math.max(1, cue.mass));
+
+      cueHideUntilRef.current = performance.now() + 5000;
+      playHit();
+
+      setGameHasShot(true);
+      setIsAimLocked(false);
+      setShotPower(50); // Reset slider
+  }, [isAimLocked, shotPower, playHit]);
 
   // ===== Magazine fetch =====
   const fetchMagazine = useCallback(async () => {
@@ -950,6 +1005,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       setLegendTipOpen(false);
       
       setGameOver(false);
+      setGameWon(false);
       setShowGameIntro(true);
 
       // ajuste: garante transform neutro ao entrar no game
@@ -966,6 +1022,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       setLegendTipOpen(false);
       
       setGameOver(false);
+      setGameWon(false);
       setShowGameIntro(false);
 
       if (draggedParticleRef.current) {
@@ -980,8 +1037,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       }, 0);
     }
 
-    gameCtlRef.current.phase = 0;
-    gameCtlRef.current.powerPull = 0;
+    setIsAimLocked(false);
     pointerDownRef.current = false;
   }, [isGameMode]);
 
@@ -1014,28 +1070,14 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
     if (detailOpenRef.current) return;
 
-    // game aiming / power drag
+    // Game Aiming Logic
     if (isGameMode) {
       const cue = particlesRef.current.find(pp => String(pp.coin.id).toLowerCase() === 'bitcoin');
       if (!cue || cue.isFalling) return;
 
-      if (gameCtlRef.current.phase === 1) {
-        gameCtlRef.current.aimX = wpos.x;
-        gameCtlRef.current.aimY = wpos.y;
-        return;
-      }
-
-      if (gameCtlRef.current.phase === 3) {
-        const dx = gameCtlRef.current.aimX - cue.x;
-        const dy = gameCtlRef.current.aimY - cue.y;
-        const distDir = Math.hypot(dx, dy) || 0.0001;
-        const nx = dx / distDir;
-        const ny = dy / distDir;
-
-        const along = (wpos.x - cue.x) * nx + (wpos.y - cue.y) * ny;
-        const pull = clamp(-along, 0, 220);
-        gameCtlRef.current.powerPull = pull;
-        return;
+      // Only update aim ref if Aim IS NOT locked
+      if (!isAimLocked) {
+        gameAimRef.current = { x: wpos.x, y: wpos.y };
       }
     }
 
@@ -1058,30 +1100,33 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-
     const { k, x, y } = transformRef.current;
 
-    let found: Particle | null = null;
-    for (let i = particlesRef.current.length - 1; i >= 0; i--) {
-      const p = particlesRef.current[i];
-      if (p.isFalling) continue;
+    // Hover Detection
+    if (!isGameMode) {
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
 
-      const sx = p.x * k + x;
-      const sy = p.y * k + y;
-      const sr = p.radius;
+        let found: Particle | null = null;
+        for (let i = particlesRef.current.length - 1; i >= 0; i--) {
+        const p = particlesRef.current[i];
+        if (p.isFalling) continue;
 
-      const dx = sx - mx;
-      const dy = sy - my;
+        const sx = p.x * k + x;
+        const sy = p.y * k + y;
+        const sr = p.radius;
 
-      if (dx * dx + dy * dy < (sr + 5) * (sr + 5)) {
-        found = p;
-        break;
-      }
+        const dx = sx - mx;
+        const dy = sy - my;
+
+        if (dx * dx + dy * dy < (sr + 5) * (sr + 5)) {
+            found = p;
+            break;
+        }
+        }
+        setHoveredParticle(found);
     }
-    setHoveredParticle(found);
   };
 
   const handlePointerDown = (e: React.PointerEvent) => {
@@ -1094,24 +1139,10 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       const cue = particlesRef.current.find(pp => String(pp.coin.id).toLowerCase() === 'bitcoin');
       if (!cue || cue.isFalling) return;
 
-      const w = screenToWorld(e.clientX, e.clientY);
-
-      if (gameCtlRef.current.phase === 0) {
-        gameCtlRef.current.phase = 1;
-        gameCtlRef.current.aimX = w.x;
-        gameCtlRef.current.aimY = w.y;
-        gameCtlRef.current.powerPull = 0;
-        gameCtlRef.current.holdStart = performance.now();
-        return;
+      if (!isAimLocked) {
+         // Lock Aim on First Click
+         setIsAimLocked(true);
       }
-
-      if (gameCtlRef.current.phase === 2) {
-        gameCtlRef.current.phase = 3;
-        gameCtlRef.current.powerPull = 0;
-        gameCtlRef.current.holdStart = performance.now();
-        return;
-      }
-
       return;
     }
 
@@ -1137,55 +1168,12 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     if (!pointerDownRef.current) return;
     pointerDownRef.current = false;
 
-    if (isGameMode) {
-      const cue = particlesRef.current.find(pp => String(pp.coin.id).toLowerCase() === 'bitcoin');
-      if (!cue || cue.isFalling) {
-        gameCtlRef.current.phase = 0;
-        gameCtlRef.current.powerPull = 0;
-        return;
-      }
-
-      if (gameCtlRef.current.phase === 1) {
-        gameCtlRef.current.phase = 2;
-        gameCtlRef.current.aimPulseT = performance.now();
-        return;
-      }
-
-      if (gameCtlRef.current.phase === 3) {
-        const dx = gameCtlRef.current.aimX - cue.x;
-        const dy = gameCtlRef.current.aimY - cue.y;
-        const dist = Math.hypot(dx, dy) || 0.0001;
-
-        const nx = dx / dist;
-        const ny = dy / dist;
-
-        const pull = clamp(gameCtlRef.current.powerPull, 0, 220);
-        const pullNorm = clamp(pull / 220, 0.01, 1);
-
-        // ajuste: tacada bem mais forte (e bola não “pesada”)
-        const basePower = 42000;
-        const power = basePower * pullNorm;
-
-        cue.vx += nx * (power / Math.max(1, cue.mass));
-        cue.vy += ny * (power / Math.max(1, cue.mass));
-
-        cueHideUntilRef.current = performance.now() + 5000;
-        playHit();
-
-        setGameHasShot(true);
-
-        gameCtlRef.current.phase = 0;
-        gameCtlRef.current.powerPull = 0;
-        return;
-      }
-    }
-
     if (draggedParticleRef.current) {
       draggedParticleRef.current.isFixed = false;
       draggedParticleRef.current = null;
     }
     isPanningRef.current = false;
-  }, [isGameMode, playHit]);
+  }, []);
 
   useEffect(() => {
     const up = () => handlePointerUp();
@@ -1221,10 +1209,10 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     if (isGameMode) {
       return (
         <>
-          <div><span className="font-black">Modo Game (2 cliques)</span></div>
-          <div>• 1º clique: fixa a mira.</div>
-          <div>• 2º clique: segure e arraste o taco para trás para regular a força. Solte para dar a tacada.</div>
-          <div>• Bolas encaçapadas saem definitivamente.</div>
+          <div><span className="font-black">Modo Game</span></div>
+          <div>• Mova o mouse para mirar.</div>
+          <div>• Clique para <b>TRAVAR A MIRA</b>.</div>
+          <div>• Use o painel inferior para ajustar a força e tacar.</div>
         </>
       );
     }
@@ -1264,9 +1252,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   const perfColor = (pct?: number) => (Number(pct) >= 0 ? '#089981' : '#f23645');
 
   const effectiveNumCoins = useMemo(() => getEffectiveCount(), [getEffectiveCount]);
-
-  const gameCoinOptions = useMemo(() => [16, 24, 32], []);
-  const normalCoinOptions = useMemo(() => [25, 50, 100, 150, 200, 250], []);
 
   const magSlides = useMemo(() => {
     const out: MagazinePost[][] = [];
@@ -1311,8 +1296,9 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       const pulse = isLocked ? (1 + Math.sin(performance.now() * 0.012) * 0.12) : 1;
       ctx2.save();
       ctx2.globalAlpha = isLocked ? 0.92 : 0.75;
-      ctx2.strokeStyle = isDarkMode ? 'rgba(255,255,255,0.80)' : 'rgba(0,0,0,0.75)';
-      ctx2.lineWidth = 2 / k;
+      // Change color when locked to indicate ready state
+      ctx2.strokeStyle = isLocked ? '#22c55e' : (isDarkMode ? 'rgba(255,255,255,0.80)' : 'rgba(0,0,0,0.75)');
+      ctx2.lineWidth = (isLocked ? 3 : 2) / k;
 
       ctx2.beginPath();
       ctx2.arc(x, y, (12 * pulse) / k, 0, Math.PI * 2);
@@ -1327,53 +1313,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       ctx2.moveTo(x, y - 18 / k);
       ctx2.lineTo(x, y + 18 / k);
       ctx2.stroke();
-
-      ctx2.restore();
-    };
-
-    const drawPowerMeter = (
-      ctx2: CanvasRenderingContext2D,
-      x: number,
-      y: number,
-      pct: number,
-      k: number,
-      isDarkMode: boolean
-    ) => {
-      const w = 110 / k;
-      const h = 24 / k;
-      const r = 6 / k;
-
-      ctx2.save();
-      ctx2.globalAlpha = 0.92;
-
-      ctx2.fillStyle = isDarkMode ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.85)';
-      ctx2.strokeStyle = isDarkMode ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.20)';
-      ctx2.lineWidth = 1.5 / k;
-
-      // Draw background
-      ctx2.beginPath();
-      ctx2.roundRect(x - w / 2, y - h / 2, w, h, r);
-      ctx2.fill();
-      ctx2.stroke();
-
-      const pad = 4 / k;
-      const barW = w - pad * 2;
-      const barH = h - pad * 2;
-      const barX = x - w / 2 + pad;
-      const barY = y - h / 2 + pad;
-
-      ctx2.fillStyle = isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)';
-      ctx2.fillRect(barX, barY, barW, barH);
-
-      const fillW = barW * clamp(pct, 0, 1);
-      ctx2.fillStyle = pct > 0.8 ? '#ef4444' : pct > 0.5 ? '#eab308' : '#22c55e';
-      ctx2.fillRect(barX, barY, fillW, barH);
-
-      ctx2.fillStyle = isDarkMode ? 'rgba(255,255,255,0.95)' : 'rgba(0,0,0,0.9)';
-      ctx2.font = `800 ${10 / k}px Inter`;
-      ctx2.textAlign = 'center';
-      ctx2.textBaseline = 'middle';
-      ctx2.fillText(`${Math.round(pct * 100)}%`, x, y);
 
       ctx2.restore();
     };
@@ -1569,6 +1508,11 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         const stepDt = dt / subSteps;
         const worldW = width / k;
         const worldH = height / k;
+        
+        // Check for WIN condition
+        if (pocketedCountRef.current === pocketedMaxRef.current && !gameWon) {
+             setGameWon(true);
+        }
 
         for (let step = 0; step < subSteps; step++) {
           const drag = Math.pow(GAME_LINEAR_DAMP, stepDt * 60);
@@ -1942,13 +1886,17 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           let aimTx = cx + 120;
           let aimTy = cy;
 
-          const hasMouse = !!lastMousePosRef.current;
-          if (gameCtlRef.current.phase === 1 || gameCtlRef.current.phase === 2 || gameCtlRef.current.phase === 3) {
-            aimTx = gameCtlRef.current.aimX;
-            aimTy = gameCtlRef.current.aimY;
-          } else if (hasMouse && lastMousePosRef.current) {
-            aimTx = lastMousePosRef.current.x;
-            aimTy = lastMousePosRef.current.y;
+          // AIMING LOGIC
+          if (isAimLockedRef.current) {
+             // Locked: Use stored ref
+             aimTx = gameAimRef.current.x;
+             aimTy = gameAimRef.current.y;
+          } else {
+             // Free: Use Mouse Pos
+             if (lastMousePosRef.current) {
+                 aimTx = lastMousePosRef.current.x;
+                 aimTy = lastMousePosRef.current.y;
+             }
           }
 
           const dx = aimTx - cx;
@@ -1958,7 +1906,9 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           const uy = dy / dist;
 
           const contactGap = 12;
-          const pull = (gameCtlRef.current.phase === 3) ? gameCtlRef.current.powerPull : 14;
+          
+          // Visual pullback depends on Slider now
+          const pull = isAimLockedRef.current ? clamp(shotPowerRef.current * 1.5, 0, 200) : 14;
 
           const bob = (Math.sin(now * 0.012) * 6);
 
@@ -2027,20 +1977,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           ctx.restore();
 
           // aim marker
-          drawAimMarker(ctx, aimTx, aimTy, k, gameCtlRef.current.phase === 2 || gameCtlRef.current.phase === 3, rs.isDark);
-
-          // power meter (FIXED ABOVE BALL)
-          if (gameCtlRef.current.phase === 2 || gameCtlRef.current.phase === 3) {
-            const pct = clamp((gameCtlRef.current.phase === 3 ? gameCtlRef.current.powerPull : 0) / 220, 0.01, 1);
-            
-            // Fixed position above cue ball
-            const barW = 80 / k;
-            const barH = 8 / k;
-            const barX = cx; // center X
-            const barY = cy - cueBall.radius - (30 / k); // center Y above ball
-
-            drawPowerMeter(ctx, barX, barY, pct, k, rs.isDark);
-          }
+          drawAimMarker(ctx, aimTx, aimTy, k, isAimLockedRef.current, rs.isDark);
         }
       }
 
@@ -2316,9 +2253,9 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                 </div>
                 <h2 className="text-2xl font-black text-gray-900 dark:text-white uppercase mb-2">Modo Game</h2>
                 <div className="text-sm text-gray-600 dark:text-gray-300 mb-6 space-y-2 text-left bg-gray-100 dark:bg-black/20 p-4 rounded-xl">
-                    <p className="flex items-start gap-2"><span className="text-[#dd9933] font-bold">•</span><span>Use o mouse para mirar e tacar.</span></p>
-                    <p className="flex items-start gap-2"><span className="text-[#dd9933] font-bold">•</span><span><b>Clique 1:</b> Fixa a mira.</span></p>
-                    <p className="flex items-start gap-2"><span className="text-[#dd9933] font-bold">•</span><span><b>Clique 2 (Segurar):</b> Arraste para trás para definir a força. Solte para tacar.</span></p>
+                    <p className="flex items-start gap-2"><span className="text-[#dd9933] font-bold">•</span><span>Use o mouse para mirar.</span></p>
+                    <p className="flex items-start gap-2"><span className="text-[#dd9933] font-bold">•</span><span><b>Clique 1:</b> Trava a mira.</span></p>
+                    <p className="flex items-start gap-2"><span className="text-[#dd9933] font-bold">•</span><span><b>Painel Inferior:</b> Ajuste a força no slider e clique em TACAR.</span></p>
                     <p className="flex items-start gap-2"><span className="text-[#dd9933] font-bold">•</span><span>Encaçape as moedas menores.</span></p>
                     <p className="flex items-start gap-2 text-red-500 font-bold"><span className="text-red-500 font-bold">•</span><span>Cuidado: Se o Bitcoin cair, GAME OVER!</span></p>
                 </div>
@@ -2332,8 +2269,50 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         </div>
       )}
 
+      {/* WIN SCREEN */}
+      {gameWon && isGameMode && (
+        <div className="absolute inset-0 z-[100] flex items-center justify-center bg-green-900/90 backdrop-blur-md animate-in zoom-in duration-300 p-4">
+            <div className="bg-white dark:bg-[#1a1c1e] p-8 rounded-3xl border-4 border-yellow-400 shadow-2xl relative w-full max-w-md text-center overflow-hidden">
+                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10"></div>
+                
+                <div className="absolute -top-12 left-1/2 -translate-x-1/2">
+                     <div className="w-24 h-24 bg-yellow-400 rounded-full flex items-center justify-center shadow-[0_0_40px_rgba(250,204,21,0.6)] border-4 border-white dark:border-[#1a1c1e] animate-bounce">
+                        <Trophy size={48} className="text-black fill-white" />
+                     </div>
+                </div>
+
+                <div className="mt-10 mb-6 relative z-10">
+                    <h1 className="text-4xl font-black text-green-600 dark:text-green-400 uppercase tracking-tighter drop-shadow-sm">VITÓRIA!</h1>
+                    <p className="text-sm font-bold text-gray-600 dark:text-gray-300 uppercase tracking-widest mt-2">A Dominância do Bitcoin é 100%</p>
+                </div>
+
+                <div className="bg-green-50 dark:bg-green-900/20 p-6 rounded-2xl mb-8 border border-green-200 dark:border-green-800 relative z-10">
+                    <div className="text-xs font-black text-green-600 dark:text-green-400 uppercase tracking-[0.2em] mb-2">Pontuação Perfeita</div>
+                    <div className="text-6xl font-black text-yellow-500 drop-shadow-md">
+                        {pocketedUI.count} <span className="text-3xl text-gray-400">/ {pocketedUI.max}</span>
+                    </div>
+                </div>
+
+                <div className="flex gap-4 relative z-10">
+                    <button 
+                        onClick={handleExitGame} 
+                        className="flex-1 py-4 px-6 rounded-xl border-2 border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-300 font-black text-sm uppercase tracking-wider hover:bg-gray-100 dark:hover:bg-white/5 transition-colors flex items-center justify-center gap-2"
+                    >
+                        <LogOut size={16} /> Sair
+                    </button>
+                    <button 
+                        onClick={handleQuickRetry} 
+                        className="flex-1 py-4 px-6 rounded-xl bg-[#dd9933] hover:bg-amber-600 text-black font-black text-sm uppercase tracking-wider transition-all shadow-xl hover:shadow-amber-500/20 active:scale-95 flex items-center justify-center gap-2"
+                    >
+                        <RotateCcw size={16} /> Jogar Novamente
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
       {/* GAME OVER SCREEN - NEW COMPACT VERSION */}
-      {gameOver && isGameMode && (
+      {gameOver && isGameMode && !gameWon && (
         <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md animate-in zoom-in duration-300 p-4">
             <div className="bg-white dark:bg-[#1a1c1e] p-6 rounded-2xl border border-red-500/30 shadow-2xl relative w-full max-w-sm text-center">
                 
@@ -2371,6 +2350,47 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                 </div>
             </div>
         </div>
+      )}
+
+      {/* GAME CONTROLS (AIM LOCKED UI) */}
+      {isGameMode && isAimLocked && !gameOver && !gameWon && (
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-[90] flex flex-col items-center gap-4 animate-in slide-in-from-bottom-10 fade-in duration-300 w-full max-w-md px-4">
+              <div className="bg-white/90 dark:bg-[#1a1c1e]/90 backdrop-blur-xl border border-gray-200 dark:border-white/10 p-5 rounded-2xl shadow-2xl w-full">
+                  <div className="flex justify-between items-center mb-4">
+                      <div className="flex items-center gap-2 text-[#dd9933]">
+                          <Target size={18} className="animate-pulse" />
+                          <span className="text-xs font-black uppercase tracking-widest">Mira Travada</span>
+                      </div>
+                      <button onClick={() => setIsAimLocked(false)} className="text-xs font-bold text-gray-500 hover:text-red-500 uppercase tracking-wider transition-colors">
+                          Cancelar (Esc)
+                      </button>
+                  </div>
+                  
+                  <div className="mb-6 relative">
+                      <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase mb-2">
+                          <span>Fraco</span>
+                          <span className="text-[#dd9933]">{shotPower}%</span>
+                          <span>Forte</span>
+                      </div>
+                      <input 
+                          type="range" 
+                          min="1" 
+                          max="100" 
+                          value={shotPower} 
+                          onChange={(e) => setShotPower(parseInt(e.target.value))}
+                          className="w-full h-3 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-[#dd9933]"
+                      />
+                  </div>
+
+                  <button 
+                      onClick={executeShot}
+                      className="w-full py-4 bg-[#dd9933] hover:bg-amber-600 text-black font-black text-lg uppercase tracking-[0.2em] rounded-xl shadow-lg hover:shadow-amber-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3"
+                  >
+                      <Crosshair size={24} />
+                      TACAR
+                  </button>
+              </div>
+          </div>
       )}
 
       {/* DETAIL CARD SIMPLE LIST */}
