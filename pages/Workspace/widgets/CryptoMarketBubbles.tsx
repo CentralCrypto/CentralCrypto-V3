@@ -318,11 +318,11 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   // aimLocked: true when user clicks once. Then the slider UI appears.
   const [isAimLocked, setIsAimLocked] = useState(false);
   // shotPower: 0 to 100, controlled by UI Slider
-  const [shotPower, setShotPower] = useState(50);
+  const [shotPower, setShotPower] = useState(0);
   
   // Refs for loop access
   const isAimLockedRef = useRef(false);
-  const shotPowerRef = useRef(50);
+  const shotPowerRef = useRef(0);
   
   useEffect(() => { isAimLockedRef.current = isAimLocked; }, [isAimLocked]);
   useEffect(() => { shotPowerRef.current = shotPower; }, [shotPower]);
@@ -461,6 +461,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         
         // Cancel Aim
         setIsAimLocked(false);
+        setShotPower(0);
 
         if (draggedParticleRef.current) {
           draggedParticleRef.current.isFixed = false;
@@ -731,7 +732,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
     // Reset Controls
     setIsAimLocked(false);
-    setShotPower(50);
+    setShotPower(0);
     gameAimRef.current = { x: 0, y: 0 };
     cueHideUntilRef.current = 0;
     pointerDownRef.current = false;
@@ -743,7 +744,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   // ===== Reset button: reset zoom + also resets free mode to map start + resets game =====
   const hardResetView = useCallback(() => {
     setIsAimLocked(false);
-    setShotPower(50);
+    setShotPower(0);
     pointerDownRef.current = false;
 
     if (draggedParticleRef.current) {
@@ -786,7 +787,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
       // Reset Physics Refs
       setIsAimLocked(false);
-      setShotPower(50);
+      setShotPower(0);
       pointerDownRef.current = false;
 
       // Force instant layout reset without waiting for state/effect chain
@@ -819,6 +820,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       const ny = dy / dist;
 
       // Power is derived from the slider (0-100) mapped to game physics force
+      // We start aiming with 0.01 pull, so min is 0.01
       const pullNorm = clamp(shotPower / 100, 0.01, 1);
       const basePower = 42000;
       const power = basePower * pullNorm;
@@ -831,7 +833,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
       setGameHasShot(true);
       setIsAimLocked(false);
-      setShotPower(50); // Reset slider
+      setShotPower(0); // Reset slider
   }, [isAimLocked, shotPower, playHit]);
 
   // ===== Magazine fetch =====
@@ -1038,6 +1040,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     }
 
     setIsAimLocked(false);
+    setShotPower(0);
     pointerDownRef.current = false;
   }, [isGameMode]);
 
@@ -1142,6 +1145,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       if (!isAimLocked) {
          // Lock Aim on First Click
          setIsAimLocked(true);
+         setShotPower(0); // RESET POWER TO 0 ON LOCK
       }
       return;
     }
@@ -1212,7 +1216,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           <div><span className="font-black">Modo Game</span></div>
           <div>• Mova o mouse para mirar.</div>
           <div>• Clique para <b>TRAVAR A MIRA</b>.</div>
-          <div>• Use o painel inferior para ajustar a força e tacar.</div>
+          <div>• Use o slider central para tacar.</div>
         </>
       );
     }
@@ -2354,40 +2358,32 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
       {/* GAME CONTROLS (AIM LOCKED UI) */}
       {isGameMode && isAimLocked && !gameOver && !gameWon && (
-          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-[90] flex flex-col items-center gap-4 animate-in slide-in-from-bottom-10 fade-in duration-300 w-full max-w-md px-4">
-              <div className="bg-white/90 dark:bg-[#1a1c1e]/90 backdrop-blur-xl border border-gray-200 dark:border-white/10 p-5 rounded-2xl shadow-2xl w-full">
-                  <div className="flex justify-between items-center mb-4">
-                      <div className="flex items-center gap-2 text-[#dd9933]">
-                          <Target size={18} className="animate-pulse" />
-                          <span className="text-xs font-black uppercase tracking-widest">Mira Travada</span>
-                      </div>
-                      <button onClick={() => setIsAimLocked(false)} className="text-xs font-bold text-gray-500 hover:text-red-500 uppercase tracking-wider transition-colors">
-                          Cancelar (Esc)
-                      </button>
-                  </div>
+          <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-[90] flex flex-col items-center animate-in slide-in-from-bottom-10 fade-in duration-200">
+              <div className="text-[10px] font-black text-white uppercase tracking-widest mb-2 drop-shadow-md">
+                  Ajuste a Força & Solte
+              </div>
+              <div className="bg-[#1a1c1e]/90 backdrop-blur-xl border border-gray-700 rounded-full p-2 pl-4 pr-2 flex items-center gap-3 shadow-2xl">
+                  <span className="text-[#dd9933] font-mono font-bold text-sm w-8 text-right">{shotPower}%</span>
                   
-                  <div className="mb-6 relative">
-                      <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase mb-2">
-                          <span>Fraco</span>
-                          <span className="text-[#dd9933]">{shotPower}%</span>
-                          <span>Forte</span>
-                      </div>
-                      <input 
-                          type="range" 
-                          min="1" 
-                          max="100" 
-                          value={shotPower} 
-                          onChange={(e) => setShotPower(parseInt(e.target.value))}
-                          className="w-full h-3 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-[#dd9933]"
-                      />
-                  </div>
+                  <input 
+                      type="range" 
+                      min="0" 
+                      max="100" 
+                      value={shotPower}
+                      onChange={(e) => setShotPower(Number(e.target.value))}
+                      onMouseUp={executeShot}
+                      onTouchEnd={executeShot}
+                      className="w-48 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-[#dd9933] hover:accent-[#ffaa00]"
+                  />
+
+                  <div className="w-px h-6 bg-gray-700 mx-1"></div>
 
                   <button 
-                      onClick={executeShot}
-                      className="w-full py-4 bg-[#dd9933] hover:bg-amber-600 text-black font-black text-lg uppercase tracking-[0.2em] rounded-xl shadow-lg hover:shadow-amber-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3"
+                      onClick={() => setIsAimLocked(false)} 
+                      className="p-2 rounded-full hover:bg-white/10 text-gray-400 hover:text-red-500 transition-colors"
+                      title="Cancelar (Esc)"
                   >
-                      <Crosshair size={24} />
-                      TACAR
+                      <XCircle size={18} />
                   </button>
               </div>
           </div>
