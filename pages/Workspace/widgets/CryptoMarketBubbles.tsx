@@ -1,3 +1,4 @@
+
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiCoin, Language, DashboardItem } from '../../../types';
 import {
@@ -169,28 +170,39 @@ const drawWatermark = (
   width: number,
   height: number,
   img: HTMLImageElement | null,
-  isDark: boolean,
-  isGameMode: boolean
+  opacity: number,
+  // Optional specific dimensions (for drawing inside the pool table)
+  rect?: { x: number, y: number, w: number, h: number }
 ) => {
   if (!img || !img.complete || img.naturalWidth <= 0 || img.naturalHeight <= 0) return;
 
-  // Tamanho relativo: 50% da menor dimensão do container (ajustado para melhor visibilidade)
-  const minDim = Math.min(width, height);
-  const targetW = minDim * 0.5;
-  
-  const scale = targetW / img.naturalWidth;
-  const w = img.naturalWidth * scale;
-  const h = img.naturalHeight * scale;
+  let x, y, w, h;
 
-  const x = (width - w) / 2;
-  const y = (height - h) / 2;
+  if (rect) {
+      // Draw inside specific rect (Pool Table felt)
+      // Fit logo within 80% of rect dimensions
+      const margin = 0.8;
+      const scaleW = (rect.w * margin) / img.naturalWidth;
+      const scaleH = (rect.h * margin) / img.naturalHeight;
+      const scale = Math.min(scaleW, scaleH);
 
-  // Opacidade ajustada (aumentada para garantir visibilidade)
-  const alphaBase = isDark ? 0.12 : 0.08;
-  const alpha = isGameMode ? alphaBase * 0.6 : alphaBase;
+      w = img.naturalWidth * scale;
+      h = img.naturalHeight * scale;
+      x = rect.x + (rect.w - w) / 2;
+      y = rect.y + (rect.h - h) / 2;
+  } else {
+      // Draw standard centered (Map mode)
+      const minDim = Math.min(width, height);
+      const targetW = minDim * 0.5;
+      const scale = targetW / img.naturalWidth;
+      w = img.naturalWidth * scale;
+      h = img.naturalHeight * scale;
+      x = (width - w) / 2;
+      y = (height - h) / 2;
+  }
 
   ctx.save();
-  ctx.globalAlpha = alpha;
+  ctx.globalAlpha = opacity;
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(img, x, y, w, h);
@@ -1378,7 +1390,8 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     timeframe,
     floatStrengthRaw,
     trailLength,
-    searchTerm
+    searchTerm,
+    isWidget // Added
   });
 
   useEffect(() => {
@@ -1390,9 +1403,10 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       timeframe,
       floatStrengthRaw,
       trailLength,
-      searchTerm
+      searchTerm,
+      isWidget // Added
     };
-  }, [isDark, chartMode, isGameMode, isFreeMode, timeframe, floatStrengthRaw, trailLength, searchTerm]);
+  }, [isDark, chartMode, isGameMode, isFreeMode, timeframe, floatStrengthRaw, trailLength, searchTerm, isWidget]);
 
   // ===== RENDER LOOP (single mount, no flicker) =====
   useEffect(() => {
@@ -1455,15 +1469,19 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalAlpha = 1;
       // Is Widget Mode Background? Use standard bg color
-      if (isWidget) {
+      if (rs.isWidget) { // Changed from isWidget to rs.isWidget
           ctx.fillStyle = rs.isDark ? '#0b0f14' : '#ffffff';
       } else {
           ctx.fillStyle = rs.isGameMode ? (rs.isDark ? '#08110c' : '#e8f3ea') : (rs.isDark ? '#0b0f14' : '#ffffff');
       }
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.scale(dpr, dpr);
-
-      drawWatermark(ctx, width, height, watermarkRef.current, rs.isDark, rs.isGameMode);
+      
+      // Se não for Game Mode, desenha watermark aqui no centro (Map Mode)
+      if (!rs.isGameMode) {
+          // Fix: Argument of type 'boolean' is not assignable to parameter of type 'number'.
+          drawWatermark(ctx, width, height, watermarkRef.current, rs.isDark ? 0.05 : 0.08);
+      }
 
       const { k, x: panX, y: panY } = transformRef.current;
       ctx.save();
@@ -1522,6 +1540,11 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
         ctx.fillStyle = '#225533'; // Standard Pool Green
         ctx.fillRect(feltX, feltY, feltW, feltH);
+        
+        // --- DRAW WATERMARK ON TABLE (ON FELT) ---
+        // Desenha a marca d'água dentro da área do feltro, com opacidade adequada
+        // Fix: Expected 5-6 arguments, but got 7.
+        drawWatermark(ctx, width, height, watermarkRef.current, 0.12, { x: feltX, y: feltY, w: feltW, h: feltH });
 
         // 4. Draw Inner Cushions (Rails)
         // These are the transition from wood to felt. Simple dark green rects.
