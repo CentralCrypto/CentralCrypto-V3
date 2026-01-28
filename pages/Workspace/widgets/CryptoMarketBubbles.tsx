@@ -35,14 +35,16 @@ import {
 } from '../../../components/Icons';
 import { fetchTopCoins } from '../services/api';
 
-// --- SOUND IMPORTS (Relative to this file) ---
-// O usuário deve colocar estes arquivos na pasta pages/Workspace/widgets/
-const SND_FUNDO = new URL('./fundo.mp3', import.meta.url).href;
-const SND_BOLAS = new URL('./bolas.mp3', import.meta.url).href;
-const SND_CACAPA = new URL('./cacapa.mp3', import.meta.url).href;
-const SND_GAMEOVER = new URL('./gameover.mp3', import.meta.url).href;
-const SND_VITORIA = new URL('./vitoria.mp3', import.meta.url).href;
-const SND_FALL = new URL('./fall.mp3', import.meta.url).href;
+// --- SOUND PATHS (served from /public) ---
+// Coloque os arquivos em: /public/sfx/
+const BASE = import.meta.env.BASE_URL; // "/" no dev, e "/v3/" ou similar no build se você configurar base
+
+const SND_FUNDO = `${BASE}sfx/fundo.mp3`;
+const SND_BOLAS = `${BASE}sfx/bolas.mp3`;
+const SND_CACAPA = `${BASE}sfx/cacapa.mp3`;
+const SND_GAMEOVER = `${BASE}sfx/gameover.mp3`;
+const SND_VITORIA = `${BASE}sfx/vitoria.mp3`;
+const SND_FALL = `${BASE}sfx/fall.mp3`;
 
 // --- INTERFACES ---
 interface Particle {
