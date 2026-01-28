@@ -1,4 +1,3 @@
-
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiCoin, Language, DashboardItem } from '../../../types';
 import {
@@ -21,7 +20,9 @@ import {
   LogOut,
   RotateCcw,
   Target,
-  Crosshair
+  Crosshair,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import { 
   Twitter, 
@@ -40,6 +41,7 @@ const SND_BOLAS = new URL('./bolas.mp3', import.meta.url).href;
 const SND_CACAPA = new URL('./cacapa.mp3', import.meta.url).href;
 const SND_GAMEOVER = new URL('./gameover.mp3', import.meta.url).href;
 const SND_VITORIA = new URL('./vitoria.mp3', import.meta.url).href;
+const SND_FALL = new URL('./fall.mp3', import.meta.url).href;
 
 // --- INTERFACES ---
 interface Particle {
@@ -326,18 +328,28 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   const [pocketedUI, setPocketedUI] = useState({ count: 0, max: 0 });
 
   // ====== AUDIO SYSTEM ======
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [soundVolume, setSoundVolume] = useState(0.5);
+
+  // Audio state refs to avoid stale closures in game loop
+  const soundEnabledRef = useRef(soundEnabled);
+  const soundVolumeRef = useRef(soundVolume);
+  useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
+  useEffect(() => { soundVolumeRef.current = soundVolume; }, [soundVolume]);
+
   const bgMusicRef = useRef<HTMLAudioElement | null>(null);
   const sfxBolasRef = useRef<HTMLAudioElement | null>(null);
   const sfxCacapaRef = useRef<HTMLAudioElement | null>(null);
   const sfxGameOverRef = useRef<HTMLAudioElement | null>(null);
   const sfxVitoriaRef = useRef<HTMLAudioElement | null>(null);
+  const sfxFallRef = useRef<HTMLAudioElement | null>(null);
   const lastCollisionTimeRef = useRef(0); // Debounce collisions
 
-  const playSound = (audio: HTMLAudioElement | null, volume = 1.0) => {
-      if (!audio) return;
+  const playSound = (audio: HTMLAudioElement | null, volumeMultiplier = 1.0) => {
+      if (!audio || !soundEnabledRef.current) return;
       try {
           audio.currentTime = 0;
-          audio.volume = volume;
+          audio.volume = Math.max(0, Math.min(1, soundVolumeRef.current * volumeMultiplier));
           audio.play().catch(() => {}); // Ignore interaction errors
       } catch (e) {}
   };
@@ -345,21 +357,27 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   const playCollision = () => {
       const now = performance.now();
       if (now - lastCollisionTimeRef.current > 80) { // Limit to 1 sound every 80ms
-        playSound(sfxBolasRef.current, 0.6);
+        playSound(sfxBolasRef.current, 0.8);
         lastCollisionTimeRef.current = now;
       }
   };
 
   useEffect(() => {
-    // Init Audio Objects
-    bgMusicRef.current = new Audio(SND_FUNDO);
-    bgMusicRef.current.loop = true;
-    bgMusicRef.current.volume = 0.3;
+    // Helper to create and preload audio
+    const createAudio = (src: string, loop = false) => {
+        const a = new Audio(src);
+        a.loop = loop;
+        a.preload = 'auto';
+        a.volume = soundVolume;
+        return a;
+    };
 
-    sfxBolasRef.current = new Audio(SND_BOLAS);
-    sfxCacapaRef.current = new Audio(SND_CACAPA);
-    sfxGameOverRef.current = new Audio(SND_GAMEOVER);
-    sfxVitoriaRef.current = new Audio(SND_VITORIA);
+    bgMusicRef.current = createAudio(SND_FUNDO, true);
+    sfxBolasRef.current = createAudio(SND_BOLAS);
+    sfxCacapaRef.current = createAudio(SND_CACAPA);
+    sfxGameOverRef.current = createAudio(SND_GAMEOVER);
+    sfxVitoriaRef.current = createAudio(SND_VITORIA);
+    sfxFallRef.current = createAudio(SND_FALL);
 
     return () => {
         if(bgMusicRef.current) {
@@ -369,22 +387,29 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     };
   }, []);
 
-  // Manage BG Music based on Game Mode
+  // Update Volumes dynamically
   useEffect(() => {
-      if (isGameMode && bgMusicRef.current) {
+     if(bgMusicRef.current) bgMusicRef.current.volume = Math.max(0, Math.min(1, soundVolume * 0.3)); // Background lower
+  }, [soundVolume]);
+
+  // Manage BG Music based on Game Mode and Settings
+  useEffect(() => {
+      if (isGameMode && soundEnabled && bgMusicRef.current) {
           // Play on interaction (handled in pointerDown) or try now
           bgMusicRef.current.play().catch(() => {});
-      } else if (!isGameMode && bgMusicRef.current) {
+      } else if (bgMusicRef.current) {
           bgMusicRef.current.pause();
-          bgMusicRef.current.currentTime = 0;
+          if(!isGameMode) bgMusicRef.current.currentTime = 0;
       }
-  }, [isGameMode]);
+  }, [isGameMode, soundEnabled]);
 
   // ====== GAME NEW MECHANIC ======
   // aimLocked: true when user clicks once. Then the slider UI appears.
   const [isAimLocked, setIsAimLocked] = useState(false);
   // shotPower: 0 to 100, controlled by UI Slider
   const [shotPower, setShotPower] = useState(0);
+  // Position for the slider popup (clamped to screen)
+  const [aimLockPos, setAimLockPos] = useState({ x: 0, y: 0 });
   
   // Refs for loop access
   const isAimLockedRef = useRef(false);
@@ -879,7 +904,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       setGameHasShot(true);
       setIsAimLocked(false);
       setShotPower(0); // Reset slider
-  }, [isAimLocked, shotPower]);
+  }, [isAimLocked, shotPower, soundEnabled, soundVolume]);
 
   // ===== Magazine fetch =====
   const fetchMagazine = useCallback(async () => {
@@ -1063,7 +1088,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       }, 0);
       
       // Attempt play bg music if allowed
-      if(bgMusicRef.current) bgMusicRef.current.play().catch(()=>{});
+      if(bgMusicRef.current && soundEnabled) bgMusicRef.current.play().catch(()=>{});
 
     } else {
       setGameHasShot(false);
@@ -1191,7 +1216,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     pointerDownRef.current = true;
     
     // Play music on first interaction if needed
-    if (isGameMode && bgMusicRef.current && bgMusicRef.current.paused) {
+    if (isGameMode && bgMusicRef.current && bgMusicRef.current.paused && soundEnabled) {
         bgMusicRef.current.play().catch(() => {});
     }
 
@@ -1205,6 +1230,28 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
          // Lock Aim on First Click
          setIsAimLocked(true);
          setShotPower(0); // RESET POWER TO 0 ON LOCK
+         
+         // Capture screen position for slider
+         const rect = canvasRef.current?.getBoundingClientRect();
+         if (rect) {
+             const x = e.clientX;
+             const y = e.clientY;
+             
+             // Clamp to viewport
+             const PADDING = 20;
+             const POPUP_W = 200;
+             const POPUP_H = 100;
+             
+             let finalX = x;
+             let finalY = y - 50;
+             
+             if (finalX + POPUP_W > window.innerWidth) finalX = window.innerWidth - POPUP_W - PADDING;
+             if (finalX < PADDING) finalX = PADDING;
+             if (finalY + POPUP_H > window.innerHeight) finalY = window.innerHeight - POPUP_H - PADDING;
+             if (finalY < PADDING) finalY = PADDING;
+             
+             setAimLockPos({ x: finalX, y: finalY });
+         }
       }
       return;
     }
@@ -1331,8 +1378,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     timeframe,
     floatStrengthRaw,
     trailLength,
-    searchTerm,
-    isWidget // Added
+    searchTerm
   });
 
   useEffect(() => {
@@ -1344,10 +1390,9 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       timeframe,
       floatStrengthRaw,
       trailLength,
-      searchTerm,
-      isWidget // Added
+      searchTerm
     };
-  }, [isDark, chartMode, isGameMode, isFreeMode, timeframe, floatStrengthRaw, trailLength, searchTerm, isWidget]);
+  }, [isDark, chartMode, isGameMode, isFreeMode, timeframe, floatStrengthRaw, trailLength, searchTerm]);
 
   // ===== RENDER LOOP (single mount, no flicker) =====
   useEffect(() => {
@@ -1410,7 +1455,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalAlpha = 1;
       // Is Widget Mode Background? Use standard bg color
-      if (rs.isWidget) { // Changed from isWidget to rs.isWidget
+      if (isWidget) {
           ctx.fillStyle = rs.isDark ? '#0b0f14' : '#ffffff';
       } else {
           ctx.fillStyle = rs.isGameMode ? (rs.isDark ? '#08110c' : '#e8f3ea') : (rs.isDark ? '#0b0f14' : '#ffffff');
@@ -1727,8 +1772,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                 p.fallFromX = p.x;
                 p.fallFromY = p.y;
                 
-                playSound(sfxCacapaRef.current);
-                
                 // Add Score Pop Up
                 floatingTextsRef.current.push({
                     x: pk.x,
@@ -1768,10 +1811,12 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
                   if (wasCue) {
                     setGameOver(true);
-                    playSound(sfxGameOverRef.current);
+                    playSound(sfxFallRef.current); // Som específico de queda da branca
+                    setTimeout(() => playSound(sfxGameOverRef.current), 800); // Game over depois
                   } else {
                     pocketedCountRef.current += 1;
                     setPocketedUI({ count: pocketedCountRef.current, max: pocketedMaxRef.current });
+                    playSound(sfxCacapaRef.current);
                   }
               }
             }
@@ -2054,6 +2099,21 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           const buttX = tipX - ux * stickLen;
           const buttY = tipY - uy * stickLen;
 
+          // --- GHOST BALL (TARGET PREVIEW) ---
+          // Desenha onde a bola branca estaria no ponto de mira (aimTx, aimTy)
+          // Isso ajuda o usuário a mirar na borda da bola alvo
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(aimTx, aimTy, cueBall.radius, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.15)'; // Semi-transparente
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+          ctx.lineWidth = 1 / k;
+          ctx.setLineDash([5 / k, 5 / k]); // Borda tracejada
+          ctx.stroke();
+          ctx.setLineDash([]); // Reset dash
+          ctx.restore();
+
           // CUE STICK DESIGN - DRAWN AS POLYGON
           ctx.save();
           ctx.globalAlpha = 0.95;
@@ -2123,7 +2183,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
     reqIdRef.current = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(reqIdRef.current);
-  }, []);
+  }, []); // Fixed dependencies
 
   const containerClassName = isWidget 
         ? "w-full h-full relative flex flex-col bg-white dark:bg-[#0b0f14] overflow-hidden transition-colors" 
@@ -2331,6 +2391,25 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           )}
 
           <div className="mt-4 space-y-4">
+            {isGameMode && (
+                <div className="bg-gray-100 dark:bg-[#1a1c1e] p-3 rounded-lg border border-transparent dark:border-white/10">
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-gray-600 dark:text-gray-300">Áudio do Jogo</span>
+                        <button onClick={() => setSoundEnabled(!soundEnabled)} className="text-gray-500 hover:text-[#dd9933]">
+                            {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+                        </button>
+                    </div>
+                    <input 
+                        type="range" 
+                        min="0" max="1" step="0.1" 
+                        value={soundVolume} 
+                        onChange={(e) => setSoundVolume(parseFloat(e.target.value))}
+                        disabled={!soundEnabled}
+                        className="w-full accent-[#dd9933] bg-gray-200 dark:bg-gray-700 rounded-lg h-1.5"
+                    />
+                </div>
+            )}
+
             <div className={isGameMode ? 'opacity-50' : ''}>
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
@@ -2487,35 +2566,58 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         </div>
       )}
 
-      {/* GAME CONTROLS (AIM LOCKED UI) */}
+      {/* GAME CONTROLS (AIM LOCKED UI - DYNAMIC POSITION) */}
       {isGameMode && isAimLocked && !gameOver && !gameWon && (
-          <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-[90] flex flex-col items-center animate-in slide-in-from-bottom-10 fade-in duration-200">
-              <div className="text-[10px] font-black text-white uppercase tracking-widest mb-2 drop-shadow-md">
-                  Ajuste a Força & Solte
-              </div>
-              <div className="bg-[#1a1c1e]/90 backdrop-blur-xl border border-gray-700 rounded-full p-2 pl-4 pr-2 flex items-center gap-3 shadow-2xl">
-                  <span className="text-[#dd9933] font-mono font-bold text-sm w-8 text-right">{shotPower}%</span>
-                  
-                  <input 
-                      type="range" 
-                      min="0" 
-                      max="100" 
-                      value={shotPower}
-                      onChange={(e) => setShotPower(Number(e.target.value))}
-                      onMouseUp={executeShot}
-                      onTouchEnd={executeShot}
-                      className="w-48 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-[#dd9933] hover:accent-[#ffaa00]"
-                  />
-
-                  <div className="w-px h-6 bg-gray-700 mx-1"></div>
-
+          <div 
+            className="absolute z-[90] flex flex-col items-center animate-in zoom-in duration-200"
+            style={{ 
+                left: aimLockPos.x, 
+                top: aimLockPos.y,
+                transform: 'translate(0, 0)', // Override any default centering
+                pointerEvents: 'auto'
+            }}
+          >
+              <div className="bg-[#1a1c1e]/95 backdrop-blur-xl border border-gray-700 rounded-2xl p-4 flex flex-col items-center gap-3 shadow-2xl relative">
+                  {/* Close Button absolute inside */}
                   <button 
                       onClick={() => setIsAimLocked(false)} 
-                      className="p-2 rounded-full hover:bg-white/10 text-gray-400 hover:text-red-500 transition-colors"
+                      className="absolute -top-3 -right-3 p-1.5 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors shadow-md"
                       title="Cancelar (Esc)"
                   >
-                      <XCircle size={18} />
+                      <XCircle size={16} />
                   </button>
+
+                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 drop-shadow-md">
+                      Força da Tacada
+                  </div>
+                  
+                  <div className="flex items-center gap-3 w-full">
+                      <input 
+                          type="range" 
+                          min="0" 
+                          max="100" 
+                          value={shotPower}
+                          onChange={(e) => setShotPower(Number(e.target.value))}
+                          onMouseUp={executeShot}
+                          onTouchEnd={executeShot}
+                          className="w-48 h-3 rounded-lg appearance-none cursor-pointer"
+                          style={{
+                              background: `linear-gradient(to right, #22c55e 0%, #eab308 50%, #ef4444 100%)`
+                          }}
+                      />
+                      <span 
+                          className="font-mono font-black text-lg w-10 text-right"
+                          style={{ 
+                              color: shotPower < 50 ? '#22c55e' : shotPower < 80 ? '#eab308' : '#ef4444' 
+                          }}
+                      >
+                          {shotPower}%
+                      </span>
+                  </div>
+                  
+                  <div className="text-[9px] text-gray-500 italic mt-1">
+                      Solte para tacar
+                  </div>
               </div>
           </div>
       )}
