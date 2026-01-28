@@ -1,3 +1,4 @@
+
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiCoin, Language, DashboardItem } from '../../../types';
 import {
@@ -31,6 +32,14 @@ import {
   Spotify 
 } from '../../../components/Icons';
 import { fetchTopCoins } from '../services/api';
+
+// --- SOUND IMPORTS (Relative to this file) ---
+// O usuário deve colocar estes arquivos na pasta pages/Workspace/widgets/
+const SND_FUNDO = new URL('./fundo.mp3', import.meta.url).href;
+const SND_BOLAS = new URL('./bolas.mp3', import.meta.url).href;
+const SND_CACAPA = new URL('./cacapa.mp3', import.meta.url).href;
+const SND_GAMEOVER = new URL('./gameover.mp3', import.meta.url).href;
+const SND_VITORIA = new URL('./vitoria.mp3', import.meta.url).href;
 
 // --- INTERFACES ---
 interface Particle {
@@ -186,14 +195,19 @@ const drawWatermark = (
   ctx.restore();
 };
 
-// audio
-const SFX_CUE_HIT = '/widgets/sfx-cue-hit.wav';
-const SFX_POCKET = '/widgets/sfx-pocket.wav';
+// GAME CONFIG - TABLE DIMENSIONS
+// Borda externa (chão)
+const TABLE_FLOOR_MARGIN = 40; 
+// Largura da madeira
+const TABLE_WOOD_WIDTH = 30;
+// Largura da borracha interna (cushion)
+const TABLE_CUSHION_WIDTH = 10;
 
-// GAME CONFIG
+// O PAD de colisão física é a soma das bordas até a área jogável
+const GAME_WALL_PAD = TABLE_FLOOR_MARGIN + TABLE_WOOD_WIDTH + TABLE_CUSHION_WIDTH;
+
 const GAME_BALL_RADIUS = 26;
 const GAME_CUE_RADIUS = 32;
-const GAME_WALL_PAD = 14;
 const GAME_LINEAR_DAMP = 0.994;
 const GAME_STOP_EPS = 0.6;
 
@@ -311,8 +325,60 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   const pocketedMaxRef = useRef(0);
   const [pocketedUI, setPocketedUI] = useState({ count: 0, max: 0 });
 
-  const sfxHitRef = useRef<HTMLAudioElement | null>(null);
-  const sfxPocketRef = useRef<HTMLAudioElement | null>(null);
+  // ====== AUDIO SYSTEM ======
+  const bgMusicRef = useRef<HTMLAudioElement | null>(null);
+  const sfxBolasRef = useRef<HTMLAudioElement | null>(null);
+  const sfxCacapaRef = useRef<HTMLAudioElement | null>(null);
+  const sfxGameOverRef = useRef<HTMLAudioElement | null>(null);
+  const sfxVitoriaRef = useRef<HTMLAudioElement | null>(null);
+  const lastCollisionTimeRef = useRef(0); // Debounce collisions
+
+  const playSound = (audio: HTMLAudioElement | null, volume = 1.0) => {
+      if (!audio) return;
+      try {
+          audio.currentTime = 0;
+          audio.volume = volume;
+          audio.play().catch(() => {}); // Ignore interaction errors
+      } catch (e) {}
+  };
+
+  const playCollision = () => {
+      const now = performance.now();
+      if (now - lastCollisionTimeRef.current > 80) { // Limit to 1 sound every 80ms
+        playSound(sfxBolasRef.current, 0.6);
+        lastCollisionTimeRef.current = now;
+      }
+  };
+
+  useEffect(() => {
+    // Init Audio Objects
+    bgMusicRef.current = new Audio(SND_FUNDO);
+    bgMusicRef.current.loop = true;
+    bgMusicRef.current.volume = 0.3;
+
+    sfxBolasRef.current = new Audio(SND_BOLAS);
+    sfxCacapaRef.current = new Audio(SND_CACAPA);
+    sfxGameOverRef.current = new Audio(SND_GAMEOVER);
+    sfxVitoriaRef.current = new Audio(SND_VITORIA);
+
+    return () => {
+        if(bgMusicRef.current) {
+            bgMusicRef.current.pause();
+            bgMusicRef.current = null;
+        }
+    };
+  }, []);
+
+  // Manage BG Music based on Game Mode
+  useEffect(() => {
+      if (isGameMode && bgMusicRef.current) {
+          // Play on interaction (handled in pointerDown) or try now
+          bgMusicRef.current.play().catch(() => {});
+      } else if (!isGameMode && bgMusicRef.current) {
+          bgMusicRef.current.pause();
+          bgMusicRef.current.currentTime = 0;
+      }
+  }, [isGameMode]);
 
   // ====== GAME NEW MECHANIC ======
   // aimLocked: true when user clicks once. Then the slider UI appears.
@@ -402,28 +468,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         setSettingsOpen(false);
     }, 3000);
   };
-
-  // ===== audio =====
-  useEffect(() => {
-    const a1 = new Audio(SFX_CUE_HIT);
-    const a2 = new Audio(SFX_POCKET);
-    a1.preload = 'auto';
-    a2.preload = 'auto';
-    sfxHitRef.current = a1;
-    sfxPocketRef.current = a2;
-  }, []);
-
-  const playHit = useCallback(() => {
-    const a = sfxHitRef.current;
-    if (!a) return;
-    try { a.currentTime = 0; void a.play(); } catch {}
-  }, []);
-
-  const playPocket = useCallback(() => {
-    const a = sfxPocketRef.current;
-    if (!a) return;
-    try { a.currentTime = 0; void a.play(); } catch {}
-  }, []);
 
   // Prevent Body Scroll only in Full Page Mode
   useEffect(() => {
@@ -714,6 +758,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       }
     }
 
+    // GAME WALL PAD agora é maior (chão + madeira + borracha)
     const minX = GAME_WALL_PAD + GAME_BALL_RADIUS;
     const maxX = w - GAME_WALL_PAD - GAME_BALL_RADIUS;
     const minY = GAME_WALL_PAD + GAME_BALL_RADIUS;
@@ -829,12 +874,12 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       cue.vy += ny * (power / Math.max(1, cue.mass));
 
       cueHideUntilRef.current = performance.now() + 5000;
-      playHit();
+      playSound(sfxBolasRef.current); // Som da tacada
 
       setGameHasShot(true);
       setIsAimLocked(false);
       setShotPower(0); // Reset slider
-  }, [isAimLocked, shotPower, playHit]);
+  }, [isAimLocked, shotPower]);
 
   // ===== Magazine fetch =====
   const fetchMagazine = useCallback(async () => {
@@ -1016,6 +1061,10 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       setTimeout(() => {
         setupGameLayout();
       }, 0);
+      
+      // Attempt play bg music if allowed
+      if(bgMusicRef.current) bgMusicRef.current.play().catch(()=>{});
+
     } else {
       setGameHasShot(false);
 
@@ -1037,6 +1086,11 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       setTimeout(() => {
         computeMapTargets();
       }, 0);
+
+      if(bgMusicRef.current) {
+          bgMusicRef.current.pause();
+          bgMusicRef.current.currentTime = 0;
+      }
     }
 
     setIsAimLocked(false);
@@ -1135,6 +1189,11 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   const handlePointerDown = (e: React.PointerEvent) => {
     if (detailOpenRef.current) return;
     pointerDownRef.current = true;
+    
+    // Play music on first interaction if needed
+    if (isGameMode && bgMusicRef.current && bgMusicRef.current.paused) {
+        bgMusicRef.current.play().catch(() => {});
+    }
 
     if (e.button !== 0) return;
 
@@ -1272,7 +1331,8 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     timeframe,
     floatStrengthRaw,
     trailLength,
-    searchTerm
+    searchTerm,
+    isWidget // Added
   });
 
   useEffect(() => {
@@ -1284,9 +1344,10 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       timeframe,
       floatStrengthRaw,
       trailLength,
-      searchTerm
+      searchTerm,
+      isWidget // Added
     };
-  }, [isDark, chartMode, isGameMode, isFreeMode, timeframe, floatStrengthRaw, trailLength, searchTerm]);
+  }, [isDark, chartMode, isGameMode, isFreeMode, timeframe, floatStrengthRaw, trailLength, searchTerm, isWidget]);
 
   // ===== RENDER LOOP (single mount, no flicker) =====
   useEffect(() => {
@@ -1349,7 +1410,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalAlpha = 1;
       // Is Widget Mode Background? Use standard bg color
-      if (isWidget) {
+      if (rs.isWidget) { // Changed from isWidget to rs.isWidget
           ctx.fillStyle = rs.isDark ? '#0b0f14' : '#ffffff';
       } else {
           ctx.fillStyle = rs.isGameMode ? (rs.isDark ? '#08110c' : '#e8f3ea') : (rs.isDark ? '#0b0f14' : '#ffffff');
@@ -1379,36 +1440,92 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         const worldW = width / k;
         const worldH = height / k;
 
-        // ajuste: mesa com borda e caçapas “pra dentro”
-        const railInset = (GAME_WALL_PAD + 8);
+        // --- NEW TABLE VISUALS ---
+        const FLOOR_MARGIN = 40; 
+        const WOOD_WIDTH = 30;
+        const CUSHION_WIDTH = 10;
+        const RAIL_TOTAL = WOOD_WIDTH + CUSHION_WIDTH;
+        const TOTAL_PAD = FLOOR_MARGIN + RAIL_TOTAL; // Should match GAME_WALL_PAD
+
+        // 1. Draw Floor (Background behind table)
+        ctx.fillStyle = '#1c1c1c'; // Dark Floor
+        ctx.fillRect(0, 0, worldW, worldH);
+
+        // 2. Draw Table Frame (Wood)
+        // Outer wood rect
+        const woodX = FLOOR_MARGIN;
+        const woodY = FLOOR_MARGIN;
+        const woodW = worldW - (FLOOR_MARGIN * 2);
+        const woodH = worldH - (FLOOR_MARGIN * 2);
+
+        // Gradient for Wood
+        const woodGrad = ctx.createLinearGradient(woodX, woodY, woodX + woodW, woodY + woodH);
+        woodGrad.addColorStop(0, '#5D4037');
+        woodGrad.addColorStop(0.5, '#8D6E63');
+        woodGrad.addColorStop(1, '#4E342E');
+
+        ctx.fillStyle = woodGrad;
+        ctx.beginPath();
+        ctx.roundRect(woodX, woodY, woodW, woodH, 20); // Rounded outer corners
+        ctx.fill();
+
+        // 3. Draw Playing Surface (Felt)
+        const feltX = TOTAL_PAD;
+        const feltY = TOTAL_PAD;
+        const feltW = worldW - (TOTAL_PAD * 2);
+        const feltH = worldH - (TOTAL_PAD * 2);
+
+        ctx.fillStyle = '#225533'; // Standard Pool Green
+        ctx.fillRect(feltX, feltY, feltW, feltH);
+
+        // 4. Draw Inner Cushions (Rails)
+        // These are the transition from wood to felt. Simple dark green rects.
+        ctx.fillStyle = '#1a4025'; // Darker green for cushions
+        
+        // Top Cushion
+        ctx.fillRect(feltX, woodY + WOOD_WIDTH, feltW, CUSHION_WIDTH);
+        // Bottom Cushion
+        ctx.fillRect(feltX, woodY + woodH - WOOD_WIDTH - CUSHION_WIDTH, feltW, CUSHION_WIDTH);
+        // Left Cushion
+        ctx.fillRect(woodX + WOOD_WIDTH, feltY, CUSHION_WIDTH, feltH);
+        // Right Cushion
+        ctx.fillRect(woodX + woodW - WOOD_WIDTH - CUSHION_WIDTH, feltY, CUSHION_WIDTH, feltH);
+
+
+        // 5. Define Pockets (Partially inside cushion/wood)
+        // Physics logic uses these coords for falling.
         const pr = Math.max(26, Math.min(40, Math.min(worldW, worldH) * 0.04));
+        // Offset slightly into the rail for visual realism
+        const pocketOffset = pr * 0.3; 
+        
+        // Top Left
+        const p1 = { x: TOTAL_PAD + pocketOffset, y: TOTAL_PAD + pocketOffset, r: pr };
+        // Top Mid
+        const p2 = { x: worldW / 2, y: TOTAL_PAD, r: pr };
+        // Top Right
+        const p3 = { x: worldW - TOTAL_PAD - pocketOffset, y: TOTAL_PAD + pocketOffset, r: pr };
+        // Bottom Left
+        const p4 = { x: TOTAL_PAD + pocketOffset, y: worldH - TOTAL_PAD - pocketOffset, r: pr };
+        // Bottom Mid
+        const p5 = { x: worldW / 2, y: worldH - TOTAL_PAD, r: pr };
+        // Bottom Right
+        const p6 = { x: worldW - TOTAL_PAD - pocketOffset, y: worldH - TOTAL_PAD - pocketOffset, r: pr };
 
-        pockets = [
-          { x: railInset, y: railInset, r: pr },
-          { x: worldW / 2, y: railInset, r: pr },
-          { x: worldW - railInset, y: railInset, r: pr },
-          { x: railInset, y: worldH - railInset, r: pr },
-          { x: worldW / 2, y: worldH - railInset, r: pr },
-          { x: worldW - railInset, y: worldH - railInset, r: pr }
-        ];
+        pockets = [p1, p2, p3, p4, p5, p6];
 
-        ctx.save();
-        ctx.strokeStyle = rs.isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.12)';
-        ctx.lineWidth = 6 / k;
-        ctx.strokeRect((railInset - pr * 0.55), (railInset - pr * 0.55), (worldW - (railInset - pr * 0.55) * 2), (worldH - (railInset - pr * 0.55) * 2));
-        ctx.restore();
-
+        // Draw Pockets
         ctx.save();
         for (const pk of pockets) {
           ctx.beginPath();
           ctx.arc(pk.x, pk.y, pk.r, 0, Math.PI * 2);
-          ctx.fillStyle = rs.isDark ? 'rgba(0,0,0,0.78)' : 'rgba(0,0,0,0.22)';
+          ctx.fillStyle = '#000000';
           ctx.fill();
-
+          
+          // Slight highlight on rim
           ctx.beginPath();
           ctx.arc(pk.x, pk.y, pk.r, 0, Math.PI * 2);
-          ctx.strokeStyle = rs.isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)';
-          ctx.lineWidth = 2 / k;
+          ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+          ctx.lineWidth = 2;
           ctx.stroke();
         }
         ctx.restore();
@@ -1516,6 +1633,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         // Check for WIN condition
         if (pocketedCountRef.current === pocketedMaxRef.current && !gameWon) {
              setGameWon(true);
+             playSound(sfxVitoriaRef.current);
         }
 
         for (let step = 0; step < subSteps; step++) {
@@ -1532,12 +1650,18 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
             p.x += p.vx * stepDt;
             p.y += p.vy * stepDt;
+            
+            // Wall Collision (Bounce off Cushions)
+            const minX = GAME_WALL_PAD + p.radius;
+            const maxX = worldW - GAME_WALL_PAD - p.radius;
+            const minY = GAME_WALL_PAD + p.radius;
+            const maxY = worldH - GAME_WALL_PAD - p.radius;
 
-            if (p.x < p.radius + GAME_WALL_PAD) { p.x = p.radius + GAME_WALL_PAD; p.vx *= -0.98; }
-            else if (p.x > worldW - p.radius - GAME_WALL_PAD) { p.x = worldW - p.radius - GAME_WALL_PAD; p.vx *= -0.98; }
+            if (p.x < minX) { p.x = minX; p.vx *= -0.98; }
+            else if (p.x > maxX) { p.x = maxX; p.vx *= -0.98; }
 
-            if (p.y < p.radius + GAME_WALL_PAD) { p.y = p.radius + GAME_WALL_PAD; p.vy *= -0.98; }
-            else if (p.y > worldH - p.radius - GAME_WALL_PAD) { p.y = worldH - p.radius - GAME_WALL_PAD; p.vy *= -0.98; }
+            if (p.y < minY) { p.y = minY; p.vy *= -0.98; }
+            else if (p.y > maxY) { p.y = maxY; p.vy *= -0.98; }
           }
 
           for (let i = 0; i < particles.length; i++) {
@@ -1557,6 +1681,11 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
               const dist = Math.sqrt(distSq) || 0.001;
               const nx = dx / dist;
               const ny = dy / dist;
+              
+              // Audio trigger on collision
+              if (!p1.isFixed && !p2.isFixed) {
+                  playCollision();
+              }
 
               const overlap = minDist - dist;
               const totalMass = (p1.mass + p2.mass) || 1;
@@ -1589,7 +1718,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
             for (const pk of pockets) {
               const dist = Math.hypot(p.x - pk.x, p.y - pk.y);
-              if (dist < (pk.r + p.radius)) {
+              if (dist < (pk.r + p.radius * 0.5)) { // Slightly forgiving
                 p.isFalling = true;
                 p.fallT = 0;
                 p.vx = 0;
@@ -1597,6 +1726,8 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                 p.fallPocket = pk;
                 p.fallFromX = p.x;
                 p.fallFromY = p.y;
+                
+                playSound(sfxCacapaRef.current);
                 
                 // Add Score Pop Up
                 floatingTextsRef.current.push({
@@ -1637,11 +1768,11 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
                   if (wasCue) {
                     setGameOver(true);
+                    playSound(sfxGameOverRef.current);
                   } else {
                     pocketedCountRef.current += 1;
                     setPocketedUI({ count: pocketedCountRef.current, max: pocketedMaxRef.current });
                   }
-                  playPocket();
               }
             }
           }
@@ -1992,7 +2123,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
     reqIdRef.current = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(reqIdRef.current);
-  }, [playPocket]);
+  }, []);
 
   const containerClassName = isWidget 
         ? "w-full h-full relative flex flex-col bg-white dark:bg-[#0b0f14] overflow-hidden transition-colors" 
