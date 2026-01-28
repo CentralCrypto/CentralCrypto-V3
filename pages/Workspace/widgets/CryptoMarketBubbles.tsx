@@ -16,7 +16,9 @@ import {
   Play,
   AlertTriangle,
   RefreshCw,
-  Trophy
+  Trophy,
+  LogOut,
+  RotateCcw
 } from 'lucide-react';
 import { 
   Twitter, 
@@ -751,6 +753,31 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       setShowGameIntro(true);
     }
   }, [animateTransformTo, isFreeMode, computeMapTargets, isGameMode, setupGameLayout, isWidget]);
+
+  // NEW: Quick Retry Handler (Instantly resets physics, no re-fetching)
+  const handleQuickRetry = useCallback(() => {
+      setGameOver(false);
+      setGameHasShot(false);
+      
+      // Reset score
+      pocketedCountRef.current = 0;
+      setPocketedUI(prev => ({ ...prev, count: 0 }));
+
+      // Reset Physics Refs
+      gameCtlRef.current.phase = 0;
+      gameCtlRef.current.powerPull = 0;
+      pointerDownRef.current = false;
+
+      // Force instant layout reset without waiting for state/effect chain
+      setTimeout(() => {
+          setupGameLayout();
+      }, 0);
+  }, [setupGameLayout]);
+
+  const handleExitGame = useCallback(() => {
+      setIsGameMode(false);
+      setGameOver(false);
+  }, []);
 
   // ===== Magazine fetch =====
   const fetchMagazine = useCallback(async () => {
@@ -2305,32 +2332,43 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         </div>
       )}
 
-      {/* GAME OVER SCREEN */}
+      {/* GAME OVER SCREEN - NEW COMPACT VERSION */}
       {gameOver && isGameMode && (
-        <div className="absolute inset-0 z-[100] flex items-center justify-center bg-red-900/80 backdrop-blur-md animate-in zoom-in duration-500">
-            <div className="text-center text-white p-8">
-                <div className="w-24 h-24 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
-                    <AlertTriangle size={48} className="text-white" />
-                </div>
-                <h1 className="text-6xl font-black mb-2 drop-shadow-lg tracking-tighter">GAME OVER</h1>
-                <p className="text-2xl font-bold mb-4 text-red-200 uppercase tracking-widest">Bitcoin deu DUMP!</p>
+        <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md animate-in zoom-in duration-300 p-4">
+            <div className="bg-white dark:bg-[#1a1c1e] p-6 rounded-2xl border border-red-500/30 shadow-2xl relative w-full max-w-sm text-center">
                 
-                <div className="bg-white/10 p-6 rounded-2xl backdrop-blur-lg mb-8 border border-white/20">
-                    <div className="flex items-center justify-center gap-3 mb-2">
-                        <Trophy size={24} className="text-yellow-400" />
-                        <span className="text-lg font-bold uppercase tracking-widest text-white/80">Placar Final</span>
-                    </div>
-                    <div className="text-5xl font-black text-yellow-400 drop-shadow-md">
-                        {pocketedUI.count} <span className="text-2xl text-white/50">/ {pocketedUI.max}</span>
+                <div className="absolute -top-10 left-1/2 -translate-x-1/2">
+                     <div className="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center shadow-lg border-4 border-white dark:border-[#1a1c1e] animate-bounce">
+                        <AlertTriangle size={32} className="text-white" />
+                     </div>
+                </div>
+
+                <div className="mt-8 mb-4">
+                    <h1 className="text-3xl font-black text-red-600 dark:text-red-500 uppercase tracking-tighter">GAME OVER</h1>
+                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mt-1">Bitcoin deu DUMP!</p>
+                </div>
+
+                <div className="bg-gray-100 dark:bg-black/40 p-4 rounded-xl mb-6 border border-gray-200 dark:border-white/5">
+                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Placar Final</div>
+                    <div className="text-4xl font-black text-[#dd9933]">
+                        {pocketedUI.count} <span className="text-lg text-gray-400">/ {pocketedUI.max}</span>
                     </div>
                 </div>
 
-                <button 
-                    onClick={hardResetView} 
-                    className="bg-white text-red-600 font-black py-4 px-10 rounded-full shadow-2xl hover:scale-110 transition-all text-lg flex items-center gap-3 mx-auto hover:bg-gray-100"
-                >
-                    <RefreshCw size={24} /> REINICIAR
-                </button>
+                <div className="flex gap-3">
+                    <button 
+                        onClick={handleExitGame} 
+                        className="flex-1 py-3 px-4 rounded-xl border border-gray-300 dark:border-white/10 text-gray-600 dark:text-gray-300 font-bold text-xs uppercase tracking-wider hover:bg-gray-100 dark:hover:bg-white/5 transition-colors flex items-center justify-center gap-2"
+                    >
+                        <LogOut size={14} /> Sair
+                    </button>
+                    <button 
+                        onClick={handleQuickRetry} 
+                        className="flex-1 py-3 px-4 rounded-xl bg-[#dd9933] hover:bg-amber-600 text-black font-bold text-xs uppercase tracking-wider transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2"
+                    >
+                        <RotateCcw size={14} /> Reiniciar
+                    </button>
+                </div>
             </div>
         </div>
       )}
