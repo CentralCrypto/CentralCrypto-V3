@@ -1,4 +1,3 @@
-
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiCoin, Language, DashboardItem } from '../../../types';
 import {
@@ -37,7 +36,7 @@ import { fetchTopCoins } from '../services/api';
 
 // --- SOUND PATHS (served from /public) ---
 // Coloque os arquivos em: /public/sfx/
-const BASE = import.meta.env.BASE_URL; // "/" no dev, e "/v3/" ou similar no build se você configurar base
+const BASE = (import.meta as any).env?.BASE_URL || '/'; // "/" no dev, e "/v3/" ou similar no build se você configurar base
 
 const SND_FUNDO = `${BASE}sfx/fundo.mp3`;
 const SND_BOLAS = `${BASE}sfx/bolas.mp3`;
@@ -2625,9 +2624,12 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                           onChange={(e) => setShotPower(Number(e.target.value))}
                           onMouseUp={executeShot}
                           onTouchEnd={executeShot}
-                          className="w-48 h-3 rounded-lg appearance-none cursor-pointer"
+                          className="w-48 h-3 rounded-lg appearance-none cursor-pointer border border-gray-600/50"
                           style={{
-                              background: `linear-gradient(to right, #22c55e 0%, #eab308 50%, #ef4444 100%)`
+                              // Técnica de Dual Gradient:
+                              // 1. O primeiro gradiente vai de transparente (0%) até a cor cinza escuro na posição do cursor (shotPower%).
+                              // 2. O segundo gradiente é o colorido completo, que fica "por baixo" e é revelado pelo primeiro.
+                              background: `linear-gradient(to right, transparent ${shotPower}%, #374151 ${shotPower}%), linear-gradient(to right, #22c55e 0%, #eab308 50%, #ef4444 100%)`
                           }}
                       />
                       <span 
