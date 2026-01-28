@@ -47,6 +47,9 @@ interface Particle {
   fallPocket?: { x: number; y: number; r: number } | null;
   fallFromX?: number;
   fallFromY?: number;
+  
+  // Flag para evitar pontuação duplicada nos sub-steps de física
+  scoreCounted?: boolean;
 
   // map transition
   mapFromX?: number;
@@ -662,6 +665,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       p.fallT = 0;
       p.fallPocket = null;
       p.mapT = 1;
+      p.scoreCounted = false; // Reset score flag
     }
 
     if (cue) {
@@ -883,7 +887,8 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         isFalling: false,
         fallT: 0,
         fallPocket: null,
-        mapT: 0
+        mapT: 0,
+        scoreCounted: false
       };
     });
 
@@ -1648,16 +1653,21 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
             }
 
             if (t >= 1) {
-              const wasCue = String(p.coin.id).toLowerCase() === 'bitcoin';
-              particlesRef.current = particlesRef.current.filter(pp => pp !== p);
+              // Correção de Contagem Dupla: Verifica se já foi contabilizado
+              if (!p.scoreCounted) {
+                  p.scoreCounted = true;
+                  
+                  const wasCue = String(p.coin.id).toLowerCase() === 'bitcoin';
+                  particlesRef.current = particlesRef.current.filter(pp => pp !== p);
 
-              if (wasCue) {
-                setGameOver(true);
-              } else {
-                pocketedCountRef.current += 1;
-                setPocketedUI({ count: pocketedCountRef.current, max: pocketedMaxRef.current });
+                  if (wasCue) {
+                    setGameOver(true);
+                  } else {
+                    pocketedCountRef.current += 1;
+                    setPocketedUI({ count: pocketedCountRef.current, max: pocketedMaxRef.current });
+                  }
+                  playPocket();
               }
-              playPocket();
             }
           }
         }
