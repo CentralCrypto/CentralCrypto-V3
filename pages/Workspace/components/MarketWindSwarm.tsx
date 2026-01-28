@@ -1,6 +1,6 @@
 
-// This component has been renamed to CryptoMarketBubbles.tsx and moved to pages/Workspace/widgets/
-// Please update imports to use the new file.
+// This component has been deprecated and replaced by CryptoMarketBubbles.tsx
+// It is kept as a stub to prevent build errors if referenced.
 import React from 'react';
 
 const MarketWindSwarm = () => {
