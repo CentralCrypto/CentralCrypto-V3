@@ -1,26 +1,34 @@
 
-import * as React from 'react';
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { 
-    CircleDashed, RefreshCw, ChevronDown, X, Atom, Coins, Wind, Info, Play, AlertTriangle,
-    Search, XCircle, Settings, Droplets, ChevronLeft, ChevronRight, X as CloseIcon
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ApiCoin, Language, DashboardItem } from '../../../types';
+import {
+  Search,
+  XCircle,
+  Settings,
+  Droplets,
+  X as CloseIcon,
+  Atom,
+  Coins,
+  Wind,
+  Info,
+  ChevronLeft,
+  ChevronRight,
+  Play,
+  AlertTriangle,
+  RefreshCw,
+  Trophy,
+  LogOut
 } from 'lucide-react';
+import { 
+  Twitter, 
+  Instagram, 
+  Youtube, 
+  Send, 
+  TikTok, 
+  Spotify 
+} from '../../../components/Icons';
 import { fetchTopCoins } from '../services/api';
-import { DashboardItem, Language, ApiCoin } from '../../../types';
-import Highcharts from 'highcharts';
-import addHighchartsMore from 'highcharts/highcharts-more';
-import { Twitter, Instagram, Youtube, Send, TikTok, Spotify } from '../../../components/Icons';
-
-// Initialize Standard Module with protection
-if (typeof addHighchartsMore === 'function') {
-    (addHighchartsMore as any)(Highcharts);
-}
-
-declare global {
-  interface Window {
-    Highcharts: any;
-  }
-}
+import { getCandidateLogoUrls } from '../../../services/logo';
 
 // --- INTERFACES ---
 interface Particle {
@@ -120,6 +128,8 @@ const computeSparkChange = (coin: any, tf: Timeframe) => {
   };
 };
 
+const perfColor = (v?: number) => (v && v >= 0 ? '#22c55e' : '#ef4444');
+
 const WATERMARK_URL = 'https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png';
 
 const drawWatermark = (
@@ -153,8 +163,12 @@ const drawWatermark = (
   ctx.restore();
 };
 
+// AUDIO PATHS
 const SFX_CUE_HIT = '/widgets/sfx-cue-hit.wav';
-const SFX_POCKET = '/widgets/sfx-pocket.wav';
+const SFX_GAME_HIT = '/bolas.mp3';
+const SFX_GAME_POCKET = '/cacapa.mp3'; 
+const SFX_GAME_OVER = '/gameover.mp3';
+const SFX_GAME_MUSIC = '/fundo.mp3';
 
 const GAME_BALL_RADIUS = 26;
 const GAME_CUE_RADIUS = 32;
@@ -208,8 +222,26 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   const [isGameMode, setIsGameMode] = useState(false);
   const [isFreeMode, setIsFreeMode] = useState(isWidget); 
   
+  // Game states
   const [gameOver, setGameOver] = useState(false);
+  const [gameWon, setGameWon] = useState(false);
   const [showGameIntro, setShowGameIntro] = useState(false);
+  
+  // Physics Logic Refs
+  const gameLogicRef = useRef({
+      pocketedCount: 0,
+      pocketedMax: 0
+  });
+
+  // Anti-double-count ref
+  const pocketedDoneRef = useRef<WeakSet<any>>(new WeakSet());
+
+  // Áudio Refs
+  const sfxHitRef = useRef<HTMLAudioElement | null>(null);      
+  const sfxPocketRef = useRef<HTMLAudioElement | null>(null);   
+  const sfxGameOverRef = useRef<HTMLAudioElement | null>(null); 
+  const musicRef = useRef<HTMLAudioElement | null>(null);       
+  const lastHitSfxAtRef = useRef(0);
 
   const isMaximized = item?.isMaximized ?? !isWidget;
   const defaultCoins = isWidget && !isMaximized ? 25 : 100;
@@ -258,13 +290,17 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   const detailOpenRef = useRef(detailOpen);
   detailOpenRef.current = detailOpen;
 
-  const pocketedCountRef = useRef(0);
-  const pocketedMaxRef = useRef(0);
-  const [pocketedUI, setPocketedUI] = useState({ count: 0, max: 0 });
-  const pocketedDoneRef = useRef<WeakSet<any>>(new WeakSet());
+  const renderStateRef = useRef({
+    isDark, isGameMode, isFreeMode, chartMode, timeframe, floatStrengthRaw, trailLength, searchTerm
+  });
 
-  const sfxHitRef = useRef<HTMLAudioElement | null>(null);
-  const sfxPocketRef = useRef<HTMLAudioElement | null>(null);
+  useEffect(() => {
+    renderStateRef.current = {
+        isDark, isGameMode, isFreeMode, chartMode, timeframe, floatStrengthRaw, trailLength, searchTerm
+    };
+  }, [isDark, isGameMode, isFreeMode, chartMode, timeframe, floatStrengthRaw, trailLength, searchTerm]);
+
+  const [pocketedUI, setPocketedUI] = useState({ count: 0, max: 0 });
 
   const gameCtlRef = useRef<{
     phase: 0 | 1 | 2 | 3;
@@ -287,16 +323,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     { icon: TikTok, href: "https://www.tiktok.com/@centralcrypto323" },
     { icon: Spotify, href: "https://open.spotify.com/show/1FurXwMBQIJOBKEBXDUiGb" }
   ]), []);
-
-  const renderStateRef = useRef({
-    isDark, isGameMode, isFreeMode, chartMode, timeframe, floatStrengthRaw, trailLength, searchTerm
-  });
-
-  useEffect(() => {
-    renderStateRef.current = {
-      isDark, isGameMode, isFreeMode, chartMode, timeframe, floatStrengthRaw, trailLength, searchTerm
-    };
-  }, [isDark, isGameMode, isFreeMode, chartMode, timeframe, floatStrengthRaw, trailLength, searchTerm]);
 
   const screenToWorld = (clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
@@ -350,234 +376,206 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     }, 3000);
   };
 
+  // ===== AUDIO INIT =====
   useEffect(() => {
-    const a1 = new Audio(SFX_CUE_HIT);
-    const a2 = new Audio(SFX_POCKET);
-    a1.preload = 'auto';
-    a2.preload = 'auto';
-    sfxHitRef.current = a1;
-    sfxPocketRef.current = a2;
-  }, []);
+    // Only initialize audio if browser supports it
+    if (typeof Audio !== 'undefined') {
+        sfxHitRef.current = new Audio(SFX_GAME_HIT);
+        sfxPocketRef.current = new Audio(SFX_GAME_POCKET);
+        sfxGameOverRef.current = new Audio(SFX_GAME_OVER);
+        
+        const m = new Audio(SFX_GAME_MUSIC);
+        m.loop = true;
+        m.volume = 0.28;
+        musicRef.current = m;
+    }
 
-  const playHit = useCallback(() => {
-    const a = sfxHitRef.current;
-    if (!a) return;
-    try { a.currentTime = 0; void a.play(); } catch {}
-  }, []);
-
-  const playPocket = useCallback(() => {
-    const a = sfxPocketRef.current;
-    if (!a) return;
-    try { a.currentTime = 0; void a.play(); } catch {}
-  }, []);
-
-  useEffect(() => {
-    if (isWidget) return;
-    const prevBody = document.body.style.overflow;
-    const prevHtml = document.documentElement.style.overflow;
-    document.body.style.overflow = 'hidden';
-    document.documentElement.style.overflow = 'hidden';
     return () => {
-      document.body.style.overflow = prevBody;
-      document.documentElement.style.overflow = prevHtml;
+      [sfxHitRef.current, sfxPocketRef.current, sfxGameOverRef.current, musicRef.current].forEach(a => {
+        if (!a) return;
+        a.pause();
+        a.currentTime = 0;
+      });
     };
-  }, [isWidget]);
-
-  useEffect(() => {
-    const tryLoad = (src: string, onOk: () => void, onFail: () => void) => {
-      if (!src) { onFail(); return; }
-      const img = new Image();
-      img.onload = () => { watermarkRef.current = img; onOk(); };
-      img.onerror = () => onFail();
-      img.src = src;
-    };
-    tryLoad(WATERMARK_URL, () => {}, () => {});
   }, []);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setDetailOpen(false);
-        setSettingsOpen(false);
-        setLegendTipOpen(false);
-
-        if (draggedParticleRef.current) {
-          draggedParticleRef.current.isFixed = false;
-          draggedParticleRef.current = null;
-        }
-        isPanningRef.current = false;
-
-        gameCtlRef.current.phase = 0;
-        gameCtlRef.current.powerPull = 0;
-        pointerDownRef.current = false;
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-
-  const loadData = useCallback(async () => {
-    if (particlesRef.current.length === 0) setStatus('loading');
+  
+  // Audio Helper
+  const playSfx = useCallback((a: HTMLAudioElement | null, restart = true) => {
+    if (!a) return;
     try {
-      const data = await fetchTopCoins({ force: true });
-      if (data && data.length > 0) {
-        setCoins(data);
-        setStatus('running');
-      } else if (particlesRef.current.length === 0) setStatus('demo');
-    } catch {
-      if (particlesRef.current.length === 0) setStatus('error');
+      if (restart) a.currentTime = 0;
+      void a.play();
+    } catch { 
+        // ignore autoplay errors
     }
   }, []);
 
-  const animateTransformTo = useCallback((to: Transform, dur = 0.35) => {
-    tweenRef.current = { active: true, from: { ...transformRef.current }, to, t: 0, dur };
+  // Music Loop Control
+  useEffect(() => {
+    const m = musicRef.current;
+    if (!m) return;
+
+    if (isGameMode && !gameOver && !gameWon) {
+      void m.play().catch(() => {});
+    } else {
+      m.pause();
+      m.currentTime = 0;
+    }
+  }, [isGameMode, gameOver, gameWon]);
+
+  // Game Logic Helper Callbacks (Used in Loop)
+  const playHit = useCallback(() => playSfx(sfxHitRef.current, true), [playSfx]);
+  const playPocket = useCallback(() => playSfx(sfxPocketRef.current, true), [playSfx]);
+
+  // ===== DATA LOADING =====
+  const loadData = useCallback(async () => {
+    try {
+        const data = await fetchTopCoins();
+        if (data && Array.isArray(data)) {
+            setCoins(data);
+            setStatus('running');
+        }
+    } catch (e) {
+        console.error("Failed to load coins", e);
+        setStatus('error');
+    }
   }, []);
 
-  const getCoinPerf = useCallback((coin: any) => computeSparkChange(coin, timeframe), [timeframe]);
-  const getCoinPerfPct = useCallback((coin: any) => getCoinPerf(coin).pct, [getCoinPerf]);
-  const getCoinAbsPct = useCallback((coin: any) => getCoinPerf(coin).absPct, [getCoinPerf]);
+  const animateTransformTo = useCallback((target: Transform, duration: number) => {
+    const start = { ...transformRef.current };
+    tweenRef.current = {
+      active: true,
+      from: start,
+      to: target,
+      t: 0,
+      dur: duration
+    };
+  }, []);
 
-  const sizeMetricPerf = useCallback((coin: any) => {
-    const absPct = Math.max(0, getCoinAbsPct(coin));
-    const vol = Math.max(0, Number(coin?.total_volume) || 0);
-    const volFactor = Math.log10(vol + 1);
-    return absPct * volFactor;
-  }, [getCoinAbsPct]);
+  // ===== STATS & TARGETS COMPUTATION =====
+  const recomputeStatsAndTargets = useCallback((currentCoins: ApiCoin[], mode: ChartMode, count: number) => {
+    const subset = currentCoins.slice(0, count);
+    
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+    
+    const valid = subset.filter(c => {
+        const mcap = c.market_cap || 0;
+        const vol = c.total_volume || 0;
+        return mcap > 0 && vol > 0;
+    });
 
-  const recomputeStatsAndTargets = useCallback((coinsList: ApiCoin[], mode: ChartMode, effectiveCount: number) => {
-    const topCoins = coinsList.slice(0, effectiveCount);
-    if (topCoins.length === 0) return;
-
-    const xData: number[] = [];
-    const yData: number[] = [];
-    const rData: number[] = [];
-
-    const sizingMode = isFreeMode ? 'valuation' : mode;
-
-    for (const c of topCoins) {
-      const vol = Math.max(1, Number(c.total_volume) || 1);
-      yData.push(vol);
-
-      if (mode === 'performance') {
-        const x = getCoinPerfPct(c) || 0;
-        xData.push(x);
-        rData.push(Math.max(0.000001, sizeMetricPerf(c)));
-      } else {
-        const mc = Math.max(1, Number(c.market_cap) || 1);
-        xData.push(mc);
-        rData.push(mc);
-      }
+    const valuesX: number[] = [];
+    const valuesY: number[] = [];
+    
+    valid.forEach(c => {
+        const mcap = c.market_cap || 0;
+        const vol = c.total_volume || 0;
+        const change = c.price_change_percentage_24h || 0;
+        
+        if (mode === 'valuation') {
+            valuesX.push(Math.log10(mcap));
+        } else {
+            valuesX.push(change);
+        }
+        valuesY.push(Math.log10(vol));
+    });
+    
+    if (valuesX.length) {
+        minX = Math.min(...valuesX);
+        maxX = Math.max(...valuesX);
+        const spanX = maxX - minX || 1;
+        minX -= spanX * 0.1;
+        maxX += spanX * 0.1;
     }
-
-    const minX = Math.min(...xData), maxX = Math.max(...xData);
-    const minY = Math.min(...yData), maxY = Math.max(...yData);
-    const minR = Math.min(...rData), maxR = Math.max(...rData);
-
-    const logMinX = (mode === 'valuation') ? Math.log10(Math.max(1, minX)) : 0;
-    const logMaxX = (mode === 'valuation') ? Math.log10(Math.max(1, maxX)) : 0;
-
+    
+    if (valuesY.length) {
+        minY = Math.min(...valuesY);
+        maxY = Math.max(...valuesY);
+        const spanY = maxY - minY || 1;
+        minY -= spanY * 0.1;
+        maxY += spanY * 0.1;
+    }
+    
     statsRef.current = {
-      minX, maxX, minY, maxY, minR, maxR,
-      logMinX, logMaxX,
-      logMinY: Math.log10(Math.max(1, minY)),
-      logMaxY: Math.log10(Math.max(1, maxY))
+        minX: mode === 'performance' ? minX : 0, maxX: mode === 'performance' ? maxX : 0,
+        minY: 0, maxY: 0,
+        minR: 0, maxR: 0,
+        logMinX: mode === 'valuation' ? minX : 0, logMaxX: mode === 'valuation' ? maxX : 0,
+        logMinY: minY, logMaxY: maxY
     };
 
-    const coinMap = new Map<string, ApiCoin>(topCoins.map(c => [c.id, c]));
-    for (const p of particlesRef.current) {
-      const updated = coinMap.get(p.id);
-      if (updated) p.coin = updated;
-
-      const pct = getCoinPerfPct(p.coin) || 0;
-      const baseColor = pct >= 0 ? '#089981' : '#f23645';
-      const isBTC = String(p.coin.id).toLowerCase() === 'bitcoin';
-
-      if (isGameMode) {
-        p.targetRadius = isBTC ? GAME_CUE_RADIUS : GAME_BALL_RADIUS;
-      } else {
-        let targetRadius = 24;
-        
-        if (sizingMode === 'performance') {
-          let metric = Math.max(0.000001, sizeMetricPerf(p.coin));
-          const t = (metric - minR) / (maxR - minR || 1);
-          targetRadius = 15 + clamp(t, 0, 1) * 55;
-        } else {
-          const metric = Math.max(1, Number(p.coin.market_cap) || 1);
-          let valMaxR = maxR;
-          if (mode === 'performance') {
-             const mcaps = topCoins.map(c => Math.max(1, Number(c.market_cap) || 1));
-             valMaxR = Math.max(...mcaps);
-          }
-          const ratio = Math.pow(metric, 0.55) / Math.pow(valMaxR, 0.55);
-          targetRadius = 18 + ratio * 90;
+    const particles = particlesRef.current;
+    const coinMap = new Map(subset.map(c => [c.id, c]));
+    
+    particles.forEach(p => {
+        const data = coinMap.get(p.id);
+        if (data) {
+            p.coin = data;
+            const change = data.price_change_percentage_24h || 0;
+            p.color = perfColor(change);
+            
+            if (!isGameMode) {
+                const mcap = data.market_cap || 0;
+                // Simple sizing logic based on log(mcap) to avoid huge disparities
+                const r = Math.max(10, Math.log10(mcap || 1) * 3.5); 
+                p.targetRadius = r;
+            }
         }
-        
-        if (isWidget && !isMaximized) {
-            targetRadius *= 0.7; 
-        }
-
-        p.targetRadius = targetRadius;
-      }
-
-      p.mass = Math.max(1, p.targetRadius);
-      p.color = isBTC ? '#ffffff' : baseColor;
-    }
-  }, [getCoinPerfPct, sizeMetricPerf, isGameMode, isFreeMode, isWidget, isMaximized]);
+    });
+  }, [isGameMode]);
 
   const computeMapTargets = useCallback(() => {
-    if (!statsRef.current) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+      const s = statsRef.current;
+      const canvas = canvasRef.current;
+      if (!s || !canvas) return;
+      
+      const dpr = dprRef.current || 1;
+      const width = canvas.width / dpr;
+      const height = canvas.height / dpr;
+      
+      const margin = { top: 18, right: 18, bottom: 92, left: 86 };
+      const chartW = Math.max(50, width - margin.left - margin.right);
+      const chartH = Math.max(50, height - margin.top - margin.bottom);
+      const originX = margin.left;
+      const originY = margin.top + chartH;
 
-    const dpr = dprRef.current || 1;
-    const width = canvas.width / dpr;
-    const height = canvas.height / dpr;
-    const s = statsRef.current;
+      particlesRef.current.forEach(p => {
+          if (p.isFalling || isGameMode) return;
+          
+          const mcap = p.coin.market_cap || 0;
+          const vol = p.coin.total_volume || 0;
+          const change = p.coin.price_change_percentage_24h || 0;
+          
+          let tx = 0;
+          let ty = 0;
+          
+          if (chartMode === 'valuation') {
+              const val = Math.log10(Math.max(mcap, 1));
+              const norm = (val - s.logMinX) / (s.logMaxX - s.logMinX || 1);
+              tx = originX + norm * chartW;
+          } else {
+              const norm = (change - s.minX) / (s.maxX - s.minX || 1);
+              tx = originX + norm * chartW;
+          }
+          
+          const valY = Math.log10(Math.max(vol, 1));
+          const normY = (valY - s.logMinY) / (s.logMaxY - s.logMinY || 1);
+          ty = originY - normY * chartH;
+          
+          // Safety check for NaN
+          if (isNaN(tx)) tx = width / 2;
+          if (isNaN(ty)) ty = height / 2;
+          
+          p.mapToX = tx;
+          p.mapToY = ty;
+          p.mapFromX = p.x;
+          p.mapFromY = p.y;
+          p.mapT = 0;
+      });
+  }, [chartMode, isGameMode]);
 
-    const margin = { top: 18, right: 18, bottom: 92, left: 86 };
-    const chartW = Math.max(50, width - margin.left - margin.right);
-    const chartH = Math.max(50, height - margin.top - margin.bottom);
-
-    const originX = margin.left;
-    const originY = margin.top + chartH;
-
-    const projectX = (v: number) => {
-      let norm = 0;
-      if (chartMode === 'valuation') {
-        if (v <= 0) return originX;
-        const denom = (s.logMaxX - s.logMinX) || 1;
-        norm = (Math.log10(Math.max(v, 1)) - s.logMinX) / denom;
-      } else {
-        norm = (v - s.minX) / (s.maxX - s.minX || 1);
-      }
-      return originX + norm * chartW;
-    };
-
-    const projectY = (v: number) => {
-      if (v <= 0) return originY;
-      const denom = (s.logMaxY - s.logMinY) || 1;
-      const norm = (Math.log10(v) - s.logMinY) / denom;
-      return margin.top + (1 - norm) * chartH;
-    };
-
-    for (const p of particlesRef.current) {
-      const yVal = Math.max(1, Number(p.coin.total_volume) || 1);
-      let xVal = 0;
-
-      if (chartMode === 'performance') xVal = getCoinPerfPct(p.coin) || 0;
-      else xVal = Math.max(1, Number(p.coin.market_cap) || 1);
-
-      const tx = projectX(xVal);
-      const ty = projectY(yVal);
-
-      p.mapFromX = p.x;
-      p.mapFromY = p.y;
-      p.mapToX = tx;
-      p.mapToY = ty;
-      p.mapT = 0;
-    }
-  }, [chartMode, getCoinPerfPct]);
-
+  // ===== GAME HELPERS =====
   const setupGameLayout = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -648,11 +646,16 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       p.y = clamp(p.y, minY, maxY);
     }
 
-    pocketedCountRef.current = 0;
-    const maxPocket = Math.max(0, others.length);
-    pocketedMaxRef.current = maxPocket;
-    setPocketedUI({ count: 0, max: maxPocket });
-    pocketedDoneRef.current = new WeakSet(); 
+    // Reset logic refs
+    gameLogicRef.current = {
+        pocketedCount: 0,
+        pocketedMax: Math.max(0, others.length)
+    };
+    
+    // Reset Anti-Double Count
+    pocketedDoneRef.current = new WeakSet();
+
+    setPocketedUI({ count: 0, max: gameLogicRef.current.pocketedMax });
 
     gameCtlRef.current.phase = 0;
     gameCtlRef.current.powerPull = 0;
@@ -660,6 +663,28 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     pointerDownRef.current = false;
 
     setGameHasShot(false);
+  }, []);
+  
+  const resetGameRuntime = useCallback(() => {
+      setGameOver(false);
+      setGameWon(false);
+      setShowGameIntro(false);
+
+      gameLogicRef.current.pocketedCount = 0;
+      setPocketedUI({ count: 0, max: gameLogicRef.current.pocketedMax });
+
+      pocketedDoneRef.current = new WeakSet();
+
+      gameHasShotRef.current = false;
+      cueHideUntilRef.current = 0;
+      gameCtlRef.current.phase = 0;
+      gameCtlRef.current.powerPull = 0;
+
+      const m = musicRef.current;
+      if (m) {
+        m.pause();
+        m.currentTime = 0;
+      }
   }, []);
 
   const hardResetView = useCallback(() => {
@@ -686,6 +711,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
     if (isGameMode) {
       setNumCoins(16);
+      setGameWon(false);
       setGameOver(false);
       setShowGameIntro(true);
       setTimeout(() => {
@@ -693,6 +719,22 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       }, 0);
     }
   }, [animateTransformTo, isFreeMode, computeMapTargets, isGameMode, setupGameLayout, isWidget]);
+  
+  const exitGameToInitial = useCallback(() => {
+      resetGameRuntime();
+      setIsGameMode(false);
+      setIsFreeMode(false);
+      setSearchTerm('');
+      setSelectedParticle(null);
+      setDetailOpen(false);
+      hardResetView();
+  }, [hardResetView, resetGameRuntime]);
+
+  const restartGame = useCallback(() => {
+      resetGameRuntime();
+      setIsGameMode(true);
+      hardResetView();
+  }, [hardResetView, resetGameRuntime]);
 
   const fetchMagazine = useCallback(async () => {
     try {
@@ -721,18 +763,22 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
   useEffect(() => { void fetchMagazine(); }, [fetchMagazine]);
 
-  const magSlides = useMemo(() => {
-      const slides = [];
-      for (let i = 0; i < magPosts.length; i += 3) {
-          slides.push(magPosts.slice(i, i + 3));
-      }
-      return slides;
+  useEffect(() => {
+    const slides = Math.max(1, Math.ceil((magPosts.length || 0) / 3));
+    setMagIndex(i => clamp(i, 0, slides - 1));
   }, [magPosts]);
 
-  useEffect(() => {
-    const slides = Math.max(1, magSlides.length);
-    setMagIndex(i => clamp(i, 0, slides - 1));
-  }, [magSlides]);
+  const magSlides = useMemo(() => {
+    const res = [];
+    for (let i = 0; i < magPosts.length; i += 3) {
+        res.push(magPosts.slice(i, i + 3));
+    }
+    return res;
+  }, [magPosts]);
+
+  const detailPerf1h = useMemo(() => detailCoin ? computeSparkChange(detailCoin, '1h') : null, [detailCoin]);
+  const detailPerf24 = useMemo(() => detailCoin ? computeSparkChange(detailCoin, '24h') : null, [detailCoin]);
+  const detailPerf7d = useMemo(() => detailCoin ? computeSparkChange(detailCoin, '7d') : null, [detailCoin]);
 
   useEffect(() => {
     loadData();
@@ -743,24 +789,30 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     if (!canvas || !stage) return;
 
     const resizeCanvas = () => {
-      const ratio = window.devicePixelRatio || 1;
-      dprRef.current = ratio;
+      // DEBOUNCE RESIZE
+      if (reqIdRef.current) return;
+      
+      reqIdRef.current = requestAnimationFrame(() => {
+          const ratio = window.devicePixelRatio || 1;
+          dprRef.current = ratio;
 
-      const rect = stage.getBoundingClientRect();
-      const cssW = Math.max(1, Math.floor(rect.width));
-      const cssH = Math.max(1, Math.floor(rect.height));
+          const rect = stage.getBoundingClientRect();
+          const cssW = Math.max(1, Math.floor(rect.width));
+          const cssH = Math.max(1, Math.floor(rect.height));
 
-      canvas.width = Math.max(1, Math.floor(cssW * ratio));
-      canvas.height = Math.max(1, Math.floor(cssH * ratio));
-      canvas.style.width = `${cssW}px`;
-      canvas.style.height = `${cssH}px`;
+          if (canvas.width !== Math.max(1, Math.floor(cssW * ratio)) || canvas.height !== Math.max(1, Math.floor(cssH * ratio))) {
+               canvas.width = Math.max(1, Math.floor(cssW * ratio));
+               canvas.height = Math.max(1, Math.floor(cssH * ratio));
+               canvas.style.width = `${cssW}px`;
+               canvas.style.height = `${cssH}px`;
+          }
+          reqIdRef.current = 0;
+      });
     };
 
     resizeCanvas();
-
     const ro = new ResizeObserver(() => resizeCanvas());
     ro.observe(stage);
-
     window.addEventListener('resize', resizeCanvas);
 
     const observer = new MutationObserver(() => setIsDark(document.documentElement.classList.contains('dark')));
@@ -771,6 +823,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       ro.disconnect();
       observer.disconnect();
       window.removeEventListener('resize', resizeCanvas);
+      if (reqIdRef.current) cancelAnimationFrame(reqIdRef.current);
     };
   }, [loadData]);
 
@@ -779,6 +832,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     return numCoins;
   }, [isGameMode, numCoins]);
 
+  // COIN IMAGE LOADING WITH LOCAL CACHE FALLBACK
   useEffect(() => {
     const effectiveNum = getEffectiveCount();
     const topCoins = coins.slice(0, effectiveNum);
@@ -787,7 +841,8 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     for (const c of topCoins) {
       if (c?.id && !imageCache.current.has(c.id)) {
         const img = new Image();
-        img.src = c.image || ''; // Fix: use c.image
+        const candidates = getCandidateLogoUrls(c);
+        img.src = candidates[0] || ''; 
         imageCache.current.set(c.id, img);
       }
     }
@@ -796,6 +851,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     const shouldRebuildNormally = !isGameMode;
 
     if (!shouldRebuildNormally && !shouldRebuildInGame) {
+      // Just update data if not rebuilding
       if (isGameMode) {
         const map = new Map<string, ApiCoin>(topCoins.map(c => [c.id, c]));
         for (const p of particlesRef.current) {
@@ -868,7 +924,12 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       setLegendTipOpen(false);
       
       setGameOver(false);
+      setGameWon(false);
       setShowGameIntro(true);
+
+      // Reset score and logic
+      gameLogicRef.current.pocketedCount = 0;
+      pocketedDoneRef.current = new WeakSet();
 
       animateTransformTo({ k: 1, x: 0, y: 0 }, 0.2);
 
@@ -883,6 +944,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       setLegendTipOpen(false);
       
       setGameOver(false);
+      setGameWon(false);
       setShowGameIntro(false);
 
       if (draggedParticleRef.current) {
@@ -916,144 +978,215 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     }
   }, [isFreeMode, isGameMode, computeMapTargets]);
 
-  const handlePointerDown = (e: React.PointerEvent | React.MouseEvent) => {
-    // ... logic for game vs pan vs drag ...
-    if (settingsOpen) setSettingsOpen(false);
-    
-    // Get mouse pos
-    const { x, y } = screenToWorld(e.clientX, e.clientY);
-    lastMousePosRef.current = { x, y };
-    pointerDownRef.current = true;
+  const openDetailFor = (p: Particle) => {
+    setSelectedParticle(p);
+    setDetailCoin(p.coin);
+    setDetailAnimKey(k => k + 1);
+    setDetailOpen(true);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    const wpos = screenToWorld(e.clientX, e.clientY);
+    lastMousePosRef.current = { x: wpos.x, y: wpos.y };
+
+    if (detailOpenRef.current) return;
 
     if (isGameMode) {
-       // Game logic for aiming/shooting
-       if (gameHasShotRef.current) return;
-       // Simplified logic
-       if (gameCtlRef.current.phase === 0) {
-           gameCtlRef.current.phase = 1; // Aiming
-           gameCtlRef.current.aimX = x;
-           gameCtlRef.current.aimY = y;
-       } else if (gameCtlRef.current.phase === 1) {
-           gameCtlRef.current.phase = 2; // Fixed aim, start power
-           gameCtlRef.current.holdStart = performance.now();
-           gameCtlRef.current.powerPull = 0;
-       }
-       return;
+      const cue = particlesRef.current.find(pp => String(pp.coin.id).toLowerCase() === 'bitcoin');
+      if (!cue || cue.isFalling) return;
+
+      if (gameCtlRef.current.phase === 1) {
+        gameCtlRef.current.aimX = wpos.x;
+        gameCtlRef.current.aimY = wpos.y;
+        return;
+      }
+
+      if (gameCtlRef.current.phase === 3) {
+        const dx = gameCtlRef.current.aimX - cue.x;
+        const dy = gameCtlRef.current.aimY - cue.y;
+        const distDir = Math.hypot(dx, dy) || 0.0001;
+        const nx = dx / distDir;
+        const ny = dy / distDir;
+
+        const along = (wpos.x - cue.x) * nx + (wpos.y - cue.y) * ny;
+        const pull = clamp(-along, 0, 220);
+        gameCtlRef.current.powerPull = pull;
+        return;
+      }
     }
 
-    // Find clicked particle
-    let clicked: Particle | null = null;
+    if (draggedParticleRef.current) {
+      const p = draggedParticleRef.current;
+      p.x = wpos.x;
+      p.y = wpos.y;
+      return;
+    }
+
+    if (!isGameMode && isPanningRef.current) {
+      const dx = e.clientX - panStartRef.current.clientX;
+      const dy = e.clientY - panStartRef.current.clientY;
+      transformRef.current.x = panStartRef.current.x + dx;
+      transformRef.current.y = panStartRef.current.y + dy;
+      return;
+    }
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const { k, x, y } = transformRef.current;
+
+    let found: Particle | null = null;
     for (let i = particlesRef.current.length - 1; i >= 0; i--) {
-        const p = particlesRef.current[i];
-        const dist = Math.hypot(p.x - x, p.y - y);
-        if (dist < p.radius) {
-            clicked = p;
-            break;
-        }
+      const p = particlesRef.current[i];
+      if (p.isFalling) continue;
+
+      const sx = p.x * k + x;
+      const sy = p.y * k + y;
+      const sr = p.radius;
+
+      const dx = sx - e.nativeEvent.offsetX;
+      const dy = sy - e.nativeEvent.offsetY;
+
+      if (dx * dx + dy * dy < (sr + 5) * (sr + 5)) {
+        found = p;
+        break;
+      }
+    }
+    setHoveredParticle(found);
+  };
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (detailOpenRef.current) return;
+    pointerDownRef.current = true;
+
+    if (e.button !== 0) return;
+
+    if (isGameMode) {
+      const cue = particlesRef.current.find(pp => String(pp.coin.id).toLowerCase() === 'bitcoin');
+      if (!cue || cue.isFalling) return;
+
+      const w = screenToWorld(e.clientX, e.clientY);
+
+      if (gameCtlRef.current.phase === 0) {
+        gameCtlRef.current.phase = 1;
+        gameCtlRef.current.aimX = w.x;
+        gameCtlRef.current.aimY = w.y;
+        gameCtlRef.current.powerPull = 0;
+        gameCtlRef.current.holdStart = performance.now();
+        return;
+      }
+
+      if (gameCtlRef.current.phase === 2) {
+        gameCtlRef.current.phase = 3;
+        gameCtlRef.current.powerPull = 0;
+        gameCtlRef.current.holdStart = performance.now();
+        return;
+      }
+
+      return;
     }
 
-    if (clicked) {
-        draggedParticleRef.current = clicked;
-        clicked.isFixed = true;
-        setSelectedParticle(clicked);
-        setDetailCoin(clicked.coin);
-        setDetailOpen(true);
-        setDetailAnimKey(k => k+1);
-    } else {
-        // Panning
-        isPanningRef.current = true;
-        panStartRef.current = {
-            clientX: e.clientX,
-            clientY: e.clientY,
-            x: transformRef.current.x,
-            y: transformRef.current.y
-        };
-        setDetailOpen(false);
-        setSelectedParticle(null);
+    if (hoveredParticleRef.current) {
+      openDetailFor(hoveredParticleRef.current);
+      return;
     }
+
+    setDetailOpen(false);
+    setSelectedParticle(null);
+
+    isPanningRef.current = true;
+    panStartRef.current = {
+      clientX: e.clientX,
+      clientY: e.clientY,
+      x: transformRef.current.x,
+      y: transformRef.current.y
+    };
   };
 
-  const handlePointerMove = (e: React.PointerEvent | React.MouseEvent) => {
-      const { x, y } = screenToWorld(e.clientX, e.clientY);
-      lastMousePosRef.current = { x, y };
+  const handlePointerUp = useCallback(() => {
+    if (!pointerDownRef.current) return;
+    pointerDownRef.current = false;
 
-      if (isGameMode) {
-          if (gameCtlRef.current.phase === 1) {
-              gameCtlRef.current.aimX = x;
-              gameCtlRef.current.aimY = y;
-          } else if (gameCtlRef.current.phase === 2 && pointerDownRef.current) {
-              const cue = particlesRef.current.find(p => String(p.coin.id).toLowerCase() === 'bitcoin');
-              if (cue) {
-                  const dist = Math.hypot(x - cue.x, y - cue.y);
-                  gameCtlRef.current.powerPull = Math.min(220, dist);
-              }
-          }
-          return;
+    if (isGameMode) {
+      const cue = particlesRef.current.find(pp => String(pp.coin.id).toLowerCase() === 'bitcoin');
+      if (!cue || cue.isFalling) {
+        gameCtlRef.current.phase = 0;
+        gameCtlRef.current.powerPull = 0;
+        return;
       }
 
-      if (draggedParticleRef.current) {
-          draggedParticleRef.current.x = x;
-          draggedParticleRef.current.y = y;
-          draggedParticleRef.current.vx = 0;
-          draggedParticleRef.current.vy = 0;
-      } else if (isPanningRef.current) {
-          const dx = e.clientX - panStartRef.current.clientX;
-          const dy = e.clientY - panStartRef.current.clientY;
-          transformRef.current = {
-              k: transformRef.current.k,
-              x: panStartRef.current.x + dx,
-              y: panStartRef.current.y + dy
-          };
-      } else {
-          // Hover logic
-          let found: Particle | null = null;
-          for (let i = particlesRef.current.length - 1; i >= 0; i--) {
-              const p = particlesRef.current[i];
-              if (Math.hypot(p.x - x, p.y - y) < p.radius) {
-                  found = p;
-                  break;
-              }
-          }
-          if (hoveredParticleRef.current !== found) {
-              setHoveredParticle(found);
-          }
+      if (gameCtlRef.current.phase === 1) {
+        gameCtlRef.current.phase = 2;
+        gameCtlRef.current.aimPulseT = performance.now();
+        return;
       }
+
+      if (gameCtlRef.current.phase === 3) {
+        const dx = gameCtlRef.current.aimX - cue.x;
+        const dy = gameCtlRef.current.aimY - cue.y;
+        const dist = Math.hypot(dx, dy) || 0.0001;
+
+        const nx = dx / dist;
+        const ny = dy / dist;
+
+        const pull = clamp(gameCtlRef.current.powerPull, 0, 220);
+        const pullNorm = clamp(pull / 220, 0.01, 1);
+
+        const basePower = 42000;
+        const power = basePower * pullNorm;
+
+        cue.vx += nx * (power / Math.max(1, cue.mass));
+        cue.vy += ny * (power / Math.max(1, cue.mass));
+
+        cueHideUntilRef.current = performance.now() + 5000;
+        playHit();
+
+        setGameHasShot(true);
+        
+        gameCtlRef.current.phase = 0;
+        gameCtlRef.current.powerPull = 0;
+        return;
+      }
+    }
+
+    if (draggedParticleRef.current) {
+      draggedParticleRef.current.isFixed = false;
+      draggedParticleRef.current = null;
+    }
+    isPanningRef.current = false;
+  }, [isGameMode, playHit]);
+
+  useEffect(() => {
+    const up = () => handlePointerUp();
+    window.addEventListener('pointerup', up);
+    return () => window.removeEventListener('pointerup', up);
+  }, [handlePointerUp]);
+
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    if (detailOpenRef.current) return;
+    if (isGameMode || isFreeMode) return;
+
+    const canvas = canvasRef.current; if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    const worldX = (mx - transformRef.current.x) / transformRef.current.k;
+    const worldY = (my - transformRef.current.y) / transformRef.current.k;
+
+    const zoomFactor = 1.1;
+    const oldK = transformRef.current.k;
+    const newK = e.deltaY < 0 ? oldK * zoomFactor : oldK / zoomFactor;
+    const clampedK = clamp(newK, 0.1, 10.0);
+
+    const newX = mx - worldX * clampedK;
+    const newY = my - worldY * clampedK;
+
+    transformRef.current = { k: clampedK, x: newX, y: newY };
   };
 
-  const handlePointerUp = () => {
-      pointerDownRef.current = false;
-      
-      if (isGameMode) {
-          if (gameCtlRef.current.phase === 2) {
-              // Shoot!
-              const cue = particlesRef.current.find(p => String(p.coin.id).toLowerCase() === 'bitcoin');
-              if (cue) {
-                  const power = gameCtlRef.current.powerPull;
-                  const ax = gameCtlRef.current.aimX;
-                  const ay = gameCtlRef.current.aimY;
-                  const dx = ax - cue.x;
-                  const dy = ay - cue.y;
-                  const len = Math.hypot(dx, dy) || 1;
-                  
-                  const shotSpeed = power * 8; 
-                  cue.vx = (dx / len) * shotSpeed;
-                  cue.vy = (dy / len) * shotSpeed;
-                  
-                  playHit();
-                  setGameHasShot(true);
-                  gameCtlRef.current.phase = 3; 
-              }
-          }
-          return;
-      }
-
-      if (draggedParticleRef.current) {
-          draggedParticleRef.current.isFixed = false;
-          draggedParticleRef.current = null;
-      }
-      isPanningRef.current = false;
-  };
-
+  // MAIN RENDER LOOP
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d', { alpha: true });
@@ -1137,12 +1270,13 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       const dt = Math.min(dtRaw, 1 / 30);
       lastTime = now;
 
-      // Safe access to ref
+      // Access safe refs for state inside loop
       if (!renderStateRef.current) {
           reqIdRef.current = requestAnimationFrame(loop);
           return;
       }
       const rs = renderStateRef.current;
+
       const dpr = dprRef.current || 1;
       const width = canvas.width / dpr;
       const height = canvas.height / dpr;
@@ -1176,6 +1310,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       ctx.translate(panX, panY);
       ctx.scale(k, k);
 
+      // Access current particles array safely
       const particles = particlesRef.current;
 
       for (const p of particles) {
@@ -1184,6 +1319,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         p.mass = Math.max(1, p.radius);
       }
 
+      // pockets + rails
       let pockets: { x: number; y: number; r: number }[] = [];
       if (rs.isGameMode) {
         const worldW = width / k;
@@ -1259,6 +1395,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           else val = s.minX + percent * (s.maxX - s.minX);
 
           const worldX = projectX(val);
+          if (isNaN(worldX)) continue; 
 
           ctx.beginPath();
           ctx.moveTo(worldX, margin.top);
@@ -1282,6 +1419,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           const percent = i / ySteps;
           const val = Math.pow(10, s.logMinY + percent * (s.logMaxY - s.logMinY));
           const worldY = projectY(val);
+          if (isNaN(worldY)) continue; 
 
           ctx.beginPath();
           ctx.moveTo(originX, worldY);
@@ -1318,6 +1456,12 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       }
 
       // PHYSICS
+      let totalKineticEnergy = 0;
+      let gameWinCheck = false;
+      let gameOverCheck = false;
+      
+      const logic = gameLogicRef.current;
+
       if (rs.isGameMode) {
         const subSteps = 3;
         const stepDt = dt / subSteps;
@@ -1333,10 +1477,16 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
             p.vx *= drag;
             p.vy *= drag;
 
+            if (step === 0) totalKineticEnergy += (p.vx * p.vx + p.vy * p.vy);
+
             if (Math.hypot(p.vx, p.vy) < GAME_STOP_EPS) { p.vx = 0; p.vy = 0; }
 
             p.x += p.vx * stepDt;
             p.y += p.vy * stepDt;
+            
+            // Safety clamp
+            if (isNaN(p.x)) p.x = 100;
+            if (isNaN(p.y)) p.y = 100;
 
             if (p.x < p.radius + GAME_WALL_PAD) { p.x = p.radius + GAME_WALL_PAD; p.vx *= -0.98; }
             else if (p.x > worldW - p.radius - GAME_WALL_PAD) { p.x = worldW - p.radius - GAME_WALL_PAD; p.vx *= -0.98; }
@@ -1375,6 +1525,16 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
               const rvy = p2.vy - p1.vy;
               const velAlongNormal = rvx * nx + rvy * ny;
               if (velAlongNormal > 0) continue;
+              
+              // sfx colisão
+              const impact = Math.abs(velAlongNormal);
+              if (impact > 8) {
+                const tNow = performance.now();
+                if (tNow - lastHitSfxAtRef.current > 70) {
+                    lastHitSfxAtRef.current = tNow;
+                    playSfx(sfxHitRef.current, true);
+                }
+              }
 
               const restitution = 0.95;
               let impulse = -(1 + restitution) * velAlongNormal;
@@ -1428,30 +1588,48 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
               pocketedDoneRef.current.add(p);
 
               const wasCue = String(p.coin.id).toLowerCase() === 'bitcoin';
+              
+              // Remove safely from real array
               particlesRef.current = particlesRef.current.filter(pp => pp !== p);
 
               if (wasCue) {
-                setGameOver(true);
+                  // GAME OVER (Queue state update to avoid heavy react render in loop)
+                  gameOverCheck = true;
+                  playSfx(sfxGameOverRef.current, true);
               } else {
-                pocketedCountRef.current += 1;
-                setPocketedUI({ count: pocketedCountRef.current, max: pocketedMaxRef.current });
-                playPocket();
+                  // SCORE (Ref update immediate, state update batched)
+                  logic.pocketedCount += 1;
+                  setPocketedUI({ count: logic.pocketedCount, max: logic.pocketedMax });
+                  playPocket(); // Use playPocket here
+                  
+                  // VICTORY CHECK
+                  if (logic.pocketedCount >= logic.pocketedMax) {
+                      gameWinCheck = true;
+                  }
               }
             }
           }
         }
+        
+        // Apply Game Over / Win State OUTSIDE the loop
+        if (gameOverCheck && !gameOver) setGameOver(true);
+        if (gameWinCheck && !gameWon) setGameWon(true);
+
       } else if (rs.isFreeMode) {
-        // ... Free mode physics ...
+        // FREE MODE PHYSICS
         const subSteps = 2;
         const stepDt = dt / subSteps;
         const worldW = width / k;
         const worldH = height / k;
+        
+        const shouldCheckCollisions = particles.length <= 50;
 
         for (let step = 0; step < subSteps; step++) {
           const drag = Math.pow(FREE_LINEAR_DAMP, stepDt * 60);
 
           for (const p of particles) {
-            if (p.isFalling || p.isFixed) continue;
+            if (p.isFalling) continue;
+            if (p.isFixed) continue;
 
             p.vx *= drag;
             p.vy *= drag;
@@ -1469,6 +1647,9 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
             p.x += p.vx * stepDt;
             p.y += p.vy * stepDt;
             
+            if (isNaN(p.x)) p.x = 100;
+            if (isNaN(p.y)) p.y = 100;
+
             if (p.x < p.radius) { p.x = p.radius; p.vx *= -0.92; }
             else if (p.x > worldW - p.radius) { p.x = worldW - p.radius; p.vx *= -0.92; }
 
@@ -1476,8 +1657,8 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
             else if (p.y > worldH - p.radius) { p.y = worldH - p.radius; p.vy *= -0.92; }
           }
           
-          // Simplified collision for free mode
-           for (let i = 0; i < particles.length; i++) {
+          if (shouldCheckCollisions) {
+              for (let i = 0; i < particles.length; i++) {
                 const p1 = particles[i];
                 if (p1.isFalling) continue;
 
@@ -1490,7 +1671,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                   const minDist = p1.radius + p2.radius;
                   const distSq = dx * dx + dy * dy;
                   if (distSq >= minDist * minDist) continue;
-                  
+
                   const dist = Math.sqrt(distSq) || 0.001;
                   const nx = dx / dist;
                   const ny = dy / dist;
@@ -1502,8 +1683,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
                   if (!p1.isFixed) { p1.x -= nx * overlap * move1 * FREE_REPULSE; p1.y -= ny * overlap * move1 * FREE_REPULSE; }
                   if (!p2.isFixed) { p2.x += nx * overlap * move2 * FREE_REPULSE; p2.y += ny * overlap * move2 * FREE_REPULSE; }
-                  
-                  // Simple bounce
+
                   const rvx = p2.vx - p1.vx;
                   const rvy = p2.vy - p1.vy;
                   const velAlongNormal = rvx * nx + rvy * ny;
@@ -1519,7 +1699,8 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                   if (!p1.isFixed) { p1.vx -= ix / p1.mass; p1.vy -= iy / p1.mass; }
                   if (!p2.isFixed) { p2.vx += ix / p2.mass; p2.vy += iy / p2.mass; }
                 }
-           }
+              }
+          }
         }
       } else {
         // MAPPED MODE
@@ -1534,8 +1715,11 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           const tx = p.mapToX ?? p.x;
           const ty = p.mapToY ?? p.y;
 
-          const baseX = fx + (tx - fx) * ease;
-          const baseY = fy + (ty - fy) * ease;
+          const safeTx = isNaN(tx) ? p.x : tx;
+          const safeTy = isNaN(ty) ? p.y : ty;
+
+          const baseX = fx + (safeTx - fx) * ease;
+          const baseY = fy + (safeTy - fy) * ease;
 
           const jitterAmp = 1.6 * rs.floatStrengthRaw;
           const jx = Math.sin(now * 0.002 + p.phase) * jitterAmp;
@@ -1545,9 +1729,11 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           p.y = baseY + jy;
         }
       }
-
+      
       // DRAW particles
       for (const p of particlesRef.current) {
+        if (isNaN(p.x) || isNaN(p.y)) continue;
+        
         let drawRadius = p.radius;
         let alpha = 1.0;
 
@@ -1557,7 +1743,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           alpha = 1 - t;
         }
         
-        if (drawRadius <= 0.5) continue;
+        if (drawRadius < 2) continue;
 
         const isHovered = hoveredParticleRef.current?.id === p.id;
         const isSelected = selectedParticleRef.current?.id === p.id;
@@ -1609,11 +1795,18 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         ctx.arc(p.x, p.y, drawRadius, 0, Math.PI * 2);
 
         const img = imageCache.current.get(p.coin.id);
+        const useClip = drawRadius > 8; 
+
         if (img?.complete) {
-          ctx.save();
-          ctx.clip();
-          ctx.drawImage(img, p.x - drawRadius, p.y - drawRadius, drawRadius * 2, drawRadius * 2);
-          ctx.restore();
+          if (useClip) {
+            ctx.save();
+            ctx.clip();
+            ctx.drawImage(img, p.x - drawRadius, p.y - drawRadius, drawRadius * 2, drawRadius * 2);
+            ctx.restore();
+          } else {
+             const s = drawRadius * 1.5; 
+             ctx.drawImage(img, p.x - s/2, p.y - s/2, s, s);
+          }
 
           ctx.strokeStyle = isBTC && rs.isGameMode ? (rs.isDark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.35)') : p.color;
           ctx.lineWidth = (isSelected ? 4 : 2) / k;
@@ -1694,24 +1887,24 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           const tipW = 6 / k;
           const buttW = 14 / k;
 
-          // Stick body (Wood)
+          // Stick body
           ctx.beginPath();
-          ctx.moveTo(buttX + perpX * buttW, buttY + perpY * buttW); // Butt Top
-          ctx.lineTo(tipX + perpX * tipW, tipY + perpY * tipW); // Tip Top
-          ctx.lineTo(tipX - perpX * tipW, tipY - perpY * tipW); // Tip Bottom
-          ctx.lineTo(buttX - perpX * buttW, buttY - perpY * buttW); // Butt Bottom
+          ctx.moveTo(buttX + perpX * buttW, buttY + perpY * buttW); 
+          ctx.lineTo(tipX + perpX * tipW, tipY + perpY * tipW); 
+          ctx.lineTo(tipX - perpX * tipW, tipY - perpY * tipW); 
+          ctx.lineTo(buttX - perpX * buttW, buttY - perpY * buttW); 
           ctx.closePath();
           
           const grad = ctx.createLinearGradient(buttX, buttY, tipX, tipY);
-          grad.addColorStop(0, '#5D4037'); // Dark wood
-          grad.addColorStop(1, '#A1887F'); // Light wood
+          grad.addColorStop(0, '#5D4037'); 
+          grad.addColorStop(1, '#A1887F'); 
           ctx.fillStyle = grad;
           ctx.fill();
           ctx.strokeStyle = rs.isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.2)';
           ctx.lineWidth = 1.5 / k;
           ctx.stroke();
 
-          // Ferrule (White tip part)
+          // Ferrule
           const ferruleLen = 12 / k;
           const ferruleStartX = tipX - ux * ferruleLen;
           const ferruleStartY = tipY - uy * ferruleLen;
@@ -1725,7 +1918,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           ctx.fillStyle = '#f5f5f5';
           ctx.fill();
 
-          // Tip (Blue/Leather)
+          // Tip
           const tipCapLen = 4 / k;
           ctx.beginPath();
           ctx.moveTo(tipX + perpX * tipW, tipY + perpY * tipW);
@@ -1741,11 +1934,10 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           // aim marker
           drawAimMarker(ctx, aimTx, aimTy, k, gameCtlRef.current.phase === 2 || gameCtlRef.current.phase === 3, rs.isDark);
 
-          // power meter (FIXED ABOVE BALL)
+          // power meter
           if (gameCtlRef.current.phase === 2 || gameCtlRef.current.phase === 3) {
             const pct = clamp((gameCtlRef.current.phase === 3 ? gameCtlRef.current.powerPull : 0) / 220, 0.01, 1);
             
-            // Fixed position above cue ball
             const barW = 80 / k;
             const barH = 8 / k;
             const barX = cx; // center X
@@ -1773,180 +1965,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         : "fixed inset-0 z-[2000] bg-white dark:bg-[#0b0f14] text-gray-900 dark:text-white flex flex-col overflow-hidden touch-none select-none overscroll-none h-[100dvh] transition-colors";
 
   const showControls = !isWidget || (isWidget && isMaximized);
-
-  const perfColor = (val: number | undefined) => {
-      if (val === undefined) return 'inherit';
-      return val >= 0 ? '#22c55e' : '#ef4444';
-  };
-
-  const detailPerf1h = useMemo(() => detailCoin ? computeSparkChange(detailCoin, '1h') : null, [detailCoin]);
-  const detailPerf24 = useMemo(() => detailCoin ? computeSparkChange(detailCoin, '24h') : null, [detailCoin]);
-  const detailPerf7d = useMemo(() => detailCoin ? computeSparkChange(detailCoin, '7d') : null, [detailCoin]);
-
-  const magSlides = useMemo(() => {
-      const slides = [];
-      for (let i = 0; i < magPosts.length; i += 3) {
-          slides.push(magPosts.slice(i, i + 3));
-      }
-      return slides;
-  }, [magPosts]);
-
-  const handlePointerDown = (e: React.PointerEvent | React.MouseEvent) => {
-    // ... logic for game vs pan vs drag ...
-    if (settingsOpen) setSettingsOpen(false);
-    
-    // Get mouse pos
-    const { x, y } = screenToWorld(e.clientX, e.clientY);
-    lastMousePosRef.current = { x, y };
-    pointerDownRef.current = true;
-
-    if (isGameMode) {
-       // Game logic for aiming/shooting
-       if (gameHasShotRef.current) return;
-       // Simplified logic
-       if (gameCtlRef.current.phase === 0) {
-           gameCtlRef.current.phase = 1; // Aiming
-           gameCtlRef.current.aimX = x;
-           gameCtlRef.current.aimY = y;
-       } else if (gameCtlRef.current.phase === 1) {
-           gameCtlRef.current.phase = 2; // Fixed aim, start power
-           gameCtlRef.current.holdStart = performance.now();
-           gameCtlRef.current.powerPull = 0;
-       }
-       return;
-    }
-
-    // Find clicked particle
-    let clicked: Particle | null = null;
-    for (let i = particlesRef.current.length - 1; i >= 0; i--) {
-        const p = particlesRef.current[i];
-        const dist = Math.hypot(p.x - x, p.y - y);
-        if (dist < p.radius) {
-            clicked = p;
-            break;
-        }
-    }
-
-    if (clicked) {
-        draggedParticleRef.current = clicked;
-        clicked.isFixed = true;
-        setSelectedParticle(clicked);
-        setDetailCoin(clicked.coin);
-        setDetailOpen(true);
-        setDetailAnimKey(k => k+1);
-    } else {
-        // Panning
-        isPanningRef.current = true;
-        panStartRef.current = {
-            clientX: e.clientX,
-            clientY: e.clientY,
-            x: transformRef.current.x,
-            y: transformRef.current.y
-        };
-        setDetailOpen(false);
-        setSelectedParticle(null);
-    }
-  };
-
-  const handlePointerMove = (e: React.PointerEvent | React.MouseEvent) => {
-      const { x, y } = screenToWorld(e.clientX, e.clientY);
-      lastMousePosRef.current = { x, y };
-
-      if (isGameMode) {
-          if (gameCtlRef.current.phase === 1) {
-              gameCtlRef.current.aimX = x;
-              gameCtlRef.current.aimY = y;
-          } else if (gameCtlRef.current.phase === 2 && pointerDownRef.current) {
-              const cue = particlesRef.current.find(p => String(p.coin.id).toLowerCase() === 'bitcoin');
-              if (cue) {
-                  const dist = Math.hypot(x - cue.x, y - cue.y);
-                  gameCtlRef.current.powerPull = Math.min(220, dist);
-              }
-          }
-          return;
-      }
-
-      if (draggedParticleRef.current) {
-          draggedParticleRef.current.x = x;
-          draggedParticleRef.current.y = y;
-          draggedParticleRef.current.vx = 0;
-          draggedParticleRef.current.vy = 0;
-      } else if (isPanningRef.current) {
-          const dx = e.clientX - panStartRef.current.clientX;
-          const dy = e.clientY - panStartRef.current.clientY;
-          transformRef.current = {
-              k: transformRef.current.k,
-              x: panStartRef.current.x + dx,
-              y: panStartRef.current.y + dy
-          };
-      } else {
-          // Hover logic
-          let found: Particle | null = null;
-          for (let i = particlesRef.current.length - 1; i >= 0; i--) {
-              const p = particlesRef.current[i];
-              if (Math.hypot(p.x - x, p.y - y) < p.radius) {
-                  found = p;
-                  break;
-              }
-          }
-          if (hoveredParticleRef.current !== found) {
-              setHoveredParticle(found);
-          }
-      }
-  };
-
-  const handlePointerUp = () => {
-      pointerDownRef.current = false;
-      
-      if (isGameMode) {
-          if (gameCtlRef.current.phase === 2) {
-              // Shoot!
-              const cue = particlesRef.current.find(p => String(p.coin.id).toLowerCase() === 'bitcoin');
-              if (cue) {
-                  const power = gameCtlRef.current.powerPull;
-                  const ax = gameCtlRef.current.aimX;
-                  const ay = gameCtlRef.current.aimY;
-                  const dx = ax - cue.x;
-                  const dy = ay - cue.y;
-                  const len = Math.hypot(dx, dy) || 1;
-                  
-                  const shotSpeed = power * 8; 
-                  cue.vx = (dx / len) * shotSpeed;
-                  cue.vy = (dy / len) * shotSpeed;
-                  
-                  playHit();
-                  setGameHasShot(true);
-                  gameCtlRef.current.phase = 3; 
-              }
-          }
-          return;
-      }
-
-      if (draggedParticleRef.current) {
-          draggedParticleRef.current.isFixed = false;
-          draggedParticleRef.current = null;
-      }
-      isPanningRef.current = false;
-  };
-
-  const handleWheel = (e: React.WheelEvent) => {
-      e.preventDefault(); e.stopPropagation();
-      const sensitivity = 0.001;
-      const delta = -e.deltaY * sensitivity;
-      const oldK = transformRef.current.k;
-      const newK = Math.min(Math.max(0.5, oldK + delta), 8); 
-      if (newK === oldK || !canvasRef.current) return;
-      
-      const rect = canvasRef.current.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-      const worldX = (mx - transformRef.current.x) / oldK;
-      const worldY = (my - transformRef.current.y) / oldK;
-      const newX = mx - worldX * newK;
-      const newY = my - worldY * newK;
-      
-      transformRef.current = { k: newK, x: newX, y: newY };
-  };
 
   return (
     <div
@@ -1976,7 +1994,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
             )}
             </div>
 
-            {/* CENTER: qtdd + busca */}
+            {/* CENTER */}
             <div className="flex-1 flex items-center justify-center gap-3 px-4">
             <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/50 p-2 rounded-lg border border-transparent dark:border-white/10">
                 <Coins size={16} className="text-gray-400" />
@@ -2015,7 +2033,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
             </div>
             </div>
 
-            {/* RIGHT: botões + controles */}
+            {/* RIGHT */}
             <div className="flex items-center gap-2 shrink-0">
             <div className="flex items-center gap-2 hidden sm:flex">
                 <div className="flex bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-transparent dark:border-white/10">
@@ -2220,8 +2238,36 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         </div>
       )}
 
+      {/* WIN SCREEN */}
+      {gameWon && isGameMode && (
+        <div className="absolute inset-0 z-[100] flex items-center justify-center bg-emerald-900/75 backdrop-blur-md animate-in zoom-in duration-500">
+            <div className="text-center text-white p-8 max-w-xl">
+                <div className="w-24 h-24 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
+                    <Trophy size={48} className="text-yellow-400" fill="currentColor" />
+                </div>
+                <h1 className="text-6xl font-black mb-2 drop-shadow-lg tracking-tighter text-yellow-400">VITÓRIA!</h1>
+                <p className="text-xl font-bold mb-8 text-green-100 uppercase tracking-widest max-w-md mx-auto">Parabéns! A dominância do #BTC disparou e limpamos a mesa!</p>
+                
+                <div className="flex items-center justify-center gap-3 flex-wrap">
+                    <button 
+                        onClick={restartGame} 
+                        className="bg-white text-green-700 font-black py-4 px-10 rounded-full shadow-2xl hover:scale-110 transition-all text-lg flex items-center gap-3"
+                    >
+                        <RefreshCw size={24} /> JOGAR NOVAMENTE
+                    </button>
+                    <button 
+                        onClick={exitGameToInitial}
+                        className="bg-black/20 hover:bg-black/30 text-white font-black py-4 px-10 rounded-full shadow-2xl hover:scale-110 transition-all text-lg flex items-center gap-2"
+                    >
+                        <LogOut size={20} /> SAIR
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
       {/* GAME OVER SCREEN */}
-      {gameOver && isGameMode && (
+      {gameOver && isGameMode && !gameWon && (
         <div className="absolute inset-0 z-[100] flex items-center justify-center bg-red-900/80 backdrop-blur-md animate-in zoom-in duration-500">
             <div className="text-center text-white p-8">
                 <div className="w-24 h-24 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
@@ -2229,12 +2275,21 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                 </div>
                 <h1 className="text-6xl font-black mb-2 drop-shadow-lg tracking-tighter">GAME OVER</h1>
                 <p className="text-2xl font-bold mb-8 text-red-200 uppercase tracking-widest">Bitcoin deu DUMP!</p>
-                <button 
-                    onClick={hardResetView} 
-                    className="bg-white text-red-600 font-black py-4 px-10 rounded-full shadow-2xl hover:scale-110 transition-all text-lg flex items-center gap-3 mx-auto"
-                >
-                    <RefreshCw size={24} /> REINICIAR
-                </button>
+                
+                <div className="flex items-center justify-center gap-3 flex-wrap">
+                    <button 
+                        onClick={hardResetView} 
+                        className="bg-white text-red-600 font-black py-4 px-10 rounded-full shadow-2xl hover:scale-110 transition-all text-lg flex items-center gap-3"
+                    >
+                        <RefreshCw size={24} /> REINICIAR
+                    </button>
+                    <button 
+                        onClick={exitGameToInitial}
+                        className="bg-black/20 hover:bg-black/30 text-white font-black py-4 px-10 rounded-full shadow-2xl hover:scale-110 transition-all text-lg flex items-center gap-2"
+                    >
+                        <LogOut size={20} /> SAIR
+                    </button>
+                </div>
             </div>
         </div>
       )}
