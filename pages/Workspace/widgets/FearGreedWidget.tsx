@@ -101,7 +101,7 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
                             { label: tTime.d7, val: fgWeek, sub: getClassification(parseInt(fgWeek)) },
                             { label: tTime.d30, val: fgMonth, sub: getClassification(parseInt(fgMonth)) }
                         ].map((card, i) => (
-                            <div key={i} className="bg-gray-50 dark:bg-tech-900 border border-gray-100 dark:border-tech-800 p-6 rounded-2xl w-44 text-center shadow-xl">
+                            <div key={i} className="bg-gray-5 dark:bg-tech-900 border border-gray-100 dark:border-tech-800 p-6 rounded-2xl w-44 text-center shadow-xl">
                                 <div className="text-xs font-black text-gray-400 uppercase mb-2 tracking-widest">{card.label}</div>
                                 <div className="text-4xl font-black text-[#dd9933] mb-2">{card.val}</div>
                                 <div className="text-[10px] font-black text-gray-500 uppercase leading-tight tracking-wider">{card.sub}</div>
@@ -131,7 +131,7 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
                                 }
                                 return null;
                             }} />
-                            <Area type="monotone" dataKey="value" stroke="#dd9933" fill="url(#gradFg)" strokeWidth={3} activeDot={{ r: 8, fill: '#dd9933', stroke: '#fff', strokeWidth: 3 }} />
+                            <Area type="monotone" dataKey="value" stroke="#dd9933" fill="url(#gradFg)" strokeWidth={1} activeDot={{ r: 6, fill: '#dd9933', stroke: '#fff', strokeWidth: 1 }} />
                             <Brush dataKey="date" height={35} stroke="#dd9933" fill="transparent" tickFormatter={() => ''} />
                         </AreaChart>
                     </ResponsiveContainer>
