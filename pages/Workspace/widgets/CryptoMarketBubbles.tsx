@@ -35,19 +35,15 @@ import {
 } from '../../../components/Icons';
 import { fetchTopCoins } from '../services/api';
 
-// --- SOUND PATHS FIX ---
-// O Vite serve arquivos da pasta 'public' na raiz do servidor.
-// Se seu projeto está em http://IP:3000/, os sons estarão em http://IP:3000/sfx/arquivo.mp3
-const getPublicSound = (filename: string) => {
-    return `/sfx/${filename}`;
-};
-
-const SND_FUNDO = getPublicSound('fundo.mp3');
-const SND_BOLAS = getPublicSound('bolas.mp3');
-const SND_CACAPA = getPublicSound('cacapa.mp3');
-const SND_GAMEOVER = getPublicSound('gameover.mp3');
-const SND_VITORIA = getPublicSound('vitoria.mp3');
-const SND_FALL = getPublicSound('fall.mp3');
+// --- SOUND PATHS ---
+// Usando import.meta.url para referenciar arquivos na MESMA pasta do componente.
+// Isso funciona nativamente no Vite sem precisar reiniciar servidor ou mexer na pasta public.
+const SND_FUNDO = new URL('./fundo.mp3', import.meta.url).href;
+const SND_BOLAS = new URL('./bolas.mp3', import.meta.url).href;
+const SND_CACAPA = new URL('./cacapa.mp3', import.meta.url).href;
+const SND_GAMEOVER = new URL('./gameover.mp3', import.meta.url).href;
+const SND_VITORIA = new URL('./vitoria.mp3', import.meta.url).href;
+const SND_FALL = new URL('./fall.mp3', import.meta.url).href;
 
 // --- INTERFACES ---
 interface Particle {
@@ -392,25 +388,8 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         a.preload = 'auto';
         a.volume = soundVolume;
         a.onerror = (e) => {
-            // Fix: 'e' can be string | Event in some TS definitions
-            if (typeof e === 'string') return;
-            
-            const target = e.target as HTMLAudioElement;
-            const err = target.error;
-            let errMsg = 'Erro desconhecido';
-            if (err) {
-                switch (err.code) {
-                    case err.MEDIA_ERR_ABORTED: errMsg = 'Busca abortada'; break;
-                    case err.MEDIA_ERR_NETWORK: errMsg = 'Erro de rede'; break;
-                    case err.MEDIA_ERR_DECODE: errMsg = 'Erro de decodificação'; break;
-                    case err.MEDIA_ERR_SRC_NOT_SUPPORTED: errMsg = 'Formato não suportado ou arquivo não encontrado (404)'; break;
-                }
-            }
-            console.error(`[Audio Error] Falha ao carregar: ${src}`, {
-                fullUrl: target.src,
-                errorCode: err?.code,
-                message: errMsg
-            });
+             // Silently fail or log minimal info, user knows sound is missing
+             console.warn(`Audio failed: ${src}`);
         };
         return a;
     };
