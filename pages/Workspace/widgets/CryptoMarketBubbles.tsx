@@ -36,15 +36,27 @@ import {
 } from '../../../components/Icons';
 import { fetchTopCoins } from '../services/api';
 
-// --- SOUND PATHS ---
-// Usando import.meta.url para referenciar arquivos na MESMA pasta do componente.
-// Verifique se os arquivos estão na pasta pages/Workspace/widgets/ com nomes EM MINÚSCULO.
-const SND_FUNDO = new URL('./fundo.mp3', import.meta.url).href;
-const SND_BOLAS = new URL('./bolas.mp3', import.meta.url).href;
-const SND_CACAPA = new URL('./cacapa.mp3', import.meta.url).href;
-const SND_GAMEOVER = new URL('./gameover.mp3', import.meta.url).href;
-const SND_VITORIA = new URL('./vitoria.mp3', import.meta.url).href;
-const SND_FALL = new URL('./fall.mp3', import.meta.url).href;
+// --- SOUND PATHS (VITE IMPORT) ---
+// Usando import direto para que o Vite gerencie o caminho do asset corretamente no build
+// @ts-ignore
+import fileFundo from './fundo.mp3';
+// @ts-ignore
+import fileBolas from './bolas.mp3';
+// @ts-ignore
+import fileCacapa from './cacapa.mp3';
+// @ts-ignore
+import fileGameover from './gameover.mp3';
+// @ts-ignore
+import fileVitoria from './vitoria.mp3';
+// @ts-ignore
+import fileFall from './fall.mp3';
+
+const SND_FUNDO = fileFundo;
+const SND_BOLAS = fileBolas;
+const SND_CACAPA = fileCacapa;
+const SND_GAMEOVER = fileGameover;
+const SND_VITORIA = fileVitoria;
+const SND_FALL = fileFall;
 
 // --- INTERFACES ---
 interface Particle {
@@ -367,7 +379,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           const playPromise = audio.play();
           if (playPromise !== undefined) {
              playPromise.catch(error => {
-                 console.warn("Audio play failed (autoplay block or error):", error.message);
+                 // console.warn("Audio play failed (autoplay block or error):", error.message);
              });
           }
       } catch (e) {
@@ -386,20 +398,10 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   useEffect(() => {
     // Helper to create and preload audio with debug logging
     const createAudio = (src: string, loop = false) => {
-        console.log(`[Audio Init] Loading: ${src}`);
         const a = new Audio(src);
         a.loop = loop;
         a.preload = 'auto';
         a.volume = soundVolume;
-        
-        a.oncanplaythrough = () => console.log(`[Audio Ready] ${src}`);
-        a.onerror = (e) => {
-             // FIX: Handle 'string | Event' type for onerror
-             const event = e as Event;
-             const target = event.target as HTMLAudioElement;
-             const errCode = target?.error?.code;
-             console.error(`[Audio Failed] ${src} | Code: ${errCode} | 404/Network Error?`);
-        };
         return a;
     };
 
@@ -427,7 +429,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   useEffect(() => {
       if (isGameMode && soundEnabled && bgMusicRef.current) {
           // Play on interaction (handled in pointerDown) or try now
-          bgMusicRef.current.play().catch((e) => console.warn("BG Music Autoplay Blocked", e));
+          bgMusicRef.current.play().catch((e) => {});
       } else if (bgMusicRef.current) {
           bgMusicRef.current.pause();
           if(!isGameMode) bgMusicRef.current.currentTime = 0;
@@ -436,13 +438,12 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
   // TEST SOUND FUNCTION
   const testSound = () => {
-      console.log("Testing sound manually...");
       if (sfxBolasRef.current) {
           sfxBolasRef.current.currentTime = 0;
           sfxBolasRef.current.volume = 1.0;
           sfxBolasRef.current.play()
-            .then(() => console.log("Test sound played successfully"))
-            .catch(e => alert("Erro ao tocar som: " + e.message + ". Verifique se o arquivo existe e se o navegador permite áudio."));
+            .then(() => {})
+            .catch(e => alert("Erro ao tocar som: " + e.message + ". Verifique se o navegador permite áudio."));
       } else {
           alert("Objeto de áudio não inicializado.");
       }
@@ -1732,7 +1733,8 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         const worldH = height / k;
         
         // Check for WIN condition
-        if (pocketedCountRef.current === pocketedMaxRef.current && !gameWon) {
+        // FIX: Ensure pocketedMax > 0 to avoid instant win on init
+        if (pocketedMaxRef.current > 0 && pocketedCountRef.current === pocketedMaxRef.current && !gameWon) {
              setGameWon(true);
              playSound(sfxVitoriaRef.current);
         }
@@ -2447,31 +2449,33 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           )}
 
           <div className="mt-4 space-y-4">
-            <div className="bg-gray-100 dark:bg-[#1a1c1e] p-3 rounded-lg border border-transparent dark:border-white/10">
-                <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold text-gray-600 dark:text-gray-300">Volume do Áudio</span>
-                    <button onClick={() => setSoundEnabled(!soundEnabled)} className="text-gray-500 hover:text-[#dd9933]">
-                        {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
-                    </button>
+            {isGameMode && (
+                <div className="bg-gray-100 dark:bg-[#1a1c1e] p-3 rounded-lg border border-transparent dark:border-white/10">
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-gray-600 dark:text-gray-300">Áudio do Jogo</span>
+                        <button onClick={() => setSoundEnabled(!soundEnabled)} className="text-gray-500 hover:text-[#dd9933]">
+                            {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+                        </button>
+                    </div>
+                    <input 
+                        type="range" 
+                        min="0" max="1" step="0.1" 
+                        value={soundVolume} 
+                        onChange={(e) => setSoundVolume(parseFloat(e.target.value))}
+                        disabled={!soundEnabled}
+                        className="w-full accent-[#dd9933] bg-gray-200 dark:bg-gray-700 rounded-lg h-1.5"
+                    />
+                    
+                    <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-200 dark:border-white/10">
+                        <button 
+                            onClick={testSound} 
+                            className="flex items-center gap-1 text-[10px] font-bold uppercase bg-white dark:bg-black/30 border border-gray-200 dark:border-white/20 rounded px-2 py-1 hover:text-[#dd9933]"
+                        >
+                            <Music size={12} /> Testar Som
+                        </button>
+                    </div>
                 </div>
-                <input 
-                    type="range" 
-                    min="0" max="1" step="0.1" 
-                    value={soundVolume} 
-                    onChange={(e) => setSoundVolume(parseFloat(e.target.value))}
-                    disabled={!soundEnabled}
-                    className="w-full accent-[#dd9933] bg-gray-200 dark:bg-gray-700 rounded-lg h-1.5"
-                />
-                
-                <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-200 dark:border-white/10">
-                    <button 
-                        onClick={testSound} 
-                        className="flex items-center gap-1 text-[10px] font-bold uppercase bg-white dark:bg-black/30 border border-gray-200 dark:border-white/20 rounded px-2 py-1 hover:text-[#dd9933]"
-                    >
-                        <Music size={12} /> Testar Som
-                    </button>
-                </div>
-            </div>
+            )}
 
             <div className={isGameMode ? 'opacity-50' : ''}>
               <div className="flex items-center justify-between gap-3">
