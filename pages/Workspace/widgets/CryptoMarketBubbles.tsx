@@ -20,7 +20,8 @@ import {
   LogOut,
   RotateCcw,
   Volume2,
-  VolumeX
+  VolumeX,
+  Music
 } from 'lucide-react';
 import { 
   Twitter, 
@@ -34,7 +35,11 @@ import { fetchTopCoins } from '../services/api';
 import { useBinanceWS } from '../../../services/BinanceWebSocketContext';
 
 // --- SOUND CONFIGURATION ---
+
+// [CURRENT] REMOTE URLS
+// Used for immediate access via the provided server
 const REMOTE_SND_BASE = 'http://centralcrypto.com.br/2/app';
+
 const SND_FUNDO = `${REMOTE_SND_BASE}/fundo.mp3`;
 const SND_BOLAS = `${REMOTE_SND_BASE}/bolas.mp3`;
 const SND_CACAPA = `${REMOTE_SND_BASE}/cacapa.mp3`;
@@ -214,11 +219,12 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   const floatingTextsRef = useRef<FloatingText[]>([]);
   
   const imageCache = useRef(new Map<string, HTMLImageElement>());
-  const bubbleBitmapCache = useRef(new Map<string, HTMLCanvasElement>()); 
+  const bubbleBitmapCache = useRef(new Map<string, HTMLCanvasElement>()); // Optimization: Cache clipped bitmaps
 
   const reqIdRef = useRef<number>(0);
   const dprRef = useRef(1);
 
+  // WebSocket Context
   const { tickers } = useBinanceWS();
   const tickersRef = useRef(tickers);
   useEffect(() => { tickersRef.current = tickers; }, [tickers]);
@@ -286,6 +292,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   const pocketedMaxRef = useRef(0);
   const [pocketedUI, setPocketedUI] = useState({ count: 0, max: 0 });
 
+  // ====== AUDIO SYSTEM ======
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [musicVolume, setMusicVolume] = useState(0.5);
   const [sfxVolume, setSfxVolume] = useState(0.5);
@@ -326,7 +333,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       }
   };
 
-  // 1. Carregamento de Som (Lazy Load) + Controle de Música de Fundo
+ // 1. Carregamento de Som (Lazy Load) + Controle de Música de Fundo
   useEffect(() => {
     if (isGameMode) {
         // Inicializa sons apenas se ainda não foram carregados (Lazy Load)
@@ -465,7 +472,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     const tryLoad = (src: string, onOk: () => void, onFail: () => void) => {
       if (!src) { onFail(); return; }
       const img = new Image();
-      img.crossOrigin = "Anonymous";
       img.onload = () => { watermarkRef.current = img; onOk(); };
       img.onerror = () => onFail();
       img.src = src;
@@ -478,6 +484,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       if (e.key === 'Escape') {
         setDetailOpen(false);
         setSettingsOpen(false);
+        // Cancel Aim
         setIsAimLocked(false);
         setShotPower(0);
         if (draggedParticleRef.current) {
@@ -496,22 +503,15 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // Optimization: Pre-generate clipped bubble image
   const getBubbleBitmap = (url: string) => {
     if (!url) return null;
+    if (bubbleBitmapCache.current.has(url)) return bubbleBitmapCache.current.get(url);
     
-    // Check if we have a valid bitmap cached
-    if (bubbleBitmapCache.current.has(url)) {
-        return bubbleBitmapCache.current.get(url);
-    }
-    
-    // Check if image is loaded in memory AND key matches the original URL
     const img = imageCache.current.get(url);
     if (!img || !img.complete || img.naturalWidth === 0) return null;
 
-    // Generate bitmap ONLY if loaded
     const size = Math.min(img.naturalWidth, img.naturalHeight);
-    if (size <= 0) return null;
-
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
@@ -521,14 +521,10 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     ctx.beginPath();
     ctx.arc(size/2, size/2, size/2, 0, Math.PI*2);
     ctx.clip();
+    ctx.drawImage(img, 0, 0, size, size);
     
-    try {
-        ctx.drawImage(img, 0, 0, size, size);
-        bubbleBitmapCache.current.set(url, canvas);
-        return canvas;
-    } catch (e) {
-        return null;
-    }
+    bubbleBitmapCache.current.set(url, canvas);
+    return canvas;
   };
 
   const loadData = useCallback(async () => {
@@ -610,11 +606,11 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       if (isGameMode) {
         p.targetRadius = isBTC ? GAME_CUE_RADIUS : GAME_BALL_RADIUS;
       } else {
-        let targetRadius = 35; // Bigger base
+        let targetRadius = 24;
         if (sizingMode === 'performance') {
           let metric = Math.max(0.000001, sizeMetricPerf(p.coin));
           const t = (metric - minR) / (maxR - minR || 1);
-          targetRadius = 25 + clamp(t, 0, 1) * 75; // Bigger bubbles
+          targetRadius = 15 + clamp(t, 0, 1) * 55;
         } else {
           const metric = Math.max(1, Number(p.coin.market_cap) || 1);
           let valMaxR = maxR;
@@ -623,7 +619,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
              valMaxR = Math.max(...mcaps);
           }
           const ratio = Math.pow(metric, 0.55) / Math.pow(valMaxR, 0.55);
-          targetRadius = 28 + ratio * 100; // Bigger bubbles
+          targetRadius = 18 + ratio * 90;
         }
         if (isWidget && !isMaximized) {
             targetRadius *= 0.7;
@@ -981,14 +977,12 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     const topCoins = coins.slice(0, effectiveNum);
     if (topCoins.length === 0) return;
 
-    // Simple Preload - Remote Only
     for (const c of topCoins) {
-        if (c?.image && !imageCache.current.has(c.image)) {
-            const img = new Image();
-            img.crossOrigin = "Anonymous";
-            img.src = c.image;
-            imageCache.current.set(c.image, img);
-        }
+      if (c?.image && !imageCache.current.has(c.image)) {
+        const img = new Image();
+        img.src = c.image;
+        imageCache.current.set(c.image, img);
+      }
     }
 
     const shouldRebuildInGame = isGameMode && (!gameHasShotRef.current) && (particlesRef.current.length !== effectiveNum);
@@ -1076,7 +1070,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         setupGameLayout();
       }, 0);
       
-      // Removed generic bgMusic play here, now handled by specific useEffect
+      if(bgMusicRef.current && soundEnabled) bgMusicRef.current.play().catch(()=>{});
 
     } else {
       setGameHasShot(false);
@@ -1098,8 +1092,11 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       setTimeout(() => {
         computeMapTargets();
       }, 0);
-      
-      // Music stop handled by specific useEffect
+
+      if(bgMusicRef.current) {
+          bgMusicRef.current.pause();
+          bgMusicRef.current.currentTime = 0;
+      }
     }
 
     setIsAimLocked(false);
@@ -1193,8 +1190,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     if (detailOpenRef.current) return;
     pointerDownRef.current = true;
     
-    // User interaction enables audio context if needed, handled by browser
-    if (isGameMode && bgMusicRef.current && bgMusicRef.current.paused && soundEnabled && !gameWon && !gameOver) {
+    if (isGameMode && bgMusicRef.current && bgMusicRef.current.paused && soundEnabled) {
         bgMusicRef.current.play().catch(() => {});
     }
 
@@ -1404,8 +1400,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
       for (const p of particles) {
         const viewRadius = rs.isGameMode ? p.targetRadius : (p.targetRadius / k);
-        // SMOOTHER INTERPOLATION
-        p.radius += (viewRadius - p.radius) * 0.06;
+        p.radius += (viewRadius - p.radius) * 0.15;
         p.mass = Math.max(1, p.radius);
       }
 
@@ -1582,7 +1577,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         
         if (pocketedMaxRef.current > 0 && pocketedCountRef.current === pocketedMaxRef.current && !gameWon) {
              setGameWon(true);
-             // Sound handled by useEffect
+             playSound(sfxVitoriaRef.current);
         }
 
         for (let step = 0; step < subSteps; step++) {
@@ -1899,11 +1894,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           ctx.fill();
         }
 
-        // TEXT VISIBILITY FIX: Check radius * zoom level
-        const screenRadius = drawRadius * k;
-        
-        // Show text if radius is large enough OR if image failed to load (fallback)
-        if (!rs.isGameMode && (screenRadius > 14 || !bitmap)) {
+        if (!rs.isGameMode && drawRadius > 12) {
           ctx.fillStyle = '#fff';
           ctx.font = `bold ${Math.max(11, drawRadius * 0.42) / k}px Inter`;
           ctx.textAlign = 'center';
