@@ -215,6 +215,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   
   const imageCache = useRef(new Map<string, HTMLImageElement>());
   const bubbleBitmapCache = useRef(new Map<string, HTMLCanvasElement>()); 
+  const processedImagesRef = useRef(new Set<string>());
 
   const reqIdRef = useRef<number>(0);
   const dprRef = useRef(1);
@@ -361,7 +362,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       }
   }, [isGameMode, soundEnabled]);
   
-  // FIX: Play Victory sound ONLY when popup opens
   useEffect(() => {
       if (gameWon && soundEnabled) {
           playSound(sfxVitoriaRef.current);
@@ -498,17 +498,9 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         return bubbleBitmapCache.current.get(url);
     }
     
-    // Check if image is loaded in memory
-    let img = imageCache.current.get(url);
-    if (!img) {
-        // Force load if not present
-        img = new Image();
-        img.crossOrigin = "Anonymous";
-        img.src = url;
-        imageCache.current.set(url, img);
-    }
-
-    if (!img.complete || img.naturalWidth === 0) return null;
+    // Check if image is loaded in memory AND key matches the original URL
+    const img = imageCache.current.get(url);
+    if (!img || !img.complete || img.naturalWidth === 0) return null;
 
     // Generate bitmap ONLY if loaded
     const size = Math.min(img.naturalWidth, img.naturalHeight);
@@ -529,9 +521,30 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         bubbleBitmapCache.current.set(url, canvas);
         return canvas;
     } catch (e) {
-        // Tainted canvas or error -> do not cache, return null
         return null;
     }
+  };
+
+  const loadChain = (urlKey: string, urls: string[]) => {
+      let index = 0;
+      const tryNext = () => {
+          if (index >= urls.length) return; // All failed
+          const src = urls[index];
+          
+          const img = new Image();
+          img.crossOrigin = "Anonymous";
+          img.src = src;
+          
+          img.onload = () => {
+              imageCache.current.set(urlKey, img); // Map original API url to successfully loaded image
+          };
+          
+          img.onerror = () => {
+              index++;
+              tryNext();
+          };
+      };
+      tryNext();
   };
 
   const loadData = useCallback(async () => {
@@ -985,12 +998,21 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     if (topCoins.length === 0) return;
 
     for (const c of topCoins) {
-      if (c?.image && !imageCache.current.has(c.image)) {
-        const img = new Image();
-        img.crossOrigin = "Anonymous";
-        img.src = c.image;
-        imageCache.current.set(c.image, img);
-      }
+        if (c?.image && !processedImagesRef.current.has(c.image)) {
+            processedImagesRef.current.add(c.image);
+            
+            // Extract filename from URL (e.g., https://.../bitcoin.png -> bitcoin.png)
+            const filename = c.image.split('/').pop() || '';
+            
+            // Chain of Fallbacks
+            const candidates = [
+                `/cachecko/logos/${filename}`,  // 1. Local Cache (Exact Name)
+                c.image,                        // 2. Remote Original
+                WATERMARK_URL                   // 3. Fallback
+            ];
+
+            loadChain(c.image, candidates);
+        }
     }
 
     const shouldRebuildInGame = isGameMode && (!gameHasShotRef.current) && (particlesRef.current.length !== effectiveNum);
