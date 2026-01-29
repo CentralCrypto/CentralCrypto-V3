@@ -35,14 +35,17 @@ import {
 import { fetchTopCoins } from '../services/api';
 
 // --- SOUND PATHS (served from /public) ---
-const BASE = import.meta.env.BASE_URL || '/';
+const runtimeBase = window.location.pathname.startsWith('/v3/') ? '/v3/' : '/';
+const sfx = (name: string) => `${runtimeBase}sfx/${name}`;
 
-const SND_FUNDO = `${BASE}sfx/fundo.mp3`;
-const SND_BOLAS = `${BASE}sfx/bolas.mp3`;
-const SND_CACAPA = `${BASE}sfx/cacapa.mp3`;
-const SND_GAMEOVER = `${BASE}sfx/gameover.mp3`;
-const SND_VITORIA = `${BASE}sfx/vitoria.mp3`;
-const SND_FALL = `${BASE}sfx/fall.mp3`;
+const SND_FUNDO = sfx('fundo.mp3');
+const SND_BOLAS = sfx('bolas.mp3');
+const SND_CACAPA = sfx('cacapa.mp3');
+const SND_GAMEOVER = sfx('gameover.mp3');
+const SND_VITORIA = sfx('vitoria.mp3');
+const SND_FALL = sfx('fall.mp3');
+
+
 
 
 // --- INTERFACES ---
