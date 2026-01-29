@@ -326,10 +326,10 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       }
   };
 
-  // Carregamento de Som Lazy Load + Controle de Música de Fundo
+  // 1. Carregamento de Som (Lazy Load) + Controle de Música de Fundo
   useEffect(() => {
     if (isGameMode) {
-        // Inicializa sons apenas se ainda não foram carregados
+        // Inicializa sons apenas se ainda não foram carregados (Lazy Load)
         if (!bgMusicRef.current) {
             const createAudio = (src: string, loop = false) => {
                 const a = new Audio(src);
@@ -347,12 +347,12 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
         if(bgMusicRef.current) bgMusicRef.current.volume = Math.max(0, Math.min(1, musicVolume));
         
-        // Toca música se não houve vitória ou derrota ainda
+        // Toca música de fundo se som ligado, modo jogo ativo, e NÃO houve vitória ou game over
         if (soundEnabled && bgMusicRef.current && !gameWon && !gameOver) {
             bgMusicRef.current.play().catch((e) => {});
         }
     } else {
-        // Pausa se sair do modo game
+        // Pausa e reseta se sair do modo game
         if (bgMusicRef.current) {
             bgMusicRef.current.pause();
             bgMusicRef.current.currentTime = 0;
@@ -360,7 +360,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     }
   }, [isGameMode, soundEnabled, musicVolume, gameWon, gameOver]);
 
-  // Efeito específico para VITÓRIA (Tocar apenas 1x e pausar música de fundo)
+  // 2. Efeito específico para VITÓRIA (Tocar apenas 1x e pausar música de fundo)
   useEffect(() => {
       if (gameWon) {
           // Pausa música de fundo imediatamente
