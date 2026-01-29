@@ -1,3 +1,4 @@
+
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiCoin, Language, DashboardItem } from '../../../types';
 import {
@@ -34,14 +35,11 @@ import {
 } from '../../../components/Icons';
 import { fetchTopCoins } from '../services/api';
 
-// --- SOUND PATHS FIX (Robust Public Access) ---
-// Garante que o caminho seja sempre absoluto /sfx/arquivo.mp3
+// --- SOUND PATHS FIX ---
+// O Vite serve arquivos da pasta 'public' na raiz do servidor.
+// Se seu projeto está em http://IP:3000/, os sons estarão em http://IP:3000/sfx/arquivo.mp3
 const getPublicSound = (filename: string) => {
-    // Tenta pegar a base do Vite
-    const envBase = (import.meta as any).env?.BASE_URL;
-    // Se não existir ou for apenas a barra, usamos string vazia para montar /sfx
-    const base = (!envBase || envBase === '/') ? '' : envBase.replace(/\/$/, '');
-    return `${base}/sfx/${filename}`;
+    return `/sfx/${filename}`;
 };
 
 const SND_FUNDO = getPublicSound('fundo.mp3');
@@ -387,13 +385,33 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   };
 
   useEffect(() => {
-    // Helper to create and preload audio
+    // Helper to create and preload audio with debug logging
     const createAudio = (src: string, loop = false) => {
         const a = new Audio(src);
         a.loop = loop;
         a.preload = 'auto';
         a.volume = soundVolume;
-        a.onerror = (e) => console.error(`Erro ao carregar som: ${src}`, e);
+        a.onerror = (e) => {
+            // Fix: 'e' can be string | Event in some TS definitions
+            if (typeof e === 'string') return;
+            
+            const target = e.target as HTMLAudioElement;
+            const err = target.error;
+            let errMsg = 'Erro desconhecido';
+            if (err) {
+                switch (err.code) {
+                    case err.MEDIA_ERR_ABORTED: errMsg = 'Busca abortada'; break;
+                    case err.MEDIA_ERR_NETWORK: errMsg = 'Erro de rede'; break;
+                    case err.MEDIA_ERR_DECODE: errMsg = 'Erro de decodificação'; break;
+                    case err.MEDIA_ERR_SRC_NOT_SUPPORTED: errMsg = 'Formato não suportado ou arquivo não encontrado (404)'; break;
+                }
+            }
+            console.error(`[Audio Error] Falha ao carregar: ${src}`, {
+                fullUrl: target.src,
+                errorCode: err?.code,
+                message: errMsg
+            });
+        };
         return a;
     };
 
