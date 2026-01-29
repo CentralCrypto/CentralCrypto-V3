@@ -1,3 +1,4 @@
+
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiCoin, Language, DashboardItem } from '../../../types';
 import {
@@ -35,18 +36,15 @@ import {
 import { fetchTopCoins } from '../services/api';
 
 // --- SOUND PATHS (served from /public) ---
-const runtimeBase = window.location.pathname.startsWith('/v3/') ? '/v3/' : '/';
-const sfx = (name: string) => `${runtimeBase}sfx/${name}`;
+// Coloque os arquivos em: /public/sfx/
+const BASE = import.meta.env.BASE_URL; // "/" no dev, e "/v3/" ou similar no build se você configurar base
 
-const SND_FUNDO = sfx('fundo.mp3');
-const SND_BOLAS = sfx('bolas.mp3');
-const SND_CACAPA = sfx('cacapa.mp3');
-const SND_GAMEOVER = sfx('gameover.mp3');
-const SND_VITORIA = sfx('vitoria.mp3');
-const SND_FALL = sfx('fall.mp3');
-
-
-
+const SND_FUNDO = `${BASE}sfx/fundo.mp3`;
+const SND_BOLAS = `${BASE}sfx/bolas.mp3`;
+const SND_CACAPA = `${BASE}sfx/cacapa.mp3`;
+const SND_GAMEOVER = `${BASE}sfx/gameover.mp3`;
+const SND_VITORIA = `${BASE}sfx/vitoria.mp3`;
+const SND_FALL = `${BASE}sfx/fall.mp3`;
 
 // --- INTERFACES ---
 interface Particle {
@@ -2627,12 +2625,9 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                           onChange={(e) => setShotPower(Number(e.target.value))}
                           onMouseUp={executeShot}
                           onTouchEnd={executeShot}
-                          className="w-48 h-3 rounded-lg appearance-none cursor-pointer border border-gray-600/50"
+                          className="w-48 h-3 rounded-lg appearance-none cursor-pointer"
                           style={{
-                              // Técnica de Dual Gradient:
-                              // 1. O primeiro gradiente vai de transparente (0%) até a cor cinza escuro na posição do cursor (shotPower%).
-                              // 2. O segundo gradiente é o colorido completo, que fica "por baixo" e é revelado pelo primeiro.
-                              background: `linear-gradient(to right, transparent ${shotPower}%, #374151 ${shotPower}%), linear-gradient(to right, #22c55e 0%, #eab308 50%, #ef4444 100%)`
+                              background: `linear-gradient(to right, #22c55e 0%, #eab308 50%, #ef4444 100%)`
                           }}
                       />
                       <span 
