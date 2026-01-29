@@ -9,7 +9,6 @@ import {
   X as CloseIcon,
   Atom,
   Coins,
-  Maximize,
   Wind,
   Info,
   ChevronLeft,
@@ -20,10 +19,9 @@ import {
   Trophy,
   LogOut,
   RotateCcw,
-  Target,
-  Crosshair,
   Volume2,
-  VolumeX
+  VolumeX,
+  Music
 } from 'lucide-react';
 import { 
   Twitter, 
@@ -35,14 +33,29 @@ import {
 } from '../../../components/Icons';
 import { fetchTopCoins } from '../services/api';
 
-// --- SOUND IMPORTS (Relative to this file) --- 
-// O usuário deve colocar estes arquivos na pasta pages/Workspace/widgets/ 
-const SND_FUNDO = new URL('./fundo.mp3', import.meta.url).href; 
-const SND_BOLAS = new URL('./bolas.mp3', import.meta.url).href; 
-const SND_CACAPA = new URL('./cacapa.mp3', import.meta.url).href; 
-const SND_GAMEOVER = new URL('./gameover.mp3', import.meta.url).href; 
-const SND_VITORIA = new URL('./vitoria.mp3', import.meta.url).href; 
-const SND_FALL = new URL('./fall.mp3', import.meta.url).href;
+// --- SOUND CONFIGURATION ---
+
+// [CURRENT] REMOTE URLS
+// Used for immediate access via the provided server
+const REMOTE_SND_BASE = 'http://centralcrypto.com.br/2/app';
+
+const SND_FUNDO = `${REMOTE_SND_BASE}/fundo.mp3`;
+const SND_BOLAS = `${REMOTE_SND_BASE}/bolas.mp3`;
+const SND_CACAPA = `${REMOTE_SND_BASE}/cacapa.mp3`;
+const SND_GAMEOVER = `${REMOTE_SND_BASE}/gameover.mp3`;
+const SND_VITORIA = `${REMOTE_SND_BASE}/vitoria.mp3`;
+const SND_FALL = `${REMOTE_SND_BASE}/fall.mp3`;
+
+// [FUTURE] LOCAL DEPLOYMENT (public/sfx folder)
+// Uncomment this block and ensure files are in /public/sfx/ when building for production if you want to serve locally
+/*
+const SND_FUNDO = '/sfx/fundo.mp3';
+const SND_BOLAS = '/sfx/bolas.mp3';
+const SND_CACAPA = '/sfx/cacapa.mp3';
+const SND_GAMEOVER = '/sfx/gameover.mp3';
+const SND_VITORIA = '/sfx/vitoria.mp3';
+const SND_FALL = '/sfx/fall.mp3';
+*/
 
 // --- INTERFACES ---
 interface Particle {
@@ -64,10 +77,8 @@ interface Particle {
   fallFromX?: number;
   fallFromY?: number;
   
-  // Flag para evitar pontuação duplicada nos sub-steps de física
   scoreCounted?: boolean;
 
-  // map transition
   mapFromX?: number;
   mapFromY?: number;
   mapToX?: number;
@@ -80,7 +91,7 @@ interface FloatingText {
   y: number;
   text: string;
   subText: string;
-  age: number; // 1.0 a 0.0
+  age: number; 
   color: string;
 }
 
@@ -91,7 +102,6 @@ type Timeframe = '1h' | '24h' | '7d';
 interface CryptoMarketBubblesProps { 
     language: Language; 
     onClose?: () => void;
-    // Widget Props
     isWidget?: boolean;
     item?: DashboardItem;
 }
@@ -116,53 +126,34 @@ const formatPrice = (v?: number) => {
   return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
-// FIX: Real calculation based on Timeframe
 const computeSparkChange = (coin: any, tf: Timeframe) => {
   let pct = 0;
-  
   if (tf === '24h') {
-      // Use direct API field for 24h to be precise
       pct = Number(coin?.price_change_percentage_24h);
   } else {
-      // Calculate from Sparkline for 1h and 7d
       const prices = coin?.sparkline_in_7d?.price;
       if (Array.isArray(prices) && prices.length > 1) {
           const last = prices[prices.length - 1];
           let start = prices[0];
-
           if (tf === '1h') {
-              // Assuming ~168 points for 7 days (hourly resolution from CoinGecko)
-              // We take the second to last point as approx 1h ago
               const idx = Math.max(0, prices.length - 2); 
               start = prices[idx];
           } else if (tf === '7d') {
               start = prices[0];
           }
-
           if (start !== 0 && isFinite(start) && isFinite(last)) {
               pct = ((last - start) / start) * 100;
           } else {
-              // Fallback if sparkline is weird
               pct = Number(coin?.price_change_percentage_24h); 
           }
       } else {
-          // Fallback if no sparkline
           pct = Number(coin?.price_change_percentage_24h);
       }
   }
-
-  // Safety check
   if (!isFinite(pct)) pct = 0;
-
-  return { 
-      pct, 
-      absPct: Math.abs(pct), 
-      series: null as number[] | null, 
-      inferredMinutesPerPoint: null as number | null 
-  };
+  return { pct, absPct: Math.abs(pct) };
 };
 
-// --- WATERMARK URL (Logo Central Crypto) ---
 const WATERMARK_URL = 'https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png';
 
 const drawWatermark = (
@@ -171,27 +162,21 @@ const drawWatermark = (
   height: number,
   img: HTMLImageElement | null,
   opacity: number,
-  // Optional specific dimensions (for drawing inside the pool table)
   rect?: { x: number, y: number, w: number, h: number }
 ) => {
   if (!img || !img.complete || img.naturalWidth <= 0 || img.naturalHeight <= 0) return;
-
   let x, y, w, h;
 
   if (rect) {
-      // Draw inside specific rect (Pool Table felt)
-      // Fit logo within 80% of rect dimensions
       const margin = 0.8;
       const scaleW = (rect.w * margin) / img.naturalWidth;
       const scaleH = (rect.h * margin) / img.naturalHeight;
       const scale = Math.min(scaleW, scaleH);
-
       w = img.naturalWidth * scale;
       h = img.naturalHeight * scale;
       x = rect.x + (rect.w - w) / 2;
       y = rect.y + (rect.h - h) / 2;
   } else {
-      // Draw standard centered (Map mode)
       const minDim = Math.min(width, height);
       const targetW = minDim * 0.5;
       const scale = targetW / img.naturalWidth;
@@ -200,7 +185,6 @@ const drawWatermark = (
       x = (width - w) / 2;
       y = (height - h) / 2;
   }
-
   ctx.save();
   ctx.globalAlpha = opacity;
   ctx.imageSmoothingEnabled = true;
@@ -209,28 +193,19 @@ const drawWatermark = (
   ctx.restore();
 };
 
-// GAME CONFIG - TABLE DIMENSIONS
-// Borda externa (chão)
 const TABLE_FLOOR_MARGIN = 40; 
-// Largura da madeira
 const TABLE_WOOD_WIDTH = 30;
-// Largura da borracha interna (cushion)
 const TABLE_CUSHION_WIDTH = 10;
-
-// O PAD de colisão física é a soma das bordas até a área jogável
 const GAME_WALL_PAD = TABLE_FLOOR_MARGIN + TABLE_WOOD_WIDTH + TABLE_CUSHION_WIDTH;
-
 const GAME_BALL_RADIUS = 26;
 const GAME_CUE_RADIUS = 32;
 const GAME_LINEAR_DAMP = 0.994;
 const GAME_STOP_EPS = 0.6;
 
-// FREE MODE physics
 const FREE_LINEAR_DAMP = 0.992;
 const FREE_MAX_SPEED = 420;
 const FREE_REPULSE = 0.95;
 
-// Transform
 type Transform = { k: number; x: number; y: number };
 type TransformTween = { active: boolean; from: Transform; to: Transform; t: number; dur: number };
 
@@ -248,10 +223,10 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const settingsPanelRef = useRef<HTMLDivElement>(null);
-  const settingsBtnRef = useRef<HTMLButtonElement>(null); // FIX: Ref for button
+  const settingsBtnRef = useRef<HTMLButtonElement>(null);
 
   const particlesRef = useRef<Particle[]>([]);
-  const floatingTextsRef = useRef<FloatingText[]>([]); // New Floating Texts
+  const floatingTextsRef = useRef<FloatingText[]>([]);
   
   const imageCache = useRef(new Map<string, HTMLImageElement>());
   const reqIdRef = useRef<number>(0);
@@ -268,21 +243,15 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   const [timeframe, setTimeframe] = useState<Timeframe>('24h');
 
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [legendTipOpen, setLegendTipOpen] = useState(false);
-
-  // Timer para fechar settings
   const settingsCloseTimerRef = useRef<number | null>(null);
 
   const [isGameMode, setIsGameMode] = useState(false);
-  // Default to Free Mode if it's a widget, otherwise start in Map Mode
   const [isFreeMode, setIsFreeMode] = useState(isWidget); 
   
-  // Game states
   const [gameOver, setGameOver] = useState(false);
   const [gameWon, setGameWon] = useState(false);
   const [showGameIntro, setShowGameIntro] = useState(false);
 
-  // Widget specific: Fewer coins when minimized
   const isMaximized = item?.isMaximized ?? !isWidget;
   const defaultCoins = isWidget && !isMaximized ? 25 : 100;
 
@@ -296,16 +265,13 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
 
-  // detail panel
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailCoin, setDetailCoin] = useState<ApiCoin | null>(null);
   const [detailAnimKey, setDetailAnimKey] = useState(0);
 
-  // magazine
   const [magPosts, setMagPosts] = useState<MagazinePost[]>([]);
   const [magIndex, setMagIndex] = useState(0);
 
-  // Transform
   const transformRef = useRef<Transform>({ k: 1, x: 0, y: 0 });
   const tweenRef = useRef<TransformTween>({ active: false, from: { k: 1, x: 0, y: 0 }, to: { k: 1, x: 0, y: 0 }, t: 0, dur: 0.35 });
 
@@ -315,26 +281,15 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   const lastMousePosRef = useRef<{ x: number; y: number } | null>(null);
 
   const watermarkRef = useRef<HTMLImageElement | null>(null);
-
-  // Map stats cache
-  const statsRef = useRef<{
-    minX: number, maxX: number,
-    minY: number, maxY: number,
-    minR: number, maxR: number,
-    logMinX: number, logMaxX: number,
-    logMinY: number, logMaxY: number
-  } | null>(null);
+  const statsRef = useRef<any>(null);
 
   const hoveredParticleRef = useRef(hoveredParticle);
   hoveredParticleRef.current = hoveredParticle;
-
   const selectedParticleRef = useRef(selectedParticle);
   selectedParticleRef.current = selectedParticle;
-
   const detailOpenRef = useRef(detailOpen);
   detailOpenRef.current = detailOpen;
 
-  // score + audio
   const pocketedCountRef = useRef(0);
   const pocketedMaxRef = useRef(0);
   const [pocketedUI, setPocketedUI] = useState({ count: 0, max: 0 });
@@ -343,7 +298,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [soundVolume, setSoundVolume] = useState(0.5);
 
-  // Audio state refs to avoid stale closures in game loop
   const soundEnabledRef = useRef(soundEnabled);
   const soundVolumeRef = useRef(soundVolume);
   useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
@@ -355,27 +309,29 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   const sfxGameOverRef = useRef<HTMLAudioElement | null>(null);
   const sfxVitoriaRef = useRef<HTMLAudioElement | null>(null);
   const sfxFallRef = useRef<HTMLAudioElement | null>(null);
-  const lastCollisionTimeRef = useRef(0); // Debounce collisions
+  const lastCollisionTimeRef = useRef(0);
 
   const playSound = (audio: HTMLAudioElement | null, volumeMultiplier = 1.0) => {
       if (!audio || !soundEnabledRef.current) return;
       try {
           audio.currentTime = 0;
           audio.volume = Math.max(0, Math.min(1, soundVolumeRef.current * volumeMultiplier));
-          audio.play().catch(() => {}); // Ignore interaction errors
-      } catch (e) {}
+          const playPromise = audio.play();
+          if (playPromise !== undefined) {
+             playPromise.catch(error => { });
+          }
+      } catch (e) { }
   };
 
   const playCollision = () => {
       const now = performance.now();
-      if (now - lastCollisionTimeRef.current > 80) { // Limit to 1 sound every 80ms
+      if (now - lastCollisionTimeRef.current > 80) {
         playSound(sfxBolasRef.current, 0.8);
         lastCollisionTimeRef.current = now;
       }
   };
 
   useEffect(() => {
-    // Helper to create and preload audio
     const createAudio = (src: string, loop = false) => {
         const a = new Audio(src);
         a.loop = loop;
@@ -383,7 +339,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         a.volume = soundVolume;
         return a;
     };
-
+    // Import variables resolve to URLs
     bgMusicRef.current = createAudio(SND_FUNDO, true);
     sfxBolasRef.current = createAudio(SND_BOLAS);
     sfxCacapaRef.current = createAudio(SND_CACAPA);
@@ -399,43 +355,44 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     };
   }, []);
 
-  // Update Volumes dynamically
   useEffect(() => {
-     if(bgMusicRef.current) bgMusicRef.current.volume = Math.max(0, Math.min(1, soundVolume * 0.3)); // Background lower
+     if(bgMusicRef.current) bgMusicRef.current.volume = Math.max(0, Math.min(1, soundVolume * 0.3)); 
   }, [soundVolume]);
 
-  // Manage BG Music based on Game Mode and Settings
   useEffect(() => {
       if (isGameMode && soundEnabled && bgMusicRef.current) {
-          // Play on interaction (handled in pointerDown) or try now
-          bgMusicRef.current.play().catch(() => {});
+          bgMusicRef.current.play().catch((e) => {});
       } else if (bgMusicRef.current) {
           bgMusicRef.current.pause();
           if(!isGameMode) bgMusicRef.current.currentTime = 0;
       }
   }, [isGameMode, soundEnabled]);
 
-  // ====== GAME NEW MECHANIC ======
-  // aimLocked: true when user clicks once. Then the slider UI appears.
+  const testSound = () => {
+      if (sfxBolasRef.current) {
+          sfxBolasRef.current.currentTime = 0;
+          sfxBolasRef.current.volume = 1.0;
+          sfxBolasRef.current.play()
+            .then(() => {})
+            .catch(e => alert("Erro ao tocar som: " + e.message + ". Verifique permissões do navegador."));
+      } else {
+          alert("Objeto de áudio não inicializado.");
+      }
+  };
+
   const [isAimLocked, setIsAimLocked] = useState(false);
-  // shotPower: 0 to 100, controlled by UI Slider
   const [shotPower, setShotPower] = useState(0);
-  // Position for the slider popup (clamped to screen)
   const [aimLockPos, setAimLockPos] = useState({ x: 0, y: 0 });
   
-  // Refs for loop access
   const isAimLockedRef = useRef(false);
   const shotPowerRef = useRef(0);
   
   useEffect(() => { isAimLockedRef.current = isAimLocked; }, [isAimLocked]);
   useEffect(() => { shotPowerRef.current = shotPower; }, [shotPower]);
 
-  // Game Aim State (Position of aim target)
   const gameAimRef = useRef<{ x: number, y: number }>({ x: 0, y: 0 });
-
   const cueHideUntilRef = useRef<number>(0);
   const pointerDownRef = useRef(false);
-
   const prevNormalNumCoinsRef = useRef<number>(100);
 
   const centralSocials = useMemo(() => ([
@@ -447,14 +404,12 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     { icon: Spotify, href: "https://open.spotify.com/show/1FurXwMBQIJOBKEBXDUiGb" }
   ]), []);
 
-  // ===== Helpers: coordinate transforms =====
   const screenToWorld = (clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0, mx: 0, my: 0 };
     const rect = canvas.getBoundingClientRect();
     const mx = clientX - rect.left;
     const my = clientY - rect.top;
-
     const { k, x, y } = transformRef.current;
     return {
       x: (mx - x) / k,
@@ -464,25 +419,20 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     };
   };
 
-  // ===== Update Coins Count when Maximized Changes =====
   useEffect(() => {
       if (isWidget) {
-          // Update coin count based on maximize state
           setNumCoins(isMaximized ? 100 : 25);
-          
-          // Reset transform to fit new size
           animateTransformTo({ k: 1, x: 0, y: 0 }, 0.5);
       }
   }, [isMaximized, isWidget]);
 
-  // ===== Click outside settings to close =====
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
         if (
             settingsOpen && 
             settingsPanelRef.current && 
             !settingsPanelRef.current.contains(event.target as Node) &&
-            settingsBtnRef.current && // Check if click is NOT on the button
+            settingsBtnRef.current && 
             !settingsBtnRef.current.contains(event.target as Node)
         ) {
             setSettingsOpen(false);
@@ -492,7 +442,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [settingsOpen]);
 
-  // ===== Auto Close Settings on Mouse Leave Logic =====
   const handleSettingsEnter = () => {
     if (settingsCloseTimerRef.current) {
         clearTimeout(settingsCloseTimerRef.current);
@@ -506,7 +455,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     }, 3000);
   };
 
-  // Prevent Body Scroll only in Full Page Mode
   useEffect(() => {
     if (isWidget) return;
     const prevBody = document.body.style.overflow;
@@ -519,13 +467,10 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     };
   }, [isWidget]);
 
-  // Load Watermark
   useEffect(() => {
     const tryLoad = (src: string, onOk: () => void, onFail: () => void) => {
       if (!src) { onFail(); return; }
       const img = new Image();
-      // REMOVIDO crossOrigin para evitar bloqueio se o servidor não enviar header
-      // img.crossOrigin = 'anonymous'; 
       img.onload = () => { watermarkRef.current = img; onOk(); };
       img.onerror = () => onFail();
       img.src = src;
@@ -538,12 +483,9 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       if (e.key === 'Escape') {
         setDetailOpen(false);
         setSettingsOpen(false);
-        setLegendTipOpen(false);
-        
         // Cancel Aim
         setIsAimLocked(false);
         setShotPower(0);
-
         if (draggedParticleRef.current) {
           draggedParticleRef.current.isFixed = false;
           draggedParticleRef.current = null;
@@ -551,8 +493,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         isPanningRef.current = false;
         pointerDownRef.current = false;
       }
-      
-      // Fire on Spacebar if Aim Locked
       if (e.code === 'Space' && isAimLockedRef.current) {
           e.preventDefault();
           executeShot();
@@ -562,7 +502,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // ===== Data loading =====
   const loadData = useCallback(async () => {
     if (particlesRef.current.length === 0) setStatus('loading');
     try {
@@ -576,12 +515,10 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     }
   }, []);
 
-  // ===== Transform animation =====
   const animateTransformTo = useCallback((to: Transform, dur = 0.35) => {
     tweenRef.current = { active: true, from: { ...transformRef.current }, to, t: 0, dur };
   }, []);
 
-  // ===== Metrics =====
   const getCoinPerf = useCallback((coin: any) => computeSparkChange(coin, timeframe), [timeframe]);
   const getCoinPerfPct = useCallback((coin: any) => getCoinPerf(coin).pct, [getCoinPerf]);
   const getCoinAbsPct = useCallback((coin: any) => getCoinPerf(coin).absPct, [getCoinPerf]);
@@ -593,7 +530,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     return absPct * volFactor;
   }, [getCoinAbsPct]);
 
-  // ===== Stats + targets =====
   const recomputeStatsAndTargets = useCallback((coinsList: ApiCoin[], mode: ChartMode, effectiveCount: number) => {
     const topCoins = coinsList.slice(0, effectiveCount);
     if (topCoins.length === 0) return;
@@ -601,14 +537,11 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     const xData: number[] = [];
     const yData: number[] = [];
     const rData: number[] = [];
-
-    // FORCE VALUATION MODE IN FREE MODE FOR SIZING
     const sizingMode = isFreeMode ? 'valuation' : mode;
 
     for (const c of topCoins) {
       const vol = Math.max(1, Number(c.total_volume) || 1);
       yData.push(vol);
-
       if (mode === 'performance') {
         const x = getCoinPerfPct(c) || 0;
         xData.push(x);
@@ -644,19 +577,15 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       const isBTC = String(p.coin.id).toLowerCase() === 'bitcoin';
 
       if (isGameMode) {
-        // Fix: Force standard sizes in game mode, ignoring market data
         p.targetRadius = isBTC ? GAME_CUE_RADIUS : GAME_BALL_RADIUS;
       } else {
         let targetRadius = 24;
-        
         if (sizingMode === 'performance') {
           let metric = Math.max(0.000001, sizeMetricPerf(p.coin));
           const t = (metric - minR) / (maxR - minR || 1);
           targetRadius = 15 + clamp(t, 0, 1) * 55;
         } else {
-          // VALUATION MODE (Power Law scaling for Mkt Cap)
           const metric = Math.max(1, Number(p.coin.market_cap) || 1);
-          // Recalculate maxR for valuation specifically if we are forcing valuation sizing in perf mode
           let valMaxR = maxR;
           if (mode === 'performance') {
              const mcaps = topCoins.map(c => Math.max(1, Number(c.market_cap) || 1));
@@ -665,21 +594,16 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           const ratio = Math.pow(metric, 0.55) / Math.pow(valMaxR, 0.55);
           targetRadius = 18 + ratio * 90;
         }
-        
-        // Widget Mini Mode scaling
         if (isWidget && !isMaximized) {
-            targetRadius *= 0.7; // Reduce size for mini widget
+            targetRadius *= 0.7;
         }
-
         p.targetRadius = targetRadius;
       }
-
       p.mass = Math.max(1, p.targetRadius);
       p.color = isBTC ? '#ffffff' : baseColor;
     }
   }, [getCoinPerfPct, sizeMetricPerf, isGameMode, isFreeMode, isWidget, isMaximized]);
 
-  // ===== Map targets (world coords = "map space") =====
   const computeMapTargets = useCallback(() => {
     if (!statsRef.current) return;
     const canvas = canvasRef.current;
@@ -717,7 +641,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     for (const p of particlesRef.current) {
       const yVal = Math.max(1, Number(p.coin.total_volume) || 1);
       let xVal = 0;
-
       if (chartMode === 'performance') xVal = getCoinPerfPct(p.coin) || 0;
       else xVal = Math.max(1, Number(p.coin.market_cap) || 1);
 
@@ -732,12 +655,10 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     }
   }, [chartMode, getCoinPerfPct]);
 
-  // ===== Game layout =====
   const setupGameLayout = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // ajuste: garante que o modo game não herda zoom/pan do modo mapa
     transformRef.current = { k: 1, x: 0, y: 0 };
     tweenRef.current.active = false;
 
@@ -765,7 +686,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       p.fallT = 0;
       p.fallPocket = null;
       p.mapT = 1;
-      p.scoreCounted = false; // Reset score flag
+      p.scoreCounted = false; 
     }
 
     if (cue) {
@@ -795,7 +716,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       }
     }
 
-    // GAME WALL PAD agora é maior (chão + madeira + borracha)
     const minX = GAME_WALL_PAD + GAME_BALL_RADIUS;
     const maxX = w - GAME_WALL_PAD - GAME_BALL_RADIUS;
     const minY = GAME_WALL_PAD + GAME_BALL_RADIUS;
@@ -812,7 +732,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     setPocketedUI({ count: 0, max: maxPocket });
     floatingTextsRef.current = [];
 
-    // Reset Controls
     setIsAimLocked(false);
     setShotPower(0);
     gameAimRef.current = { x: 0, y: 0 };
@@ -823,7 +742,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     setGameWon(false);
   }, []);
 
-  // ===== Reset button: reset zoom + also resets free mode to map start + resets game =====
   const hardResetView = useCallback(() => {
     setIsAimLocked(false);
     setShotPower(0);
@@ -838,7 +756,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     animateTransformTo({ k: 1, x: 0, y: 0 }, 0.35);
 
     if (isFreeMode) {
-      if (!isWidget) { // Only force map mode reset in Full Page
+      if (!isWidget) { 
           setIsFreeMode(false);
           setTimeout(() => {
             computeMapTargets();
@@ -857,22 +775,18 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     }
   }, [animateTransformTo, isFreeMode, computeMapTargets, isGameMode, setupGameLayout, isWidget]);
 
-  // NEW: Quick Retry Handler (Instantly resets physics, no re-fetching)
   const handleQuickRetry = useCallback(() => {
       setGameOver(false);
       setGameWon(false);
       setGameHasShot(false);
       
-      // Reset score
       pocketedCountRef.current = 0;
       setPocketedUI(prev => ({ ...prev, count: 0 }));
 
-      // Reset Physics Refs
       setIsAimLocked(false);
       setShotPower(0);
       pointerDownRef.current = false;
 
-      // Force instant layout reset without waiting for state/effect chain
       setTimeout(() => {
           setupGameLayout();
       }, 0);
@@ -884,7 +798,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       setGameWon(false);
   }, []);
 
-  // === NEW SHOOT MECHANISM ===
   const executeShot = useCallback(() => {
       if (!isAimLocked) return;
       
@@ -901,8 +814,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       const nx = dx / dist;
       const ny = dy / dist;
 
-      // Power is derived from the slider (0-100) mapped to game physics force
-      // We start aiming with 0.01 pull, so min is 0.01
       const pullNorm = clamp(shotPower / 100, 0.01, 1);
       const basePower = 42000;
       const power = basePower * pullNorm;
@@ -911,14 +822,13 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       cue.vy += ny * (power / Math.max(1, cue.mass));
 
       cueHideUntilRef.current = performance.now() + 5000;
-      playSound(sfxBolasRef.current); // Som da tacada
+      playSound(sfxBolasRef.current); 
 
       setGameHasShot(true);
       setIsAimLocked(false);
-      setShotPower(0); // Reset slider
+      setShotPower(0);
   }, [isAimLocked, shotPower, soundEnabled, soundVolume]);
 
-  // ===== Magazine fetch =====
   const fetchMagazine = useCallback(async () => {
     try {
       const res = await fetch('/2/wp-json/wp/v2/posts?per_page=6&_embed=1', { cache: 'no-store' });
@@ -951,7 +861,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     setMagIndex(i => clamp(i, 0, slides - 1));
   }, [magPosts]);
 
-  // ===== Init + resize =====
   useEffect(() => {
     loadData();
     const interval = setInterval(loadData, 60000);
@@ -992,7 +901,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     };
   }, [loadData]);
 
-  // ===== Build particles (rebuild allowed entering game / before first shot; locked after first shot) =====
   const getEffectiveCount = useCallback(() => {
     if (isGameMode) return clamp(numCoins, 16, 32);
     return numCoins;
@@ -1073,7 +981,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     if (!isGameMode && !isFreeMode) computeMapTargets();
   }, [chartMode, timeframe, coins, recomputeStatsAndTargets, isGameMode, isFreeMode, computeMapTargets, getEffectiveCount]);
 
-  // ===== Mode toggles =====
   useEffect(() => {
     if (isGameMode) {
       prevNormalNumCoinsRef.current = numCoins;
@@ -1086,20 +993,17 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
       setIsFreeMode(false);
       setSettingsOpen(false);
-      setLegendTipOpen(false);
       
       setGameOver(false);
       setGameWon(false);
       setShowGameIntro(true);
 
-      // ajuste: garante transform neutro ao entrar no game
       animateTransformTo({ k: 1, x: 0, y: 0 }, 0.2);
 
       setTimeout(() => {
         setupGameLayout();
       }, 0);
       
-      // Attempt play bg music if allowed
       if(bgMusicRef.current && soundEnabled) bgMusicRef.current.play().catch(()=>{});
 
     } else {
@@ -1107,7 +1011,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
       setDetailOpen(false);
       setSettingsOpen(false);
-      setLegendTipOpen(false);
       
       setGameOver(false);
       setGameWon(false);
@@ -1149,7 +1052,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     }
   }, [isFreeMode, isGameMode, computeMapTargets]);
 
-  // ===== UI helpers =====
   const openDetailFor = (p: Particle) => {
     setSelectedParticle(p);
     setDetailCoin(p.coin);
@@ -1157,25 +1059,21 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     setDetailOpen(true);
   };
 
-  // ===== Pointer handlers =====
   const handlePointerMove = (e: React.PointerEvent) => {
     const wpos = screenToWorld(e.clientX, e.clientY);
     lastMousePosRef.current = { x: wpos.x, y: wpos.y };
 
     if (detailOpenRef.current) return;
 
-    // Game Aiming Logic
     if (isGameMode) {
       const cue = particlesRef.current.find(pp => String(pp.coin.id).toLowerCase() === 'bitcoin');
       if (!cue || cue.isFalling) return;
 
-      // Only update aim ref if Aim IS NOT locked
       if (!isAimLocked) {
         gameAimRef.current = { x: wpos.x, y: wpos.y };
       }
     }
 
-    // dragging
     if (draggedParticleRef.current) {
       const p = draggedParticleRef.current;
       p.x = wpos.x;
@@ -1196,7 +1094,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
     const { k, x, y } = transformRef.current;
 
-    // Hover Detection
     if (!isGameMode) {
         const rect = canvas.getBoundingClientRect();
         const mx = e.clientX - rect.left;
@@ -1227,7 +1124,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     if (detailOpenRef.current) return;
     pointerDownRef.current = true;
     
-    // Play music on first interaction if needed
     if (isGameMode && bgMusicRef.current && bgMusicRef.current.paused && soundEnabled) {
         bgMusicRef.current.play().catch(() => {});
     }
@@ -1239,17 +1135,14 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       if (!cue || cue.isFalling) return;
 
       if (!isAimLocked) {
-         // Lock Aim on First Click
          setIsAimLocked(true);
-         setShotPower(0); // RESET POWER TO 0 ON LOCK
+         setShotPower(0); 
          
-         // Capture screen position for slider
          const rect = canvasRef.current?.getBoundingClientRect();
          if (rect) {
              const x = e.clientX;
              const y = e.clientY;
              
-             // Clamp to viewport
              const PADDING = 20;
              const POPUP_W = 200;
              const POPUP_H = 100;
@@ -1268,7 +1161,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       return;
     }
 
-    // non-game: click coin opens detail
     if (hoveredParticleRef.current) {
       openDetailFor(hoveredParticleRef.current);
       return;
@@ -1306,7 +1198,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     if (detailOpenRef.current) return;
-    if (isGameMode || isFreeMode) return; // Disable zoom in Free Mode too
+    if (isGameMode || isFreeMode) return; 
 
     const canvas = canvasRef.current; if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
@@ -1327,61 +1219,17 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     transformRef.current = { k: clampedK, x: newX, y: newY };
   };
 
-  const legendText = useMemo(() => {
-    if (isGameMode) {
-      return (
-        <>
-          <div><span className="font-black">Modo Game</span></div>
-          <div>• Mova o mouse para mirar.</div>
-          <div>• Clique para <b>TRAVAR A MIRA</b>.</div>
-          <div>• Use o slider central para tacar.</div>
-        </>
-      );
-    }
-    if (isFreeMode) {
-      return (
-        <>
-          <div><span className="font-black">Modo Livre</span></div>
-          <div>• Bolhas flutuam com colisão (não atravessa).</div>
-          <div>• Market Cap / Variação alteram tamanho e cor.</div>
-        </>
-      );
-    }
-    if (chartMode === 'performance') {
-      return (
-        <>
-          <div><span className="font-black">Modo Variação</span></div>
-          <div>• X: Variação {timeframe} (%)</div>
-          <div>• Y: Volume 24h (log)</div>
-          <div>• Tamanho: |%| × log(volume)</div>
-        </>
-      );
-    }
-    return (
-      <>
-        <div><span className="font-black">Modo Market Cap</span></div>
-        <div>• X: Market Cap (log)</div>
-        <div>• Y: Volume 24h (log)</div>
-        <div>• Tamanho: Market Cap (escala log)</div>
-      </>
-    );
-  }, [chartMode, timeframe, isGameMode, isFreeMode]);
-
   const detailPerf24 = useMemo(() => detailCoin ? computeSparkChange(detailCoin, '24h') : null, [detailCoin]);
   const detailPerf1h = useMemo(() => detailCoin ? computeSparkChange(detailCoin, '1h') : null, [detailCoin]);
   const detailPerf7d = useMemo(() => detailCoin ? computeSparkChange(detailCoin, '7d') : null, [detailCoin]);
 
   const perfColor = (pct?: number) => (Number(pct) >= 0 ? '#089981' : '#f23645');
-
-  const effectiveNumCoins = useMemo(() => getEffectiveCount(), [getEffectiveCount]);
-
   const magSlides = useMemo(() => {
     const out: MagazinePost[][] = [];
     for (let i = 0; i < magPosts.length; i += 3) out.push(magPosts.slice(i, i + 3));
     return out.length ? out : [[]];
   }, [magPosts]);
   
-  // ====== “ANTI-PISCAR”: render loop roda uma vez e lê tudo por refs ======
   const renderStateRef = useRef({
     isDark,
     chartMode,
@@ -1391,7 +1239,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     floatStrengthRaw,
     trailLength,
     searchTerm,
-    isWidget // Added
+    isWidget 
   });
 
   useEffect(() => {
@@ -1404,11 +1252,10 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       floatStrengthRaw,
       trailLength,
       searchTerm,
-      isWidget // Added
+      isWidget
     };
   }, [isDark, chartMode, isGameMode, isFreeMode, timeframe, floatStrengthRaw, trailLength, searchTerm, isWidget]);
 
-  // ===== RENDER LOOP (single mount, no flicker) =====
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d', { alpha: true });
@@ -1420,7 +1267,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       const pulse = isLocked ? (1 + Math.sin(performance.now() * 0.012) * 0.12) : 1;
       ctx2.save();
       ctx2.globalAlpha = isLocked ? 0.92 : 0.75;
-      // Change color when locked to indicate ready state
       ctx2.strokeStyle = isLocked ? '#22c55e' : (isDarkMode ? 'rgba(255,255,255,0.80)' : 'rgba(0,0,0,0.75)');
       ctx2.lineWidth = (isLocked ? 3 : 2) / k;
 
@@ -1465,11 +1311,9 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         if (tw.t >= 1) tw.active = false;
       }
 
-      // clear background
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalAlpha = 1;
-      // Is Widget Mode Background? Use standard bg color
-      if (rs.isWidget) { // Changed from isWidget to rs.isWidget
+      if (rs.isWidget) { 
           ctx.fillStyle = rs.isDark ? '#0b0f14' : '#ffffff';
       } else {
           ctx.fillStyle = rs.isGameMode ? (rs.isDark ? '#08110c' : '#e8f3ea') : (rs.isDark ? '#0b0f14' : '#ffffff');
@@ -1477,9 +1321,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.scale(dpr, dpr);
       
-      // Se não for Game Mode, desenha watermark aqui no centro (Map Mode)
       if (!rs.isGameMode) {
-          // Fix: Argument of type 'boolean' is not assignable to parameter of type 'number'.
           drawWatermark(ctx, width, height, watermarkRef.current, rs.isDark ? 0.05 : 0.08);
       }
 
@@ -1490,38 +1332,31 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
       const particles = particlesRef.current;
 
-      // update radii
       for (const p of particles) {
         const viewRadius = rs.isGameMode ? p.targetRadius : (p.targetRadius / k);
         p.radius += (viewRadius - p.radius) * 0.15;
         p.mass = Math.max(1, p.radius);
       }
 
-      // pockets + rails
       let pockets: { x: number; y: number; r: number }[] = [];
       if (rs.isGameMode) {
         const worldW = width / k;
         const worldH = height / k;
 
-        // --- NEW TABLE VISUALS ---
         const FLOOR_MARGIN = 40; 
         const WOOD_WIDTH = 30;
         const CUSHION_WIDTH = 10;
         const RAIL_TOTAL = WOOD_WIDTH + CUSHION_WIDTH;
-        const TOTAL_PAD = FLOOR_MARGIN + RAIL_TOTAL; // Should match GAME_WALL_PAD
+        const TOTAL_PAD = FLOOR_MARGIN + RAIL_TOTAL; 
 
-        // 1. Draw Floor (Background behind table)
-        ctx.fillStyle = '#1c1c1c'; // Dark Floor
+        ctx.fillStyle = '#1c1c1c'; 
         ctx.fillRect(0, 0, worldW, worldH);
 
-        // 2. Draw Table Frame (Wood)
-        // Outer wood rect
         const woodX = FLOOR_MARGIN;
         const woodY = FLOOR_MARGIN;
         const woodW = worldW - (FLOOR_MARGIN * 2);
         const woodH = worldH - (FLOOR_MARGIN * 2);
 
-        // Gradient for Wood
         const woodGrad = ctx.createLinearGradient(woodX, woodY, woodX + woodW, woodY + woodH);
         woodGrad.addColorStop(0, '#5D4037');
         woodGrad.addColorStop(0.5, '#8D6E63');
@@ -1529,59 +1364,38 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
         ctx.fillStyle = woodGrad;
         ctx.beginPath();
-        ctx.roundRect(woodX, woodY, woodW, woodH, 20); // Rounded outer corners
+        ctx.roundRect(woodX, woodY, woodW, woodH, 20); 
         ctx.fill();
 
-        // 3. Draw Playing Surface (Felt)
         const feltX = TOTAL_PAD;
         const feltY = TOTAL_PAD;
         const feltW = worldW - (TOTAL_PAD * 2);
         const feltH = worldH - (TOTAL_PAD * 2);
 
-        ctx.fillStyle = '#225533'; // Standard Pool Green
+        ctx.fillStyle = '#225533'; 
         ctx.fillRect(feltX, feltY, feltW, feltH);
         
-        // --- DRAW WATERMARK ON TABLE (ON FELT) ---
-        // Desenha a marca d'água dentro da área do feltro, com opacidade adequada
-        // Fix: Expected 5-6 arguments, but got 7.
         drawWatermark(ctx, width, height, watermarkRef.current, 0.12, { x: feltX, y: feltY, w: feltW, h: feltH });
 
-        // 4. Draw Inner Cushions (Rails)
-        // These are the transition from wood to felt. Simple dark green rects.
-        ctx.fillStyle = '#1a4025'; // Darker green for cushions
+        ctx.fillStyle = '#1a4025'; 
         
-        // Top Cushion
         ctx.fillRect(feltX, woodY + WOOD_WIDTH, feltW, CUSHION_WIDTH);
-        // Bottom Cushion
         ctx.fillRect(feltX, woodY + woodH - WOOD_WIDTH - CUSHION_WIDTH, feltW, CUSHION_WIDTH);
-        // Left Cushion
         ctx.fillRect(woodX + WOOD_WIDTH, feltY, CUSHION_WIDTH, feltH);
-        // Right Cushion
         ctx.fillRect(woodX + woodW - WOOD_WIDTH - CUSHION_WIDTH, feltY, CUSHION_WIDTH, feltH);
 
-
-        // 5. Define Pockets (Partially inside cushion/wood)
-        // Physics logic uses these coords for falling.
         const pr = Math.max(26, Math.min(40, Math.min(worldW, worldH) * 0.04));
-        // Offset slightly into the rail for visual realism
         const pocketOffset = pr * 0.3; 
         
-        // Top Left
         const p1 = { x: TOTAL_PAD + pocketOffset, y: TOTAL_PAD + pocketOffset, r: pr };
-        // Top Mid
         const p2 = { x: worldW / 2, y: TOTAL_PAD, r: pr };
-        // Top Right
         const p3 = { x: worldW - TOTAL_PAD - pocketOffset, y: TOTAL_PAD + pocketOffset, r: pr };
-        // Bottom Left
         const p4 = { x: TOTAL_PAD + pocketOffset, y: worldH - TOTAL_PAD - pocketOffset, r: pr };
-        // Bottom Mid
         const p5 = { x: worldW / 2, y: worldH - TOTAL_PAD, r: pr };
-        // Bottom Right
         const p6 = { x: worldW - TOTAL_PAD - pocketOffset, y: worldH - TOTAL_PAD - pocketOffset, r: pr };
 
         pockets = [p1, p2, p3, p4, p5, p6];
 
-        // Draw Pockets
         ctx.save();
         for (const pk of pockets) {
           ctx.beginPath();
@@ -1589,7 +1403,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           ctx.fillStyle = '#000000';
           ctx.fill();
           
-          // Slight highlight on rim
           ctx.beginPath();
           ctx.arc(pk.x, pk.y, pk.r, 0, Math.PI * 2);
           ctx.strokeStyle = 'rgba(255,255,255,0.1)';
@@ -1599,7 +1412,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         ctx.restore();
       }
 
-      // axes
       if (!rs.isGameMode && !rs.isFreeMode && statsRef.current) {
         const s = statsRef.current;
         const margin = { top: 18, right: 18, bottom: 92, left: 86 };
@@ -1691,15 +1503,14 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         ctx.restore();
       }
 
-      // PHYSICS
       if (rs.isGameMode) {
         const subSteps = 3;
         const stepDt = dt / subSteps;
         const worldW = width / k;
         const worldH = height / k;
         
-        // Check for WIN condition
-        if (pocketedCountRef.current === pocketedMaxRef.current && !gameWon) {
+        // FIX: Só ganha se max > 0 e todas encaçapadas
+        if (pocketedMaxRef.current > 0 && pocketedCountRef.current === pocketedMaxRef.current && !gameWon) {
              setGameWon(true);
              playSound(sfxVitoriaRef.current);
         }
@@ -1719,7 +1530,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
             p.x += p.vx * stepDt;
             p.y += p.vy * stepDt;
             
-            // Wall Collision (Bounce off Cushions)
             const minX = GAME_WALL_PAD + p.radius;
             const maxX = worldW - GAME_WALL_PAD - p.radius;
             const minY = GAME_WALL_PAD + p.radius;
@@ -1750,7 +1560,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
               const nx = dx / dist;
               const ny = dy / dist;
               
-              // Audio trigger on collision
               if (!p1.isFixed && !p2.isFixed) {
                   playCollision();
               }
@@ -1786,7 +1595,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
             for (const pk of pockets) {
               const dist = Math.hypot(p.x - pk.x, p.y - pk.y);
-              if (dist < (pk.r + p.radius * 0.5)) { // Slightly forgiving
+              if (dist < (pk.r + p.radius * 0.5)) { 
                 p.isFalling = true;
                 p.fallT = 0;
                 p.vx = 0;
@@ -1795,7 +1604,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                 p.fallFromX = p.x;
                 p.fallFromY = p.y;
                 
-                // Add Score Pop Up
                 floatingTextsRef.current.push({
                     x: pk.x,
                     y: pk.y,
@@ -1825,7 +1633,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
             }
 
             if (t >= 1) {
-              // Correção de Contagem Dupla: Verifica se já foi contabilizado
               if (!p.scoreCounted) {
                   p.scoreCounted = true;
                   
@@ -1834,8 +1641,8 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
                   if (wasCue) {
                     setGameOver(true);
-                    playSound(sfxFallRef.current); // Som específico de queda da branca
-                    setTimeout(() => playSound(sfxGameOverRef.current), 800); // Game over depois
+                    playSound(sfxFallRef.current); 
+                    setTimeout(() => playSound(sfxGameOverRef.current), 800); 
                   } else {
                     pocketedCountRef.current += 1;
                     setPocketedUI({ count: pocketedCountRef.current, max: pocketedMaxRef.current });
@@ -1925,7 +1732,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           }
         }
       } else {
-        // MAPPED MODE
         for (const p of particles) {
           const t0 = p.mapT ?? 1;
           const t1 = clamp(t0 + dt / 0.55, 0, 1);
@@ -1948,7 +1754,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           p.y = baseY + jy;
         }
       }
-      // DRAW particles
+
       for (const p of particlesRef.current) {
         let drawRadius = p.radius;
         let alpha = 1.0;
@@ -2047,12 +1853,11 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         ctx.restore();
       }
 
-      // Draw Floating Texts
       if (rs.isGameMode) {
           for (let i = floatingTextsRef.current.length - 1; i >= 0; i--) {
               const ft = floatingTextsRef.current[i];
-              ft.age -= 0.02; // Fade out speed
-              ft.y -= 1.5 / k; // Float up speed
+              ft.age -= 0.02; 
+              ft.y -= 1.5 / k; 
               
               if (ft.age <= 0) {
                   floatingTextsRef.current.splice(i, 1);
@@ -2067,11 +1872,9 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
               ctx.shadowColor = 'rgba(0,0,0,0.8)';
               ctx.shadowBlur = 4 / k;
               
-              // Draw Symbol Text
               ctx.fillText(ft.text, ft.x, ft.y);
               
-              // Draw +1 below
-              ctx.fillStyle = '#22c55e'; // Green for score
+              ctx.fillStyle = '#22c55e';
               ctx.font = `bold ${16 / k}px Inter`;
               ctx.fillText(ft.subText, ft.x, ft.y + 20 / k);
               
@@ -2079,7 +1882,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           }
       }
 
-      // draw cue + aim marker + power meter (game)
       if (rs.isGameMode) {
         const cueBall = particlesRef.current.find(p => String(p.coin.id).toLowerCase() === 'bitcoin');
         if (cueBall && now >= cueHideUntilRef.current) {
@@ -2089,13 +1891,10 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           let aimTx = cx + 120;
           let aimTy = cy;
 
-          // AIMING LOGIC
           if (isAimLockedRef.current) {
-             // Locked: Use stored ref
              aimTx = gameAimRef.current.x;
              aimTy = gameAimRef.current.y;
           } else {
-             // Free: Use Mouse Pos
              if (lastMousePosRef.current) {
                  aimTx = lastMousePosRef.current.x;
                  aimTy = lastMousePosRef.current.y;
@@ -2110,7 +1909,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
           const contactGap = 12;
           
-          // Visual pullback depends on Slider now
           const pull = isAimLockedRef.current ? clamp(shotPowerRef.current * 1.5, 0, 200) : 14;
 
           const bob = (Math.sin(now * 0.012) * 6);
@@ -2122,52 +1920,45 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           const buttX = tipX - ux * stickLen;
           const buttY = tipY - uy * stickLen;
 
-          // --- GHOST BALL (TARGET PREVIEW) ---
-          // Desenha onde a bola branca estaria no ponto de mira (aimTx, aimTy)
-          // Isso ajuda o usuário a mirar na borda da bola alvo
           ctx.save();
           ctx.beginPath();
           ctx.arc(aimTx, aimTy, cueBall.radius, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.15)'; // Semi-transparente
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.15)'; 
           ctx.fill();
           ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
           ctx.lineWidth = 1 / k;
-          ctx.setLineDash([5 / k, 5 / k]); // Borda tracejada
+          ctx.setLineDash([5 / k, 5 / k]); 
           ctx.stroke();
-          ctx.setLineDash([]); // Reset dash
+          ctx.setLineDash([]); 
           ctx.restore();
 
-          // CUE STICK DESIGN - DRAWN AS POLYGON
           ctx.save();
           ctx.globalAlpha = 0.95;
           ctx.lineCap = 'round';
           ctx.lineJoin = 'round';
 
-          // Vectors perpendicular to aim direction for width
           const perpX = -uy;
           const perpY = ux;
 
           const tipW = 6 / k;
           const buttW = 14 / k;
 
-          // Stick body (Wood)
           ctx.beginPath();
-          ctx.moveTo(buttX + perpX * buttW, buttY + perpY * buttW); // Butt Top
-          ctx.lineTo(tipX + perpX * tipW, tipY + perpY * tipW); // Tip Top
-          ctx.lineTo(tipX - perpX * tipW, tipY - perpY * tipW); // Tip Bottom
-          ctx.lineTo(buttX - perpX * buttW, buttY - perpY * buttW); // Butt Bottom
+          ctx.moveTo(buttX + perpX * buttW, buttY + perpY * buttW); 
+          ctx.lineTo(tipX + perpX * tipW, tipY + perpY * tipW); 
+          ctx.lineTo(tipX - perpX * tipW, tipY - perpY * tipW); 
+          ctx.lineTo(buttX - perpX * buttW, buttY - perpY * buttW); 
           ctx.closePath();
           
           const grad = ctx.createLinearGradient(buttX, buttY, tipX, tipY);
-          grad.addColorStop(0, '#5D4037'); // Dark wood
-          grad.addColorStop(1, '#A1887F'); // Light wood
+          grad.addColorStop(0, '#5D4037'); 
+          grad.addColorStop(1, '#A1887F'); 
           ctx.fillStyle = grad;
           ctx.fill();
           ctx.strokeStyle = rs.isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.2)';
           ctx.lineWidth = 1.5 / k;
           ctx.stroke();
 
-          // Ferrule (White tip part)
           const ferruleLen = 12 / k;
           const ferruleStartX = tipX - ux * ferruleLen;
           const ferruleStartY = tipY - uy * ferruleLen;
@@ -2181,7 +1972,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           ctx.fillStyle = '#f5f5f5';
           ctx.fill();
 
-          // Tip (Blue/Leather)
           const tipCapLen = 4 / k;
           ctx.beginPath();
           ctx.moveTo(tipX + perpX * tipW, tipY + perpY * tipW);
@@ -2189,12 +1979,11 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           ctx.lineTo(tipX + ux * tipCapLen - perpX * tipW, tipY + uy * tipCapLen - perpY * tipW);
           ctx.lineTo(tipX - perpX * tipW, tipY - perpY * tipW);
           ctx.closePath();
-          ctx.fillStyle = '#0284c7'; // Sky blue tip
+          ctx.fillStyle = '#0284c7'; 
           ctx.fill();
 
           ctx.restore();
 
-          // aim marker
           drawAimMarker(ctx, aimTx, aimTy, k, isAimLockedRef.current, rs.isDark);
         }
       }
@@ -2206,13 +1995,12 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
     reqIdRef.current = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(reqIdRef.current);
-  }, []); // Fixed dependencies
+  }, []); 
 
   const containerClassName = isWidget 
         ? "w-full h-full relative flex flex-col bg-white dark:bg-[#0b0f14] overflow-hidden transition-colors" 
         : "fixed inset-0 z-[2000] bg-white dark:bg-[#0b0f14] text-gray-900 dark:text-white flex flex-col overflow-hidden touch-none select-none overscroll-none h-[100dvh] transition-colors";
 
-  // If minimized widget, hide header complex controls
   const showControls = !isWidget || (isWidget && isMaximized);
 
   return (
@@ -2220,10 +2008,8 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       ref={containerRef}
       className={containerClassName}
     >
-      {/* HEADER */}
       {showControls && (
         <div className="flex items-center p-4 z-20 bg-white/80 dark:bg-black/50 backdrop-blur-sm border-b border-transparent dark:border-white/10 shrink-0 transition-colors shadow-sm dark:shadow-none">
-            {/* LEFT */}
             <div className="flex items-center gap-4 shrink-0">
             {!isWidget && <Coins size={28} className="text-[#dd9933]" />}
             <div>
@@ -2243,7 +2029,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
             )}
             </div>
 
-            {/* CENTER: qtdd + busca */}
             <div className="flex-1 flex items-center justify-center gap-3 px-4">
             <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/50 p-2 rounded-lg border border-transparent dark:border-white/10">
                 <Coins size={16} className="text-gray-400" />
@@ -2282,7 +2067,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
             </div>
             </div>
 
-            {/* RIGHT: botões + controles */}
             <div className="flex items-center gap-2 shrink-0">
             <div className="flex items-center gap-2 hidden sm:flex">
                 <div className="flex bg-gray-100 dark:bg-black/50 p-1 rounded-lg border border-transparent dark:border-white/10">
@@ -2430,6 +2214,15 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                         disabled={!soundEnabled}
                         className="w-full accent-[#dd9933] bg-gray-200 dark:bg-gray-700 rounded-lg h-1.5"
                     />
+                    
+                    <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-200 dark:border-white/10">
+                        <button 
+                            onClick={testSound} 
+                            className="flex items-center gap-1 text-[10px] font-bold uppercase bg-white dark:bg-black/30 border border-gray-200 dark:border-white/20 rounded px-2 py-1 hover:text-[#dd9933]"
+                        >
+                            <Music size={12} /> Testar Som
+                        </button>
+                    </div>
                 </div>
             )}
 
@@ -2480,7 +2273,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         </div>
       )}
 
-      {/* GAME INTRO POPUP */}
       {showGameIntro && isGameMode && (
         <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in zoom-in duration-300">
             <div className="bg-white dark:bg-[#1a1c1e] p-8 rounded-2xl max-w-md text-center border border-gray-200 dark:border-white/10 shadow-2xl relative">
@@ -2506,7 +2298,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         </div>
       )}
 
-      {/* WIN SCREEN */}
       {gameWon && isGameMode && (
         <div className="absolute inset-0 z-[100] flex items-center justify-center bg-green-900/90 backdrop-blur-md animate-in zoom-in duration-300 p-4">
             <div className="bg-white dark:bg-[#1a1c1e] p-8 rounded-3xl border-4 border-yellow-400 shadow-2xl relative w-full max-w-md text-center overflow-hidden">
@@ -2539,7 +2330,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                     </button>
                     <button 
                         onClick={handleQuickRetry} 
-                        className="flex-1 py-4 px-6 rounded-xl bg-[#dd9933] hover:bg-amber-600 text-black font-black text-sm uppercase tracking-wider transition-all shadow-xl hover:shadow-amber-500/20 active:scale-95 flex items-center justify-center gap-2"
+                        className="flex-1 py-4 px-6 rounded-xl bg-[#dd9933] hover:bg-amber-600 text-black font-bold text-sm uppercase tracking-wider transition-all shadow-xl hover:shadow-amber-500/20 active:scale-95 flex items-center justify-center gap-2"
                     >
                         <RotateCcw size={16} /> Jogar Novamente
                     </button>
@@ -2548,7 +2339,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         </div>
       )}
 
-      {/* GAME OVER SCREEN - NEW COMPACT VERSION */}
       {gameOver && isGameMode && !gameWon && (
         <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md animate-in zoom-in duration-300 p-4">
             <div className="bg-white dark:bg-[#1a1c1e] p-6 rounded-2xl border border-red-500/30 shadow-2xl relative w-full max-w-sm text-center">
@@ -2589,19 +2379,17 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         </div>
       )}
 
-      {/* GAME CONTROLS (AIM LOCKED UI - DYNAMIC POSITION) */}
       {isGameMode && isAimLocked && !gameOver && !gameWon && (
           <div 
             className="absolute z-[90] flex flex-col items-center animate-in zoom-in duration-200"
             style={{ 
                 left: aimLockPos.x, 
                 top: aimLockPos.y,
-                transform: 'translate(0, 0)', // Override any default centering
+                transform: 'translate(0, 0)', 
                 pointerEvents: 'auto'
             }}
           >
               <div className="bg-[#1a1c1e]/95 backdrop-blur-xl border border-gray-700 rounded-2xl p-4 flex flex-col items-center gap-3 shadow-2xl relative">
-                  {/* Close Button absolute inside */}
                   <button 
                       onClick={() => setIsAimLocked(false)} 
                       className="absolute -top-3 -right-3 p-1.5 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors shadow-md"
@@ -2623,9 +2411,9 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                           onChange={(e) => setShotPower(Number(e.target.value))}
                           onMouseUp={executeShot}
                           onTouchEnd={executeShot}
-                          className="w-48 h-3 rounded-lg appearance-none cursor-pointer"
+                          className="w-48 h-3 rounded-lg appearance-none cursor-pointer border border-gray-600/50"
                           style={{
-                              background: `linear-gradient(to right, #22c55e 0%, #eab308 50%, #ef4444 100%)`
+                              background: `linear-gradient(to right, transparent ${shotPower}%, #374151 ${shotPower}%), linear-gradient(to right, #22c55e 0%, #eab308 50%, #ef4444 100%)`
                           }}
                       />
                       <span 
@@ -2645,7 +2433,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           </div>
       )}
 
-      {/* DETAIL CARD SIMPLE LIST */}
       {detailOpen && detailCoin && (
         <div
           className="absolute inset-0 z-[80] flex items-center justify-center bg-black/55 backdrop-blur-sm"
