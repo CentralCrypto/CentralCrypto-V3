@@ -354,9 +354,11 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
         if(bgMusicRef.current) bgMusicRef.current.volume = Math.max(0, Math.min(1, musicVolume));
         
-        // Toca música de fundo se som ligado, modo jogo ativo, e NÃO houve vitória ou game over
+        // CORREÇÃO MUTE: Toca se habilitado, PAUSA explicitamente se desabilitado
         if (soundEnabled && bgMusicRef.current && !gameWon && !gameOver) {
             bgMusicRef.current.play().catch((e) => {});
+        } else if (bgMusicRef.current) {
+            bgMusicRef.current.pause();
         }
     } else {
         // Pausa e reseta se sair do modo game
@@ -841,22 +843,78 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     }
   }, [animateTransformTo, isFreeMode, computeMapTargets, isGameMode, setupGameLayout, isWidget]);
 
+  // MOVED UP: getEffectiveCount definition before handleQuickRetry
+  const getEffectiveCount = useCallback(() => {
+    if (isGameMode) return clamp(numCoins, 16, 32);
+    return numCoins;
+  }, [isGameMode, numCoins]);
+
+  // CORREÇÃO 1: Quick Retry Instantâneo (Sem depender de useEffect)
   const handleQuickRetry = useCallback(() => {
+      // 1. Audio Reset (Stop and Pause immediately)
+      if (sfxVitoriaRef.current) {
+          sfxVitoriaRef.current.pause();
+          sfxVitoriaRef.current.currentTime = 0;
+      }
+      if (bgMusicRef.current) {
+          bgMusicRef.current.currentTime = 0;
+          if (soundEnabledRef.current) {
+              bgMusicRef.current.play().catch(() => {});
+          } else {
+              bgMusicRef.current.pause();
+          }
+      }
+
+      // 2. UI Reset
       setGameOver(false);
       setGameWon(false);
       setGameHasShot(false);
-      
+      gameHasShotRef.current = false; // Sync Ref
+
       pocketedCountRef.current = 0;
-      setPocketedUI(prev => ({ ...prev, count: 0 }));
+      const maxPocket = pocketedMaxRef.current; // Keep max
+      setPocketedUI({ count: 0, max: maxPocket });
 
       setIsAimLocked(false);
       setShotPower(0);
       pointerDownRef.current = false;
 
-      setTimeout(() => {
-          setupGameLayout();
-      }, 0);
-  }, [setupGameLayout]);
+      // 3. Logic Reset (Immediate - no useEffect delay)
+      const effectiveNum = getEffectiveCount();
+      const topCoins = coins.slice(0, effectiveNum);
+      const w = stageRef.current?.clientWidth || 1000;
+      const h = stageRef.current?.clientHeight || 800;
+
+      // Recria as partículas na memória imediatamente
+      const newParticles = topCoins.map(coin => ({
+        id: coin.id,
+        x: Math.random() * w,
+        y: Math.random() * h,
+        vx: 0, vy: 0,
+        radius: 24, // temp targetRadius will fix this
+        targetRadius: 24,
+        color: '#dd9933',
+        coin,
+        trail: [],
+        phase: Math.random() * Math.PI * 2,
+        isFixed: false,
+        mass: 24,
+        isFalling: false,
+        fallT: 0,
+        fallPocket: null,
+        mapT: 0,
+        scoreCounted: false
+      }));
+
+      particlesRef.current = newParticles;
+
+      // Recalcula cores e tamanhos para modo jogo
+      recomputeStatsAndTargets(coins, chartMode, effectiveNum);
+      
+      // Posiciona na mesa imediatamente
+      setupGameLayout();
+
+  }, [coins, chartMode, getEffectiveCount, recomputeStatsAndTargets, setupGameLayout]);
 
   const handleExitGame = useCallback(() => {
       setIsGameMode(false);
@@ -966,11 +1024,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       window.removeEventListener('resize', resizeCanvas);
     };
   }, [loadData]);
-
-  const getEffectiveCount = useCallback(() => {
-    if (isGameMode) return clamp(numCoins, 16, 32);
-    return numCoins;
-  }, [isGameMode, numCoins]);
 
   useEffect(() => {
     const effectiveNum = getEffectiveCount();
