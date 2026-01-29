@@ -360,6 +360,13 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           if(!isGameMode) bgMusicRef.current.currentTime = 0;
       }
   }, [isGameMode, soundEnabled]);
+  
+  // FIX: Play Victory sound ONLY when popup opens
+  useEffect(() => {
+      if (gameWon && soundEnabled) {
+          playSound(sfxVitoriaRef.current);
+      }
+  }, [gameWon, soundEnabled]);
 
   const [isAimLocked, setIsAimLocked] = useState(false);
   const [shotPower, setShotPower] = useState(0);
@@ -503,8 +510,10 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
     if (!img.complete || img.naturalWidth === 0) return null;
 
-    // Generate bitmap
+    // Generate bitmap ONLY if loaded
     const size = Math.min(img.naturalWidth, img.naturalHeight);
+    if (size <= 0) return null;
+
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
@@ -514,10 +523,15 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     ctx.beginPath();
     ctx.arc(size/2, size/2, size/2, 0, Math.PI*2);
     ctx.clip();
-    ctx.drawImage(img, 0, 0, size, size);
     
-    bubbleBitmapCache.current.set(url, canvas);
-    return canvas;
+    try {
+        ctx.drawImage(img, 0, 0, size, size);
+        bubbleBitmapCache.current.set(url, canvas);
+        return canvas;
+    } catch (e) {
+        // Tainted canvas or error -> do not cache, return null
+        return null;
+    }
   };
 
   const loadData = useCallback(async () => {
@@ -1572,7 +1586,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         
         if (pocketedMaxRef.current > 0 && pocketedCountRef.current === pocketedMaxRef.current && !gameWon) {
              setGameWon(true);
-             playSound(sfxVitoriaRef.current);
+             // REMOVED PLAY SOUND FROM HERE TO PREVENT LOOPING
         }
 
         for (let step = 0; step < subSteps; step++) {
@@ -1892,7 +1906,8 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         // TEXT VISIBILITY FIX: Check radius * zoom level
         const screenRadius = drawRadius * k;
         
-        if (!rs.isGameMode && screenRadius > 14) {
+        // Show text if radius is large enough OR if image failed to load (fallback)
+        if (!rs.isGameMode && (screenRadius > 14 || !bitmap)) {
           ctx.fillStyle = '#fff';
           ctx.font = `bold ${Math.max(11, drawRadius * 0.42) / k}px Inter`;
           ctx.textAlign = 'center';
