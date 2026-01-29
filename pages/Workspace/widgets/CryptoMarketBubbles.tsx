@@ -34,7 +34,7 @@ import {
 } from '../../../components/Icons';
 import { fetchTopCoins } from '../services/api';
 
-// --- SOUND PATHS (served from /public) .---
+// --- SOUND PATHS (served from /public) ---
 const runtimeBase = window.location.pathname.startsWith('/v3/') ? '/v3/' : '/';
 const sfx = (name: string) => `${runtimeBase}sfx/${name}`;
 
