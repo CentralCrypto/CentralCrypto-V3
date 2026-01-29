@@ -215,7 +215,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   
   const imageCache = useRef(new Map<string, HTMLImageElement>());
   const bubbleBitmapCache = useRef(new Map<string, HTMLCanvasElement>()); 
-  // const processedImagesRef = useRef(new Set<string>()); // Not needed for simple caching
 
   const reqIdRef = useRef<number>(0);
   const dprRef = useRef(1);
@@ -975,6 +974,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     const topCoins = coins.slice(0, effectiveNum);
     if (topCoins.length === 0) return;
 
+    // Simple Preload - Remote Only
     for (const c of topCoins) {
         if (c?.image && !imageCache.current.has(c.image)) {
             const img = new Image();
