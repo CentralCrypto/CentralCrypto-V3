@@ -215,7 +215,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   
   const imageCache = useRef(new Map<string, HTMLImageElement>());
   const bubbleBitmapCache = useRef(new Map<string, HTMLCanvasElement>()); 
-  const processedImagesRef = useRef(new Set<string>());
 
   const reqIdRef = useRef<number>(0);
   const dprRef = useRef(1);
@@ -299,7 +298,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   useEffect(() => { musicVolumeRef.current = musicVolume; }, [musicVolume]);
   useEffect(() => { sfxVolumeRef.current = sfxVolume; }, [sfxVolume]);
 
-  // Áudio refs - inicializados como null
   const bgMusicRef = useRef<HTMLAudioElement | null>(null);
   const sfxBolasRef = useRef<HTMLAudioElement | null>(null);
   const sfxCacapaRef = useRef<HTMLAudioElement | null>(null);
@@ -349,6 +347,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
         if(bgMusicRef.current) bgMusicRef.current.volume = Math.max(0, Math.min(1, musicVolume));
         
+        // Toca música se não houve vitória ou derrota ainda
         if (soundEnabled && bgMusicRef.current && !gameWon && !gameOver) {
             bgMusicRef.current.play().catch((e) => {});
         }
@@ -364,7 +363,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   // Efeito específico para VITÓRIA (Tocar apenas 1x e pausar música de fundo)
   useEffect(() => {
       if (gameWon) {
-          // Pausa música de fundo
+          // Pausa música de fundo imediatamente
           if (bgMusicRef.current) {
               bgMusicRef.current.pause();
           }
@@ -373,7 +372,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
               playSound(sfxVitoriaRef.current);
           }
       }
-  }, [gameWon]); // Dependência APENAS no estado de vitória para não repetir
+  }, [gameWon]); 
 
   const [isAimLocked, setIsAimLocked] = useState(false);
   const [shotPower, setShotPower] = useState(0);
@@ -982,6 +981,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     const topCoins = coins.slice(0, effectiveNum);
     if (topCoins.length === 0) return;
 
+    // Simple Preload - Remote Only
     for (const c of topCoins) {
         if (c?.image && !imageCache.current.has(c.image)) {
             const img = new Image();
