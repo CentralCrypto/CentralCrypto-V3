@@ -34,19 +34,22 @@ import {
 } from '../../../components/Icons';
 import { fetchTopCoins } from '../services/api';
 
-// --- SOUND PATHS (served from /public) .---
-const runtimeBase = window.location.pathname.startsWith('/v3/') ? '/v3/' : '/';
-const sfx = (name: string) => `${runtimeBase}sfx/${name}`;
+// --- SOUND PATHS FIX (Robust Public Access) ---
+// Garante que o caminho seja sempre absoluto /sfx/arquivo.mp3
+const getPublicSound = (filename: string) => {
+    // Tenta pegar a base do Vite
+    const envBase = (import.meta as any).env?.BASE_URL;
+    // Se não existir ou for apenas a barra, usamos string vazia para montar /sfx
+    const base = (!envBase || envBase === '/') ? '' : envBase.replace(/\/$/, '');
+    return `${base}/sfx/${filename}`;
+};
 
-const SND_FUNDO = sfx('fundo.mp3');
-const SND_BOLAS = sfx('bolas.mp3');
-const SND_CACAPA = sfx('cacapa.mp3');
-const SND_GAMEOVER = sfx('gameover.mp3');
-const SND_VITORIA = sfx('vitoria.mp3');
-const SND_FALL = sfx('fall.mp3');
-
-
-
+const SND_FUNDO = getPublicSound('fundo.mp3');
+const SND_BOLAS = getPublicSound('bolas.mp3');
+const SND_CACAPA = getPublicSound('cacapa.mp3');
+const SND_GAMEOVER = getPublicSound('gameover.mp3');
+const SND_VITORIA = getPublicSound('vitoria.mp3');
+const SND_FALL = getPublicSound('fall.mp3');
 
 // --- INTERFACES ---
 interface Particle {
@@ -366,7 +369,12 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       try {
           audio.currentTime = 0;
           audio.volume = Math.max(0, Math.min(1, soundVolumeRef.current * volumeMultiplier));
-          audio.play().catch(() => {}); // Ignore interaction errors
+          const playPromise = audio.play();
+          if (playPromise !== undefined) {
+             playPromise.catch(error => {
+                 // Autoplay was prevented or source not found
+             });
+          }
       } catch (e) {}
   };
 
@@ -385,6 +393,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         a.loop = loop;
         a.preload = 'auto';
         a.volume = soundVolume;
+        a.onerror = (e) => console.error(`Erro ao carregar som: ${src}`, e);
         return a;
     };
 
