@@ -32,6 +32,7 @@ import {
   Spotify 
 } from '../../../components/Icons';
 import { fetchTopCoins } from '../services/api';
+import { useBinanceWS } from '../../../services/BinanceWebSocketContext';
 
 // --- SOUND CONFIGURATION ---
 
@@ -45,17 +46,6 @@ const SND_CACAPA = `${REMOTE_SND_BASE}/cacapa.mp3`;
 const SND_GAMEOVER = `${REMOTE_SND_BASE}/gameover.mp3`;
 const SND_VITORIA = `${REMOTE_SND_BASE}/vitoria.mp3`;
 const SND_FALL = `${REMOTE_SND_BASE}/fall.mp3`;
-
-// [FUTURE] LOCAL DEPLOYMENT (public/sfx folder)
-// Uncomment this block and ensure files are in /public/sfx/ when building for production if you want to serve locally
-/*
-const SND_FUNDO = '/sfx/fundo.mp3';
-const SND_BOLAS = '/sfx/bolas.mp3';
-const SND_CACAPA = '/sfx/cacapa.mp3';
-const SND_GAMEOVER = '/sfx/gameover.mp3';
-const SND_VITORIA = '/sfx/vitoria.mp3';
-const SND_FALL = '/sfx/fall.mp3';
-*/
 
 // --- INTERFACES ---
 interface Particle {
@@ -229,11 +219,19 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   const floatingTextsRef = useRef<FloatingText[]>([]);
   
   const imageCache = useRef(new Map<string, HTMLImageElement>());
+  const bubbleBitmapCache = useRef(new Map<string, HTMLCanvasElement>()); // Optimization: Cache clipped bitmaps
+
   const reqIdRef = useRef<number>(0);
   const dprRef = useRef(1);
 
+  // WebSocket Context
+  const { tickers } = useBinanceWS();
+  const tickersRef = useRef(tickers);
+  useEffect(() => { tickersRef.current = tickers; }, [tickers]);
+
   const [status, setStatus] = useState<Status>('loading');
   const [coins, setCoins] = useState<ApiCoin[]>([]);
+  const firstLoadDoneRef = useRef(false);
 
   const [hoveredParticle, setHoveredParticle] = useState<Particle | null>(null);
   const [selectedParticle, setSelectedParticle] = useState<Particle | null>(null);
@@ -296,12 +294,16 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
 
   // ====== AUDIO SYSTEM ======
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [soundVolume, setSoundVolume] = useState(0.5);
+  const [musicVolume, setMusicVolume] = useState(0.5);
+  const [sfxVolume, setSfxVolume] = useState(0.5);
 
   const soundEnabledRef = useRef(soundEnabled);
-  const soundVolumeRef = useRef(soundVolume);
+  const musicVolumeRef = useRef(musicVolume);
+  const sfxVolumeRef = useRef(sfxVolume);
+
   useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
-  useEffect(() => { soundVolumeRef.current = soundVolume; }, [soundVolume]);
+  useEffect(() => { musicVolumeRef.current = musicVolume; }, [musicVolume]);
+  useEffect(() => { sfxVolumeRef.current = sfxVolume; }, [sfxVolume]);
 
   const bgMusicRef = useRef<HTMLAudioElement | null>(null);
   const sfxBolasRef = useRef<HTMLAudioElement | null>(null);
@@ -311,11 +313,11 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   const sfxFallRef = useRef<HTMLAudioElement | null>(null);
   const lastCollisionTimeRef = useRef(0);
 
-  const playSound = (audio: HTMLAudioElement | null, volumeMultiplier = 1.0) => {
+  const playSound = (audio: HTMLAudioElement | null) => {
       if (!audio || !soundEnabledRef.current) return;
       try {
           audio.currentTime = 0;
-          audio.volume = Math.max(0, Math.min(1, soundVolumeRef.current * volumeMultiplier));
+          audio.volume = Math.max(0, Math.min(1, sfxVolumeRef.current));
           const playPromise = audio.play();
           if (playPromise !== undefined) {
              playPromise.catch(error => { });
@@ -326,7 +328,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   const playCollision = () => {
       const now = performance.now();
       if (now - lastCollisionTimeRef.current > 80) {
-        playSound(sfxBolasRef.current, 0.8);
+        playSound(sfxBolasRef.current);
         lastCollisionTimeRef.current = now;
       }
   };
@@ -336,10 +338,8 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         const a = new Audio(src);
         a.loop = loop;
         a.preload = 'auto';
-        a.volume = soundVolume;
         return a;
     };
-    // Import variables resolve to URLs
     bgMusicRef.current = createAudio(SND_FUNDO, true);
     sfxBolasRef.current = createAudio(SND_BOLAS);
     sfxCacapaRef.current = createAudio(SND_CACAPA);
@@ -356,8 +356,8 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   }, []);
 
   useEffect(() => {
-     if(bgMusicRef.current) bgMusicRef.current.volume = Math.max(0, Math.min(1, soundVolume * 0.3)); 
-  }, [soundVolume]);
+     if(bgMusicRef.current) bgMusicRef.current.volume = Math.max(0, Math.min(1, musicVolume)); 
+  }, [musicVolume]);
 
   useEffect(() => {
       if (isGameMode && soundEnabled && bgMusicRef.current) {
@@ -367,18 +367,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           if(!isGameMode) bgMusicRef.current.currentTime = 0;
       }
   }, [isGameMode, soundEnabled]);
-
-  const testSound = () => {
-      if (sfxBolasRef.current) {
-          sfxBolasRef.current.currentTime = 0;
-          sfxBolasRef.current.volume = 1.0;
-          sfxBolasRef.current.play()
-            .then(() => {})
-            .catch(e => alert("Erro ao tocar som: " + e.message + ". Verifique permissões do navegador."));
-      } else {
-          alert("Objeto de áudio não inicializado.");
-      }
-  };
 
   const [isAimLocked, setIsAimLocked] = useState(false);
   const [shotPower, setShotPower] = useState(0);
@@ -502,13 +490,39 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // Optimization: Pre-generate clipped bubble image
+  const getBubbleBitmap = (url: string) => {
+    if (!url) return null;
+    if (bubbleBitmapCache.current.has(url)) return bubbleBitmapCache.current.get(url);
+    
+    const img = imageCache.current.get(url);
+    if (!img || !img.complete || img.naturalWidth === 0) return null;
+
+    const size = Math.min(img.naturalWidth, img.naturalHeight);
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.beginPath();
+    ctx.arc(size/2, size/2, size/2, 0, Math.PI*2);
+    ctx.clip();
+    ctx.drawImage(img, 0, 0, size, size);
+    
+    bubbleBitmapCache.current.set(url, canvas);
+    return canvas;
+  };
+
   const loadData = useCallback(async () => {
     if (particlesRef.current.length === 0) setStatus('loading');
     try {
-      const data = await fetchTopCoins({ force: true });
+      const isFirst = !firstLoadDoneRef.current;
+      const data = await fetchTopCoins({ force: isFirst });
       if (data && data.length > 0) {
         setCoins(data);
         setStatus('running');
+        firstLoadDoneRef.current = true;
       } else if (particlesRef.current.length === 0) setStatus('demo');
     } catch {
       if (particlesRef.current.length === 0) setStatus('error');
@@ -654,6 +668,45 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       p.mapT = 0;
     }
   }, [chartMode, getCoinPerfPct]);
+
+  // LIVE UPDATES VIA WEBSOCKET
+  useEffect(() => {
+    if (isGameMode) return;
+    
+    const currentTickers = tickersRef.current;
+    if (Object.keys(currentTickers).length === 0) return;
+
+    let needsUpdate = false;
+    const particles = particlesRef.current;
+
+    for (const p of particles) {
+        const symbol = p.coin.symbol.toUpperCase();
+        const tickerName = `${symbol}USDT`;
+        const ticker = currentTickers[tickerName];
+        
+        if (ticker) {
+            const newPrice = parseFloat(ticker.c);
+            const openPrice = parseFloat(ticker.o);
+            const newChange = openPrice > 0 ? ((newPrice - openPrice) / openPrice) * 100 : 0;
+            const newVol = parseFloat(ticker.q); 
+
+            if (Math.abs(p.coin.price_change_percentage_24h - newChange) > 0.05 || Math.abs(p.coin.current_price - newPrice) / newPrice > 0.005) {
+                p.coin.current_price = newPrice;
+                p.coin.price_change_percentage_24h = newChange;
+                if (newVol > 0) p.coin.total_volume = newVol;
+                needsUpdate = true;
+            }
+        }
+    }
+
+    if (needsUpdate) {
+        const updatedCoins = particles.map(p => p.coin);
+        const effectiveNum = getEffectiveCount();
+        recomputeStatsAndTargets(updatedCoins, chartMode, effectiveNum);
+        
+        if (!isFreeMode) computeMapTargets();
+    }
+  }, [tickers, isGameMode, isFreeMode, chartMode, recomputeStatsAndTargets, computeMapTargets]);
 
   const setupGameLayout = useCallback(() => {
     const canvas = canvasRef.current;
@@ -827,7 +880,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       setGameHasShot(true);
       setIsAimLocked(false);
       setShotPower(0);
-  }, [isAimLocked, shotPower, soundEnabled, soundVolume]);
+  }, [isAimLocked, shotPower, soundEnabled, sfxVolume]);
 
   const fetchMagazine = useCallback(async () => {
     try {
@@ -1509,7 +1562,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         const worldW = width / k;
         const worldH = height / k;
         
-        // FIX: Só ganha se max > 0 e todas encaçapadas
         if (pocketedMaxRef.current > 0 && pocketedCountRef.current === pocketedMaxRef.current && !gameWon) {
              setGameWon(true);
              playSound(sfxVitoriaRef.current);
@@ -1816,13 +1868,11 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         ctx.beginPath();
         ctx.arc(p.x, p.y, drawRadius, 0, Math.PI * 2);
 
-        const img = imageCache.current.get(p.coin.image);
-        if (img?.complete) {
-          ctx.save();
-          ctx.clip();
-          ctx.drawImage(img, p.x - drawRadius, p.y - drawRadius, drawRadius * 2, drawRadius * 2);
-          ctx.restore();
-
+        // OPTIMIZED BITMAP DRAWING
+        const bitmap = getBubbleBitmap(p.coin.image);
+        if (bitmap) {
+          ctx.drawImage(bitmap, p.x - drawRadius, p.y - drawRadius, drawRadius * 2, drawRadius * 2);
+          
           ctx.strokeStyle = isBTC && rs.isGameMode ? (rs.isDark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.35)') : p.color;
           ctx.lineWidth = (isSelected ? 4 : 2) / k;
           ctx.stroke();
@@ -2206,22 +2256,35 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                             {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
                         </button>
                     </div>
-                    <input 
-                        type="range" 
-                        min="0" max="1" step="0.1" 
-                        value={soundVolume} 
-                        onChange={(e) => setSoundVolume(parseFloat(e.target.value))}
-                        disabled={!soundEnabled}
-                        className="w-full accent-[#dd9933] bg-gray-200 dark:bg-gray-700 rounded-lg h-1.5"
-                    />
-                    
-                    <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-200 dark:border-white/10">
-                        <button 
-                            onClick={testSound} 
-                            className="flex items-center gap-1 text-[10px] font-bold uppercase bg-white dark:bg-black/30 border border-gray-200 dark:border-white/20 rounded px-2 py-1 hover:text-[#dd9933]"
-                        >
-                            <Music size={12} /> Testar Som
-                        </button>
+
+                    <div className="mb-2">
+                         <div className="flex justify-between items-center mb-1">
+                            <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase">Música</span>
+                            <span className="text-[9px] font-mono text-gray-400">{(musicVolume * 100).toFixed(0)}%</span>
+                         </div>
+                         <input 
+                            type="range" 
+                            min="0" max="1" step="0.05" 
+                            value={musicVolume} 
+                            onChange={(e) => setMusicVolume(parseFloat(e.target.value))}
+                            disabled={!soundEnabled}
+                            className="w-full accent-[#dd9933] bg-gray-200 dark:bg-gray-700 rounded-lg h-1.5"
+                        />
+                    </div>
+
+                    <div>
+                         <div className="flex justify-between items-center mb-1">
+                            <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase">Efeitos</span>
+                            <span className="text-[9px] font-mono text-gray-400">{(sfxVolume * 100).toFixed(0)}%</span>
+                         </div>
+                         <input 
+                            type="range" 
+                            min="0" max="1" step="0.05" 
+                            value={sfxVolume} 
+                            onChange={(e) => setSfxVolume(parseFloat(e.target.value))}
+                            disabled={!soundEnabled}
+                            className="w-full accent-[#dd9933] bg-gray-200 dark:bg-gray-700 rounded-lg h-1.5"
+                        />
                     </div>
                 </div>
             )}
