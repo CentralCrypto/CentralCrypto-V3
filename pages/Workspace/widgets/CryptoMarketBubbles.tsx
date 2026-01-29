@@ -36,8 +36,8 @@ import {
 } from '../../../components/Icons';
 import { fetchTopCoins } from '../services/api';
 
-// --- SOUND PATHS (VITE IMPORT) ---
-// Usando import direto para que o Vite gerencie o caminho do asset corretamente no build
+// --- SOUND IMPORTS (VITE) ---
+// Importando diretamente, o Vite garante que a URL final (mesmo com hash) seja correta.
 // @ts-ignore
 import fileFundo from './fundo.mp3';
 // @ts-ignore
@@ -379,11 +379,11 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           const playPromise = audio.play();
           if (playPromise !== undefined) {
              playPromise.catch(error => {
-                 // console.warn("Audio play failed (autoplay block or error):", error.message);
+                 // Autoplay ou erro de carga - silencioso para não poluir log
              });
           }
       } catch (e) {
-          console.error("Audio internal error", e);
+          // Erro interno de áudio
       }
   };
 
@@ -396,7 +396,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   };
 
   useEffect(() => {
-    // Helper to create and preload audio with debug logging
+    // Helper to create and preload audio
     const createAudio = (src: string, loop = false) => {
         const a = new Audio(src);
         a.loop = loop;
@@ -443,9 +443,9 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           sfxBolasRef.current.volume = 1.0;
           sfxBolasRef.current.play()
             .then(() => {})
-            .catch(e => alert("Erro ao tocar som: " + e.message + ". Verifique se o navegador permite áudio."));
+            .catch(e => alert("Erro ao tocar som. Verifique permissões do navegador."));
       } else {
-          alert("Objeto de áudio não inicializado.");
+          alert("Áudio não carregado.");
       }
   };
 
