@@ -249,6 +249,10 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   const [gameOver, setGameOver] = useState(false);
   const [gameWon, setGameWon] = useState(false);
   const [showGameIntro, setShowGameIntro] = useState(false);
+  
+  // FIX: Ref to track gameWon state inside the loop to prevent repeated triggers
+  const gameWonRef = useRef(false);
+  useEffect(() => { gameWonRef.current = gameWon; }, [gameWon]);
 
   const isMaximized = item?.isMaximized ?? !isWidget;
   const defaultCoins = isWidget && !isMaximized ? 25 : 100;
@@ -868,6 +872,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       // 2. UI Reset
       setGameOver(false);
       setGameWon(false);
+      gameWonRef.current = false; // Add this
       setGameHasShot(false);
       gameHasShotRef.current = false; // Sync Ref
 
@@ -920,6 +925,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       setIsGameMode(false);
       setGameOver(false);
       setGameWon(false);
+      gameWonRef.current = false; // Add this for consistency
   }, []);
 
   const executeShot = useCallback(() => {
@@ -1628,9 +1634,9 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         const worldW = width / k;
         const worldH = height / k;
         
-        if (pocketedMaxRef.current > 0 && pocketedCountRef.current === pocketedMaxRef.current && !gameWon) {
+        if (pocketedMaxRef.current > 0 && pocketedCountRef.current === pocketedMaxRef.current && !gameWonRef.current) {
+             gameWonRef.current = true;
              setGameWon(true);
-             playSound(sfxVitoriaRef.current);
         }
 
         for (let step = 0; step < subSteps; step++) {
