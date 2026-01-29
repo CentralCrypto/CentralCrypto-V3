@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import {
   X, Save, Wand2, Copy, Code, Loader2,
@@ -52,9 +53,10 @@ const TagEditor: React.FC<{
           const blob = items[i].getAsFile();
           if (!blob) continue;
           const reader = new FileReader();
-          reader.onload = (e) => {
-            if (e.target && e.target.result) {
-              document.execCommand('insertImage', false, e.target.result as string);
+          reader.onload = (event) => {
+            const base64 = event.target?.result as string;
+            if (base64) {
+              document.execCommand('insertImage', false, base64);
               handleVisualInput();
             }
           };

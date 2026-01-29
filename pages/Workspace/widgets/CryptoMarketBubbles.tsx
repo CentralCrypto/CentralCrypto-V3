@@ -1,4 +1,3 @@
-
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiCoin, Language, DashboardItem } from '../../../types';
 import {
@@ -23,8 +22,7 @@ import {
   Target,
   Crosshair,
   Volume2,
-  VolumeX,
-  Music
+  VolumeX
 } from 'lucide-react';
 import { 
   Twitter, 
@@ -36,27 +34,19 @@ import {
 } from '../../../components/Icons';
 import { fetchTopCoins } from '../services/api';
 
-// --- SOUND IMPORTS (VITE) ---
-// Importando diretamente, o Vite garante que a URL final (mesmo com hash) seja correta.
-// @ts-ignore
-import fileFundo from './fundo.mp3';
-// @ts-ignore
-import fileBolas from './bolas.mp3';
-// @ts-ignore
-import fileCacapa from './cacapa.mp3';
-// @ts-ignore
-import fileGameover from './gameover.mp3';
-// @ts-ignore
-import fileVitoria from './vitoria.mp3';
-// @ts-ignore
-import fileFall from './fall.mp3';
+// --- SOUND PATHS (served from /public) .---
+const runtimeBase = window.location.pathname.startsWith('/v3/') ? '/v3/' : '/';
+const sfx = (name: string) => `${runtimeBase}sfx/${name}`;
 
-const SND_FUNDO = fileFundo;
-const SND_BOLAS = fileBolas;
-const SND_CACAPA = fileCacapa;
-const SND_GAMEOVER = fileGameover;
-const SND_VITORIA = fileVitoria;
-const SND_FALL = fileFall;
+const SND_FUNDO = sfx('fundo.mp3');
+const SND_BOLAS = sfx('bolas.mp3');
+const SND_CACAPA = sfx('cacapa.mp3');
+const SND_GAMEOVER = sfx('gameover.mp3');
+const SND_VITORIA = sfx('vitoria.mp3');
+const SND_FALL = sfx('fall.mp3');
+
+
+
 
 // --- INTERFACES ---
 interface Particle {
@@ -376,15 +366,8 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       try {
           audio.currentTime = 0;
           audio.volume = Math.max(0, Math.min(1, soundVolumeRef.current * volumeMultiplier));
-          const playPromise = audio.play();
-          if (playPromise !== undefined) {
-             playPromise.catch(error => {
-                 // Autoplay ou erro de carga - silencioso para não poluir log
-             });
-          }
-      } catch (e) {
-          // Erro interno de áudio
-      }
+          audio.play().catch(() => {}); // Ignore interaction errors
+      } catch (e) {}
   };
 
   const playCollision = () => {
@@ -429,25 +412,12 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   useEffect(() => {
       if (isGameMode && soundEnabled && bgMusicRef.current) {
           // Play on interaction (handled in pointerDown) or try now
-          bgMusicRef.current.play().catch((e) => {});
+          bgMusicRef.current.play().catch(() => {});
       } else if (bgMusicRef.current) {
           bgMusicRef.current.pause();
           if(!isGameMode) bgMusicRef.current.currentTime = 0;
       }
   }, [isGameMode, soundEnabled]);
-
-  // TEST SOUND FUNCTION
-  const testSound = () => {
-      if (sfxBolasRef.current) {
-          sfxBolasRef.current.currentTime = 0;
-          sfxBolasRef.current.volume = 1.0;
-          sfxBolasRef.current.play()
-            .then(() => {})
-            .catch(e => alert("Erro ao tocar som. Verifique permissões do navegador."));
-      } else {
-          alert("Áudio não carregado.");
-      }
-  };
 
   // ====== GAME NEW MECHANIC ======
   // aimLocked: true when user clicks once. Then the slider UI appears.
@@ -1733,8 +1703,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         const worldH = height / k;
         
         // Check for WIN condition
-        // FIX: Ensure pocketedMax > 0 to avoid instant win on init
-        if (pocketedMaxRef.current > 0 && pocketedCountRef.current === pocketedMaxRef.current && !gameWon) {
+        if (pocketedCountRef.current === pocketedMaxRef.current && !gameWon) {
              setGameWon(true);
              playSound(sfxVitoriaRef.current);
         }
@@ -2465,15 +2434,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                         disabled={!soundEnabled}
                         className="w-full accent-[#dd9933] bg-gray-200 dark:bg-gray-700 rounded-lg h-1.5"
                     />
-                    
-                    <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-200 dark:border-white/10">
-                        <button 
-                            onClick={testSound} 
-                            className="flex items-center gap-1 text-[10px] font-bold uppercase bg-white dark:bg-black/30 border border-gray-200 dark:border-white/20 rounded px-2 py-1 hover:text-[#dd9933]"
-                        >
-                            <Music size={12} /> Testar Som
-                        </button>
-                    </div>
                 </div>
             )}
 
