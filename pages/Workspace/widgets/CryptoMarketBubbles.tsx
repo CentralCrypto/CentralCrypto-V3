@@ -215,7 +215,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   
   const imageCache = useRef(new Map<string, HTMLImageElement>());
   const bubbleBitmapCache = useRef(new Map<string, HTMLCanvasElement>()); 
-  const processedImagesRef = useRef(new Set<string>());
+  // const processedImagesRef = useRef(new Set<string>()); // Not needed for simple caching
 
   const reqIdRef = useRef<number>(0);
   const dprRef = useRef(1);
@@ -523,28 +523,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     } catch (e) {
         return null;
     }
-  };
-
-  const loadChain = (urlKey: string, urls: string[]) => {
-      let index = 0;
-      const tryNext = () => {
-          if (index >= urls.length) return; // All failed
-          const src = urls[index];
-          
-          const img = new Image();
-          img.crossOrigin = "Anonymous";
-          img.src = src;
-          
-          img.onload = () => {
-              imageCache.current.set(urlKey, img); // Map original API url to successfully loaded image
-          };
-          
-          img.onerror = () => {
-              index++;
-              tryNext();
-          };
-      };
-      tryNext();
   };
 
   const loadData = useCallback(async () => {
@@ -998,20 +976,11 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     if (topCoins.length === 0) return;
 
     for (const c of topCoins) {
-        if (c?.image && !processedImagesRef.current.has(c.image)) {
-            processedImagesRef.current.add(c.image);
-            
-            // Extract filename from URL (e.g., https://.../bitcoin.png -> bitcoin.png)
-            const filename = c.image.split('/').pop() || '';
-            
-            // Chain of Fallbacks
-            const candidates = [
-                `/cachecko/logos/${filename}`,  // 1. Local Cache (Exact Name)
-                c.image,                        // 2. Remote Original
-                WATERMARK_URL                   // 3. Fallback
-            ];
-
-            loadChain(c.image, candidates);
+        if (c?.image && !imageCache.current.has(c.image)) {
+            const img = new Image();
+            img.crossOrigin = "Anonymous";
+            img.src = c.image;
+            imageCache.current.set(c.image, img);
         }
     }
 
