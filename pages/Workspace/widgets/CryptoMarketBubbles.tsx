@@ -11,6 +11,8 @@ import {
   Coins,
   Wind,
   Info,
+  ChevronLeft,
+  ChevronRight,
   Play,
   AlertTriangle,
   RefreshCw,
@@ -19,10 +21,7 @@ import {
   RotateCcw,
   Volume2,
   VolumeX,
-  Maximize2,
-  Minimize2,
-  BarChart2,
-  PieChart
+  Music
 } from 'lucide-react';
 import { 
   Twitter, 
@@ -36,11 +35,7 @@ import { fetchTopCoins } from '../services/api';
 import { useBinanceWS } from '../../../services/BinanceWebSocketContext';
 
 // --- SOUND CONFIGURATION ---
-
-// [CURRENT] REMOTE URLS
-// Used for immediate access via the provided server
 const REMOTE_SND_BASE = 'http://centralcrypto.com.br/2/app';
-
 const SND_FUNDO = `${REMOTE_SND_BASE}/fundo.mp3`;
 const SND_BOLAS = `${REMOTE_SND_BASE}/bolas.mp3`;
 const SND_CACAPA = `${REMOTE_SND_BASE}/cacapa.mp3`;
@@ -61,15 +56,12 @@ interface Particle {
   phase: number;
   isFixed?: boolean;
   mass: number;
-
   isFalling?: boolean;
   fallT?: number;
   fallPocket?: { x: number; y: number; r: number } | null;
   fallFromX?: number;
   fallFromY?: number;
-  
   scoreCounted?: boolean;
-
   mapFromX?: number;
   mapFromY?: number;
   mapToX?: number;
@@ -192,7 +184,6 @@ const GAME_BALL_RADIUS = 26;
 const GAME_CUE_RADIUS = 32;
 const GAME_LINEAR_DAMP = 0.994;
 const GAME_STOP_EPS = 0.6;
-
 const FREE_LINEAR_DAMP = 0.992;
 const FREE_MAX_SPEED = 420;
 const FREE_REPULSE = 0.95;
@@ -220,7 +211,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   const floatingTextsRef = useRef<FloatingText[]>([]);
   
   const imageCache = useRef(new Map<string, HTMLImageElement>());
-  const bubbleBitmapCache = useRef(new Map<string, HTMLCanvasElement>()); // Optimization: Cache clipped bitmaps
+  const bubbleBitmapCache = useRef(new Map<string, HTMLCanvasElement>());
 
   const reqIdRef = useRef<number>(0);
   const dprRef = useRef(1);
@@ -251,7 +242,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
   const [gameWon, setGameWon] = useState(false);
   const [showGameIntro, setShowGameIntro] = useState(false);
   
-  // FIX: Ref to track gameWon state inside the loop to prevent repeated triggers
   const gameWonRef = useRef(false);
   useEffect(() => { gameWonRef.current = gameWon; }, [gameWon]);
 
@@ -361,7 +351,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
             bgMusicRef.current.pause();
             bgMusicRef.current.currentTime = 0;
         }
-        // Pausar outros efeitos sonoros longos se necessário
         if (sfxVitoriaRef.current) {
              sfxVitoriaRef.current.pause();
              sfxVitoriaRef.current.currentTime = 0;
@@ -397,7 +386,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     }
   }, [isGameMode, soundEnabled, musicVolume, gameWon, gameOver]);
 
-  // 2. Efeito específico para VITÓRIA (Tocar apenas 1x e pausar música de fundo)
+  // 3. Efeito específico para VITÓRIA (Tocar apenas 1x e pausar música de fundo)
   useEffect(() => {
       if (gameWon) {
           // Pausa música de fundo imediatamente
@@ -411,9 +400,10 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       }
   }, [gameWon]); 
 
+  // --- UI RESTORED: Floating Aim Popup State ---
   const [isAimLocked, setIsAimLocked] = useState(false);
   const [shotPower, setShotPower] = useState(0);
-  const [aimLockPos, setAimLockPos] = useState({ x: 0, y: 0 });
+  const [aimLockPos, setAimLockPos] = useState({ x: 0, y: 0 }); // RESTORED
   
   const isAimLockedRef = useRef(false);
   const shotPowerRef = useRef(0);
@@ -533,7 +523,6 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // Optimization: Pre-generate clipped bubble image
   const getBubbleBitmap = (url: string) => {
     if (!url) return null;
     if (bubbleBitmapCache.current.has(url)) return bubbleBitmapCache.current.get(url);
@@ -896,7 +885,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       // 2. UI Reset
       setGameOver(false);
       setGameWon(false);
-      gameWonRef.current = false; // Add this
+      gameWonRef.current = false; 
       setGameHasShot(false);
       gameHasShotRef.current = false; // Sync Ref
 
@@ -1297,6 +1286,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
          setIsAimLocked(true);
          setShotPower(0); 
          
+         // --- RESTORED LOGIC FOR FLOATING AIM POPUP ---
          const rect = canvasRef.current?.getBoundingClientRect();
          if (rect) {
              const x = e.clientX;
@@ -1668,9 +1658,9 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         const worldW = width / k;
         const worldH = height / k;
         
-        if (pocketedMaxRef.current > 0 && pocketedCountRef.current === pocketedMaxRef.current && !gameWon) {
+        if (pocketedMaxRef.current > 0 && pocketedCountRef.current === pocketedMaxRef.current && !gameWonRef.current) {
+             gameWonRef.current = true;
              setGameWon(true);
-             playSound(sfxVitoriaRef.current);
         }
 
         for (let step = 0; step < subSteps; step++) {
@@ -2122,7 +2112,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
           ctx.beginPath();
           ctx.moveTo(ferruleStartX + perpX * (tipW * 1.1), ferruleStartY + perpY * (tipW * 1.1));
           ctx.lineTo(tipX + perpX * tipW, tipY + perpY * tipW);
-          ctx.lineTo(tipX - perpX * tipW, tipY - perpY * tipW);
+          ctx.lineTo(tipX - perpX * tipW, tipY - perpY * tipW); 
           ctx.lineTo(ferruleStartX - perpX * (tipW * 1.1), ferruleStartY - perpY * (tipW * 1.1));
           ctx.closePath();
           ctx.fillStyle = '#f5f5f5';
@@ -2453,7 +2443,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                 <div className="text-sm text-gray-600 dark:text-gray-300 mb-6 space-y-2 text-left bg-gray-100 dark:bg-black/20 p-4 rounded-xl">
                     <p className="flex items-start gap-2"><span className="text-[#dd9933] font-bold">•</span><span>Use o mouse para mirar.</span></p>
                     <p className="flex items-start gap-2"><span className="text-[#dd9933] font-bold">•</span><span><b>Clique 1:</b> Trava a mira.</span></p>
-                    <p className="flex items-start gap-2"><span className="text-[#dd9933] font-bold">•</span><span><b>Painel Inferior:</b> Ajuste a força no slider e clique em TACAR.</span></p>
+                    <p className="flex items-start gap-2"><span className="text-[#dd9933] font-bold">•</span><span><b>Painel Flutuante:</b> Ajuste a força e clique em TACAR.</span></p>
                     <p className="flex items-start gap-2"><span className="text-[#dd9933] font-bold">•</span><span>Encaçape as moedas menores.</span></p>
                     <p className="flex items-start gap-2 text-red-500 font-bold"><span className="text-red-500 font-bold">•</span><span>Cuidado: Se o Bitcoin cair, GAME OVER!</span></p>
                 </div>
@@ -2499,7 +2489,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
                     </button>
                     <button 
                         onClick={handleQuickRetry} 
-                        className="flex-1 py-4 px-6 rounded-xl bg-[#dd9933] hover:bg-amber-600 text-white font-black text-sm uppercase tracking-wider shadow-lg hover:scale-105 transition-all flex items-center justify-center gap-2"
+                        className="flex-1 py-4 px-6 rounded-xl bg-[#dd9933] hover:bg-amber-600 text-black font-bold text-sm uppercase tracking-wider transition-all shadow-xl hover:shadow-amber-500/20 active:scale-95 flex items-center justify-center gap-2"
                     >
                         <RotateCcw size={16} /> Jogar Novamente
                     </button>
@@ -2508,78 +2498,229 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         </div>
       )}
 
-      {gameOver && !gameWon && isGameMode && (
-        <div className="absolute inset-0 z-[100] flex items-center justify-center bg-red-900/90 backdrop-blur-md animate-in zoom-in duration-300 p-4">
-            <div className="bg-white dark:bg-[#1a1c1e] p-8 rounded-3xl border-4 border-red-500 shadow-2xl relative w-full max-w-md text-center overflow-hidden">
-                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10"></div>
-                <div className="absolute -top-12 left-1/2 -translate-x-1/2">
-                     <div className="w-24 h-24 bg-red-500 rounded-full flex items-center justify-center shadow-[0_0_40px_rgba(239,68,68,0.6)] border-4 border-white dark:border-[#1a1c1e] animate-pulse">
-                        <AlertTriangle size={48} className="text-white fill-current" />
+      {gameOver && isGameMode && !gameWon && (
+        <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md animate-in zoom-in duration-300 p-4">
+            <div className="bg-white dark:bg-[#1a1c1e] p-6 rounded-2xl border border-red-500/30 shadow-2xl relative w-full max-w-sm text-center">
+                
+                <div className="absolute -top-10 left-1/2 -translate-x-1/2">
+                     <div className="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center shadow-lg border-4 border-white dark:border-[#1a1c1e] animate-bounce">
+                        <AlertTriangle size={32} className="text-white" />
                      </div>
                 </div>
 
-                <div className="mt-10 mb-6 relative z-10">
-                    <h1 className="text-4xl font-black text-red-600 dark:text-red-500 uppercase tracking-tighter drop-shadow-sm">GAME OVER</h1>
-                    <p className="text-sm font-bold text-gray-600 dark:text-gray-300 uppercase tracking-widest mt-2">O Bitcoin Caiu!</p>
+                <div className="mt-8 mb-4">
+                    <h1 className="text-3xl font-black text-red-600 dark:text-red-500 uppercase tracking-tighter">GAME OVER</h1>
+                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mt-1">Bitcoin deu DUMP!</p>
                 </div>
 
-                <div className="bg-red-50 dark:bg-red-900/20 p-6 rounded-2xl mb-8 border border-red-200 dark:border-red-800 relative z-10">
-                    <div className="text-xs font-black text-red-600 dark:text-red-400 uppercase tracking-[0.2em] mb-2">Moedas Eliminadas</div>
-                    <div className="text-6xl font-black text-white drop-shadow-md">
-                        {pocketedUI.count} <span className="text-3xl text-gray-400">/ {pocketedUI.max}</span>
+                <div className="bg-gray-100 dark:bg-black/40 p-4 rounded-xl mb-6 border border-gray-200 dark:border-white/5">
+                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Placar Final</div>
+                    <div className="text-4xl font-black text-[#dd9933]">
+                        {pocketedUI.count} <span className="text-lg text-gray-400">/ {pocketedUI.max}</span>
                     </div>
                 </div>
 
-                <div className="flex gap-4 relative z-10">
+                <div className="flex gap-3">
                     <button 
                         onClick={handleExitGame} 
-                        className="flex-1 py-4 px-6 rounded-xl border-2 border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-300 font-black text-sm uppercase tracking-wider hover:bg-gray-100 dark:hover:bg-white/5 transition-colors flex items-center justify-center gap-2"
+                        className="flex-1 py-3 px-4 rounded-xl border border-gray-300 dark:border-white/10 text-gray-600 dark:text-gray-300 font-bold text-xs uppercase tracking-wider hover:bg-gray-100 dark:hover:bg-white/5 transition-colors flex items-center justify-center gap-2"
                     >
-                        <LogOut size={16} /> Sair
+                        <LogOut size={14} /> Sair
                     </button>
                     <button 
                         onClick={handleQuickRetry} 
-                        className="flex-1 py-4 px-6 rounded-xl bg-[#dd9933] hover:bg-amber-600 text-white font-black text-sm uppercase tracking-wider shadow-lg hover:scale-105 transition-all flex items-center justify-center gap-2"
+                        className="flex-1 py-3 px-4 rounded-xl bg-[#dd9933] hover:bg-amber-600 text-black font-bold text-xs uppercase tracking-wider transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2"
                     >
-                        <RotateCcw size={16} /> Jogar Novamente
+                        <RotateCcw size={14} /> Reiniciar
                     </button>
                 </div>
             </div>
         </div>
       )}
 
-      {isGameMode && isAimLocked && !gameWon && !gameOver && (
-          <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 pointer-events-auto w-full max-w-sm px-6">
-              <div className="bg-white/90 dark:bg-black/80 backdrop-blur-md p-4 rounded-xl shadow-2xl border border-white/20 w-full animate-in slide-in-from-bottom-4">
-                  <div className="flex justify-between items-center mb-2">
-                      <span className="text-xs font-black uppercase text-gray-500">Força da Tacada</span>
-                      <span className="text-lg font-black text-[#dd9933]">{shotPower.toFixed(0)}%</span>
+      {isGameMode && isAimLocked && !gameOver && !gameWon && (
+          <div 
+            className="absolute z-[90] flex flex-col items-center animate-in zoom-in duration-200"
+            style={{ 
+                left: aimLockPos.x, 
+                top: aimLockPos.y,
+                transform: 'translate(0, 0)', 
+                pointerEvents: 'auto'
+            }}
+          >
+              <div className="bg-[#1a1c1e]/95 backdrop-blur-xl border border-gray-700 rounded-2xl p-4 flex flex-col items-center gap-3 shadow-2xl relative">
+                  <button 
+                      onClick={() => setIsAimLocked(false)} 
+                      className="absolute -top-3 -right-3 p-1.5 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors shadow-md"
+                      title="Cancelar (Esc)"
+                  >
+                      <XCircle size={16} />
+                  </button>
+
+                  <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 drop-shadow-md">
+                      Força da Tacada
                   </div>
-                  <input 
-                      type="range" 
-                      min="0" max="100" step="1" 
-                      value={shotPower} 
-                      onChange={(e) => setShotPower(parseInt(e.target.value))}
-                      className="w-full h-4 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-[#dd9933]"
-                  />
-                  <button 
-                      onClick={executeShot}
-                      className="mt-4 w-full bg-[#dd9933] hover:bg-amber-600 text-white font-black py-3 rounded-lg shadow-lg active:scale-95 transition-all uppercase tracking-widest text-sm flex items-center justify-center gap-2"
-                  >
-                      TACAR AGORA (ESPAÇO)
-                  </button>
-                  <button 
-                      onClick={() => { setIsAimLocked(false); setShotPower(0); }}
-                      className="mt-2 w-full text-xs font-bold text-gray-500 hover:text-red-500 uppercase tracking-widest"
-                  >
-                      Cancelar Mira (ESC)
-                  </button>
+                  
+                  <div className="flex items-center gap-3 w-full">
+                      <input 
+                          type="range" 
+                          min="0" 
+                          max="100" 
+                          value={shotPower}
+                          onChange={(e) => setShotPower(Number(e.target.value))}
+                          onMouseUp={executeShot}
+                          onTouchEnd={executeShot}
+                          className="w-48 h-3 rounded-lg appearance-none cursor-pointer border border-gray-600/50"
+                          style={{
+                              background: `linear-gradient(to right, transparent ${shotPower}%, #374151 ${shotPower}%), linear-gradient(to right, #22c55e 0%, #eab308 50%, #ef4444 100%)`
+                          }}
+                      />
+                      <span 
+                          className="font-mono font-black text-lg w-10 text-right"
+                          style={{ 
+                              color: shotPower < 50 ? '#22c55e' : shotPower < 80 ? '#eab308' : '#ef4444' 
+                          }}
+                      >
+                          {shotPower}%
+                      </span>
+                  </div>
+                  
+                  <div className="text-[9px] text-gray-500 italic mt-1">
+                      Solte para tacar
+                  </div>
               </div>
           </div>
       )}
 
-      <div className="flex-1 w-full h-full relative" ref={stageRef}>
-        <canvas ref={canvasRef} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerLeave={handlePointerUp} onWheel={handleWheel} className="block w-full h-full touch-none select-none" />
+      {detailOpen && detailCoin && (
+        <div
+          className="absolute inset-0 z-[80] flex items-center justify-center bg-black/55 backdrop-blur-sm"
+          onPointerDown={() => setDetailOpen(false)}
+        >
+          <div
+            key={detailAnimKey}
+            className="w-[92vw] max-w-[760px] rounded-2xl border border-gray-200 dark:border-white/10 bg-white/95 dark:bg-black/80 backdrop-blur-md shadow-2xl p-5 animate-[dropin_0.28s_ease-out]"
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <style>{`@keyframes dropin{0%{transform:translateY(-18px) scale(0.96);opacity:0}100%{transform:translateY(0) scale(1);opacity:1}}`}</style>
+
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <img src={detailCoin.image} alt={detailCoin.name} className="w-12 h-12 rounded-full" />
+                <div>
+                  <div className="text-lg font-black leading-tight text-gray-900 dark:text-white">{detailCoin.name}</div>
+                  <div className="text-xs font-bold text-gray-500 dark:text-gray-400">
+                    {detailCoin.symbol?.toUpperCase()} • Rank #{detailCoin.market_cap_rank ?? '-'}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setDetailOpen(false)}
+                className="p-2 rounded-lg bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 border border-transparent dark:border-white/10 text-gray-600 dark:text-white"
+                title="Fechar"
+              >
+                <CloseIcon size={18} />
+              </button>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="text-sm space-y-2 text-gray-800 dark:text-gray-200">
+                <div className="flex justify-between gap-4"><span className="font-bold text-gray-500 dark:text-gray-400">Preço</span><span className="font-black">{formatPrice(detailCoin.current_price)}</span></div>
+                <div className="flex justify-between gap-4"><span className="font-bold text-gray-500 dark:text-gray-400">Market Cap</span><span className="font-black">{formatCompact(detailCoin.market_cap)}</span></div>
+                <div className="flex justify-between gap-4"><span className="font-bold text-gray-500 dark:text-gray-400">Volume 24h</span><span className="font-black">{formatCompact(detailCoin.total_volume)}</span></div>
+                <div className="flex justify-between gap-4"><span className="font-bold text-gray-500 dark:text-gray-400">High 24h</span><span className="font-black">{formatPrice((detailCoin as any).high_24h)}</span></div>
+                <div className="flex justify-between gap-4"><span className="font-bold text-gray-500 dark:text-gray-400">Low 24h</span><span className="font-black">{formatPrice((detailCoin as any).low_24h)}</span></div>
+                <div className="flex justify-between gap-4"><span className="font-bold text-gray-500 dark:text-gray-400">ATH</span><span className="font-black">{formatPrice((detailCoin as any).ath)}</span></div>
+                <div className="flex justify-between gap-4"><span className="font-bold text-gray-500 dark:text-gray-400">ATL</span><span className="font-black">{formatPrice((detailCoin as any).atl)}</span></div>
+              </div>
+
+              <div className="text-sm space-y-2">
+                <div className="flex justify-between gap-4"><span className="font-bold text-gray-500 dark:text-gray-400">1h</span><span className="font-black" style={{ color: perfColor(detailPerf1h?.pct) }}>{(detailPerf1h?.pct ?? 0).toFixed(2)}%</span></div>
+                <div className="flex justify-between gap-4"><span className="font-bold text-gray-500 dark:text-gray-400">24h</span><span className="font-black" style={{ color: perfColor(detailPerf24?.pct) }}>{(detailPerf24?.pct ?? 0).toFixed(2)}%</span></div>
+                <div className="flex justify-between gap-4"><span className="font-bold text-gray-500 dark:text-gray-400">7d</span><span className="font-black" style={{ color: perfColor(detailPerf7d?.pct) }}>{(detailPerf7d?.pct ?? 0).toFixed(2)}%</span></div>
+
+                <div className="pt-2 flex items-center gap-2 flex-wrap justify-end">
+                    {centralSocials.map((s, i) => {
+                        const Icon = s.icon;
+                        return (
+                            <a
+                                key={i}
+                                href={s.href}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-white/5 hover:bg-[#dd9933] hover:text-white dark:hover:bg-[#dd9933] dark:hover:text-white transition-all shadow-sm text-gray-600 dark:text-gray-400"
+                            >
+                                <Icon size={16} />
+                            </a>
+                        );
+                    })}
+                </div>
+              </div>
+            </div>
+
+            <div className="md:col-span-2 pt-2">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-black text-gray-500 dark:text-gray-400">Magazine</div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setMagIndex(i => (i - 1 + magSlides.length) % magSlides.length)}
+                    className="px-3 py-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-xs font-black text-gray-600 dark:text-gray-300"
+                    disabled={magSlides.length <= 1}
+                  >
+                    <ChevronLeft size={12} />
+                  </button>
+                  <button
+                    onClick={() => setMagIndex(i => (i + 1) % magSlides.length)}
+                    className="px-3 py-1 rounded-lg border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-xs font-black text-gray-600 dark:text-gray-300"
+                    disabled={magSlides.length <= 1}
+                  >
+                    <ChevronRight size={12} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+                {(magSlides[magIndex] ?? []).map(p => (
+                  <a
+                    key={p.id}
+                    href={p.link}
+                    target="_blank"
+                    className="group rounded-xl border border-gray-200 dark:border-white/10 bg-white/70 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 transition-colors overflow-hidden"
+                  >
+                    <div className="h-24 w-full bg-black/5 dark:bg-white/5">
+                      {p.image ? (
+                        <img src={p.image} alt={p.title} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-xs font-black text-gray-500 dark:text-gray-400">Sem imagem</div>
+                      )}
+                    </div>
+                    <div className="p-3">
+                      <div className="text-sm font-black line-clamp-2 text-gray-800 dark:text-gray-200">{p.title}</div>
+                    </div>
+                  </a>
+                ))}
+              </div>
+
+              {magPosts.length === 0 && (
+                <div className="mt-2 text-xs font-bold text-gray-500 dark:text-gray-400">
+                  Nenhum post carregado (verifique /2/wp-json/wp/v2/posts).
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div ref={stageRef} className="flex-1 w-full relative cursor-crosshair overflow-hidden">
+        <canvas
+          ref={canvasRef}
+          onPointerMove={handlePointerMove}
+          onPointerDown={(e) => { e.preventDefault(); handlePointerDown(e); }}
+          onPointerLeave={() => { setHoveredParticle(null); handlePointerUp(); }}
+          onWheel={handleWheel}
+          className="absolute inset-0 w-full h-full block"
+        />
       </div>
     </div>
   );
