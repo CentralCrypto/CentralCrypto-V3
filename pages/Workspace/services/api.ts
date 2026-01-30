@@ -29,7 +29,7 @@ export const isStablecoin = (symbol: string) => STABLECOINS.includes(symbol.toUp
  */
 function extractDataArray(raw: any): any[] {
     if (!raw) return [];
-    
+
     if (Array.isArray(raw)) {
         if (raw.length === 0) return [];
         // Verifica se é um array de objetos wrapper tipo [{data: [...]}]
@@ -51,19 +51,19 @@ function extractDataArray(raw: any): any[] {
         }
         return raw;
     }
-    
+
     if (typeof raw === 'object') {
         if (raw.daily && Array.isArray(raw.daily)) return raw.daily; // ETF Standard format
         if (raw.data?.heatmap?.items && Array.isArray(raw.data.heatmap.items)) return raw.data.heatmap.items;
         if (Array.isArray(raw.data)) return raw.data;
         if (Array.isArray(raw.items)) return raw.items;
-        
+
         const keys = Object.keys(raw);
         for (const key of keys) {
             if (Array.isArray(raw[key]) && raw[key].length > 0) return raw[key];
         }
     }
-    
+
     return [];
 }
 
@@ -165,8 +165,8 @@ export interface EtfFlowData {
   ethValue: number;
   netFlow: number;
   timestamp: number;
-  chartDataBTC: any[]; 
-  chartDataETH: any[]; 
+  chartDataBTC: any[];
+  chartDataETH: any[];
   history: { lastWeek: number; lastMonth: number; last90d: number; };
   solValue: number;
   xrpValue: number;
@@ -273,11 +273,11 @@ export interface RsiTablePageResult {
   totalItems: number;
 }
 
-export interface MacdTablePageResult { 
-  items: MacdTrackerPoint[]; 
-  page: number; 
-  totalPages: number; 
-  totalItems: number; 
+export interface MacdTablePageResult {
+  items: MacdTrackerPoint[];
+  page: number;
+  totalPages: number;
+  totalItems: number;
 }
 
 const tfKeyFromSort = (sort: string): RsiTimeframeKey | null => {
@@ -546,7 +546,7 @@ export const fetchMacdTracker = async (opts?: { force?: boolean }): Promise<Macd
   return items.map((i: any) => {
       const symbol = String(i.symbol || '').toUpperCase();
       const macdNode = i.macd || {};
-      
+
       return {
           id: i.id || symbol.toLowerCase(),
           symbol,
@@ -581,7 +581,7 @@ export const fetchMacdTablePage = async (args: { page: number; limit: number; so
         if (sort === 'nmacd') { av = a.macd?.[tf]?.nmacd ?? 0; bv = b.macd?.[tf]?.nmacd ?? 0; }
         else if (sort === 'macd') { av = a.macd?.[tf]?.macd ?? 0; bv = b.macd?.[tf]?.macd ?? 0; }
         else if (sort === 'change24h') { av = a.change24h; bv = b.change24h; }
-        else { av = a.marketCap; bv = b.marketCap; } 
+        else { av = a.marketCap; bv = b.marketCap; }
         return asc ? (av - bv) : (bv - av);
     });
 
@@ -606,7 +606,7 @@ export const fetchEconomicCalendar = async (): Promise<EconEvent[]> => {
 // Processador seguro de data - CORRIGIDO PARA DETECTAR SEGUNDOS VS MS
 const processChartDate = (dateInput: string | number) => {
     if (!dateInput) return 0;
-    
+
     // Se for número
     if (typeof dateInput === 'number') {
         if (dateInput < 10000000000) {
@@ -614,7 +614,7 @@ const processChartDate = (dateInput: string | number) => {
         }
         return dateInput;
     }
-    
+
     // Se for string
     const date = new Date(dateInput);
     return !isNaN(date.getTime()) ? date.getTime() : 0;
@@ -720,6 +720,56 @@ export const fetchEtfFlow = async (): Promise<EtfFlowData | null> => {
   }
 };
 
+type EtfAsset = 'BTC' | 'ETH' | 'SOL' | 'XRP' | 'DOGE' | 'LTC';
+type EtfMetric = 'flows' | 'volume';
+
+const getFilesNode = (): any => (ENDPOINTS as any)?.cachecko?.files ?? (ENDPOINTS as any)?.cachecko?.files ?? (ENDPOINTS as any)?.cachecko?.files;
+
+const resolveEtfEndpoint = (asset: EtfAsset, metric: EtfMetric): string | null => {
+  const files = (ENDPOINTS as any)?.cachecko?.files || (ENDPOINTS as any)?.cachecko?.files || (ENDPOINTS as any)?.cachecko?.files;
+  const f = (ENDPOINTS as any)?.cachecko?.files ?? (ENDPOINTS as any)?.cachecko?.files;
+  const node = (ENDPOINTS as any)?.cachecko?.files ?? (ENDPOINTS as any)?.cachecko?.files;
+  const filesAny = (ENDPOINTS as any)?.cachecko?.files ?? (ENDPOINTS as any)?.cachecko?.files;
+
+  const filesObj = (ENDPOINTS as any)?.cachecko?.files ?? (ENDPOINTS as any)?.cachecko?.files ?? (ENDPOINTS as any)?.cachecko?.files;
+
+  const obj = filesObj || (ENDPOINTS as any)?.cachecko?.files || (ENDPOINTS as any)?.cachecko?.files || {};
+  const pick = (...keys: string[]) => {
+    for (const k of keys) {
+      const v = obj?.[k];
+      if (typeof v === 'string' && v.trim()) return v;
+    }
+    return null;
+  };
+
+  if (asset === 'BTC') return metric === 'flows'
+    ? pick('etfBtcFlows')
+    : pick('etfBtcVolume', 'etfBtcVolumes');
+
+  if (asset === 'ETH') return metric === 'flows'
+    ? pick('etfEthFlows')
+    : pick('etfEthVolume', 'etfEthVolumes');
+
+  if (asset === 'SOL') return metric === 'flows'
+    ? pick('etfSolFlows')
+    : pick('etfSolVolume', 'etfSolVolumes');
+
+  if (asset === 'XRP') return metric === 'flows'
+    ? pick('etfXrpFlows')
+    : pick('etfXrpVolume', 'etfXrpVolumes');
+
+  // DOGE/LTC: só volume (flows inexistente)
+  if (asset === 'DOGE') return metric === 'volume'
+    ? (pick('etfDogeVolume', 'etfDogeVolumes') || 'spot-doge-etf-volumes.json')
+    : null;
+
+  if (asset === 'LTC') return metric === 'volume'
+    ? (pick('etfLtcVolume', 'etfLtcVolumes') || 'spot-ltc-etf-volumes.json')
+    : null;
+
+  return null;
+};
+
 /**
  * Fetch Detailed ETF Data (Flows or Volume)
  * Robusto para:
@@ -727,13 +777,11 @@ export const fetchEtfFlow = async (): Promise<EtfFlowData | null> => {
  * - jsonFile.data como string
  * - TBStat Series (IBIT/FBTC/...) -> daily[] via soma por Timestamp
  * - daily já pronto
+ * - Volume-only assets (DOGE/LTC) com fallback para spot-*-etf-volumes.json
  */
-export const fetchEtfDetailed = async (asset: 'BTC' | 'ETH' | 'SOL' | 'XRP', metric: 'flows' | 'volume'): Promise<any[]> => {
-    let endpoint = '';
-    if (asset === 'BTC') endpoint = metric === 'flows' ? ENDPOINTS.cachecko.files.etfBtcFlows : ENDPOINTS.cachecko.files.etfBtcVolume;
-    else if (asset === 'ETH') endpoint = metric === 'flows' ? ENDPOINTS.cachecko.files.etfEthFlows : ENDPOINTS.cachecko.files.etfEthVolume;
-    else if (asset === 'SOL') endpoint = metric === 'flows' ? ENDPOINTS.cachecko.files.etfSolFlows : ENDPOINTS.cachecko.files.etfSolVolumes;
-    else if (asset === 'XRP') endpoint = metric === 'flows' ? ENDPOINTS.cachecko.files.etfXrpFlows : ENDPOINTS.cachecko.files.etfXrpVolumes;
+export const fetchEtfDetailed = async (asset: EtfAsset, metric: EtfMetric): Promise<any[]> => {
+    const endpoint = resolveEtfEndpoint(asset, metric);
+    if (!endpoint) return [];
 
     const raw = await fetchWithFallback(getCacheckoUrl(endpoint));
     if (!raw) return [];
@@ -786,45 +834,24 @@ export const fetchEtfDetailed = async (asset: 'BTC' | 'ETH' | 'SOL' | 'XRP', met
         };
 
         // perEtf pode vir nested
-        if (d.perEtf && typeof d.perEtf === 'object') {
-            Object.keys(d.perEtf).forEach(ticker => {
-                flatPoint[ticker] = Number(d.perEtf[ticker]);
-            });
-        }
-
-        // ou já “espalhado” (quando vem do SeriesToDaily e não tem perEtf)
-        if ((!d.perEtf || typeof d.perEtf !== 'object') && d.perEtf === undefined) {
-          // Quando vem de seriesToDaily: {timestamp,totalGlobal,perEtf:{...}}
-          if (d.perEtf && typeof d.perEtf === 'object') {
-            Object.keys(d.perEtf).forEach(ticker => {
-              flatPoint[ticker] = Number(d.perEtf[ticker]);
-            });
-          }
-        }
-
-        // Se vier no formato seriesToDaily
-        if (d.perEtf && typeof d.perEtf === 'object') {
-          // já tratado acima
-        } else if (d.perEtf === undefined && d.perEtf !== null) {
-          // nada
-        }
-
-        // Caso seriesToDaily tenha 'perEtf' e passou batido (segurança extra)
-        if (d.perEtf && typeof d.perEtf === 'object') {
-          // redundante por segurança
-        }
-
-        // Caso seriesToDaily: perEtf está no d.perEtf, então ok.
-        // Caso alguns pipelines: d.ETFs ou d.etfs
-        const altPer =
-          d.etfs ??
-          d.ETFs ??
+        const per =
+          (d.perEtf && typeof d.perEtf === 'object') ? d.perEtf :
+          (d.etfs && typeof d.etfs === 'object') ? d.etfs :
+          (d.ETFs && typeof d.ETFs === 'object') ? d.ETFs :
           null;
 
-        if (altPer && typeof altPer === 'object') {
-          Object.keys(altPer).forEach(ticker => {
-            flatPoint[ticker] = Number(altPer[ticker]);
+        if (per) {
+          let sum = 0;
+          Object.keys(per).forEach(ticker => {
+            const val = Number(per[ticker]);
+            const n = Number.isFinite(val) ? val : 0;
+            flatPoint[ticker] = n;
+            sum += n;
           });
+          // Se o totalGlobal não veio, usa soma do perEtf
+          if (!Number.isFinite(flatPoint.totalGlobal) || flatPoint.totalGlobal === 0) {
+            flatPoint.totalGlobal = sum;
+          }
         }
 
         return flatPoint;
