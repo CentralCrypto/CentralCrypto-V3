@@ -124,6 +124,11 @@ const StackedEtfChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
             mouseWheel: { enabled: true },
             type: 'x'
         },
+        panning: {
+            enabled: true,
+            type: 'x'
+        },
+        panKey: 'shift',
         events: {
           load: function () { applyWatermark(this as any); },
           redraw: function () { applyWatermark(this as any); }
@@ -185,8 +190,8 @@ const StackedEtfChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
   return <div ref={chartRef} className="w-full h-full min-h-[320px]" />;
 };
 
-// -------------------- CHART 2: TOTAL (linha do totalGlobal) --------------------
-const TotalLineChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
+// -------------------- CHART 2: TOTAL (Modificado para Colunas não-empilhadas) --------------------
+const TotalBarChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<Highcharts.Chart | null>(null);
   const { isDark, textColor, gridColor } = useChartTheme();
@@ -204,6 +209,18 @@ const TotalLineChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
 
     const label = metric === 'flows' ? 'Total Net Flow' : 'Total Volume';
 
+    // Prepara dados com cor condicional
+    const seriesData = data.map(d => {
+        const val = Number(d.totalGlobal || 0);
+        return {
+            x: d.date,
+            y: val,
+            color: metric === 'volume' 
+                ? (isDark ? '#3b82f6' : '#2563eb') // Azul para volume
+                : (val >= 0 ? '#16a34a' : '#dc2626') // Verde/Vermelho para flows
+        };
+    });
+
     if (chartInstance.current) chartInstance.current.destroy();
 
     chartInstance.current = Highcharts.chart(chartRef.current, {
@@ -215,6 +232,11 @@ const TotalLineChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
             mouseWheel: { enabled: true },
             type: 'x'
         },
+        panning: {
+            enabled: true,
+            type: 'x'
+        },
+        panKey: 'shift',
         events: {
           load: function () { applyWatermark(this as any); },
           redraw: function () { applyWatermark(this as any); }
@@ -248,13 +270,18 @@ const TotalLineChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
         valuePrefix: '$',
         valueDecimals: 0
       },
+      plotOptions: {
+        column: {
+            borderWidth: 0,
+            pointPadding: 0.1,
+            groupPadding: 0.1
+        }
+      },
       series: [{
         name: label,
-        type: 'spline',
-        data: data.map(d => [d.date, Number(d.totalGlobal || 0)]),
-        color: isDark ? '#ffffff' : '#000000',
-        lineWidth: 2,
-        marker: { enabled: false }
+        type: 'column',
+        data: seriesData,
+        lineWidth: 1
       }]
     } as any);
 
@@ -307,6 +334,11 @@ const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }
             mouseWheel: { enabled: true },
             type: 'x'
         },
+        panning: {
+            enabled: true,
+            type: 'x'
+        },
+        panKey: 'shift',
         events: {
           load: function () { applyWatermark(this as any); },
           redraw: function () { applyWatermark(this as any); }
@@ -345,7 +377,7 @@ const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }
         type: 'spline',
         data: data.map(d => [d.date, Number(d[selectedTicker] || 0)]),
         color: isDark ? '#ffffff' : '#000000',
-        lineWidth: 2,
+        lineWidth: 1, // LINHA FINA 1PX
         marker: { enabled: false }
       }]
     } as any);
@@ -402,46 +434,50 @@ const EtfRankingTable: React.FC<{ data: any[], metric: Metric }> = ({ data, metr
     );
   }
 
-  // Evita dividir por zero em flows com total=0
-  const denom = Math.abs(total) > 0 ? Math.abs(total) : 1;
-
+  // Ordena do maior para menor em absoluto
   const ranking = keys.map(k => ({
     ticker: k,
     value: Number(lastDay[k] || 0)
   })).sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
 
   return (
-    <div className="flex-1 overflow-y-auto custom-scrollbar">
-      <table className="w-full text-left text-xs">
-        <thead className="sticky top-0 bg-gray-50 dark:bg-black/20 text-gray-500 dark:text-slate-400">
-          <tr>
-            <th className="p-2 font-black uppercase">ETF</th>
-            <th className="p-2 text-right font-black uppercase">Value (USD)</th>
-            <th className="p-2 text-right font-black uppercase">% Share</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
-          {ranking.map(item => {
-            const share = (Math.abs(item.value) / denom) * 100;
-            const isPos = item.value >= 0;
-            const colorClass = metric === 'volume'
-              ? 'text-gray-900 dark:text-white'
-              : (isPos ? 'text-green-500' : 'text-red-500');
+    <div className="flex flex-col h-full overflow-hidden">
+      <div className="flex-1 overflow-y-auto custom-scrollbar">
+        <table className="w-full text-left text-xs">
+          <thead className="sticky top-0 bg-gray-50 dark:bg-black/20 text-gray-500 dark:text-slate-400 border-b border-gray-100 dark:border-slate-800">
+            <tr>
+              <th className="p-2 font-black uppercase">ETF</th>
+              <th className="p-2 text-right font-black uppercase">Value (USD)</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+            {ranking.map(item => {
+              const isPos = item.value >= 0;
+              const colorClass = metric === 'volume'
+                ? 'text-gray-900 dark:text-white'
+                : (isPos ? 'text-green-500' : 'text-red-500');
 
-            return (
-              <tr key={item.ticker} className="hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">
-                <td className="p-2 font-bold text-gray-700 dark:text-slate-300">{item.ticker}</td>
-                <td className={`p-2 text-right font-mono font-black ${colorClass}`}>
-                  ${formatCompactNumber(item.value)}
-                </td>
-                <td className="p-2 text-right text-gray-500 font-mono">
-                  {share.toFixed(1)}%
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+              return (
+                <tr key={item.ticker} className="hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">
+                  <td className="p-2 font-bold text-gray-700 dark:text-slate-300">{item.ticker}</td>
+                  <td className={`p-2 text-right font-mono font-black ${colorClass}`}>
+                    ${formatCompactNumber(item.value)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {/* TOTALIZADOR NO RODAPÉ */}
+      <div className="bg-gray-50 dark:bg-black/20 border-t border-gray-100 dark:border-slate-800 p-2 text-xs">
+          <div className="flex justify-between items-center">
+              <span className="font-black text-gray-500 dark:text-slate-400 uppercase">TOTAL</span>
+              <span className={`font-mono font-black ${metric === 'volume' ? 'text-gray-900 dark:text-white' : (total >= 0 ? 'text-green-500' : 'text-red-500')}`}>
+                  ${formatCompactNumber(total)}
+              </span>
+          </div>
+      </div>
     </div>
   );
 };
@@ -524,7 +560,7 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
       );
     }
 
-    if (viewMode === 'total') return <TotalLineChart data={data} metric={metric} asset={asset} />;
+    if (viewMode === 'total') return <TotalBarChart data={data} metric={metric} asset={asset} />;
     if (viewMode === 'lines') return <EtfLinesChart data={data} metric={metric} asset={asset} selectedTicker={selectedTicker} />;
 
     return <StackedEtfChart data={data} metric={metric} asset={asset} />;
@@ -538,7 +574,7 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
           {/* TOTAL NET FLOW (sempre) + CONTROLS */}
           <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-baseline gap-2">
-              <div className="text-xs font-black text-gray-400 uppercase tracking-widest">Total Net Flow (Último dia)</div>
+              <div className="text-xs font-black text-gray-400 uppercase tracking-widest">Total Net Flow</div>
               <div className={`text-xl font-black font-mono ${hasFlows ? flowColor : 'text-gray-400'}`}>
                 {hasFlows ? '$' + formatCompactNumber(lastFlow) : '---'}
               </div>
@@ -596,18 +632,8 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
                 onClick={() => setViewMode('lines')}
                 className={`px-4 py-1.5 text-xs font-black rounded flex items-center gap-2 transition-all ${viewMode === 'lines' ? 'bg-white dark:bg-[#2f3032] text-gray-900 dark:text-white shadow' : 'text-gray-500 hover:text-white'}`}
               >
-                <BarChart3 size={14} /> Linhas
+                <BarChart3 size={14} /> Individuais
               </button>
-            </div>
-          </div>
-
-          {/* TOTAL DO METRIC ATUAL (lado direito) */}
-          <div className="text-right hidden lg:block">
-            <div className="text-xs font-black text-gray-400 uppercase tracking-widest">
-              Total {metric === 'flows' ? 'Net Flow' : 'Volume'} (Último dia)
-            </div>
-            <div className={`text-2xl font-black font-mono ${hasData && (Number(data[data.length - 1].totalGlobal) >= 0 || metric === 'volume') ? 'text-gray-900 dark:text-white' : 'text-red-500'}`}>
-              {hasData ? '$' + formatCompactNumber(Number(data[data.length - 1].totalGlobal || 0)) : '---'}
             </div>
           </div>
         </div>
@@ -641,7 +667,7 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
         <div className="lg:col-span-2 relative bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4">
           <ChartArea />
           <div className="absolute right-3 bottom-3 text-[10px] text-gray-400">
-            Zoom: roda do mouse (X)
+            Zoom: roda do mouse (X) | Pan: Shift + Arrastar
           </div>
         </div>
 
