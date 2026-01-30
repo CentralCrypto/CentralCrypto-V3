@@ -33,6 +33,7 @@ function extractDataArray(raw: any): any[] {
     
     if (Array.isArray(raw)) {
         if (raw.length === 0) return [];
+        // Verifica se é um array de objetos wrapper tipo [{data: [...]}]
         const first = raw[0];
         if (first && typeof first === 'object') {
              if (first.data?.heatmap?.items && Array.isArray(first.data.heatmap.items)) {
@@ -44,11 +45,16 @@ function extractDataArray(raw: any): any[] {
              if (first.data && Array.isArray(first.data.data)) {
                  return first.data.data;
              }
+             // Caso ETF n8n: [{ daily: [...] }]
+             if (Array.isArray(first.daily)) {
+                 return first.daily;
+             }
         }
         return raw;
     }
     
     if (typeof raw === 'object') {
+        if (raw.daily && Array.isArray(raw.daily)) return raw.daily; // ETF Standard format
         if (raw.data?.heatmap?.items && Array.isArray(raw.data.heatmap.items)) return raw.data.heatmap.items;
         if (Array.isArray(raw.data)) return raw.data;
         if (Array.isArray(raw.items)) return raw.items;
@@ -598,7 +604,7 @@ export const fetchEconomicCalendar = async (): Promise<EconEvent[]> => {
 
 // -------------------- ETF --------------------
 
-// Processador seguro de data
+// Processador seguro de data - CORRIGIDO PARA DETECTAR SEGUNDOS VS MS
 const processChartDate = (dateInput: string | number) => {
     if (!dateInput) return 0;
     
