@@ -80,8 +80,24 @@ export const fetchTopCoins = async (opts?: { force?: boolean; ttlMs?: number }):
 
   topCoinsInFlight = (async () => {
     const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.main));
-    const items = extractDataArray(data);
-    topCoinsCache = Array.isArray(items) ? (items as ApiCoin[]) : [];
+    if (!data) return topCoinsCache || [];
+
+    let coins: any[] = [];
+
+    if (Array.isArray(data)) {
+      const subData = data.find(item => item && Array.isArray(item.data));
+      if (subData) coins = subData.data;
+      else if (data[0] && Array.isArray(data[0])) coins = data[0];
+      else coins = data;
+    } else if (data && typeof data === 'object') {
+      if (Array.isArray((data as any).data)) coins = (data as any).data;
+      else {
+        const foundArray = Object.values(data as any).find(v => Array.isArray(v) && (v as any[]).length > 10);
+        if (foundArray) coins = foundArray as any[];
+      }
+    }
+
+    topCoinsCache = Array.isArray(coins) ? (coins as ApiCoin[]) : [];
     topCoinsCacheTs = Date.now();
     return topCoinsCache;
   })().finally(() => {
@@ -117,7 +133,7 @@ export const fetchHeatmapCategories = async (opts?: { force?: boolean }): Promis
 
   categoriesInFlight = (async () => {
     const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.heatmapCategories));
-    const arr = extractDataArray(data);
+    const arr = Array.isArray(data) ? data : (Array.isArray((data as any)?.data) ? (data as any).data : []);
     categoriesCache = Array.isArray(arr) ? (arr as HeatmapCategory[]) : [];
     categoriesCacheTs = Date.now();
     return categoriesCache;
@@ -144,8 +160,8 @@ export interface EtfFlowData {
   ethValue: number;
   netFlow: number;
   timestamp: number;
-  chartDataBTC: any[];
-  chartDataETH: any[];
+  chartDataBTC: any[]; // Deprecated - use fetchEtfDetailed for arrays
+  chartDataETH: any[]; // Deprecated - use fetchEtfDetailed for arrays
   history: { lastWeek: number; lastMonth: number; last90d: number; };
   solValue: number;
   xrpValue: number;
@@ -582,26 +598,81 @@ export const fetchEconomicCalendar = async (): Promise<EconEvent[]> => {
 
 // -------------------- ETF --------------------
 
+// Processador seguro de data
+const processChartDate = (dateStr: string | number) => {
+    if (typeof dateStr === 'number') return dateStr;
+    const date = new Date(dateStr);
+    return !isNaN(date.getTime()) ? date.getTime() : 0;
+};
+
+// Simple fetch for summary widget
 export const fetchEtfFlow = async (): Promise<EtfFlowData | null> => {
-  const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.etfNetFlow));
-  if (!raw) return null;
+  try {
+      const summaryRaw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.etfNetFlow));
+      if (!summaryRaw) return null;
 
-  const root = Array.isArray(raw) ? raw[0] : raw;
+      const root = Array.isArray(summaryRaw) ? summaryRaw[0] : summaryRaw;
+      const data = (root && typeof root === 'object' && (root as any).data) ? (root as any).data : root;
+      const status = (root && typeof root === 'object' && (root as any).status) ? (root as any).status : null;
 
-  const data = (root && typeof root === 'object' && (root as any).data) ? (root as any).data : root;
-  const status = (root && typeof root === 'object' && (root as any).status) ? (root as any).status : null;
+      return {
+        btcValue: Number(data?.totalBtcValue ?? data?.btcValue ?? 0),
+        ethValue: Number(data?.totalEthValue ?? data?.ethValue ?? 0),
+        netFlow: Number(data?.total ?? data?.netFlow ?? 0),
+        timestamp: status?.timestamp ? new Date(status.timestamp).getTime() : Date.now(),
+        chartDataBTC: [], // Used detailed fetcher instead
+        chartDataETH: [], // Used detailed fetcher instead
+        history: data?.history || { lastWeek: 0, lastMonth: 0, last90d: 0 },
+        solValue: Number(data?.solValue ?? 0),
+        xrpValue: Number(data?.xrpValue ?? 0)
+      };
+  } catch (e) {
+      console.error("Error fetching ETF data", e);
+      return null;
+  }
+};
 
-  return {
-    btcValue: Number(data?.totalBtcValue ?? data?.btcValue ?? 0),
-    ethValue: Number(data?.totalEthValue ?? data?.ethValue ?? 0),
-    netFlow: Number(data?.total ?? data?.netFlow ?? 0),
-    timestamp: status?.timestamp ? new Date(status.timestamp).getTime() : Date.now(),
-    chartDataBTC: data?.chartDataBTC || [],
-    chartDataETH: data?.chartDataETH || [],
-    history: data?.history || { lastWeek: 0, lastMonth: 0, last90d: 0 },
-    solValue: Number(data?.solValue ?? 0),
-    xrpValue: Number(data?.xrpValue ?? 0)
-  };
+/**
+ * Fetch Detailed ETF Data (Flows or Volume)
+ * FLATTENS the data structure for Highcharts
+ */
+export const fetchEtfDetailed = async (asset: 'BTC' | 'ETH', metric: 'flows' | 'volume'): Promise<any[]> => {
+    let endpoint = '';
+    if (asset === 'BTC' && metric === 'flows') endpoint = ENDPOINTS.cachecko.files.etfBtcFlows;
+    else if (asset === 'BTC' && metric === 'volume') endpoint = ENDPOINTS.cachecko.files.etfBtcVolume;
+    else if (asset === 'ETH' && metric === 'flows') endpoint = ENDPOINTS.cachecko.files.etfEthFlows;
+    else if (asset === 'ETH' && metric === 'volume') endpoint = ENDPOINTS.cachecko.files.etfEthVolume;
+
+    const raw = await fetchWithFallback(getCacheckoUrl(endpoint));
+    if (!raw) return [];
+
+    // Detect data structure: Object with 'daily' or Array
+    let dailyData = [];
+    if (raw.daily && Array.isArray(raw.daily)) {
+        dailyData = raw.daily;
+    } else if (Array.isArray(raw)) {
+        dailyData = raw;
+    }
+
+    // Flatten logic
+    return dailyData.map((d: any) => {
+        const timestamp = processChartDate(d.timestamp || d.date);
+        
+        // Base object
+        const flatPoint: any = {
+            date: timestamp,
+            totalGlobal: Number(d.totalGlobal || d.total || 0)
+        };
+
+        // Spread perEtf if exists
+        if (d.perEtf && typeof d.perEtf === 'object') {
+            Object.keys(d.perEtf).forEach(ticker => {
+                flatPoint[ticker] = Number(d.perEtf[ticker]);
+            });
+        }
+
+        return flatPoint;
+    }).sort((a: any, b: any) => a.date - b.date);
 };
 
 // -------------------- BINANCE --------------------

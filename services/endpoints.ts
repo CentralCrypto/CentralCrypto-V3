@@ -27,9 +27,12 @@ export const ENDPOINTS = {
       calendar: "/calendar.json",
       heatmap: "/heatmap.json",
       heatmapCategories: "/heatmap-categories.json",
-      etfBtc: "/spot-btc-etf-flows.json",
-      etfEth: "/spot-eth-etf-flows.json",
       etfNetFlow: "/etfnetflow.json",
+      // Specific ETF Files
+      etfBtcFlows: "/spot-btc-etf-flows.json",
+      etfBtcVolume: "/spot-btc-etf-volume.json",
+      etfEthFlows: "/spot-eth-etf-flows.json",
+      etfEthVolume: "/spot-eth-etf-volume.json",
       top10gnl: "/top10gnl.json",
       top10mktcap: "/top10mktcap.json"
     }
