@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Loader2, ArrowUp, ArrowDown, TrendingUp, BarChart3, Layers, AlertTriangle } from 'lucide-react';
+import { Loader2, ArrowUp, ArrowDown, TrendingUp, BarChart3, Layers, AlertTriangle, LineChart } from 'lucide-react';
 import { fetchEtfFlow, fetchEtfDetailed, EtfFlowData } from '../services/api';
 import { DashboardItem, Language } from '../../../types';
 import { getTranslations } from '../../../locales';
 import Highcharts from 'highcharts';
+import addMouseWheelZoom from 'highcharts/modules/mouse-wheel-zoom';
+
+addMouseWheelZoom(Highcharts);
 
 const formatCompactNumber = (number: number) => {
-  if (number === null || number === undefined) return "---";
-  if (Number.isNaN(number)) return "---";
-  if (number === 0) return "0";
+  if (!number || number === 0) return "---";
   const abs = Math.abs(number);
   const sign = number < 0 ? "-" : "";
   if (abs < 1000) return sign + abs.toString();
@@ -24,72 +25,68 @@ const PALETTE = [
   '#D97706', '#9333EA', '#2563EB', '#059669', '#DB2777'
 ];
 
-// Normaliza qualquer shape “provável” vindo do backend/cache
-// para o shape que o gráfico/tabela já esperam.
-const normalizeDailySeries = (input: any): any[] => {
-  let arr: any[] = [];
+// ⚠️ Ajuste aqui se o caminho do teu logo for diferente:
+const WATERMARK_URL = '/v3/img/logo.png';
+const WATERMARK_OPACITY = 0.07;
 
-  // Se vier { daily: [...] }
-  if (input && Array.isArray(input.daily)) arr = input.daily;
-  // Se vier array direto
-  else if (Array.isArray(input)) arr = input;
-  // Se vier { data: [...] } (alguns endpoints fazem isso)
-  else if (input && Array.isArray(input.data)) arr = input.data;
-  else arr = [];
+type Metric = 'flows' | 'volume';
+type Asset = 'BTC' | 'ETH';
+type ViewMode = 'stacked' | 'total' | 'lines';
 
-  const out = arr
-    .filter(Boolean)
-    .map((d: any) => {
-      // timestamp pode vir em segundos; Highcharts datetime espera milissegundos
-      const tsRaw =
-        d.timestamp ??
-        d.Timestamp ??
-        d.date ??
-        d.Date ??
-        d.time ??
-        null;
-
-      const tsNum = typeof tsRaw === 'string' ? Number(tsRaw) : tsRaw;
-      const tsSeconds = (typeof tsNum === 'number' && tsNum > 1e12) ? Math.floor(tsNum / 1000) : tsNum; // se já vier em ms, converte p/ sec
-      const dateMs =
-        typeof tsNum === 'number'
-          ? (tsNum > 1e12 ? tsNum : tsNum * 1000)
-          : null;
-
-      const perEtf =
-        d.perEtf ??
-        d.etfs ??
-        d.ETFs ??
-        null;
-
-      // Se já estiver “flattened”, usa como está
-      // Se estiver nested em perEtf, espalha pro nível raiz
-      const flattened = {
-        ...d,
-        ...(perEtf && typeof perEtf === 'object' ? perEtf : {}),
-        // padroniza campos que o seu gráfico usa:
-        timestamp: typeof tsSeconds === 'number' ? tsSeconds : d.timestamp,
-        date: typeof dateMs === 'number' ? dateMs : d.date, // usado no chart
-        totalGlobal: (d.totalGlobal ?? d.total ?? d.netFlow ?? 0)
-      };
-
-      return flattened;
-    })
-    .filter((d: any) => typeof d.date === 'number') // sem data, sem gráfico
-    .sort((a: any, b: any) => a.date - b.date);
-
-  return out;
-};
-
-interface StackedChartProps {
+interface ChartBaseProps {
   data: any[];
-  metric: 'flows' | 'volume';
-  asset: 'BTC' | 'ETH';
+  metric: Metric;
+  asset: Asset;
 }
 
-const StackedBarChart: React.FC<StackedChartProps> = ({ data, metric, asset }) => {
+const useChartTheme = () => {
+  const isDark = document.documentElement.classList.contains('dark');
+  const textColor = isDark ? '#94a3b8' : '#475569';
+  const gridColor = isDark ? '#334155' : '#e2e8f0';
+  return { isDark, textColor, gridColor };
+};
+
+const applyWatermark = (chart: Highcharts.Chart) => {
+  try {
+    const anyChart = chart as any;
+    if (anyChart.__wm) {
+      anyChart.__wm.destroy();
+      anyChart.__wm = null;
+    }
+
+    const w = chart.chartWidth;
+    const h = chart.chartHeight;
+    if (!w || !h) return;
+
+    // Tamanho proporcional
+    const size = Math.min(w, h) * 0.45;
+    const x = (w - size) / 2;
+    const y = (h - size) / 2;
+
+    anyChart.__wm = chart.renderer
+      .image(WATERMARK_URL, x, y, size, size)
+      .attr({ opacity: WATERMARK_OPACITY })
+      .add();
+  } catch (e) {
+    // Não quebra o gráfico se a imagem falhar
+  }
+};
+
+const getTickerKeys = (data: any[]) => {
+  const keys = new Set<string>();
+  data.forEach(d => {
+    Object.keys(d).forEach(k => {
+      if (k !== 'date' && k !== 'totalGlobal' && k !== 'timestamp') keys.add(k);
+    });
+  });
+  return Array.from(keys);
+};
+
+// -------------------- CHART 1: STACKED (ETFs) --------------------
+const StackedEtfChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<Highcharts.Chart | null>(null);
+  const { isDark, textColor, gridColor } = useChartTheme();
 
   useEffect(() => {
     if (!chartRef.current) return;
@@ -102,59 +99,28 @@ const StackedBarChart: React.FC<StackedChartProps> = ({ data, metric, asset }) =
       return;
     }
 
-    const isDark = document.documentElement.classList.contains('dark');
-    const textColor = isDark ? '#94a3b8' : '#475569';
-    const gridColor = isDark ? '#334155' : '#e2e8f0';
+    const seriesKeys = getTickerKeys(data);
 
-    // Extract series keys (Tickers) excluding date/totalGlobal/timestamp/perEtf
-    const keys = new Set<string>();
-    data.forEach(d => {
-      Object.keys(d).forEach(k => {
-        if (k !== 'date' && k !== 'totalGlobal' && k !== 'timestamp' && k !== 'perEtf' && k !== 'etfs') {
-          // garante que é número ou pode ser coerçado
-          const v = d[k];
-          if (typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && !Number.isNaN(Number(v)))) {
-            keys.add(k);
-          }
-        }
-      });
-    });
+    const series: any[] = seriesKeys.map((key, idx) => ({
+      name: key,
+      data: data.map(d => [d.date, Number(d[key] || 0)]),
+      color: PALETTE[idx % PALETTE.length],
+      type: 'column',
+      stack: 'etf'
+    }));
 
-    const seriesKeys = Array.from(keys);
-
-    // Se não há tickers, ainda podemos plotar a linha do totalGlobal
-    const series: any[] = [];
-
-    seriesKeys.forEach((key, idx) => {
-      series.push({
-        name: key,
-        data: data.map(d => [d.date, Number(d[key] || 0)]),
-        color: PALETTE[idx % PALETTE.length],
-        type: 'column',
-        stack: 'etf'
-      });
-    });
-
-    series.push({
-      name: metric === 'flows' ? 'Net Flow' : 'Total Volume',
-      type: 'spline',
-      data: data.map(d => [d.date, Number(d.totalGlobal || 0)]),
-      color: isDark ? '#ffffff' : '#000000',
-      lineWidth: 2,
-      marker: { enabled: false, states: { hover: { enabled: true } } },
-      yAxis: 0,
-      zIndex: 10
-    });
-
-    if (chartInstance.current) {
-      chartInstance.current.destroy();
-    }
+    if (chartInstance.current) chartInstance.current.destroy();
 
     chartInstance.current = Highcharts.chart(chartRef.current, {
       chart: {
         backgroundColor: 'transparent',
         style: { fontFamily: 'Inter, sans-serif' },
-        spacing: [10, 10, 10, 10]
+        spacing: [10, 10, 10, 10],
+        zooming: { type: 'x', mouseWheel: { enabled: true } },
+        events: {
+          load: function () { applyWatermark(this as any); },
+          redraw: function () { applyWatermark(this as any); }
+        }
       },
       title: { text: null },
       credits: { enabled: false },
@@ -184,6 +150,9 @@ const StackedBarChart: React.FC<StackedChartProps> = ({ data, metric, asset }) =
           stacking: 'normal',
           borderWidth: 0,
           dataLabels: { enabled: false }
+        },
+        series: {
+          states: { inactive: { opacity: 1 } }
         }
       },
       tooltip: {
@@ -204,22 +173,199 @@ const StackedBarChart: React.FC<StackedChartProps> = ({ data, metric, asset }) =
         chartInstance.current = null;
       }
     };
-  }, [data, metric, asset]);
+  }, [data, metric, isDark, textColor, gridColor]);
 
-  return <div ref={chartRef} className="w-full h-full min-h-[300px]" />;
+  return <div ref={chartRef} className="w-full h-full min-h-[320px]" />;
 };
 
-const EtfRankingTable: React.FC<{ data: any[], metric: 'flows' | 'volume' }> = ({ data, metric }) => {
+// -------------------- CHART 2: TOTAL (linha do totalGlobal) --------------------
+const TotalLineChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
+  const chartRef = useRef<HTMLDivElement>(null);
+  const chartInstance = useRef<Highcharts.Chart | null>(null);
+  const { isDark, textColor, gridColor } = useChartTheme();
+
+  useEffect(() => {
+    if (!chartRef.current) return;
+
+    if (!data || data.length === 0) {
+      if (chartInstance.current) {
+        chartInstance.current.destroy();
+        chartInstance.current = null;
+      }
+      return;
+    }
+
+    const label = metric === 'flows' ? 'Total Net Flow' : 'Total Volume';
+
+    if (chartInstance.current) chartInstance.current.destroy();
+
+    chartInstance.current = Highcharts.chart(chartRef.current, {
+      chart: {
+        backgroundColor: 'transparent',
+        style: { fontFamily: 'Inter, sans-serif' },
+        spacing: [10, 10, 10, 10],
+        zooming: { type: 'x', mouseWheel: { enabled: true } },
+        events: {
+          load: function () { applyWatermark(this as any); },
+          redraw: function () { applyWatermark(this as any); }
+        }
+      },
+      title: { text: null },
+      credits: { enabled: false },
+      legend: { enabled: false },
+      xAxis: {
+        type: 'datetime',
+        lineColor: gridColor,
+        tickColor: gridColor,
+        labels: { style: { color: textColor, fontSize: '10px' } },
+        crosshair: { width: 1, color: gridColor, dashStyle: 'Dash' }
+      },
+      yAxis: {
+        title: { text: 'USD Value', style: { color: textColor } },
+        gridLineColor: gridColor,
+        gridLineDashStyle: 'Dash',
+        labels: {
+          style: { color: textColor, fontSize: '10px' },
+          formatter: function (this: any) { return '$' + formatCompactNumber(this.value); }
+        }
+      },
+      tooltip: {
+        backgroundColor: isDark ? 'rgba(26, 28, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+        borderColor: gridColor,
+        borderRadius: 8,
+        style: { color: isDark ? '#fff' : '#000' },
+        shared: false,
+        valuePrefix: '$',
+        valueDecimals: 0
+      },
+      series: [{
+        name: label,
+        type: 'spline',
+        data: data.map(d => [d.date, Number(d.totalGlobal || 0)]),
+        color: isDark ? '#ffffff' : '#000000',
+        lineWidth: 2,
+        marker: { enabled: false }
+      }]
+    } as any);
+
+    return () => {
+      if (chartInstance.current) {
+        chartInstance.current.destroy();
+        chartInstance.current = null;
+      }
+    };
+  }, [data, metric, isDark, textColor, gridColor]);
+
+  return <div ref={chartRef} className="w-full h-full min-h-[320px]" />;
+};
+
+// -------------------- CHART 3: LINES (1 ETF por vez) --------------------
+const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }> = ({ data, metric, selectedTicker }) => {
+  const chartRef = useRef<HTMLDivElement>(null);
+  const chartInstance = useRef<Highcharts.Chart | null>(null);
+  const { isDark, textColor, gridColor } = useChartTheme();
+
+  useEffect(() => {
+    if (!chartRef.current) return;
+
+    if (!data || data.length === 0) {
+      if (chartInstance.current) {
+        chartInstance.current.destroy();
+        chartInstance.current = null;
+      }
+      return;
+    }
+
+    if (!selectedTicker) {
+      if (chartInstance.current) {
+        chartInstance.current.destroy();
+        chartInstance.current = null;
+      }
+      return;
+    }
+
+    const label = `${selectedTicker} ${metric === 'flows' ? 'Net Flow' : 'Volume'}`;
+
+    if (chartInstance.current) chartInstance.current.destroy();
+
+    chartInstance.current = Highcharts.chart(chartRef.current, {
+      chart: {
+        backgroundColor: 'transparent',
+        style: { fontFamily: 'Inter, sans-serif' },
+        spacing: [10, 10, 10, 10],
+        zooming: { type: 'x', mouseWheel: { enabled: true } },
+        events: {
+          load: function () { applyWatermark(this as any); },
+          redraw: function () { applyWatermark(this as any); }
+        }
+      },
+      title: { text: null },
+      credits: { enabled: false },
+      legend: { enabled: false },
+      xAxis: {
+        type: 'datetime',
+        lineColor: gridColor,
+        tickColor: gridColor,
+        labels: { style: { color: textColor, fontSize: '10px' } },
+        crosshair: { width: 1, color: gridColor, dashStyle: 'Dash' }
+      },
+      yAxis: {
+        title: { text: 'USD Value', style: { color: textColor } },
+        gridLineColor: gridColor,
+        gridLineDashStyle: 'Dash',
+        labels: {
+          style: { color: textColor, fontSize: '10px' },
+          formatter: function (this: any) { return '$' + formatCompactNumber(this.value); }
+        }
+      },
+      tooltip: {
+        backgroundColor: isDark ? 'rgba(26, 28, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+        borderColor: gridColor,
+        borderRadius: 8,
+        style: { color: isDark ? '#fff' : '#000' },
+        shared: false,
+        valuePrefix: '$',
+        valueDecimals: 0
+      },
+      series: [{
+        name: label,
+        type: 'spline',
+        data: data.map(d => [d.date, Number(d[selectedTicker] || 0)]),
+        color: isDark ? '#ffffff' : '#000000',
+        lineWidth: 2,
+        marker: { enabled: false }
+      }]
+    } as any);
+
+    return () => {
+      if (chartInstance.current) {
+        chartInstance.current.destroy();
+        chartInstance.current = null;
+      }
+    };
+  }, [data, metric, selectedTicker, isDark, textColor, gridColor]);
+
+  if (!selectedTicker) {
+    return (
+      <div className="w-full h-full min-h-[320px] flex items-center justify-center text-gray-400">
+        <div className="flex flex-col items-center gap-2">
+          <LineChart size={28} />
+          <span className="text-xs font-black uppercase">Selecione uma ETF</span>
+        </div>
+      </div>
+    );
+  }
+
+  return <div ref={chartRef} className="w-full h-full min-h-[320px]" />;
+};
+
+const EtfRankingTable: React.FC<{ data: any[], metric: Metric }> = ({ data, metric }) => {
   const lastDay = data[data.length - 1];
   if (!lastDay) return null;
 
-  const keys = Object.keys(lastDay).filter(k => k !== 'date' && k !== 'totalGlobal' && k !== 'timestamp' && k !== 'perEtf' && k !== 'etfs');
-  const total = Number(lastDay.totalGlobal ?? 0);
+  let keys = Object.keys(lastDay).filter(k => k !== 'date' && k !== 'totalGlobal' && k !== 'timestamp');
+  const total = Number(lastDay.totalGlobal || 0);
 
-  // Se total for 0, evita divisão por zero e mantém table útil
-  const safeTotal = total === 0 ? 1 : Math.abs(total);
-
-  // Fallback se não houver tickers (ex: ETH volume agregado)
   if (keys.length === 0) {
     return (
       <div className="flex-1 overflow-y-auto custom-scrollbar">
@@ -243,6 +389,9 @@ const EtfRankingTable: React.FC<{ data: any[], metric: 'flows' | 'volume' }> = (
     );
   }
 
+  // Evita dividir por zero em flows com total=0
+  const denom = Math.abs(total) > 0 ? Math.abs(total) : 1;
+
   const ranking = keys.map(k => ({
     ticker: k,
     value: Number(lastDay[k] || 0)
@@ -260,7 +409,7 @@ const EtfRankingTable: React.FC<{ data: any[], metric: 'flows' | 'volume' }> = (
         </thead>
         <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
           {ranking.map(item => {
-            const share = (Math.abs(item.value) / safeTotal) * 100;
+            const share = (Math.abs(item.value) / denom) * 100;
             const isPos = item.value >= 0;
             const colorClass = metric === 'volume'
               ? 'text-gray-900 dark:text-white'
@@ -286,62 +435,203 @@ const EtfRankingTable: React.FC<{ data: any[], metric: 'flows' | 'volume' }> = (
 
 // --- MAXIMIZED WIDGET (DEEP DIVE) ---
 const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ language }) => {
-  const [asset, setAsset] = useState<'BTC' | 'ETH'>('BTC');
-  const [metric, setMetric] = useState<'flows' | 'volume'>('flows');
-  const [rawData, setRawData] = useState<any>([]);
+  const [asset, setAsset] = useState<Asset>('BTC');
+  const [metric, setMetric] = useState<Metric>('flows');
+  const [viewMode, setViewMode] = useState<ViewMode>('stacked');
+  const [data, setData] = useState<any[]>([]);
+  const [flowsData, setFlowsData] = useState<any[]>([]);
+  const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Sempre mantém flows carregado pra mostrar Total Net Flow no topo (mesmo se o usuário estiver vendo volume)
+  useEffect(() => {
+    fetchEtfDetailed(asset, 'flows').then(res => {
+      setFlowsData(Array.isArray(res) ? res : []);
+    });
+  }, [asset]);
 
   useEffect(() => {
     setLoading(true);
     fetchEtfDetailed(asset, metric).then(res => {
-      setRawData(res);
+      const arr = Array.isArray(res) ? res : [];
+      setData(arr);
       setLoading(false);
-    }).catch(() => {
-      setRawData([]);
-      setLoading(false);
+
+      // Auto-select no modo lines
+      if (viewMode === 'lines') {
+        const keys = getTickerKeys(arr);
+        setSelectedTicker(keys[0] || null);
+      }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [asset, metric]);
 
-  const data = useMemo(() => normalizeDailySeries(rawData), [rawData]);
+  useEffect(() => {
+    if (viewMode === 'lines') {
+      const keys = getTickerKeys(data);
+      if (!selectedTicker || !keys.includes(selectedTicker)) {
+        setSelectedTicker(keys[0] || null);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode]);
+
   const hasData = data && data.length > 0;
+  const hasFlows = flowsData && flowsData.length > 0;
+
+  const lastFlow = hasFlows ? Number(flowsData[flowsData.length - 1]?.totalGlobal || 0) : 0;
+  const flowColor = lastFlow >= 0 ? 'text-green-500' : 'text-red-500';
+
+  const tickerButtons = useMemo(() => {
+    if (!hasData) return [];
+    return getTickerKeys(data);
+  }, [hasData, data]);
+
+  const ChartArea = () => {
+    if (loading) {
+      return (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Loader2 className="animate-spin text-gray-400" />
+        </div>
+      );
+    }
+
+    if (!hasData) {
+      if (metric === 'volume') {
+        console.warn('[ETF] Volume retornou vazio. Verifique ENDPOINTS.cachecko.files.etfBtcVolume/etfEthVolume e o JSON no VPS.');
+      }
+      return (
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 gap-2">
+          <AlertTriangle size={32} />
+          <span className="text-sm font-bold uppercase">Sem dados disponíveis</span>
+          <span className="text-[11px] text-gray-500">
+            Se isso for “Volume”, provavelmente é endpoint/arquivo vazio no VPS.
+          </span>
+        </div>
+      );
+    }
+
+    if (viewMode === 'total') return <TotalLineChart data={data} metric={metric} asset={asset} />;
+    if (viewMode === 'lines') return <EtfLinesChart data={data} metric={metric} asset={asset} selectedTicker={selectedTicker} />;
+
+    return <StackedEtfChart data={data} metric={metric} asset={asset} />;
+  };
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-[#1a1c1e] text-gray-900 dark:text-white overflow-hidden p-6">
-      {/* CONTROLS */}
-      <div className="flex justify-between items-center mb-6 border-b border-gray-100 dark:border-slate-800 pb-4">
-        <div className="flex items-center gap-4">
-          <div className="flex bg-gray-100 dark:bg-black/30 p-1 rounded-lg border border-gray-200 dark:border-slate-700">
-            <button onClick={() => setAsset('BTC')} className={`px-4 py-1.5 text-xs font-black rounded transition-all ${asset === 'BTC' ? 'bg-[#f7931a] text-white shadow' : 'text-gray-500 hover:text-white'}`}>BTC</button>
-            <button onClick={() => setAsset('ETH')} className={`px-4 py-1.5 text-xs font-black rounded transition-all ${asset === 'ETH' ? 'bg-[#627eea] text-white shadow' : 'text-gray-500 hover:text-white'}`}>ETH</button>
+      {/* TOP BAR */}
+      <div className="flex flex-col gap-3 mb-6 border-b border-gray-100 dark:border-slate-800 pb-4">
+        <div className="flex justify-between items-center">
+          {/* TOTAL NET FLOW (sempre) + CONTROLS */}
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="flex items-baseline gap-2">
+              <div className="text-xs font-black text-gray-400 uppercase tracking-widest">Total Net Flow (Último dia)</div>
+              <div className={`text-xl font-black font-mono ${hasFlows ? flowColor : 'text-gray-400'}`}>
+                {hasFlows ? '$' + formatCompactNumber(lastFlow) : '---'}
+              </div>
+            </div>
+
+            <div className="w-px h-6 bg-gray-200 dark:bg-slate-700 hidden md:block"></div>
+
+            {/* ASSET */}
+            <div className="flex bg-gray-100 dark:bg-black/30 p-1 rounded-lg border border-gray-200 dark:border-slate-700">
+              <button
+                onClick={() => setAsset('BTC')}
+                className={`px-4 py-1.5 text-xs font-black rounded transition-all ${asset === 'BTC' ? 'bg-[#f7931a] text-white shadow' : 'text-gray-500 hover:text-white'}`}
+              >
+                BTC
+              </button>
+              <button
+                onClick={() => setAsset('ETH')}
+                className={`px-4 py-1.5 text-xs font-black rounded transition-all ${asset === 'ETH' ? 'bg-[#627eea] text-white shadow' : 'text-gray-500 hover:text-white'}`}
+              >
+                ETH
+              </button>
+            </div>
+
+            {/* METRIC */}
+            <div className="flex bg-gray-100 dark:bg-black/30 p-1 rounded-lg border border-gray-200 dark:border-slate-700">
+              <button
+                onClick={() => setMetric('flows')}
+                className={`px-4 py-1.5 text-xs font-black rounded flex items-center gap-2 transition-all ${metric === 'flows' ? 'bg-white dark:bg-[#2f3032] text-[#dd9933] shadow' : 'text-gray-500 hover:text-white'}`}
+              >
+                <TrendingUp size={14} /> Flows
+              </button>
+              <button
+                onClick={() => setMetric('volume')}
+                className={`px-4 py-1.5 text-xs font-black rounded flex items-center gap-2 transition-all ${metric === 'volume' ? 'bg-white dark:bg-[#2f3032] text-blue-400 shadow' : 'text-gray-500 hover:text-white'}`}
+              >
+                <BarChart3 size={14} /> Volume
+              </button>
+            </div>
+
+            {/* VIEW MODE */}
+            <div className="flex bg-gray-100 dark:bg-black/30 p-1 rounded-lg border border-gray-200 dark:border-slate-700">
+              <button
+                onClick={() => setViewMode('stacked')}
+                className={`px-4 py-1.5 text-xs font-black rounded flex items-center gap-2 transition-all ${viewMode === 'stacked' ? 'bg-white dark:bg-[#2f3032] text-gray-900 dark:text-white shadow' : 'text-gray-500 hover:text-white'}`}
+              >
+                <Layers size={14} /> Empilhado
+              </button>
+              <button
+                onClick={() => setViewMode('total')}
+                className={`px-4 py-1.5 text-xs font-black rounded flex items-center gap-2 transition-all ${viewMode === 'total' ? 'bg-white dark:bg-[#2f3032] text-gray-900 dark:text-white shadow' : 'text-gray-500 hover:text-white'}`}
+              >
+                <LineChart size={14} /> Total
+              </button>
+              <button
+                onClick={() => setViewMode('lines')}
+                className={`px-4 py-1.5 text-xs font-black rounded flex items-center gap-2 transition-all ${viewMode === 'lines' ? 'bg-white dark:bg-[#2f3032] text-gray-900 dark:text-white shadow' : 'text-gray-500 hover:text-white'}`}
+              >
+                <BarChart3 size={14} /> Linhas
+              </button>
+            </div>
           </div>
-          <div className="w-px h-6 bg-gray-200 dark:bg-slate-700"></div>
-          <div className="flex bg-gray-100 dark:bg-black/30 p-1 rounded-lg border border-gray-200 dark:border-slate-700">
-            <button onClick={() => setMetric('flows')} className={`px-4 py-1.5 text-xs font-black rounded flex items-center gap-2 transition-all ${metric === 'flows' ? 'bg-white dark:bg-[#2f3032] text-[#dd9933] shadow' : 'text-gray-500 hover:text-white'}`}><TrendingUp size={14} /> Flows</button>
-            <button onClick={() => setMetric('volume')} className={`px-4 py-1.5 text-xs font-black rounded flex items-center gap-2 transition-all ${metric === 'volume' ? 'bg-white dark:bg-[#2f3032] text-blue-400 shadow' : 'text-gray-500 hover:text-white'}`}><BarChart3 size={14} /> Volume</button>
+
+          {/* TOTAL DO METRIC ATUAL (lado direito) */}
+          <div className="text-right hidden lg:block">
+            <div className="text-xs font-black text-gray-400 uppercase tracking-widest">
+              Total {metric === 'flows' ? 'Net Flow' : 'Volume'} (Último dia)
+            </div>
+            <div className={`text-2xl font-black font-mono ${hasData && (Number(data[data.length - 1].totalGlobal) >= 0 || metric === 'volume') ? 'text-gray-900 dark:text-white' : 'text-red-500'}`}>
+              {hasData ? '$' + formatCompactNumber(Number(data[data.length - 1].totalGlobal || 0)) : '---'}
+            </div>
           </div>
         </div>
-        <div className="text-right">
-          <div className="text-xs font-black text-gray-400 uppercase tracking-widest">Total {metric === 'flows' ? 'Net Flow' : 'Volume'} (Último dia)</div>
-          <div className={`text-2xl font-black font-mono ${hasData && (data[data.length - 1].totalGlobal >= 0 || metric === 'volume') ? 'text-gray-900 dark:text-white' : 'text-red-500'}`}>
-            {hasData ? '$' + formatCompactNumber(Number(data[data.length - 1].totalGlobal || 0)) : '---'}
+
+        {/* ETF BUTTONS (somente no modo lines) */}
+        {viewMode === 'lines' && (
+          <div className="flex gap-2 flex-wrap">
+            {tickerButtons.length === 0 ? (
+              <div className="text-xs text-gray-500">Nenhuma ETF encontrada no dataset.</div>
+            ) : (
+              tickerButtons.map(t => (
+                <button
+                  key={t}
+                  onClick={() => setSelectedTicker(t)}
+                  className={`px-3 py-1 text-xs font-black rounded-lg border transition-all ${
+                    selectedTicker === t
+                      ? 'bg-[#dd9933] text-white border-transparent shadow'
+                      : 'bg-gray-50 dark:bg-black/20 text-gray-600 dark:text-slate-300 border-gray-200 dark:border-slate-800 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                >
+                  {t}
+                </button>
+              ))
+            )}
           </div>
-        </div>
+        )}
       </div>
 
       {/* CONTENT GRID */}
       <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 relative bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4">
-          {loading ? (
-            <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="animate-spin text-gray-400" /></div>
-          ) : hasData ? (
-            <StackedBarChart data={data} metric={metric} asset={asset} />
-          ) : (
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 gap-2">
-              <AlertTriangle size={32} />
-              <span className="text-sm font-bold uppercase">Sem dados disponíveis</span>
-            </div>
-          )}
+          <ChartArea />
+          <div className="absolute right-3 bottom-3 text-[10px] text-gray-400">
+            Zoom: roda do mouse (X)
+          </div>
         </div>
+
         <div className="bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-slate-800 rounded-xl flex flex-col overflow-hidden">
           <div className="p-3 bg-gray-50 dark:bg-black/30 border-b border-gray-100 dark:border-slate-800 font-black text-xs uppercase text-gray-500 tracking-widest flex items-center gap-2">
             <Layers size={14} /> Market Share (Dia)
@@ -365,7 +655,7 @@ const EtfSummary: React.FC<{ language: Language }> = ({ language }) => {
   const t = getTranslations(language).workspace.widgets.etf;
 
   useEffect(() => {
-    fetchEtfFlow().then(res => { if (res) setEtfData(res); }).catch(() => {});
+    fetchEtfFlow().then(res => { if (res) setEtfData(res); });
   }, []);
 
   if (!etfData) return <div className="flex items-center justify-center h-full text-slate-500"><Loader2 className="animate-spin" /></div>;
