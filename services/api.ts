@@ -391,8 +391,10 @@ const seriesToDaily = (seriesObj: any): any[] => {
 
     arr.forEach((p: any) => {
       // TBStat Timestamp costuma ser em segundos
-      const tsSec = Number(p?.Timestamp);
-      const val = Number(p?.Result); // TBStat usa 'Result' para o valor
+      // Alguns endpoints novos usam 'Time' em vez de 'Timestamp'
+      const tsSec = Number(p?.Timestamp ?? p?.Time ?? p?.date ?? p?.Date);
+      // Alguns endpoints usam 'Value' em vez de 'Result'
+      const val = Number(p?.Result ?? p?.Value ?? p?.v ?? 0);
       
       if (!Number.isFinite(tsSec)) return;
       const cleanVal = Number.isFinite(val) ? val : 0;
@@ -478,11 +480,11 @@ export const fetchEtfDetailed = async (asset: 'BTC' | 'ETH' | 'SOL' | 'XRP', met
     // 3) Normaliza para o formato esperado pelo Widget: { date: ms, totalGlobal: num, TICKER: num... }
     return dailyData.map((d: any) => {
         // Tenta achar timestamp em várias chaves possíveis
-        const tsIn = d.timestamp ?? d.Timestamp ?? d.date ?? d.Date ?? null;
+        const tsIn = d.timestamp ?? d.Timestamp ?? d.date ?? d.Date ?? d.t ?? null;
         const timestamp = processChartDate(tsIn);
 
         // Valor total
-        const total = Number(d.totalGlobal ?? d.total ?? 0);
+        let total = Number(d.totalGlobal ?? d.total ?? d.netFlow ?? d.v ?? 0);
 
         const flatPoint: any = {
             date: timestamp,
@@ -493,17 +495,30 @@ export const fetchEtfDetailed = async (asset: 'BTC' | 'ETH' | 'SOL' | 'XRP', met
         // Caso 1: objeto 'perEtf' (nosso padrão flows)
         if (d.perEtf && typeof d.perEtf === 'object') {
             Object.keys(d.perEtf).forEach(ticker => {
-                flatPoint[ticker] = Number(d.perEtf[ticker]);
+                const val = Number(d.perEtf[ticker]);
+                flatPoint[ticker] = val;
             });
         }
-        // Caso 2: tickers estão na raiz do objeto daily (formato TBStat seriesToDaily)
+        // Caso 2: tickers estão na raiz do objeto daily (formato TBStat seriesToDaily ou flat)
         else {
+             let calculatedTotal = 0;
+             let foundTickers = 0;
              // Pega chaves que não sejam metadados
              Object.keys(d).forEach(k => {
-                 if (k !== 'timestamp' && k !== 'Timestamp' && k !== 'totalGlobal' && k !== 'date' && k !== 'perEtf' && k !== 'total') {
-                     flatPoint[k] = Number(d[k]);
+                 if (k !== 'timestamp' && k !== 'Timestamp' && k !== 'totalGlobal' && k !== 'date' && k !== 'perEtf' && k !== 'total' && k !== 'netFlow' && k !== 't' && k !== 'v') {
+                     const val = Number(d[k]);
+                     if (!isNaN(val)) {
+                         flatPoint[k] = val;
+                         calculatedTotal += val;
+                         foundTickers++;
+                     }
                  }
              });
+             
+             // Se o total veio zerado mas temos tickers, usa a soma dos tickers
+             if (total === 0 && foundTickers > 0) {
+                 flatPoint.totalGlobal = calculatedTotal;
+             }
         }
 
         return flatPoint;

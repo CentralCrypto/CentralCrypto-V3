@@ -337,23 +337,10 @@ const EtfBubbles: React.FC<{
     metric: Metric,
     asset: Asset 
 }> = ({ data, selectedIndex, metric, asset }) => {
-    // We need both volume and flow data to toggle bubble size mode.
-    // However, for simplicity and performance, we'll size bubbles based on the CURRENT VIEW (Flow or Volume)
-    // plus a toggle to switch the visual meaning if we had both datasets loaded.
-    // Since we only load one metric at a time in the main fetcher, we will stick to the current metric for sizing.
-    // OR we can implement the "Bubble Mode" toggle to switch the bubble sizing logic if available.
-    
     // Simplification: Bubble size = Absolute Value of current metric.
     // Color: Green/Red for Flows, Blue for Volume.
     
     const [bubbleMode, setBubbleMode] = useState<'flow' | 'volume'>('flow'); // Default to flow preference if available
-    
-    // NOTE: Since we only fetch *one* metric (flows OR volume) in the parent based on user selection,
-    // we can only display bubbles for that metric accurately.
-    // To support toggling "Bubble Size: Flow vs Volume" independently of the chart, we'd need to fetch BOTH.
-    // For V1, we will align the Bubble Mode with the Chart Metric to ensure data consistency without double fetching.
-    // BUT the prompt asks for specific toggle buttons. Let's add them but they might trigger a fetch or just warn.
-    // BETTER STRATEGY: If metric is 'volume', bubbles show volume. If 'flows', bubbles show flows.
     
     const currentDay = data[selectedIndex];
     
@@ -570,14 +557,14 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
         
         {/* LEFT COL: Chart + Bubbles */}
         <div className="lg:col-span-2 flex flex-col gap-6 h-full min-h-0">
-            {/* Chart */}
-            <div className="flex-[2] relative bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4 overflow-hidden min-h-[300px]">
+            {/* Chart - REDUCED FLEX RATIO */}
+            <div className="flex-[1.5] relative bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4 overflow-hidden min-h-[300px]">
                 <ChartArea />
                 <HelpTooltip />
             </div>
             
-            {/* Bubbles */}
-            <div className="flex-1 min-h-[200px]">
+            {/* Bubbles - INCREASED HEIGHT and FLEX RATIO */}
+            <div className="flex-1 min-h-[350px]">
                 <EtfBubbles 
                     data={data} 
                     selectedIndex={selectedIndex} 

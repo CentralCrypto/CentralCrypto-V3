@@ -728,12 +728,12 @@ export const fetchEtfFlow = async (): Promise<EtfFlowData | null> => {
  * - TBStat Series (IBIT/FBTC/...) -> daily[] via soma por Timestamp
  * - daily já pronto
  */
-export const fetchEtfDetailed = async (asset: 'BTC' | 'ETH', metric: 'flows' | 'volume'): Promise<any[]> => {
+export const fetchEtfDetailed = async (asset: 'BTC' | 'ETH' | 'SOL' | 'XRP', metric: 'flows' | 'volume'): Promise<any[]> => {
     let endpoint = '';
-    if (asset === 'BTC' && metric === 'flows') endpoint = ENDPOINTS.cachecko.files.etfBtcFlows;
-    else if (asset === 'BTC' && metric === 'volume') endpoint = ENDPOINTS.cachecko.files.etfBtcVolume;
-    else if (asset === 'ETH' && metric === 'flows') endpoint = ENDPOINTS.cachecko.files.etfEthFlows;
-    else if (asset === 'ETH' && metric === 'volume') endpoint = ENDPOINTS.cachecko.files.etfEthVolume;
+    if (asset === 'BTC') endpoint = metric === 'flows' ? ENDPOINTS.cachecko.files.etfBtcFlows : ENDPOINTS.cachecko.files.etfBtcVolume;
+    else if (asset === 'ETH') endpoint = metric === 'flows' ? ENDPOINTS.cachecko.files.etfEthFlows : ENDPOINTS.cachecko.files.etfEthVolume;
+    else if (asset === 'SOL') endpoint = metric === 'flows' ? ENDPOINTS.cachecko.files.etfSolFlows : ENDPOINTS.cachecko.files.etfSolVolumes;
+    else if (asset === 'XRP') endpoint = metric === 'flows' ? ENDPOINTS.cachecko.files.etfXrpFlows : ENDPOINTS.cachecko.files.etfXrpVolumes;
 
     const raw = await fetchWithFallback(getCacheckoUrl(endpoint));
     if (!raw) return [];
