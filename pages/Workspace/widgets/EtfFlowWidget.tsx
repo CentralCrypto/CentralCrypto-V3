@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Loader2, ArrowUp, ArrowDown, TrendingUp, BarChart3, Database, Layers } from 'lucide-react';
+import { Loader2, ArrowUp, ArrowDown, TrendingUp, BarChart3, Database, Layers, AlertTriangle } from 'lucide-react';
 import { fetchEtfFlow, fetchEtfDetailed, EtfFlowData } from '../services/api';
 import { DashboardItem, Language } from '../../../types';
 import { getTranslations } from '../../../locales';
@@ -34,7 +34,15 @@ const StackedBarChart: React.FC<StackedChartProps> = ({ data, metric, asset }) =
     const chartInstance = useRef<Highcharts.Chart | null>(null);
 
     useEffect(() => {
-        if (!chartRef.current || data.length === 0) return;
+        if (!chartRef.current) return;
+        
+        if (!data || data.length === 0) {
+            if (chartInstance.current) {
+                chartInstance.current.destroy();
+                chartInstance.current = null;
+            }
+            return;
+        }
 
         const isDark = document.documentElement.classList.contains('dark');
         const textColor = isDark ? '#94a3b8' : '#475569';
@@ -75,7 +83,6 @@ const StackedBarChart: React.FC<StackedChartProps> = ({ data, metric, asset }) =
             chart: {
                 backgroundColor: 'transparent',
                 style: { fontFamily: 'Inter, sans-serif' },
-                height: 380,
                 spacing: [10, 10, 10, 10]
             },
             title: { text: null },
@@ -129,7 +136,7 @@ const StackedBarChart: React.FC<StackedChartProps> = ({ data, metric, asset }) =
 
     }, [data, metric, asset]);
 
-    return <div ref={chartRef} className="w-full h-full" />;
+    return <div ref={chartRef} className="w-full h-full min-h-[300px]" />;
 };
 
 const EtfRankingTable: React.FC<{ data: any[], metric: 'flows' | 'volume' }> = ({ data, metric }) => {
@@ -221,6 +228,8 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
         });
     }, [asset, metric]);
 
+    const hasData = data && data.length > 0;
+
     return (
         <div className="flex flex-col h-full bg-white dark:bg-[#1a1c1e] text-gray-900 dark:text-white overflow-hidden p-6">
             {/* CONTROLS */}
@@ -238,8 +247,8 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
                 </div>
                 <div className="text-right">
                     <div className="text-xs font-black text-gray-400 uppercase tracking-widest">Total {metric === 'flows' ? 'Net Flow' : 'Volume'} (Último dia)</div>
-                    <div className={`text-2xl font-black font-mono ${data.length > 0 && (data[data.length-1].totalGlobal >= 0 || metric === 'volume') ? 'text-gray-900 dark:text-white' : 'text-red-500'}`}>
-                        {data.length > 0 ? '$' + formatCompactNumber(data[data.length-1].totalGlobal) : '---'}
+                    <div className={`text-2xl font-black font-mono ${hasData && (data[data.length-1].totalGlobal >= 0 || metric === 'volume') ? 'text-gray-900 dark:text-white' : 'text-red-500'}`}>
+                        {hasData ? '$' + formatCompactNumber(data[data.length-1].totalGlobal) : '---'}
                     </div>
                 </div>
             </div>
@@ -247,16 +256,27 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
             {/* CONTENT GRID */}
             <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 relative bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4">
-                    {loading ? <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="animate-spin text-gray-400" /></div> : (
+                    {loading ? (
+                        <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="animate-spin text-gray-400" /></div>
+                    ) : hasData ? (
                         <StackedBarChart data={data} metric={metric} asset={asset} />
+                    ) : (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 gap-2">
+                            <AlertTriangle size={32} />
+                            <span className="text-sm font-bold uppercase">Sem dados disponíveis</span>
+                        </div>
                     )}
                 </div>
                 <div className="bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-slate-800 rounded-xl flex flex-col overflow-hidden">
                     <div className="p-3 bg-gray-50 dark:bg-black/30 border-b border-gray-100 dark:border-slate-800 font-black text-xs uppercase text-gray-500 tracking-widest flex items-center gap-2">
                         <Layers size={14} /> Market Share (Dia)
                     </div>
-                    {loading ? <div className="flex-1 flex items-center justify-center"><Loader2 className="animate-spin text-gray-400"/></div> : (
+                    {loading ? (
+                        <div className="flex-1 flex items-center justify-center"><Loader2 className="animate-spin text-gray-400"/></div>
+                    ) : hasData ? (
                         <EtfRankingTable data={data} metric={metric} />
+                    ) : (
+                        <div className="flex-1 flex items-center justify-center text-xs text-gray-500">Tabela Vazia</div>
                     )}
                 </div>
             </div>

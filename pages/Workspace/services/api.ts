@@ -160,8 +160,8 @@ export interface EtfFlowData {
   ethValue: number;
   netFlow: number;
   timestamp: number;
-  chartDataBTC: any[]; // Deprecated - use fetchEtfDetailed for arrays
-  chartDataETH: any[]; // Deprecated - use fetchEtfDetailed for arrays
+  chartDataBTC: any[]; 
+  chartDataETH: any[]; 
   history: { lastWeek: number; lastMonth: number; last90d: number; };
   solValue: number;
   xrpValue: number;
@@ -598,7 +598,7 @@ export const fetchEconomicCalendar = async (): Promise<EconEvent[]> => {
 
 // -------------------- ETF --------------------
 
-// Processador seguro de data - CORRIGIDO PARA DETECTAR SEGUNDOS VS MS
+// Processador seguro de data
 const processChartDate = (dateInput: string | number) => {
     if (!dateInput) return 0;
     
