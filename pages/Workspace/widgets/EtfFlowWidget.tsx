@@ -121,8 +121,9 @@ const StackedEtfChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
         style: { fontFamily: 'Inter, sans-serif' },
         spacing: [10, 10, 10, 10],
         zooming: {
-            mouseWheel: { enabled: true },
-            type: 'x' // Required for scroll zoom to identify axis
+            // Habilita roda do mouse explicitamente no eixo X, mas remove 'type' global para desativar seleção
+            mouseWheel: { enabled: true, type: 'x' },
+            type: undefined 
         },
         panning: {
             enabled: true,
@@ -164,6 +165,8 @@ const StackedEtfChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
           dataLabels: { enabled: false }
         },
         series: {
+          // Desativa o tracking "grudento", o mouse precisa estar sobre a barra
+          stickyTracking: false,
           states: { inactive: { opacity: 1 } }
         }
       },
@@ -174,7 +177,9 @@ const StackedEtfChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
         style: { color: isDark ? '#fff' : '#000' },
         shared: true,
         valuePrefix: '$',
-        valueDecimals: 0
+        valueDecimals: 0,
+        // Oculta se não estiver em cima
+        followPointer: false 
       },
       series
     } as any);
@@ -209,15 +214,14 @@ const TotalBarChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
 
     const label = metric === 'flows' ? 'Total Net Flow' : 'Total Volume';
 
-    // Prepara dados com cor condicional
     const seriesData = data.map(d => {
         const val = Number(d.totalGlobal || 0);
         return {
             x: d.date,
             y: val,
             color: metric === 'volume' 
-                ? (isDark ? '#3b82f6' : '#2563eb') // Azul para volume
-                : (val >= 0 ? '#16a34a' : '#dc2626') // Verde/Vermelho para flows
+                ? (isDark ? '#3b82f6' : '#2563eb')
+                : (val >= 0 ? '#16a34a' : '#dc2626')
         };
     });
 
@@ -229,8 +233,8 @@ const TotalBarChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
         style: { fontFamily: 'Inter, sans-serif' },
         spacing: [10, 10, 10, 10],
         zooming: {
-            mouseWheel: { enabled: true },
-            type: 'x'
+            mouseWheel: { enabled: true, type: 'x' },
+            type: undefined
         },
         panning: {
             enabled: true,
@@ -268,13 +272,18 @@ const TotalBarChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
         style: { color: isDark ? '#fff' : '#000' },
         shared: false,
         valuePrefix: '$',
-        valueDecimals: 0
+        valueDecimals: 0,
+        followPointer: false
       },
       plotOptions: {
         column: {
             borderWidth: 0,
             pointPadding: 0.1,
             groupPadding: 0.1
+        },
+        series: {
+            // Tooltip só ao passar o mouse na barra
+            stickyTracking: false
         }
       },
       series: [{
@@ -331,8 +340,8 @@ const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }
         style: { fontFamily: 'Inter, sans-serif' },
         spacing: [10, 10, 10, 10],
         zooming: {
-            mouseWheel: { enabled: true },
-            type: 'x'
+            mouseWheel: { enabled: true, type: 'x' },
+            type: undefined
         },
         panning: {
             enabled: true,
