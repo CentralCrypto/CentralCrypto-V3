@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Loader2, ArrowUp, ArrowDown, TrendingUp, BarChart3, Layers, AlertTriangle, LineChart } from 'lucide-react';
+import { Loader2, ArrowUp, ArrowDown, TrendingUp, BarChart3, Layers, AlertTriangle, LineChart, Info } from 'lucide-react';
 import { fetchEtfFlow, fetchEtfDetailed, EtfFlowData } from '../services/api';
 import { DashboardItem, Language } from '../../../types';
 import { getTranslations } from '../../../locales';
@@ -122,13 +122,13 @@ const StackedEtfChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
         spacing: [10, 10, 10, 10],
         zooming: {
             mouseWheel: { enabled: true },
-            type: 'x'
+            type: undefined // Disable selection zoom
         },
         panning: {
             enabled: true,
             type: 'x'
         },
-        panKey: 'shift',
+        panKey: undefined, // No key required for panning
         events: {
           load: function () { applyWatermark(this as any); },
           redraw: function () { applyWatermark(this as any); }
@@ -230,13 +230,13 @@ const TotalBarChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
         spacing: [10, 10, 10, 10],
         zooming: {
             mouseWheel: { enabled: true },
-            type: 'x'
+            type: undefined
         },
         panning: {
             enabled: true,
             type: 'x'
         },
-        panKey: 'shift',
+        panKey: undefined,
         events: {
           load: function () { applyWatermark(this as any); },
           redraw: function () { applyWatermark(this as any); }
@@ -332,13 +332,13 @@ const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }
         spacing: [10, 10, 10, 10],
         zooming: {
             mouseWheel: { enabled: true },
-            type: 'x'
+            type: undefined
         },
         panning: {
             enabled: true,
             type: 'x'
         },
-        panKey: 'shift',
+        panKey: undefined,
         events: {
           load: function () { applyWatermark(this as any); },
           redraw: function () { applyWatermark(this as any); }
@@ -408,7 +408,15 @@ const EtfRankingTable: React.FC<{ data: any[], metric: Metric }> = ({ data, metr
   const lastDay = data[data.length - 1];
   if (!lastDay) return null;
 
-  let keys = Object.keys(lastDay).filter(k => k !== 'date' && k !== 'totalGlobal' && k !== 'timestamp');
+  // Usa TODOS os tickers encontrados no dataset, não apenas os do último dia (para incluir 0)
+  const allKeys = new Set<string>();
+  data.forEach(d => {
+      Object.keys(d).forEach(k => {
+          if (k !== 'date' && k !== 'totalGlobal' && k !== 'timestamp') allKeys.add(k);
+      });
+  });
+  
+  const keys = Array.from(allKeys);
   const total = Number(lastDay.totalGlobal || 0);
 
   if (keys.length === 0) {
@@ -481,6 +489,20 @@ const EtfRankingTable: React.FC<{ data: any[], metric: Metric }> = ({ data, metr
     </div>
   );
 };
+
+// --- TOOLTIP DE AJUDA ---
+const HelpTooltip = () => (
+    <div className="absolute top-2 right-2 z-20 group">
+        <div className="bg-white/10 p-1.5 rounded-full backdrop-blur-sm cursor-help hover:bg-white/20 transition-colors text-gray-400 hover:text-white border border-white/5">
+            <Info size={14} />
+        </div>
+        <div className="absolute right-0 top-full mt-2 w-48 p-3 bg-white dark:bg-[#1a1c1e] border border-gray-200 dark:border-slate-700 rounded-xl shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none text-xs text-gray-600 dark:text-gray-300 z-50">
+            <div className="font-bold mb-2 text-gray-900 dark:text-white border-b border-gray-100 dark:border-slate-700 pb-1">Navegação</div>
+            <div className="flex justify-between mb-1"><span>Zoom:</span> <span className="font-mono bg-gray-100 dark:bg-white/10 px-1 rounded">Scroll</span></div>
+            <div className="flex justify-between"><span>Pan:</span> <span className="font-mono bg-gray-100 dark:bg-white/10 px-1 rounded">Drag</span></div>
+        </div>
+    </div>
+);
 
 // --- MAXIMIZED WIDGET (DEEP DIVE) ---
 const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ language }) => {
@@ -664,11 +686,9 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
 
       {/* CONTENT GRID */}
       <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 relative bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4">
+        <div className="lg:col-span-2 relative bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4 overflow-hidden">
           <ChartArea />
-          <div className="absolute right-3 bottom-3 text-[10px] text-gray-400">
-            Zoom: roda do mouse (X) | Pan: Shift + Arrastar
-          </div>
+          <HelpTooltip />
         </div>
 
         <div className="bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-slate-800 rounded-xl flex flex-col overflow-hidden">
@@ -688,7 +708,7 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
   );
 };
 
-// --- MINIMIZED WIDGET (SUMMARY) ---
+// --- MINIMIZED WIDGET (SUMMARY). ---
 const EtfSummary: React.FC<{ language: Language }> = ({ language }) => {
   const [etfData, setEtfData] = useState<EtfFlowData | null>(null);
   const t = getTranslations(language).workspace.widgets.etf;
