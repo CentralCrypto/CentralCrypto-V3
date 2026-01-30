@@ -122,13 +122,13 @@ const StackedEtfChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
         spacing: [10, 10, 10, 10],
         zooming: {
             mouseWheel: { enabled: true },
-            type: undefined // Disable selection zoom
+            type: 'x' // Required for scroll zoom to identify axis
         },
         panning: {
             enabled: true,
             type: 'x'
         },
-        panKey: undefined, // No key required for panning
+        panKey: undefined,
         events: {
           load: function () { applyWatermark(this as any); },
           redraw: function () { applyWatermark(this as any); }
@@ -230,7 +230,7 @@ const TotalBarChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
         spacing: [10, 10, 10, 10],
         zooming: {
             mouseWheel: { enabled: true },
-            type: undefined
+            type: 'x'
         },
         panning: {
             enabled: true,
@@ -332,7 +332,7 @@ const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }
         spacing: [10, 10, 10, 10],
         zooming: {
             mouseWheel: { enabled: true },
-            type: undefined
+            type: 'x'
         },
         panning: {
             enabled: true,
@@ -708,7 +708,7 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
   );
 };
 
-// --- MINIMIZED WIDGET (SUMMARY). ---
+// --- MINIMIZED WIDGET (SUMMARY) ---
 const EtfSummary: React.FC<{ language: Language }> = ({ language }) => {
   const [etfData, setEtfData] = useState<EtfFlowData | null>(null);
   const t = getTranslations(language).workspace.widgets.etf;
