@@ -340,8 +340,6 @@ const EtfBubbles: React.FC<{
     // Simplification: Bubble size = Absolute Value of current metric.
     // Color: Green/Red for Flows, Blue for Volume.
     
-    const [bubbleMode, setBubbleMode] = useState<'flow' | 'volume'>('flow'); // Default to flow preference if available
-    
     const currentDay = data[selectedIndex];
     
     const bubbles = useMemo(() => {
@@ -370,11 +368,6 @@ const EtfBubbles: React.FC<{
             <div className="flex justify-between items-center mb-4">
                 <div className="flex items-center gap-2 text-xs font-black uppercase text-gray-500 dark:text-gray-400">
                     <DollarSign size={14} /> ETF Bubbles ({metric === 'volume' ? 'Volume' : 'Net Flow'})
-                </div>
-                {/* Visual Toggle - inactive if data not available, just visual indicator of current mode */}
-                <div className="flex bg-gray-200 dark:bg-black/40 rounded p-0.5">
-                    <button disabled={metric !== 'flows'} className={`px-3 py-1 rounded text-[10px] font-bold ${metric === 'flows' ? 'bg-white dark:bg-[#dd9933] text-black shadow' : 'text-gray-400'}`}>FLOW</button>
-                    <button disabled={metric !== 'volume'} className={`px-3 py-1 rounded text-[10px] font-bold ${metric === 'volume' ? 'bg-white dark:bg-blue-500 text-black shadow' : 'text-gray-400'}`}>VOL</button>
                 </div>
             </div>
             
@@ -421,7 +414,8 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
   const [viewMode, setViewMode] = useState<ViewMode>('stacked');
   
   const [data, setData] = useState<any[]>([]);
-  const [flowsData, setFlowsData] = useState<any[]>([]); // For Top KPI
+  // Store summary data (aggregate)
+  const [summaryData, setSummaryData] = useState<EtfFlowData | null>(null);
   const [loading, setLoading] = useState(true);
   
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
@@ -429,14 +423,14 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
   // Date Pagination State
   const [selectedIndex, setSelectedIndex] = useState<number>(-1);
 
-  // 1. Fetch Flows Data (Always needed for the KPI Header)
+  // 1. Fetch Aggregate Summary (For Header KPI - Sum of ALL)
   useEffect(() => {
-    fetchEtfDetailed(asset, 'flows').then(res => {
-      setFlowsData(Array.isArray(res) ? res : []);
+    fetchEtfFlow().then(res => {
+      setSummaryData(res);
     });
-  }, [asset]);
+  }, []); // Run once on mount
 
-  // 2. Fetch Main Data (Based on Metric)
+  // 2. Fetch Main Data (Based on Metric & Selected Asset)
   useEffect(() => {
     setLoading(true);
     fetchEtfDetailed(asset, metric).then(res => {
@@ -464,10 +458,20 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
     }
   }, [viewMode, data]);
 
-  // KPI Calculation
-  const hasFlows = flowsData && flowsData.length > 0;
-  const lastFlow = hasFlows ? Number(flowsData[flowsData.length - 1]?.totalGlobal || 0) : 0;
-  const flowColor = lastFlow >= 0 ? 'text-green-500' : 'text-red-500';
+  // KPI Calculation (Total of ALL coins for the day)
+  const grandTotal = useMemo(() => {
+      if (!summaryData) return 0;
+      // Net flow is usually pre-calculated in the summary endpoint as 'total'
+      // But let's sum explicitly if netFlow is just one asset (depends on endpoint behavior)
+      // Assuming 'netFlow' in summary is the aggregate daily total of all monitored ETFs.
+      // Or sum individual:
+      return (summaryData.btcValue || 0) + (summaryData.ethValue || 0) + (summaryData.solValue || 0) + (summaryData.xrpValue || 0);
+  }, [summaryData]);
+  
+  // Use netFlow if the individual sums are 0 (fallback)
+  const displayTotal = grandTotal !== 0 ? grandTotal : (summaryData?.netFlow || 0);
+
+  const flowColor = displayTotal >= 0 ? 'text-green-500' : 'text-red-500';
 
   const tickerButtons = useMemo(() => {
     if (!data || data.length === 0) return [];
@@ -496,9 +500,9 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
         <div className="flex justify-between items-center flex-wrap gap-4">
           <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-baseline gap-2">
-              <div className="text-xs font-black text-gray-400 uppercase tracking-widest">Total Net Flow</div>
-              <div className={`text-xl font-black font-mono ${hasFlows ? flowColor : 'text-gray-400'}`}>
-                {hasFlows ? '$' + formatCompactNumber(lastFlow) : '---'}
+              <div className="text-xs font-black text-gray-400 uppercase tracking-widest">Total Net Flow (All)</div>
+              <div className={`text-xl font-black font-mono ${summaryData ? flowColor : 'text-gray-400'}`}>
+                {summaryData ? '$' + formatCompactNumber(displayTotal) : '---'}
               </div>
             </div>
 
@@ -552,19 +556,19 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
         )}
       </div>
 
-      {/* MAIN GRID LAYOUT */}
-      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* MAIN GRID LAYOUT - Increased Min Height */}
+      <div className="flex-1 min-h-[650px] grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* LEFT COL: Chart + Bubbles */}
         <div className="lg:col-span-2 flex flex-col gap-6 h-full min-h-0">
-            {/* Chart - REDUCED FLEX RATIO */}
-            <div className="flex-[1.5] relative bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4 overflow-hidden min-h-[300px]">
+            {/* Chart - Adjusted Flex Ratio */}
+            <div className="h-[45%] relative bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4 overflow-hidden min-h-[250px]">
                 <ChartArea />
                 <HelpTooltip />
             </div>
             
-            {/* Bubbles - INCREASED HEIGHT and FLEX RATIO */}
-            <div className="flex-1 min-h-[350px]">
+            {/* Bubbles - Adjusted Flex Ratio (More space) */}
+            <div className="h-[55%] min-h-[300px]">
                 <EtfBubbles 
                     data={data} 
                     selectedIndex={selectedIndex} 
