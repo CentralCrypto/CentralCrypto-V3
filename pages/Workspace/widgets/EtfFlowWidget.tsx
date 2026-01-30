@@ -137,15 +137,38 @@ const EtfRankingTable: React.FC<{ data: any[], metric: 'flows' | 'volume' }> = (
     const lastDay = data[data.length - 1];
     if (!lastDay) return null;
 
-    const keys = Object.keys(lastDay).filter(k => k !== 'date' && k !== 'totalGlobal' && k !== 'timestamp');
+    let keys = Object.keys(lastDay).filter(k => k !== 'date' && k !== 'totalGlobal' && k !== 'timestamp');
+    const total = lastDay.totalGlobal || 1;
+
+    // Fallback if no specific tickers found (e.g. ETH Volume aggregate only)
+    if (keys.length === 0) {
+        return (
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+                <table className="w-full text-left text-xs">
+                    <thead className="sticky top-0 bg-gray-50 dark:bg-black/20 text-gray-500 dark:text-slate-400">
+                        <tr>
+                            <th className="p-2 font-black uppercase">Resumo</th>
+                            <th className="p-2 text-right font-black uppercase">Value (USD)</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+                        <tr className="hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">
+                            <td className="p-2 font-bold text-gray-700 dark:text-slate-300">Total Agregado</td>
+                            <td className={`p-2 text-right font-mono font-black ${metric === 'volume' ? 'text-gray-900 dark:text-white' : (total >= 0 ? 'text-green-500' : 'text-red-500')}`}>
+                                ${formatCompactNumber(total)}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        );
+    }
     
     // Sort tickers by value magnitude desc
     const ranking = keys.map(k => ({
         ticker: k,
         value: lastDay[k] || 0
     })).sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
-
-    const total = lastDay.totalGlobal || 1;
 
     return (
         <div className="flex-1 overflow-y-auto custom-scrollbar">

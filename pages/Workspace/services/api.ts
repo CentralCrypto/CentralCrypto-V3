@@ -598,10 +598,24 @@ export const fetchEconomicCalendar = async (): Promise<EconEvent[]> => {
 
 // -------------------- ETF --------------------
 
-// Processador seguro de data
-const processChartDate = (dateStr: string | number) => {
-    if (typeof dateStr === 'number') return dateStr;
-    const date = new Date(dateStr);
+// Processador seguro de data - CORRIGIDO PARA DETECTAR SEGUNDOS VS MS
+const processChartDate = (dateInput: string | number) => {
+    if (!dateInput) return 0;
+    
+    // Se for número
+    if (typeof dateInput === 'number') {
+        // Heurística: Se for menor que 10 bilhões, assume segundos (UNIX epoch 1970)
+        // 10.000.000.000 segundos = ano 2286. 
+        // 10.000.000.000 millis = ano 1970 (abril).
+        // Timestamp atual em ms é ~1.7e12. Em segundos é ~1.7e9.
+        if (dateInput < 10000000000) {
+            return dateInput * 1000;
+        }
+        return dateInput;
+    }
+    
+    // Se for string
+    const date = new Date(dateInput);
     return !isNaN(date.getTime()) ? date.getTime() : 0;
 };
 
@@ -646,10 +660,12 @@ export const fetchEtfDetailed = async (asset: 'BTC' | 'ETH', metric: 'flows' | '
     const raw = await fetchWithFallback(getCacheckoUrl(endpoint));
     if (!raw) return [];
 
-    // Detect data structure: Object with 'daily' or Array
+    // Detect data structure: Object with 'daily', or data.daily, or Array
     let dailyData = [];
     if (raw.daily && Array.isArray(raw.daily)) {
         dailyData = raw.daily;
+    } else if (raw.data && raw.data.daily && Array.isArray(raw.data.daily)) {
+        dailyData = raw.data.daily;
     } else if (Array.isArray(raw)) {
         dailyData = raw;
     }
