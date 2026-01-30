@@ -1,12 +1,16 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Loader2, ArrowUp, ArrowDown, TrendingUp, BarChart3, Layers, AlertTriangle, LineChart } from 'lucide-react';
 import { fetchEtfFlow, fetchEtfDetailed, EtfFlowData } from '../services/api';
 import { DashboardItem, Language } from '../../../types';
 import { getTranslations } from '../../../locales';
 import Highcharts from 'highcharts';
-import addMouseWheelZoom from 'highcharts/modules/mouse-wheel-zoom';
+import mouseWheelZoom from 'highcharts/modules/mouse-wheel-zoom';
 
-addMouseWheelZoom(Highcharts);
+// Inicialização segura do módulo de zoom
+if (typeof mouseWheelZoom === 'function') {
+    (mouseWheelZoom as any)(Highcharts);
+}
 
 const formatCompactNumber = (number: number) => {
   if (!number || number === 0) return "---";
@@ -116,7 +120,10 @@ const StackedEtfChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
         backgroundColor: 'transparent',
         style: { fontFamily: 'Inter, sans-serif' },
         spacing: [10, 10, 10, 10],
-        zooming: { type: 'x', mouseWheel: { enabled: true } },
+        zooming: {
+            mouseWheel: { enabled: true },
+            type: 'x'
+        },
         events: {
           load: function () { applyWatermark(this as any); },
           redraw: function () { applyWatermark(this as any); }
@@ -204,7 +211,10 @@ const TotalLineChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
         backgroundColor: 'transparent',
         style: { fontFamily: 'Inter, sans-serif' },
         spacing: [10, 10, 10, 10],
-        zooming: { type: 'x', mouseWheel: { enabled: true } },
+        zooming: {
+            mouseWheel: { enabled: true },
+            type: 'x'
+        },
         events: {
           load: function () { applyWatermark(this as any); },
           redraw: function () { applyWatermark(this as any); }
@@ -293,7 +303,10 @@ const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }
         backgroundColor: 'transparent',
         style: { fontFamily: 'Inter, sans-serif' },
         spacing: [10, 10, 10, 10],
-        zooming: { type: 'x', mouseWheel: { enabled: true } },
+        zooming: {
+            mouseWheel: { enabled: true },
+            type: 'x'
+        },
         events: {
           load: function () { applyWatermark(this as any); },
           redraw: function () { applyWatermark(this as any); }
