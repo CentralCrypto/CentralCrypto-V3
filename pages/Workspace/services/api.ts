@@ -1,4 +1,3 @@
-
 import { ApiCoin } from '../../../types';
 import { httpGetJson } from '../../../services/http';
 import { getCacheckoUrl, ENDPOINTS } from '../../../services/endpoints';
@@ -610,10 +609,6 @@ const processChartDate = (dateInput: string | number) => {
     
     // Se for número
     if (typeof dateInput === 'number') {
-        // Heurística: Se for menor que 10 bilhões, assume segundos (UNIX epoch 1970)
-        // 10.000.000.000 segundos = ano 2286. 
-        // 10.000.000.000 millis = ano 1970 (abril).
-        // Timestamp atual em ms é ~1.7e12. Em segundos é ~1.7e9.
         if (dateInput < 10000000000) {
             return dateInput * 1000;
         }
@@ -623,6 +618,79 @@ const processChartDate = (dateInput: string | number) => {
     // Se for string
     const date = new Date(dateInput);
     return !isNaN(date.getTime()) ? date.getTime() : 0;
+};
+
+// Helpers para “desembrulhar” JSONs do TheBlock/TBStat/cache n8n
+const tryJsonParse = (v: any): any => {
+  if (typeof v !== 'string') return v;
+  const s = v.trim();
+  if (!s) return null;
+  try {
+    return JSON.parse(s);
+  } catch {
+    return null;
+  }
+};
+
+const unwrapPossibleDataNode = (raw: any): any => {
+  if (!raw) return null;
+
+  // Caso: [{ slug, data: "{...}" }]
+  if (Array.isArray(raw) && raw.length > 0 && raw[0] && typeof raw[0] === 'object') {
+    const first = raw[0] as any;
+    // prioridade: first.data, first.jsonFile?.data, first.data?.jsonFile?.data
+    const cand =
+      first.data ??
+      first.jsonFile?.data ??
+      first.data?.jsonFile?.data ??
+      null;
+
+    const parsed = tryJsonParse(cand);
+    return parsed ?? cand ?? first;
+  }
+
+  // Caso: { data: "{...}" } ou { jsonFile: { data: "{...}" } }
+  if (raw && typeof raw === 'object') {
+    const cand =
+      (raw as any).data ??
+      (raw as any).jsonFile?.data ??
+      (raw as any).jsonFile ??
+      null;
+
+    const parsed = tryJsonParse(cand);
+    return parsed ?? cand ?? raw;
+  }
+
+  // Caso: string direta
+  const parsed = tryJsonParse(raw);
+  return parsed ?? raw;
+};
+
+// Converte TBStat Series -> daily[]
+const seriesToDaily = (seriesObj: any): any[] => {
+  if (!seriesObj || typeof seriesObj !== 'object') return [];
+
+  const byTs: Record<number, { timestamp: number; totalGlobal: number; perEtf: Record<string, number> }> = {};
+
+  Object.keys(seriesObj).forEach((ticker) => {
+    const node = seriesObj[ticker];
+    const arr = node?.Data;
+    if (!Array.isArray(arr)) return;
+
+    arr.forEach((p: any) => {
+      const tsSec = Number(p?.Timestamp);
+      const val = Number(p?.Result);
+      if (!Number.isFinite(tsSec) || !Number.isFinite(val)) return;
+
+      if (!byTs[tsSec]) {
+        byTs[tsSec] = { timestamp: tsSec, totalGlobal: 0, perEtf: {} };
+      }
+      byTs[tsSec].perEtf[ticker] = val;
+      byTs[tsSec].totalGlobal += val;
+    });
+  });
+
+  return Object.values(byTs).sort((a, b) => a.timestamp - b.timestamp);
 };
 
 // Simple fetch for summary widget
@@ -654,7 +722,11 @@ export const fetchEtfFlow = async (): Promise<EtfFlowData | null> => {
 
 /**
  * Fetch Detailed ETF Data (Flows or Volume)
- * FLATTENS the data structure for Highcharts
+ * Robusto para:
+ * - n8n wrapper [{slug,data:"{...}"}]
+ * - jsonFile.data como string
+ * - TBStat Series (IBIT/FBTC/...) -> daily[] via soma por Timestamp
+ * - daily já pronto
  */
 export const fetchEtfDetailed = async (asset: 'BTC' | 'ETH', metric: 'flows' | 'volume'): Promise<any[]> => {
     let endpoint = '';
@@ -666,35 +738,97 @@ export const fetchEtfDetailed = async (asset: 'BTC' | 'ETH', metric: 'flows' | '
     const raw = await fetchWithFallback(getCacheckoUrl(endpoint));
     if (!raw) return [];
 
-    // Detect data structure: Object with 'daily', or data.daily, or Array
-    let dailyData = [];
-    if (raw.daily && Array.isArray(raw.daily)) {
-        dailyData = raw.daily;
-    } else if (raw.data && raw.data.daily && Array.isArray(raw.data.daily)) {
-        dailyData = raw.data.daily;
-    } else if (Array.isArray(raw)) {
-        dailyData = raw;
+    // 1) Desembrulha wrappers/strings
+    const unwrapped = unwrapPossibleDataNode(raw);
+
+    // 2) Decide a fonte real dos pontos diários
+    let dailyData: any[] = [];
+
+    // Caso “daily” padrão
+    if (unwrapped?.daily && Array.isArray(unwrapped.daily)) {
+      dailyData = unwrapped.daily;
+    } else if (unwrapped?.data?.daily && Array.isArray(unwrapped.data.daily)) {
+      dailyData = unwrapped.data.daily;
+    } else if (Array.isArray(unwrapped)) {
+      // Às vezes o unwrapped já vira array de daily
+      dailyData = unwrapped;
     }
 
-    // Flatten logic
+    // Caso TBStat: { Series: { IBIT:{Data:[...]}, ... } }
+    if (dailyData.length === 0) {
+      const seriesObj =
+        unwrapped?.Series ??
+        unwrapped?.jsonFile?.Series ??
+        unwrapped?.data?.Series ??
+        null;
+
+      if (seriesObj && typeof seriesObj === 'object') {
+        dailyData = seriesToDaily(seriesObj);
+      }
+    }
+
+    if (!Array.isArray(dailyData) || dailyData.length === 0) return [];
+
+    // 3) Flatten para o shape do widget/Highcharts
     return dailyData.map((d: any) => {
-        const timestamp = processChartDate(d.timestamp || d.date);
-        
-        // Base object
+        const tsIn =
+          d.timestamp ??
+          d.Timestamp ??
+          d.date ??
+          d.Date ??
+          null;
+
+        const timestamp = processChartDate(tsIn as any);
+
         const flatPoint: any = {
             date: timestamp,
-            totalGlobal: Number(d.totalGlobal || d.total || 0)
+            totalGlobal: Number(d.totalGlobal ?? d.total ?? 0)
         };
 
-        // Spread perEtf if exists
+        // perEtf pode vir nested
         if (d.perEtf && typeof d.perEtf === 'object') {
             Object.keys(d.perEtf).forEach(ticker => {
                 flatPoint[ticker] = Number(d.perEtf[ticker]);
             });
         }
 
+        // ou já “espalhado” (quando vem do SeriesToDaily e não tem perEtf)
+        if ((!d.perEtf || typeof d.perEtf !== 'object') && d.perEtf === undefined) {
+          // Quando vem de seriesToDaily: {timestamp,totalGlobal,perEtf:{...}}
+          if (d.perEtf && typeof d.perEtf === 'object') {
+            Object.keys(d.perEtf).forEach(ticker => {
+              flatPoint[ticker] = Number(d.perEtf[ticker]);
+            });
+          }
+        }
+
+        // Se vier no formato seriesToDaily
+        if (d.perEtf && typeof d.perEtf === 'object') {
+          // já tratado acima
+        } else if (d.perEtf === undefined && d.perEtf !== null) {
+          // nada
+        }
+
+        // Caso seriesToDaily tenha 'perEtf' e passou batido (segurança extra)
+        if (d.perEtf && typeof d.perEtf === 'object') {
+          // redundante por segurança
+        }
+
+        // Caso seriesToDaily: perEtf está no d.perEtf, então ok.
+        // Caso alguns pipelines: d.ETFs ou d.etfs
+        const altPer =
+          d.etfs ??
+          d.ETFs ??
+          null;
+
+        if (altPer && typeof altPer === 'object') {
+          Object.keys(altPer).forEach(ticker => {
+            flatPoint[ticker] = Number(altPer[ticker]);
+          });
+        }
+
         return flatPoint;
-    }).sort((a: any, b: any) => a.date - b.date);
+    }).filter(p => Number.isFinite(p.date) && p.date > 0).sort((a: any, b: any) => a.date - b.date);
 };
 
 // -------------------- BINANCE --------------------
