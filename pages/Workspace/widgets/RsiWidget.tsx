@@ -1,9 +1,10 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, Info, Search, ChevronLeft, ChevronRight, BarChart2, DollarSign, Percent, ZoomOut, MousePointer2, GripVertical, ChevronsUpDown, Filter, TrendingUp, TrendingDown } from 'lucide-react';
+import { Loader2, Info, Search, ChevronLeft, ChevronRight, BarChart2, DollarSign, Percent, ZoomOut, MousePointer2, GripVertical, ChevronsUpDown, Filter, TrendingUp, TrendingDown, ChevronDown } from 'lucide-react';
 import Highcharts from 'highcharts';
 import addMouseWheelZoom from 'highcharts/modules/mouse-wheel-zoom';
 import { Language, DashboardItem } from '../../../types';
+import { getTranslations } from '../../../locales';
 import {
   RsiAvgData,
   RsiTableItem,
@@ -310,13 +311,9 @@ export const RsiScatterChart: React.FC = () => {
 
     const seriesData = points
         .filter(r => {
-            // Data validation for chart rendering
             if (!r.rsi?.[timeframe]) return false;
-            
-            // Critical check for Logarithmic Axis (Highcharts errors on 0 or negative log input)
             if (xMode === 'mcap' && (!r.marketCap || r.marketCap <= 0)) return false;
             if (xMode === 'volume' && (!r.volume24h || r.volume24h <= 0)) return false;
-            
             return true;
         })
         .slice(0, limit)
@@ -327,7 +324,6 @@ export const RsiScatterChart: React.FC = () => {
             else xVal = r.change24h || 0;
 
             const cur = r.rsi?.[timeframe];
-            
             const isOversold = cur <= RSI_LOW;
             const isOverbought = cur >= RSI_HIGH;
             const isNeutral = !isOversold && !isOverbought;
@@ -339,14 +335,13 @@ export const RsiScatterChart: React.FC = () => {
             const last = r.lastRsi; 
             const isRising = (last !== undefined && cur > last);
             const symbolShort = (r.symbol || 'UNK').substring(0, 3).toUpperCase();
-            
             const coinId = (r as any).id || (r.symbol ? r.symbol.toLowerCase() : 'unknown');
             const logoUrl = `https://s2.coinmarketcap.com/static/img/coins/64x64/${coinId}.png`;
             
             return {
                 id: coinId,
-                x: xVal, // X Axis = Metric (Mcap/Vol/Change)
-                y: cur,  // Y Axis = RSI
+                x: xVal,
+                y: cur,
                 z: r.volume24h,
                 name: r.symbol,
                 fullName: r.name,
@@ -355,10 +350,10 @@ export const RsiScatterChart: React.FC = () => {
                 isRising: isRising,
                 logoUrl,
                 symbolShort,
-                allRsi: r.rsi // Pass all RSI data for tooltip
+                allRsi: r.rsi 
             };
         })
-        .filter(p => p !== null); // Remove filtered out points
+        .filter(p => p !== null);
 
     seriesData.sort((a, b) => a!.name.localeCompare(b!.name));
 
@@ -386,7 +381,7 @@ export const RsiScatterChart: React.FC = () => {
             backgroundColor: bgColor,
             style: { fontFamily: 'Inter, sans-serif' },
             height: null, 
-            zooming: { mouseWheel: { enabled: true }, type: 'xy' }, // Mouse Wheel Enabled
+            zooming: { mouseWheel: { enabled: true }, type: 'xy' },
             animation: { duration: 1000 }
         },
         title: { text: null },
@@ -416,15 +411,14 @@ export const RsiScatterChart: React.FC = () => {
             gridLineColor: gridColor,
             gridLineDashStyle: 'Dash',
             labels: { style: { color: textColor, fontSize: '10px' } },
-            // FIX: Lines at 20 and 80
             plotLines: [
                 { value: RSI_HIGH, color: COLOR_RED, dashStyle: 'ShortDash', width: 2, label: { text: 'Overbought (80)', align: 'right', style: { color: COLOR_RED, fontSize: '10px' } }, zIndex: 5 },
                 { value: RSI_LOW, color: COLOR_GREEN, dashStyle: 'ShortDash', width: 2, label: { text: 'Oversold (20)', align: 'right', style: { color: COLOR_GREEN, fontSize: '10px' } }, zIndex: 5 },
                 { value: 50, color: textColor, width: 1, zIndex: 1 }
             ],
             plotBands: [
-                { from: RSI_HIGH, to: 100, color: 'rgba(194, 84, 78, 0.08)' }, // Red with opacity
-                { from: 0, to: RSI_LOW, color: 'rgba(78, 132, 60, 0.08)' } // Green with opacity
+                { from: RSI_HIGH, to: 100, color: 'rgba(194, 84, 78, 0.08)' }, 
+                { from: 0, to: RSI_LOW, color: 'rgba(78, 132, 60, 0.08)' } 
             ],
             crosshair: { width: 1, color: crosshairColor, dashStyle: 'Dot', snap: false, zIndex: 5 }
         },
@@ -444,7 +438,6 @@ export const RsiScatterChart: React.FC = () => {
                 const changeColor = p.options.change >= 0 ? COLOR_GREEN : COLOR_RED;
                 const logo = p.options.logoUrl || SITE_LOGO;
                 
-                // Helper to get color for specific RSI value
                 const getValColor = (v: number) => {
                     if (v <= RSI_LOW) return COLOR_GREEN;
                     if (v >= RSI_HIGH) return COLOR_RED;
@@ -471,12 +464,10 @@ export const RsiScatterChart: React.FC = () => {
                                 <div style="font-size:10px; font-weight:700; color:${isDark ? '#64748b' : '#94a3b8'}; text-transform:uppercase; margin-top:2px;">Rank #${p.options.rank || '-'}</div>
                             </div>
                         </div>
-                        
                         <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:12px;">
                             <div style="font-size:16px; font-weight:800; font-family:monospace;">$${formatCompactNumber(p.options.price)}</div>
                             <div style="font-size:12px; font-weight:800; color:${changeColor};">${p.options.change > 0 ? '+' : ''}${p.options.change.toFixed(2)}%</div>
                         </div>
-
                         <div style="display:grid; grid-template-columns: repeat(5, 1fr); gap:8px; background:${isDark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.05)'}; padding:6px; border-radius:6px;">
                             ${tfHtml}
                         </div>
@@ -508,17 +499,11 @@ export const RsiScatterChart: React.FC = () => {
                         const symbol = isRising ? '▲' : '▼'; 
                         const logo = p.options.logoUrl || SITE_LOGO;
                         const short = p.options.symbolShort || '';
-                        
-                        // Fallback Logic with Site Logo
                         return `
                         <div style="position: relative; width: 24px; height: 24px;">
                             <div style="position: absolute; inset: 0; background: #334155; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: bold; color: #fff; z-index: 1;">${short.charAt(0)}</div>
-                            <img src="${logo}" 
-                                 style="position: relative; width: 24px; height: 24px; border-radius: 50%; object-fit: cover; z-index: 2; background: transparent;" 
-                            />
-                            <div style="position: absolute; right: -4px; bottom: -2px; color: ${color}; font-size: 10px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.8); line-height: 1; z-index: 3;">
-                                ${symbol}
-                            </div>
+                            <img src="${logo}" style="position: relative; width: 24px; height: 24px; border-radius: 50%; object-fit: cover; z-index: 2; background: transparent;" />
+                            <div style="position: absolute; right: -4px; bottom: -2px; color: ${color}; font-size: 10px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.8); line-height: 1; z-index: 3;">${symbol}</div>
                         </div>`;
                     },
                     style: { textOutline: 'none' }
@@ -712,9 +697,7 @@ export const RsiTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false })
     return (
         <div className={`bg-white dark:bg-[#1a1c1e] rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm flex flex-col ${isPage ? 'w-full h-auto block' : 'h-full overflow-hidden min-h-[500px]'}`}>
             <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-3 bg-gray-50 dark:bg-black/20">
-                {/* Header Controls Reorganized */}
                 <div className="flex flex-wrap items-center justify-between gap-4 w-full">
-                    {/* Left Group: Search + Rows */}
                     <div className="flex items-center gap-4 flex-1">
                         <div className="relative w-full sm:max-w-xs">
                             <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
@@ -729,7 +712,6 @@ export const RsiTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false })
                         </div>
                     </div>
                     
-                    {/* Right Group: Pagination */}
                     <div className="flex items-center gap-2">
                          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="p-1 hover:text-[#dd9933] transition-colors disabled:opacity-30 text-gray-600 dark:text-white"><ChevronLeft size={16}/></button>
                          <div className="flex items-center gap-1 text-xs font-bold text-gray-500 dark:text-gray-400">
@@ -770,7 +752,43 @@ export const RsiTableList: React.FC<{ isPage?: boolean }> = ({ isPage = false })
     );
 };
 
-export const RsiFaq: React.FC = () => { return null; };
+export const RsiFaq: React.FC<{ language?: Language }> = ({ language = 'pt' }) => {
+    const [openIndex, setOpenIndex] = useState<number | null>(null);
+    const t = getTranslations(language as Language).workspace.pages.faq.rsi;
+    
+    if (!t) return null;
+
+    const items = [
+        { q: t.q1, a: t.a1 },
+        { q: t.q2, a: t.a2 },
+        { q: t.q3, a: t.a3 },
+        { q: t.q4, a: t.a4 }
+    ];
+
+    return (
+        <div className="mt-8 mb-12 max-w-4xl mx-auto px-4">
+            <h3 className="text-xl font-black text-gray-800 dark:text-[#dd9933] uppercase tracking-widest text-center mb-8">Metodologia e FAQ</h3>
+            <div className="space-y-3">
+                {items.map((item, i) => (
+                    <div key={i} className="bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-tech-800 rounded-xl overflow-hidden shadow-sm transition-all duration-500">
+                        <button
+                            onClick={() => setOpenIndex(openIndex === i ? null : i)}
+                            className="w-full flex items-center justify-between p-5 text-left group"
+                        >
+                            <span className={`font-bold text-base transition-colors ${openIndex === i ? 'text-[#dd9933]' : 'text-gray-700 dark:text-gray-300'}`}>{item.q}</span>
+                            <ChevronDown size={20} className={`text-gray-400 transition-transform duration-500 ${openIndex === i ? 'rotate-180 text-[#dd9933]' : ''}`} />
+                        </button>
+                        <div className={`transition-all duration-500 ease-in-out ${openIndex === i ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                            <div className="p-5 pt-0 text-base text-gray-500 dark:text-slate-400 leading-relaxed border-t border-transparent dark:border-white/5">
+                                <div dangerouslySetInnerHTML={{ __html: item.a }} />
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
 
 const RsiWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ item, language = 'pt' }) => {
     // 1. Grid Mode: Simplified Widget

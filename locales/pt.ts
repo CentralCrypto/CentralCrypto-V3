@@ -92,25 +92,37 @@ export const pt = {
           q1: "Como o Fear & Greed Index é calculado?",
           a1: "O índice é uma análise de sentimento multifatorial. Processamos dados de volatilidade, volume de mercado, sentimento em redes sociais e dominância do Bitcoin para gerar um valor de 0 a 100.",
           q2: "O que significa cada faixa do índice?",
-          a2: "<ul class='space-y-2 font-mono text-xs'><li class='flex gap-2'><b class='text-red-500 w-16 shrink-0'>0-25:</b> <span><b>Cagaço extremo</b> (oportunidade histórica de compra)</span></li><li class='flex gap-2'><b class='text-orange-500 w-16 shrink-0'>26-45:</b> <span><b>Rebosteio</b> (medo presente no mercado)</span></li><li class='flex gap-2'><b class='text-yellow-500 w-16 shrink-0'>46-55:</b> <span><b>Andando de lado</b> (incerteza e falta de volume)</span></li><li class='flex gap-2'><b class='text-green-400 w-16 shrink-0'>56-75:</b> <span><b>Agora Vai</b> (ganância começando a dominar)</span></li><li class='flex gap-2'><b class='text-green-600 w-16 shrink-0'>76-94:</b> <span><b>É luaaaa!</b> (ganância extrema)</span></li><li class='flex gap-2'><b class='text-cyan-400 w-16 shrink-0'>95-100:</b> <span><b>Vende a mãe!</b> (euforia perigosa, correção iminente)</span></li></ul>"
+          a2: "<ul class='space-y-2 font-mono text-xs'><li class='flex gap-2'><b class='text-red-500 w-16 shrink-0'>0-25:</b> <span><b>Cagaço extremo</b> (oportunidade histórica de compra)</span></li><li class='flex gap-2'><b class='text-orange-500 w-16 shrink-0'>26-45:</b> <span><b>Rebosteio</b> (medo presente no mercado)</span></li><li class='flex gap-2'><b class='text-yellow-500 w-16 shrink-0'>46-55:</b> <span><b>Andando de lado</b> (incerteza e falta de volume)</span></li><li class='flex gap-2'><b class='text-green-400 w-16 shrink-0'>56-75:</b> <span><b>Agora Vai</b> (ganância começando a dominar)</span></li><li class='flex gap-2'><b class='text-green-600 w-16 shrink-0'>76-94:</b> <span><b>É luaaaa!</b> (ganância extrema)</span></li><li class='flex gap-2'><b class='text-cyan-400 w-16 shrink-0'>95-100:</b> <span><b>Vende a mãe!</b> (euforia perigosa, correção iminente)</span></li></ul>",
+          q3: "Como usar este índice para lucrar?",
+          a3: "O segredo está na psicologia de massa. Compre quando os outros estão com medo e venda quando estão eufóricos. Quer dominar a psicologia de mercado? Visite a <a href='/academy' class='text-[#dd9933] hover:underline font-bold'>Central Academy</a>."
         },
         rsi: {
           q1: "O que é a Média Global RSI?",
           a1: "É a média aritmética do Índice de Força Relativa das 100 maiores criptomoedas por capitalização. Ajuda a identificar quando o mercado como um todo está em zonas de sobrecompra ou sobrevenda macro.",
           q2: "Como interpretar os valores?",
-          a2: "Acima de 70 indica que a maioria dos ativos está esticada (sobrecomprada). Abaixo de 30 indica que o mercado está em pânico vendedor (sobrevendida)."
+          a2: "Acima de 70 indica que a maioria dos ativos está esticada (sobrecomprada). Abaixo de 30 indica que o mercado está em pânico vendedor (sobrevendida).",
+          q3: "O que é o RSI Scatter Map?",
+          a3: "É uma visualização que cruza o RSI de cada moeda com seu volume ou market cap. Moedas isoladas no topo (sobrecompra) ou no fundo (sobrevenda) geralmente apresentam as melhores oportunidades de trade.",
+          q4: "Qual o melhor e mais barato jeito de aprender?",
+          a4: "Sem dúvidas, a <a href='/academy' class='text-[#dd9933] hover:underline font-bold'>Central Academy</a>. Enquanto gurus cobram fortunas por cursos rasos, nossa Academy oferece trilhas completas (do zero ao avançado) sobre Análise Técnica, SMC e Dados On-chain. Temos módulos gratuitos e conteúdos VIP de nível institucional com grande profundidade técnica."
         },
         macd: {
           q1: "Como funciona o Rastreador MACD?",
           a1: "Analisamos o cruzamento das médias móveis de convergência e divergência em múltiplos ativos simultaneamente, filtrando por capitalização de mercado.",
           q2: "O que os pontos no gráfico representam?",
-          a2: "Cada ponto é um ativo. A posição no eixo Y mostra a força da tendência atual, permitindo identificar reversões globais antes que aconteçam no preço."
+          a2: "Cada ponto é um ativo. A posição no eixo Y mostra a força da tendência atual, permitindo identificar reversões globais antes que aconteçam no preço.",
+          q3: "Como identificar uma reversão de tendência?",
+          a3: "Observe quando a média global (linha laranja no gráfico lateral) começa a curvar. Se a maioria das moedas cruzar o eixo zero simultaneamente, temos uma confirmação de fluxo de mercado.",
+          q4: "Qual o melhor e mais barato jeito de aprender?",
+          a4: "Pare de perder dinheiro tentando adivinhar topos e fundos. Na <a href='/academy' class='text-[#dd9933] hover:underline font-bold'>Central Academy</a>, temos aulas dedicadas sobre Momentum e Tendência, ensinando setup profissionais usados por tesourarias. Comece grátis ou torne-se VIP para acesso total."
         },
         altseason: {
           q1: "O que define uma Altcoin Season?",
           a1: "Uma Altcoin Season acontece quando 75% das 50 maiores moedas performam melhor que o Bitcoin em um período de 90 dias.",
           q2: "Como usar este índice?",
-          a2: "Valores próximos de 0 indicam Bitcoin Season (melhor ter BTC). Valores próximos de 100 indicam Altcoin Season (altcoins tendem a explodir em relação ao par BTC)."
+          a2: "Valores próximos de 0 indicam Bitcoin Season (melhor ter BTC). Valores próximos de 100 indicam Altcoin Season (altcoins tendem a explodir em relação ao par BTC).",
+          q3: "Qual a melhor estratégia para Altseason?",
+          a3: "Rotação de capital. Aprenda a identificar os setores quentes (DeFi, AI, Gaming) antes da multidão com nossos relatórios na <a href='/academy' class='text-[#dd9933] hover:underline font-bold'>Central Academy</a>."
         },
         etf: {
           q1: "Por que acompanhar o fluxo de ETFs?",
@@ -122,31 +134,41 @@ export const pt = {
           q1: "O que é o Long/Short Ratio?",
           a1: "Representa a proporção entre apostas de alta (Longs) e baixa (Shorts) no mercado de futuros das principais exchanges.",
           q2: "Como interpretar?",
-          a2: "Um ratio muito alto (ex: 3.0) coustuma ser um sinal contrário, indicando que há muitos traders 'comprados', o que facilita cascatas de liquidação."
+          a2: "Um ratio muito alto (ex: 3.0) costuma ser um sinal contrário, indicando que há muitos traders 'comprados', o que facilita cascatas de liquidação.",
+          q3: "Como operar contra a manada?",
+          a3: "Entenda a liquidez. Quando o LSR está extremo, as baleias tendem a caçar os stops da maioria. Aprenda a ler a liquidez institucional na <a href='/academy' class='text-[#dd9933] hover:underline font-bold'>Central Academy</a>."
         },
         trump: {
           q1: "O que o Trump-o-Meter mede?",
           a1: "Processamos via Inteligência Artificial (NLP) as postagens de Donald Trump em redes sociais para medir o impacto emocional imediato no mercado cripto.",
           q2: "Como ler o medidor?",
-          a2: "O medidor vai de -50 (Bearish extremo) a +50 (Bullish extremo). Quanto mais à direita, maior a correlação positiva esperada com ativos de risco como BTC."
+          a2: "O medidor vai de -50 (Bearish extremo) a +50 (Bullish extremo). Quanto mais à direita, maior a correlação positiva esperada com ativos de risco como BTC.",
+          q3: "Política afeta preço?",
+          a3: "Absolutamente. Regulação e narrativas políticas movem bilhões. Entenda os ciclos macroeconômicos e políticos com nossos estudos de caso na <a href='/academy' class='text-[#dd9933] hover:underline font-bold'>Central Academy</a>."
         },
         calendar: {
           q1: "Quais eventos são monitorados no Calendário?",
           a1: "Focamos em dados macro dos EUA (CPI, FOMC, Payroll) e Brasil, que impactam diretamente a liquidez e a volatilidade do Bitcoin.",
           q2: "O que significam as cores de impacto?",
-          a2: "Vermelho (Alto Impacto), Laranja (Médio) e Amarelo (Baixo). Eventos vermelhos costumam gerar volatilidade violenta no momento do anúncio."
+          a2: "Vermelho (Alto Impacto), Laranja (Médio), Amarelo (Baixo) e Cinza (Feriado). Eventos vermelhos costumam gerar volatilidade violenta no momento do anúncio.",
+          q3: "Como operar durante notícias de Alto Impacto?",
+          a3: "Volatilidade é lucro, mas também é risco. Na <a href='/academy' class='text-[#dd9933] hover:underline font-bold'>Central Academy</a>, temos um módulo específico sobre 'News Trading' e Macroeconomia para Cripto, ensinando como proteger seu capital em dias de FOMC e CPI."
         },
         heatmap: {
           q1: "Como ler o Heatmap Quadrado?",
           a1: "O tamanho do quadrado representa o Market Cap, e a cor representa a variação de preço. Verde intenso indica alta forte, vermelho intenso indica queda livre.",
           q2: "Posso filtrar por performance?",
-          a2: "Sim, no topo do widget você pode alternar a visão para focar apenas em quem mais subiu ou caiu."
+          a2: "Sim, no topo do widget você pode alternar a visão para focar apenas em quem mais subiu ou caiu.",
+          q3: "Como identificar oportunidades no caos?",
+          a3: "O Heatmap mostra o 'agora', mas para entender o 'porquê' e o 'para onde', você precisa de contexto. Na <a href='/academy' class='text-[#dd9933] hover:underline font-bold'>Central Academy</a>, ensinamos a correlacionar volume e variação de preço para encontrar as gemas antes da explosão."
         },
         bubble: {
           q1: "O que o Bubble Chart mostra?",
           a1: "É uma visão volumétrica e dinâmica dos Top Movers. Bolhas maiores representam ativos com maior volume ou variação percentual no dia.",
           q2: "Para que servem as cores?",
-          a2: "As cores classificam o sentimento: de Bearish extremo a Bullish extremo, lo que permite visualizar para onde o fluxo de capital está indo."
+          a2: "As cores classificam o sentimento: de Bearish extremo a Bullish extremo, o que permite visualizar para onde o fluxo de capital está indo.",
+          q3: "Como pegar a próxima 100x?",
+          a3: "Não é sorte, é método. Analisar fluxo de capital e rotação de setores é essencial. Aprenda a identificar tendências nascentes na <a href='/academy' class='text-[#dd9933] hover:underline font-bold'>Central Academy</a>."
         }
       }
     },

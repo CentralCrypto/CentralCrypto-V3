@@ -1,4 +1,3 @@
-
 // IndicatorPage.tsx
 import React, { useState, useMemo, useEffect } from 'react';
 import { ApiCoin, Language, WidgetType, UserTier } from '../../../types';
@@ -83,10 +82,12 @@ function PageFaq({ language, pageType }: { language: Language; pageType: string 
   // Safe return after all hooks are called
   if (!faqData) return null;
 
-  const items = [
-    { q: faqData.q1, a: faqData.a1 },
-    { q: faqData.q2, a: faqData.a2 }
-  ];
+  // Generic handling (max 3 questions if not specific component)
+  const items = [];
+  const data = faqData as any;
+  if (data.q1) items.push({ q: data.q1, a: data.a1 });
+  if (data.q2) items.push({ q: data.q2, a: data.a2 });
+  if (data.q3) items.push({ q: data.q3, a: data.a3 });
 
   return (
     <div className="mt-8 mb-12 max-w-4xl mx-auto px-4">
@@ -133,7 +134,7 @@ const RsiPageLayout = ({ language }: { language: Language }) => {
             </div>
             
             {/* FAQ Section */}
-            <RsiFaq />
+            <RsiFaq language={language} />
         </div>
     );
 };
@@ -155,7 +156,7 @@ const MacdPageLayout = ({ language }: { language: Language }) => {
                 <MacdTableList isPage={true} />
             </div>
             
-            <MacdFaq />
+            <MacdFaq language={language} />
         </div>
     );
 };
