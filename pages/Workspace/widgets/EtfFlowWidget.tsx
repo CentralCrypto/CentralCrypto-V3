@@ -10,6 +10,8 @@ if (typeof mouseWheelZoom === 'function') {
   (mouseWheelZoom as any)(Highcharts);
 }
 
+const NO_DATA_MSG = 'Em breve! Aguardem!';
+
 const formatCompactNumber = (number: number) => {
   if (!number || number === 0) return "---";
   const abs = Math.abs(number);
@@ -28,7 +30,7 @@ const PALETTE = [
 ];
 
 const WATERMARK_URL = '/v3/img/logo.png';
-const WATERMARK_OPACITY = 0.07;
+const WATERMARK_OPACITY = 0.06;
 
 type Metric = 'flows' | 'volume';
 type Asset = 'BTC' | 'ETH' | 'SOL' | 'XRP' | 'DOGE' | 'LTC';
@@ -40,7 +42,7 @@ const ASSETS_CONFIG: Record<Asset, { label: string, color: string, logo: string 
   SOL: { label: 'SOL', color: '#14f195', logo: 'https://assets.coincap.io/assets/icons/sol@2x.png' },
   XRP: { label: 'XRP', color: '#23292f', logo: 'https://assets.coincap.io/assets/icons/xrp@2x.png' },
   DOGE: { label: 'DOGE', color: '#c2a633', logo: 'https://assets.coincap.io/assets/icons/doge@2x.png' },
-  LTC: { label: 'LTC', color: '#345c9c', logo: 'https://assets.coincap.io/assets/icons/ltc@2x.png' }
+  LTC: { label: 'LTC', color: '#345d9d', logo: 'https://assets.coincap.io/assets/icons/ltc@2x.png' }
 };
 
 interface ChartBaseProps {
@@ -66,7 +68,7 @@ const applyWatermark = (chart: Highcharts.Chart) => {
     const w = chart.chartWidth;
     const h = chart.chartHeight;
     if (!w || !h) return;
-    const size = Math.min(w, h) * 0.45;
+    const size = Math.min(w, h) * 0.48;
     const x = (w - size) / 2;
     const y = (h - size) / 2;
     anyChart.__wm = chart.renderer
@@ -76,51 +78,47 @@ const applyWatermark = (chart: Highcharts.Chart) => {
   } catch (e) {}
 };
 
-const getTickerKeys = (data: any[]) => {
+const getAllTickerKeys = (data: any[]) => {
   const keys = new Set<string>();
   data.forEach(d => {
-    Object.keys(d).forEach(k => {
+    Object.keys(d || {}).forEach(k => {
       if (k !== 'date' && k !== 'totalGlobal' && k !== 'timestamp') keys.add(k);
     });
   });
   return Array.from(keys);
 };
 
-const isComboSupported = (asset: Asset, metric: Metric) => {
-  // DOGE e LTC só tem volume (pelo que você mostrou na pasta)
-  if ((asset === 'DOGE' || asset === 'LTC') && metric === 'flows') return false;
-  return true;
-};
-
-const ComingSoonOverlay: React.FC<{ title?: string }> = ({ title }) => (
-  <div className="absolute inset-0 flex items-center justify-center z-10">
-    <div className="absolute inset-0 backdrop-blur-md bg-white/30 dark:bg-black/30" />
-    <div className="relative px-5 py-4 rounded-xl border border-gray-200/60 dark:border-slate-700/60 bg-white/70 dark:bg-[#1a1c1e]/70 shadow-xl text-center">
-      <div className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-slate-300">
-        {title || "Em breve! Aguardem!"}
+const NoDataChart: React.FC = () => {
+  return (
+    <div className="w-full h-full min-h-[360px] rounded-xl border border-gray-100 dark:border-slate-800/50 bg-gray-50 dark:bg-black/20 overflow-hidden relative">
+      <div className="absolute inset-0 blur-[2px] opacity-40">
+        <div className="w-full h-full bg-gradient-to-b from-transparent via-white/5 to-transparent" />
       </div>
-      <div className="text-[11px] mt-1 text-gray-500 dark:text-slate-400">
-        Este par ainda não tem dados compatíveis para este modo.
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="px-4 py-2 rounded-lg bg-black/40 text-white text-sm font-black">
+          {NO_DATA_MSG}
+        </div>
+      </div>
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <img src={WATERMARK_URL} className="w-[42%] opacity-[0.06]" alt="watermark" />
       </div>
     </div>
-  </div>
-);
+  );
+};
 
-// -------------------- CHARTS --------------------
-
+// --- CHARTS ---
 const StackedEtfChart: React.FC<ChartBaseProps> = React.memo(({ data, metric }) => {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<Highcharts.Chart | null>(null);
   const { isDark, textColor, gridColor } = useChartTheme();
 
-  const seriesKeys = useMemo(() => getTickerKeys(data), [data]);
-
   useEffect(() => {
     if (!chartRef.current || !data || data.length === 0) return;
 
+    const seriesKeys = getAllTickerKeys(data);
     const series: any[] = seriesKeys.map((key, idx) => ({
       name: key,
-      data: data.map(d => [d.date, Number(d[key] || 0)]),
+      data: data.map(d => [d.date, Number(d[key] ?? 0)]),
       color: PALETTE[idx % PALETTE.length],
       type: 'column',
       stack: 'etf'
@@ -132,7 +130,7 @@ const StackedEtfChart: React.FC<ChartBaseProps> = React.memo(({ data, metric }) 
       chart: {
         backgroundColor: 'transparent',
         style: { fontFamily: 'Inter, sans-serif' },
-        spacing: [10, 10, 10, 10],
+        spacing: [10, 10, 28, 10],
         zooming: { mouseWheel: { enabled: true, type: 'x' }, type: undefined },
         panning: { enabled: true, type: 'x' },
         events: {
@@ -144,6 +142,9 @@ const StackedEtfChart: React.FC<ChartBaseProps> = React.memo(({ data, metric }) 
       credits: { enabled: false },
       legend: {
         enabled: true,
+        layout: 'horizontal',
+        align: 'center',
+        verticalAlign: 'bottom',
         itemStyle: { color: textColor, fontSize: '10px' },
         itemHoverStyle: { color: isDark ? '#fff' : '#000' }
       },
@@ -186,9 +187,9 @@ const StackedEtfChart: React.FC<ChartBaseProps> = React.memo(({ data, metric }) 
         chartInstance.current = null;
       }
     };
-  }, [data, metric, seriesKeys, isDark, textColor, gridColor]);
+  }, [data, metric, isDark, textColor, gridColor]);
 
-  return <div ref={chartRef} className="w-full h-full min-h-[360px]" />;
+  return <div ref={chartRef} className="w-full h-full min-h-[420px]" />;
 });
 
 const TotalBarChart: React.FC<ChartBaseProps> = React.memo(({ data, metric }) => {
@@ -200,9 +201,8 @@ const TotalBarChart: React.FC<ChartBaseProps> = React.memo(({ data, metric }) =>
     if (!chartRef.current || !data || data.length === 0) return;
 
     const label = metric === 'flows' ? 'Total Net Flow' : 'Total Volume';
-
     const seriesData = data.map(d => {
-      const val = Number(d.totalGlobal || 0);
+      const val = Number(d.totalGlobal ?? 0);
       return {
         x: d.date,
         y: val,
@@ -270,7 +270,7 @@ const TotalBarChart: React.FC<ChartBaseProps> = React.memo(({ data, metric }) =>
     };
   }, [data, metric, isDark, textColor, gridColor]);
 
-  return <div ref={chartRef} className="w-full h-full min-h-[360px]" />;
+  return <div ref={chartRef} className="w-full h-full min-h-[420px]" />;
 });
 
 const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }> = React.memo(({ data, metric, selectedTicker }) => {
@@ -282,7 +282,6 @@ const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }
     if (!chartRef.current || !data || data.length === 0 || !selectedTicker) return;
 
     const label = `${selectedTicker} ${metric === 'flows' ? 'Net Flow' : 'Volume'}`;
-
     if (chartInstance.current) chartInstance.current.destroy();
 
     chartInstance.current = Highcharts.chart(chartRef.current, {
@@ -325,13 +324,13 @@ const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }
         valuePrefix: '$',
         valueDecimals: 0
       },
+      plotOptions: { series: { marker: { enabled: false } } },
       series: [{
         name: label,
         type: 'spline',
-        data: data.map(d => [d.date, Number(d[selectedTicker] || 0)]),
+        data: data.map(d => [d.date, Number(d[selectedTicker] ?? 0)]),
         color: isDark ? '#ffffff' : '#000000',
-        lineWidth: 1,
-        marker: { enabled: false }
+        lineWidth: 1
       }]
     } as any);
 
@@ -345,7 +344,7 @@ const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }
 
   if (!selectedTicker) {
     return (
-      <div className="w-full h-full min-h-[360px] flex items-center justify-center text-gray-400">
+      <div className="w-full h-full min-h-[420px] flex items-center justify-center text-gray-400">
         <div className="flex flex-col items-center gap-2">
           <LineChart size={28} />
           <span className="text-xs font-black uppercase">Selecione uma ETF</span>
@@ -354,23 +353,22 @@ const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }
     );
   }
 
-  return <div ref={chartRef} className="w-full h-full min-h-[360px]" />;
+  return <div ref={chartRef} className="w-full h-full min-h-[420px]" />;
 });
 
-// -------------------- MARKET SHARE PANEL --------------------
-
+// --- MINI TABLE WITH PAGINATION & CARDS ---
 const MarketSharePanel: React.FC<{
-  data: any[];
-  metric: Metric;
-  selectedIndex: number;
-  onIndexChange: (idx: number) => void;
-  allTickers: string[];
+  data: any[],
+  metric: Metric,
+  selectedIndex: number,
+  onIndexChange: (idx: number) => void,
+  allTickers: string[]
 }> = ({ data, metric, selectedIndex, onIndexChange, allTickers }) => {
 
   const handlePrev = () => { if (selectedIndex > 0) onIndexChange(selectedIndex - 1); };
   const handleNext = () => { if (selectedIndex < data.length - 1) onIndexChange(selectedIndex + 1); };
 
-  const currentDay = selectedIndex >= 0 ? data[selectedIndex] : null;
+  const currentDay = data[selectedIndex];
 
   const dateStr = currentDay
     ? new Date(currentDay.date).toLocaleDateString(undefined, { year: 'numeric', month: 'numeric', day: 'numeric' })
@@ -378,27 +376,26 @@ const MarketSharePanel: React.FC<{
 
   const stats = useMemo(() => {
     if (!currentDay) return { d1: 0, d7: 0, d30: 0 };
-
-    const val1 = Number(currentDay.totalGlobal || 0);
+    const val1 = Number(currentDay.totalGlobal ?? 0);
 
     let sum7 = 0;
-    for (let i = selectedIndex; i > Math.max(-1, selectedIndex - 7); i--) sum7 += Number(data[i]?.totalGlobal || 0);
+    for (let i = selectedIndex; i > Math.max(-1, selectedIndex - 7); i--) sum7 += Number(data[i]?.totalGlobal ?? 0);
 
     let sum30 = 0;
-    for (let i = selectedIndex; i > Math.max(-1, selectedIndex - 30); i--) sum30 += Number(data[i]?.totalGlobal || 0);
+    for (let i = selectedIndex; i > Math.max(-1, selectedIndex - 30); i--) sum30 += Number(data[i]?.totalGlobal ?? 0);
 
     return { d1: val1, d7: sum7, d30: sum30 };
   }, [data, selectedIndex, currentDay]);
 
   const ranking = useMemo(() => {
     if (!currentDay) return [];
-    const keys = allTickers || [];
-    return keys.map(k => ({ ticker: k, value: Number(currentDay[k] || 0) }))
+    return allTickers
+      .map(ticker => ({ ticker, value: Number(currentDay[ticker] ?? 0) }))
       .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
   }, [currentDay, allTickers]);
 
   const SummaryCard = ({ label, value }: { label: string, value: number }) => (
-    <div className="flex flex-col items-center justify-center p-2 bg-gray-50 dark:bg-black/30 rounded-lg border border-gray-200 dark:border-slate-800 shadow-sm flex-1 min-w-[0]">
+    <div className="flex flex-col items-center justify-center p-2 bg-gray-50 dark:bg-black/30 rounded-lg border border-gray-200 dark:border-slate-800 shadow-sm flex-1">
       <span className="text-[10px] font-black text-gray-400 uppercase tracking-wide">{label}</span>
       <span className={`text-sm font-black font-mono ${metric === 'volume' ? 'text-blue-500' : (value >= 0 ? 'text-green-500' : 'text-red-500')}`}>
         ${formatCompactNumber(value)}
@@ -408,7 +405,7 @@ const MarketSharePanel: React.FC<{
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex gap-2 mb-3 shrink-0 flex-wrap">
+      <div className="flex gap-2 mb-3 shrink-0">
         <SummaryCard label="1D" value={stats.d1} />
         <SummaryCard label="7D" value={stats.d7} />
         <SummaryCard label="30D" value={stats.d30} />
@@ -461,98 +458,113 @@ const MarketSharePanel: React.FC<{
   );
 };
 
-// -------------------- ETF BUBBLES --------------------
-
+// --- BUBBLES ---
 const EtfBubbles: React.FC<{
-  data: any[];
-  selectedIndex: number;
-  metric: Metric;
-  allTickers: string[];
+  data: any[],
+  selectedIndex: number,
+  metric: Metric,
+  allTickers: string[]
 }> = ({ data, selectedIndex, metric, allTickers }) => {
-  const currentDay = selectedIndex >= 0 ? data[selectedIndex] : null;
+
+  const currentDay = data[selectedIndex];
 
   const bubbles = useMemo(() => {
     if (!currentDay) return [];
-    const keys = allTickers || [];
-    return keys.map(k => {
-      const val = Number(currentDay[k] || 0);
-      return { id: k, val, absVal: Math.abs(val), hasValue: Number.isFinite(val) && val !== 0 };
+    return allTickers.map(ticker => {
+      const hasVal = Object.prototype.hasOwnProperty.call(currentDay, ticker);
+      const val = Number(currentDay[ticker] ?? 0);
+      return {
+        id: ticker,
+        val,
+        absVal: Math.abs(val),
+        hasVal
+      };
     }).sort((a, b) => b.absVal - a.absVal);
   }, [currentDay, allTickers]);
 
   if (!currentDay || bubbles.length === 0) {
-    return <div className="h-full flex items-center justify-center text-xs text-gray-500">Sem dados de bolhas.</div>;
+    return (
+      <div className="h-full min-h-[380px] flex items-center justify-center text-xs text-gray-500">
+        {NO_DATA_MSG}
+      </div>
+    );
   }
 
   const maxVal = Math.max(...bubbles.map(b => b.absVal)) || 1;
+  const minSize = 38;
+  const maxSize = 128;
 
-  const minSize = 44;
-  const maxSize = 140;
+  const scaleMarks = useMemo(() => {
+    const a = maxVal;
+    return {
+      p10: a * 0.10,
+      p50: a * 0.50,
+      p100: a
+    };
+  }, [maxVal]);
 
-  const scaleMid = maxVal * 0.5;
-  const scaleLow = maxVal * 0.1;
-
-  const bubbleClass = (val: number, hasValue: boolean) => {
-    if (!hasValue) {
-      return 'bg-gray-400/15 border-gray-400/40 text-gray-700 dark:text-slate-200 shadow-inner';
-    }
-    if (metric === 'volume') {
-      return 'bg-blue-500/20 border-blue-500/50 text-blue-100';
-    }
-    return val >= 0
-      ? 'bg-green-500/20 border-green-500/50 text-green-100'
-      : 'bg-red-500/20 border-red-500/50 text-red-100';
-  };
-
-  const bubbleValueClass = (val: number, hasValue: boolean) => {
-    if (!hasValue) return 'text-gray-600 dark:text-slate-300';
-    if (metric === 'volume') return 'text-blue-100';
-    return val >= 0 ? 'text-green-100' : 'text-red-100';
-  };
-
-  const BubbleScaleDot = ({ label, sizePx, value }: { label: string; sizePx: number; value: number }) => (
-    <div className="flex items-center gap-2">
-      <div
-        className="rounded-full border border-gray-300/60 dark:border-slate-700/60 bg-gray-300/10 dark:bg-white/5"
-        style={{ width: sizePx, height: sizePx }}
-      />
-      <div className="flex flex-col leading-none">
-        <span className="text-[10px] font-black uppercase text-gray-400">{label}</span>
-        <span className="text-[11px] font-mono text-gray-600 dark:text-slate-300">${formatCompactNumber(value)}</span>
+  const BubbleScale = () => {
+    const sizes = [
+      { label: '10%', v: scaleMarks.p10 },
+      { label: '50%', v: scaleMarks.p50 },
+      { label: 'MAX', v: scaleMarks.p100 }
+    ];
+    return (
+      <div className="flex items-end gap-6">
+        {sizes.map(s => {
+          const size = minSize + ((Math.abs(s.v) / maxVal) * (maxSize - minSize));
+          return (
+            <div key={s.label} className="flex items-center gap-2">
+              <div
+                className="rounded-full border border-gray-300/40 dark:border-white/10 bg-gray-200/30 dark:bg-white/5 shadow-inner"
+                style={{ width: size * 0.38, height: size * 0.38 }}
+              />
+              <div className="flex flex-col leading-tight">
+                <span className="text-[10px] font-black text-gray-400 uppercase">{s.label}</span>
+                <span className="text-[10px] font-mono font-black text-gray-600 dark:text-gray-300">
+                  ${formatCompactNumber(s.v)}
+                </span>
+              </div>
+            </div>
+          );
+        })}
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
-    <div className="flex flex-col h-full bg-gray-50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-slate-800">
-      <div className="flex items-center justify-between mb-3">
+    <div className="flex flex-col h-full min-h-[420px] bg-gray-50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-slate-800 relative overflow-hidden">
+      <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+        <img src={WATERMARK_URL} className="w-[40%] opacity-[0.05]" alt="watermark" />
+      </div>
+
+      <div className="flex justify-between items-start mb-3 gap-3 relative z-10">
         <div className="flex items-center gap-2 text-xs font-black uppercase text-gray-500 dark:text-gray-400">
           <DollarSign size={14} /> ETF Bubbles
         </div>
-
-        <div className="hidden sm:flex items-center gap-4">
-          <BubbleScaleDot label="10%" sizePx={26} value={scaleLow} />
-          <BubbleScaleDot label="50%" sizePx={40} value={scaleMid} />
-          <BubbleScaleDot label="MAX" sizePx={52} value={maxVal} />
-        </div>
+        <BubbleScale />
       </div>
 
-      <div className="flex-1 relative overflow-hidden flex flex-wrap content-center justify-center gap-4 p-4">
+      <div className="flex-1 relative overflow-hidden flex flex-wrap content-center justify-center gap-4 p-4 z-10">
         {bubbles.map(b => {
-          const size = b.hasValue
+          const size = b.hasVal
             ? (minSize + ((b.absVal / maxVal) * (maxSize - minSize)))
-            : minSize;
+            : 44;
 
-          const cls = bubbleClass(b.val, b.hasValue);
+          const colorClass = !b.hasVal
+            ? 'bg-gray-400/15 border-gray-400/30 text-gray-300'
+            : (metric === 'volume'
+              ? 'bg-blue-500/20 border-blue-500/50 text-blue-100'
+              : (b.val >= 0 ? 'bg-green-500/20 border-green-500/50 text-green-100' : 'bg-red-500/20 border-red-500/50 text-red-100'));
 
           return (
             <div
               key={b.id}
-              className={`rounded-full border flex flex-col items-center justify-center transition-all duration-500 hover:scale-110 shadow-lg cursor-default backdrop-blur-sm ${cls}`}
+              className={`rounded-full border flex flex-col items-center justify-center transition-all duration-300 hover:scale-105 shadow-lg cursor-default backdrop-blur-sm ${colorClass}`}
               style={{ width: size, height: size }}
             >
               <span className="font-black text-[10px] sm:text-xs leading-none">{b.id}</span>
-              <span className={`text-[9px] sm:text-[10px] font-bold mt-0.5 ${bubbleValueClass(b.val, b.hasValue)}`}>
+              <span className="text-[9px] sm:text-[10px] font-bold mt-0.5">
                 ${formatCompactNumber(b.val)}
               </span>
             </div>
@@ -563,21 +575,19 @@ const EtfBubbles: React.FC<{
   );
 };
 
-// -------------------- TOOLTIP HELP --------------------
-
+// --- TOOLTIP (kept) ---
 const HelpTooltip = () => (
   <div className="absolute top-2 right-2 group z-20">
     <Info size={16} className="text-gray-400 hover:text-[#dd9933] cursor-help" />
     <div className="absolute right-0 top-6 w-64 p-3 bg-white dark:bg-[#1a1c1e] border border-gray-200 dark:border-slate-700 rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none text-xs text-gray-600 dark:text-gray-300 z-50">
       <p className="font-bold mb-1">Como ler este gráfico?</p>
       <p>Os dados mostram o fluxo líquido (Net Flow) ou Volume diário dos ETFs Spot nos EUA.</p>
-      <p className="mt-1">Em Flows: positivo = entrada, negativo = saída.</p>
+      <p className="mt-1">Valores positivos indicam entrada de capital. Valores negativos indicam saída.</p>
     </div>
   </div>
 );
 
-// -------------------- MAXIMIZED --------------------
-
+// --- MAXIMIZED ---
 const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ language }) => {
   const [asset, setAsset] = useState<Asset>('BTC');
   const [metric, setMetric] = useState<Metric>('flows');
@@ -590,126 +600,67 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number>(-1);
 
-  // Total header (soma de flows de TODAS as moedas disponíveis, no último dia)
-  const [allAssetsTotal, setAllAssetsTotal] = useState<number>(0);
-  const [allAssetsTotalLoading, setAllAssetsTotalLoading] = useState<boolean>(false);
-
   useEffect(() => {
-    fetchEtfFlow().then(res => { setSummaryData(res); });
+    fetchEtfFlow().then(res => setSummaryData(res));
   }, []);
 
-  // Carrega TOTAL GLOBAL agregado (último dia) para todas as moedas que têm JSON no modo atual.
-  // Isso NÃO depende de selectedIndex (pra não resetar chart ao paginar dia).
   useEffect(() => {
-    let mounted = true;
-    const run = async () => {
-      setAllAssetsTotalLoading(true);
-      try {
-        const assetsToSum: Asset[] = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'LTC'];
-        const supported = assetsToSum.filter(a => isComboSupported(a, metric));
-        const results = await Promise.allSettled(
-          supported.map(a => fetchEtfDetailed(a as any, metric))
-        );
-
-        const totals = results.map(r => {
-          if (r.status !== 'fulfilled') return 0;
-          const arr = Array.isArray(r.value) ? r.value : [];
-          if (!arr.length) return 0;
-          const last = arr[arr.length - 1];
-          return Number(last?.totalGlobal || 0);
-        });
-
-        const sum = totals.reduce((acc, v) => acc + (Number.isFinite(v) ? v : 0), 0);
-        if (mounted) setAllAssetsTotal(sum);
-      } catch (e) {
-        if (mounted) setAllAssetsTotal(0);
-      } finally {
-        if (mounted) setAllAssetsTotalLoading(false);
-      }
-    };
-    run();
-    return () => { mounted = false; };
-  }, [metric]);
-
-  // Main data (asset + metric)
-  useEffect(() => {
-    let mounted = true;
     setLoading(true);
 
-    if (!isComboSupported(asset, metric)) {
-      // Sem dados compatíveis: não estoura erro, só limpa e para.
-      setData([]);
-      setSelectedIndex(-1);
-      setSelectedTicker(null);
-      setLoading(false);
-      return;
-    }
-
-    fetchEtfDetailed(asset as any, metric).then(res => {
-      if (!mounted) return;
+    fetchEtfDetailed(asset as any, metric as any).then(res => {
       const arr = Array.isArray(res) ? res : [];
       setData(arr);
       setSelectedIndex(arr.length > 0 ? arr.length - 1 : -1);
 
-      // Se estiver em lines, escolhe um ticker válido automaticamente
-      if (viewMode === 'lines') {
-        const keys = getTickerKeys(arr);
-        setSelectedTicker(keys[0] || null);
-      }
+      const allKeys = getAllTickerKeys(arr);
+      if (viewMode === 'lines') setSelectedTicker(allKeys[0] || null);
 
-      setLoading(false);
-    }).catch(() => {
-      if (!mounted) return;
-      setData([]);
-      setSelectedIndex(-1);
-      setSelectedTicker(null);
       setLoading(false);
     });
-
-    return () => { mounted = false; };
-  }, [asset, metric]); // não inclui viewMode nem selectedIndex de propósito
+  }, [asset, metric]);
 
   const allTickers = useMemo(() => {
-    if (!data || data.length === 0) return [];
-    return getTickerKeys(data);
+    return getAllTickerKeys(data);
   }, [data]);
 
   useEffect(() => {
     if (viewMode !== 'lines') return;
-    const keys = allTickers;
-    if (!selectedTicker || !keys.includes(selectedTicker)) setSelectedTicker(keys[0] || null);
-  }, [viewMode, allTickers]); // selectedIndex não entra aqui
+    if (!allTickers.length) return;
+    if (!selectedTicker || !allTickers.includes(selectedTicker)) setSelectedTicker(allTickers[0] || null);
+  }, [viewMode, allTickers, selectedTicker]);
 
-  const headerLabel = metric === 'flows' ? 'Total Net Flow' : 'Total Volume';
-  const displayTotal = allAssetsTotal;
-  const flowColor = displayTotal >= 0 ? 'text-green-500' : 'text-red-500';
-  const kpiColor = metric === 'volume' ? 'text-blue-500' : flowColor;
+  const totalHeaderFlow = useMemo(() => {
+    if (!summaryData) return 0;
+    const sum = (summaryData.btcValue || 0) + (summaryData.ethValue || 0) + (summaryData.solValue || 0) + (summaryData.xrpValue || 0);
+    return sum !== 0 ? sum : (summaryData.netFlow || 0);
+  }, [summaryData]);
 
-  const ChartArea = () => {
-    if (!isComboSupported(asset, metric)) {
+  const flowColor = totalHeaderFlow >= 0 ? 'text-green-500' : 'text-red-500';
+
+  const unsupportedCombo = useMemo(() => {
+    const flowsNotAvailable = (asset === 'DOGE' || asset === 'LTC') && metric === 'flows';
+    return flowsNotAvailable;
+  }, [asset, metric]);
+
+  const ChartAreaEl = useMemo(() => {
+    if (loading) {
       return (
-        <div className="absolute inset-0">
-          <ComingSoonOverlay title="Em breve! Aguardem!" />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Loader2 className="animate-spin text-gray-400" />
         </div>
       );
     }
 
-    if (loading) {
-      return <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="animate-spin text-gray-400" /></div>;
-    }
+    if (unsupportedCombo) return <NoDataChart />;
 
     if (!data || data.length === 0) {
-      return (
-        <div className="absolute inset-0">
-          <ComingSoonOverlay title="Em breve! Aguardem!" />
-        </div>
-      );
+      return <NoDataChart />;
     }
 
     if (viewMode === 'total') return <TotalBarChart data={data} metric={metric} asset={asset} />;
     if (viewMode === 'lines') return <EtfLinesChart data={data} metric={metric} asset={asset} selectedTicker={selectedTicker} />;
     return <StackedEtfChart data={data} metric={metric} asset={asset} />;
-  };
+  }, [loading, data, metric, asset, viewMode, selectedTicker, unsupportedCombo]);
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-[#1a1c1e] text-gray-900 dark:text-white overflow-hidden p-6">
@@ -718,16 +669,16 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
         <div className="flex justify-between items-center flex-wrap gap-4">
           <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-baseline gap-2">
-              <div className="text-xs font-black text-gray-400 uppercase tracking-widest">{headerLabel}</div>
-              <div className={`text-xl font-black font-mono ${allAssetsTotalLoading ? 'text-gray-400' : kpiColor}`}>
-                {allAssetsTotalLoading ? '...' : '$' + formatCompactNumber(displayTotal)}
+              <div className="text-xs font-black text-gray-400 uppercase tracking-widest">Total Net Flow</div>
+              <div className={`text-xl font-black font-mono ${summaryData ? flowColor : 'text-gray-400'}`}>
+                {summaryData ? '$' + formatCompactNumber(totalHeaderFlow) : '---'}
               </div>
             </div>
 
             <div className="w-px h-6 bg-gray-200 dark:bg-slate-700 hidden md:block"></div>
 
-            {/* ASSET SELECTOR */}
-            <div className="flex bg-gray-100 dark:bg-black/30 p-1 rounded-lg border border-gray-200 dark:border-slate-700 flex-wrap">
+            {/* ASSET */}
+            <div className="flex bg-gray-100 dark:bg-black/30 p-1 rounded-lg border border-gray-200 dark:border-slate-700">
               {(Object.keys(ASSETS_CONFIG) as Asset[]).map((key) => (
                 <button
                   key={key}
@@ -742,30 +693,45 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
 
             {/* METRIC */}
             <div className="flex bg-gray-100 dark:bg-black/30 p-1 rounded-lg border border-gray-200 dark:border-slate-700">
-              <button onClick={() => setMetric('flows')} className={`px-4 py-1.5 text-xs font-black rounded flex items-center gap-2 transition-all ${metric === 'flows' ? 'bg-white dark:bg-[#2f3032] text-[#dd9933] shadow' : 'text-gray-500 hover:text-white'}`}>
+              <button
+                onClick={() => setMetric('flows')}
+                className={`px-4 py-1.5 text-xs font-black rounded flex items-center gap-2 transition-all ${metric === 'flows' ? 'bg-white dark:bg-[#2f3032] text-[#dd9933] shadow' : 'text-gray-500 hover:text-white'}`}
+              >
                 <TrendingUp size={14} /> Flows
               </button>
-              <button onClick={() => setMetric('volume')} className={`px-4 py-1.5 text-xs font-black rounded flex items-center gap-2 transition-all ${metric === 'volume' ? 'bg-white dark:bg-[#2f3032] text-blue-400 shadow' : 'text-gray-500 hover:text-white'}`}>
+              <button
+                onClick={() => setMetric('volume')}
+                className={`px-4 py-1.5 text-xs font-black rounded flex items-center gap-2 transition-all ${metric === 'volume' ? 'bg-white dark:bg-[#2f3032] text-blue-400 shadow' : 'text-gray-500 hover:text-white'}`}
+              >
                 <BarChart3 size={14} /> Volume
               </button>
             </div>
 
             {/* VIEW MODE */}
             <div className="flex bg-gray-100 dark:bg-black/30 p-1 rounded-lg border border-gray-200 dark:border-slate-700">
-              <button onClick={() => setViewMode('stacked')} className={`px-4 py-1.5 text-xs font-black rounded flex items-center gap-2 transition-all ${viewMode === 'stacked' ? 'bg-white dark:bg-[#2f3032] text-gray-900 dark:text-white shadow' : 'text-gray-500 hover:text-white'}`}>
+              <button
+                onClick={() => setViewMode('stacked')}
+                className={`px-4 py-1.5 text-xs font-black rounded flex items-center gap-2 transition-all ${viewMode === 'stacked' ? 'bg-white dark:bg-[#2f3032] text-gray-900 dark:text-white shadow' : 'text-gray-500 hover:text-white'}`}
+              >
                 <Layers size={14} /> Empilhado
               </button>
-              <button onClick={() => setViewMode('total')} className={`px-4 py-1.5 text-xs font-black rounded flex items-center gap-2 transition-all ${viewMode === 'total' ? 'bg-white dark:bg-[#2f3032] text-gray-900 dark:text-white shadow' : 'text-gray-500 hover:text-white'}`}>
+              <button
+                onClick={() => setViewMode('total')}
+                className={`px-4 py-1.5 text-xs font-black rounded flex items-center gap-2 transition-all ${viewMode === 'total' ? 'bg-white dark:bg-[#2f3032] text-gray-900 dark:text-white shadow' : 'text-gray-500 hover:text-white'}`}
+              >
                 <LineChart size={14} /> Total
               </button>
-              <button onClick={() => setViewMode('lines')} className={`px-4 py-1.5 text-xs font-black rounded flex items-center gap-2 transition-all ${viewMode === 'lines' ? 'bg-white dark:bg-[#2f3032] text-gray-900 dark:text-white shadow' : 'text-gray-500 hover:text-white'}`}>
+              <button
+                onClick={() => setViewMode('lines')}
+                className={`px-4 py-1.5 text-xs font-black rounded flex items-center gap-2 transition-all ${viewMode === 'lines' ? 'bg-white dark:bg-[#2f3032] text-gray-900 dark:text-white shadow' : 'text-gray-500 hover:text-white'}`}
+              >
                 <BarChart3 size={14} /> Linhas
               </button>
             </div>
           </div>
         </div>
 
-        {viewMode === 'lines' && (
+        {viewMode === 'lines' && !unsupportedCombo && (
           <div className="flex gap-2 flex-wrap mt-2">
             {allTickers.map(t => (
               <button
@@ -780,29 +746,31 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
         )}
       </div>
 
-      {/* MAIN GRID LAYOUT */}
+      {/* MAIN GRID LAYOUT (no hard height lock / no % split) */}
       <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* LEFT COL */}
-        <div className="lg:col-span-2 flex flex-col gap-6 h-full min-h-0">
-          {/* CHART */}
-          <div className="relative bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4 overflow-hidden min-h-[420px]">
-            <ChartArea />
-            <HelpTooltip />
+        {/* LEFT */}
+        <div className="lg:col-span-2 flex flex-col gap-6 min-h-0 overflow-visible">
+          <div className="relative bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4 overflow-visible min-h-[460px]">
+            {ChartAreaEl}
+            {!unsupportedCombo && !loading && data.length > 0 && <HelpTooltip />}
           </div>
 
-          {/* BUBBLES */}
-          <div className="min-h-[360px]">
-            <EtfBubbles
-              data={data}
-              selectedIndex={selectedIndex}
-              metric={metric}
-              allTickers={allTickers}
-            />
+          <div className="min-h-[460px] overflow-visible">
+            {unsupportedCombo || loading || data.length === 0 ? (
+              <NoDataChart />
+            ) : (
+              <EtfBubbles
+                data={data}
+                selectedIndex={selectedIndex}
+                metric={metric}
+                allTickers={allTickers}
+              />
+            )}
           </div>
         </div>
 
-        {/* RIGHT COL */}
-        <div className="bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-slate-800 rounded-xl flex flex-col overflow-hidden h-full min-h-0">
+        {/* RIGHT */}
+        <div className="bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-slate-800 rounded-xl flex flex-col overflow-hidden min-h-0">
           {loading ? (
             <div className="flex-1 flex items-center justify-center"><Loader2 className="animate-spin text-gray-400" /></div>
           ) : (
@@ -820,8 +788,7 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
   );
 };
 
-// -------------------- MINIMIZED --------------------
-
+// --- MINIMIZED ---
 const EtfSummary: React.FC<{ language: Language }> = ({ language }) => {
   const [etfData, setEtfData] = useState<EtfFlowData | null>(null);
   const t = getTranslations(language).workspace.widgets.etf;
@@ -883,9 +850,7 @@ const EtfSummary: React.FC<{ language: Language }> = ({ language }) => {
 };
 
 const EtfFlowWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ item, language = 'pt' }) => {
-  if (item.isMaximized) {
-    return <EtfMaximized language={language} />;
-  }
+  if (item.isMaximized) return <EtfMaximized language={language} />;
   return <EtfSummary language={language} />;
 };
 
