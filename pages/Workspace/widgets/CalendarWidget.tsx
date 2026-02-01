@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Loader2, Calendar } from 'lucide-react';
-import { EconEvent, fetchEconomicCalendar } from '../services/api';
+import { EconEvent, fetchEconomicCalendar } from '../../../services/api';
 import { DashboardItem, Language } from '../../../types';
 import { getTranslations } from '../../../locales';
 

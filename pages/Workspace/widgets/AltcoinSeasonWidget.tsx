@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Loader2 } from 'lucide-react';
 import { ComposedChart, Area, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Brush } from 'recharts';
-import { AltSeasonData, fetchAltcoinSeason, fetchAltcoinSeasonHistory, AltSeasonHistoryPoint } from '../services/api';
+import { AltSeasonData, fetchAltcoinSeason, fetchAltcoinSeasonHistory, AltSeasonHistoryPoint } from '../../../services/api';
 import { DashboardItem, Language } from '../../../types';
 import { getTranslations } from '../../../locales';
 

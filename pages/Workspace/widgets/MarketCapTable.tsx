@@ -31,7 +31,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 import { ApiCoin, Language } from '../../../types';
-import { fetchTopCoins } from '../services/api';
+import { fetchTopCoins } from '../../../services/api';
 import { getTranslations } from '../../../locales';
 import { useBinanceWS } from '../../../services/BinanceWebSocketContext';
 import CoinLogo from '../../../components/CoinLogo';

@@ -11,7 +11,7 @@ import {
   fetchMacdAverage,
   fetchMacdTracker,
   fetchMacdTablePage
-} from '../services/api';
+} from '../../../services/api';
 import CoinLogo from '../../../components/CoinLogo';
 import { initLogoService, getBestLocalLogo } from '../../../services/logo';
 

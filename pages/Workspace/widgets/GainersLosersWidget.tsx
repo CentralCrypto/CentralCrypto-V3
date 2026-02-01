@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Loader2, TrendingUp, TrendingDown, AlertTriangle, ChevronsUpDown } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts';
-import { fetchWithFallback } from '../services/api';
+import { fetchWithFallback } from '../../../services/api';
 import { DashboardItem, Language, ApiCoin } from '../../../types';
 import { getTranslations } from '../../../locales';
 import { getCacheckoUrl, ENDPOINTS } from '../../../services/endpoints';

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
-import { fetchCryptoNews, NewsItem } from '../services/api';
+import { fetchCryptoNews, NewsItem } from '../../../services/api';
 import { DashboardItem, Language } from '../../../types';
 import { getTranslations } from '../../../locales';
 
