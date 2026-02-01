@@ -1964,7 +1964,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
         ctx.beginPath();
         ctx.arc(p.x, p.y, drawRadius, 0, Math.PI * 2);
 
-        // OPTIMIZED BITMAP DRAWING
+        // OPTIMIZED BITMAP DRAWING.
         const bitmap = getBubbleBitmap(p.coin.image);
         if (bitmap) {
           ctx.drawImage(bitmap, p.x - drawRadius, p.y - drawRadius, drawRadius * 2, drawRadius * 2);

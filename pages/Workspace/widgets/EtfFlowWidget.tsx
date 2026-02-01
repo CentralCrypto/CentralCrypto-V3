@@ -340,7 +340,7 @@ const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }
   return <div ref={chartRef} className="w-full h-full min-h-[300px]" />;
 };
 
-// --- MINI TABLE (NO INTERNAL SCROLL) ---
+// --- MINI TABLE (NO INTERNAL SCROLL). ---
 
 const MarketSharePanel: React.FC<{
   data: any[];

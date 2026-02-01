@@ -74,7 +74,7 @@ const CryptoWidget: React.FC<Props> = (props) => {
       case WidgetType.BUBBLE_HEATMAP:
         return <CryptoMarketBubbles language={language} isWidget={true} item={item} />;
       
-      // --- "BOARD 2" WIDGETS ---
+      // --- "BOARD 2" WIDGETS .---
       case WidgetType.PRICE:
         return <PriceWidget item={item} currentPrice={currentPrice} priceChange={priceChange} sparkline={sparkline} marketCap={marketCap} totalVolume={totalVolume} language={language} />;
       case WidgetType.VOLUME:
