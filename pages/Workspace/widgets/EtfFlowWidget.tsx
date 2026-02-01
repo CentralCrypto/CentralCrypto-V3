@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Loader2, TrendingUp, BarChart3, Layers, LineChart, Info, ChevronLeft, ChevronRight, DollarSign, ArrowUp, ArrowDown } from 'lucide-react';
+import { Loader2, TrendingUp, BarChart3, Layers, AlertTriangle, LineChart, Info, ChevronLeft, ChevronRight, DollarSign, ArrowUp, ArrowDown } from 'lucide-react';
 import { fetchEtfFlow, fetchEtfDetailed, EtfFlowData } from '../services/api';
 import { DashboardItem, Language } from '../../../types';
 import { getTranslations } from '../../../locales';
@@ -10,15 +10,15 @@ if (typeof mouseWheelZoom === 'function') {
   (mouseWheelZoom as any)(Highcharts);
 }
 
-const NO_DATA_MSG = 'Em breve! Aguardem!';
-
 const formatCompactNumber = (number: number) => {
-  if (!number || number === 0) return "---";
-  const abs = Math.abs(number);
-  const sign = number < 0 ? "-" : "";
-  if (abs < 1000) return sign + abs.toString();
+  if (number === null || number === undefined || !Number.isFinite(Number(number))) return "---";
+  const n = Number(number);
+  if (n === 0) return "0";
+  const abs = Math.abs(n);
+  const sign = n < 0 ? "-" : "";
+  if (abs < 1000) return sign + abs.toFixed(0);
   const suffixes = ["", "K", "M", "B", "T"];
-  const suffixNum = Math.floor(("" + Math.floor(abs)).length / 3);
+  const suffixNum = Math.min(suffixes.length - 1, Math.floor(("" + Math.floor(abs)).length / 3));
   let shortValue = parseFloat((abs / Math.pow(1000, suffixNum)).toPrecision(3));
   if (shortValue % 1 !== 0) shortValue = parseFloat(shortValue.toFixed(2));
   return sign + shortValue + suffixes[suffixNum];
@@ -26,11 +26,12 @@ const formatCompactNumber = (number: number) => {
 
 const PALETTE = [
   '#F7931A', '#627EEA', '#26A17B', '#E84142', '#8C8C8C',
-  '#D97706', '#9333EA', '#2563EB', '#059669', '#DB2777'
+  '#D97706', '#9333EA', '#2563EB', '#059669', '#DB2777',
+  '#22c55e', '#eab308', '#38bdf8', '#f97316'
 ];
 
-const WATERMARK_URL = '/v3/img/logo.png';
-const WATERMARK_OPACITY = 0.06;
+const WATERMARK_URL = 'https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png';
+const WATERMARK_OPACITY = 0.055;
 
 type Metric = 'flows' | 'volume';
 type Asset = 'BTC' | 'ETH' | 'SOL' | 'XRP' | 'DOGE' | 'LTC';
@@ -42,18 +43,20 @@ const ASSETS_CONFIG: Record<Asset, { label: string, color: string, logo: string 
   SOL: { label: 'SOL', color: '#14f195', logo: 'https://assets.coincap.io/assets/icons/sol@2x.png' },
   XRP: { label: 'XRP', color: '#23292f', logo: 'https://assets.coincap.io/assets/icons/xrp@2x.png' },
   DOGE: { label: 'DOGE', color: '#c2a633', logo: 'https://assets.coincap.io/assets/icons/doge@2x.png' },
-  LTC: { label: 'LTC', color: '#345d9d', logo: 'https://assets.coincap.io/assets/icons/ltc@2x.png' }
+  LTC: { label: 'LTC', color: '#b8b8b8', logo: 'https://assets.coincap.io/assets/icons/ltc@2x.png' },
 };
 
 interface ChartBaseProps {
   data: any[];
   metric: Metric;
   asset: Asset;
+  allTickers: string[];
+  colorMap: Record<string, string>;
 }
 
 const useChartTheme = () => {
   const isDark = document.documentElement.classList.contains('dark');
-  const textColor = isDark ? '#94a3b8' : '#475569';
+  const textColor = isDark ? '#cbd5e1' : '#475569';
   const gridColor = isDark ? '#334155' : '#e2e8f0';
   return { isDark, textColor, gridColor };
 };
@@ -68,9 +71,11 @@ const applyWatermark = (chart: Highcharts.Chart) => {
     const w = chart.chartWidth;
     const h = chart.chartHeight;
     if (!w || !h) return;
-    const size = Math.min(w, h) * 0.48;
+
+    const size = Math.min(w, h) * 0.52;
     const x = (w - size) / 2;
     const y = (h - size) / 2;
+
     anyChart.__wm = chart.renderer
       .image(WATERMARK_URL, x, y, size, size)
       .attr({ opacity: WATERMARK_OPACITY })
@@ -78,7 +83,7 @@ const applyWatermark = (chart: Highcharts.Chart) => {
   } catch (e) {}
 };
 
-const getAllTickerKeys = (data: any[]) => {
+const getTickerKeysUnion = (data: any[]) => {
   const keys = new Set<string>();
   data.forEach(d => {
     Object.keys(d || {}).forEach(k => {
@@ -88,129 +93,52 @@ const getAllTickerKeys = (data: any[]) => {
   return Array.from(keys);
 };
 
-const NoDataChart: React.FC = () => {
-  return (
-    <div className="w-full h-full min-h-[360px] rounded-xl border border-gray-100 dark:border-slate-800/50 bg-gray-50 dark:bg-black/20 overflow-hidden relative">
-      <div className="absolute inset-0 blur-[2px] opacity-40">
-        <div className="w-full h-full bg-gradient-to-b from-transparent via-white/5 to-transparent" />
-      </div>
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div className="px-4 py-2 rounded-lg bg-black/40 text-white text-sm font-black">
-          {NO_DATA_MSG}
-        </div>
-      </div>
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <img src={WATERMARK_URL} className="w-[42%] opacity-[0.06]" alt="watermark" />
-      </div>
+const getAllTickersFromData = (data: any[]) => {
+  const meta = (data as any)?.__etfs;
+  if (Array.isArray(meta) && meta.length > 0) return meta.filter(Boolean);
+  return getTickerKeysUnion(data);
+};
+
+const makeColorMap = (tickers: string[]) => {
+  const map: Record<string, string> = {};
+  tickers.forEach((t, i) => { map[t] = PALETTE[i % PALETTE.length]; });
+  return map;
+};
+
+const MissingDataOverlay: React.FC = () => (
+  <div className="absolute inset-0 flex items-center justify-center">
+    <div className="px-4 py-2 rounded-xl bg-black/35 backdrop-blur-sm border border-white/10 text-white font-black tracking-wide">
+      Em breve! Aguardem!
     </div>
-  );
-};
+  </div>
+);
 
-// ----------- NORMALIZERS (fix “JSON tem daily mas caiu no fallback”) -----------
-
-const normalizeToFlatPoints = (raw: any): any[] => {
-  if (!raw) return [];
-
-  const mkTs = (t: any) => {
-    const n = Number(t);
-    if (!Number.isFinite(n)) return 0;
-    if (n < 10000000000) return n * 1000;
-    return n;
-  };
-
-  const fromDailyWrapper = (obj: any) => {
-    const daily = obj?.daily;
-    if (!Array.isArray(daily) || daily.length === 0) return [];
-    return daily.map((d: any) => {
-      const date = mkTs(d.timestamp ?? d.date ?? d.Timestamp ?? d.Date);
-      const flat: any = {
-        date,
-        totalGlobal: Number(d.totalGlobal ?? d.total ?? 0)
-      };
-      const per = d.perEtf ?? d.per_etf ?? d.etfs ?? d.ETFs ?? null;
-      if (per && typeof per === 'object') {
-        Object.keys(per).forEach(k => { flat[k] = Number(per[k] ?? 0); });
-      }
-      return flat;
-    }).filter((p: any) => Number.isFinite(p.date) && p.date > 0).sort((a: any, b: any) => a.date - b.date);
-  };
-
-  // already flat array: [{date,totalGlobal,IBIT,...}]
-  const fromFlatArray = (arr: any[]) => {
-    if (!Array.isArray(arr) || arr.length === 0) return [];
-    const f = arr[0];
-    if (f && typeof f === 'object' && (f.date || f.totalGlobal !== undefined)) {
-      return arr.map(p => ({
-        ...p,
-        date: Number(p.date),
-        totalGlobal: Number(p.totalGlobal ?? 0)
-      })).filter((p: any) => Number.isFinite(p.date) && p.date > 0);
-    }
-    return [];
-  };
-
-  // cases:
-  // 1) raw already flat array
-  if (Array.isArray(raw)) {
-    const flat = fromFlatArray(raw);
-    if (flat.length) return flat;
-
-    // 2) array wrapper: [{asset,metric,daily:[...]}]
-    const first = raw[0];
-    if (first && typeof first === 'object') {
-      const d1 = fromDailyWrapper(first);
-      if (d1.length) return d1;
-
-      // 3) array wrapper: [{data:{daily:[...]}}]
-      const d2 = fromDailyWrapper(first?.data);
-      if (d2.length) return d2;
-
-      // 4) sometimes: [{0:{daily:[...]}}] or random nesting
-      for (const k of Object.keys(first)) {
-        const d3 = fromDailyWrapper((first as any)[k]);
-        if (d3.length) return d3;
-      }
-    }
-    return [];
-  }
-
-  // object wrapper: {daily:[...]} or {data:{daily:[...]}}
-  if (raw && typeof raw === 'object') {
-    const d1 = fromDailyWrapper(raw);
-    if (d1.length) return d1;
-    const d2 = fromDailyWrapper((raw as any).data);
-    if (d2.length) return d2;
-  }
-
-  return [];
-};
-
-// --- CHARTS ---
-const StackedEtfChart: React.FC<ChartBaseProps> = React.memo(({ data, metric }) => {
+const StackedEtfChart: React.FC<ChartBaseProps> = ({ data, metric, allTickers, colorMap }) => {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<Highcharts.Chart | null>(null);
   const { isDark, textColor, gridColor } = useChartTheme();
 
   useEffect(() => {
-    if (!chartRef.current || !data || data.length === 0) return;
+    if (!chartRef.current) return;
+    if (!data || data.length === 0 || allTickers.length === 0) return;
 
-    const seriesKeys = getAllTickerKeys(data);
-    const series: any[] = seriesKeys.map((key, idx) => ({
+    const series: any[] = allTickers.map((key) => ({
       name: key,
       data: data.map(d => [d.date, Number(d[key] ?? 0)]),
-      color: PALETTE[idx % PALETTE.length],
+      color: colorMap[key],
       type: 'column',
-      stack: 'etf'
+      stack: 'etf',
     }));
 
     if (chartInstance.current) chartInstance.current.destroy();
 
     chartInstance.current = Highcharts.chart(chartRef.current, {
+      time: { useUTC: true },
       chart: {
         backgroundColor: 'transparent',
         style: { fontFamily: 'Inter, sans-serif' },
-        spacing: [10, 10, 28, 10],
-        zooming: { mouseWheel: { enabled: true, type: 'x' }, type: undefined },
+        spacing: [10, 10, 10, 10],
+        zooming: { mouseWheel: { enabled: true, type: 'x' } },
         panning: { enabled: true, type: 'x' },
         events: {
           load: function () { applyWatermark(this as any); },
@@ -221,9 +149,6 @@ const StackedEtfChart: React.FC<ChartBaseProps> = React.memo(({ data, metric }) 
       credits: { enabled: false },
       legend: {
         enabled: true,
-        layout: 'horizontal',
-        align: 'center',
-        verticalAlign: 'bottom',
         itemStyle: { color: textColor, fontSize: '10px' },
         itemHoverStyle: { color: isDark ? '#fff' : '#000' }
       },
@@ -247,16 +172,7 @@ const StackedEtfChart: React.FC<ChartBaseProps> = React.memo(({ data, metric }) 
         column: { stacking: 'normal', borderWidth: 0, dataLabels: { enabled: false } },
         series: { stickyTracking: false, states: { inactive: { opacity: 1 } } }
       },
-      tooltip: {
-        backgroundColor: isDark ? 'rgba(26, 28, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)',
-        borderColor: gridColor,
-        borderRadius: 8,
-        style: { color: isDark ? '#fff' : '#000' },
-        shared: true,
-        valuePrefix: '$',
-        valueDecimals: 0,
-        followPointer: false
-      },
+      tooltip: { enabled: false },
       series
     } as any);
 
@@ -266,27 +182,29 @@ const StackedEtfChart: React.FC<ChartBaseProps> = React.memo(({ data, metric }) 
         chartInstance.current = null;
       }
     };
-  }, [data, metric, isDark, textColor, gridColor]);
+  }, [data, metric, allTickers.join('|'), isDark, textColor, gridColor]);
 
-  return <div ref={chartRef} className="w-full min-h-[460px]" />;
-});
+  return <div ref={chartRef} className="w-full min-h-[420px]" />;
+};
 
-const TotalBarChart: React.FC<ChartBaseProps> = React.memo(({ data, metric }) => {
+const TotalBarChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<Highcharts.Chart | null>(null);
   const { isDark, textColor, gridColor } = useChartTheme();
 
   useEffect(() => {
-    if (!chartRef.current || !data || data.length === 0) return;
+    if (!chartRef.current) return;
+    if (!data || data.length === 0) return;
 
     const label = metric === 'flows' ? 'Total Net Flow' : 'Total Volume';
+
     const seriesData = data.map(d => {
       const val = Number(d.totalGlobal ?? 0);
       return {
         x: d.date,
         y: val,
         color: metric === 'volume'
-          ? (isDark ? '#3b82f6' : '#2563eb')
+          ? (isDark ? '#60a5fa' : '#2563eb')
           : (val >= 0 ? '#16a34a' : '#dc2626')
       };
     });
@@ -294,11 +212,12 @@ const TotalBarChart: React.FC<ChartBaseProps> = React.memo(({ data, metric }) =>
     if (chartInstance.current) chartInstance.current.destroy();
 
     chartInstance.current = Highcharts.chart(chartRef.current, {
+      time: { useUTC: true },
       chart: {
         backgroundColor: 'transparent',
         style: { fontFamily: 'Inter, sans-serif' },
         spacing: [10, 10, 10, 10],
-        zooming: { mouseWheel: { enabled: true, type: 'x' }, type: undefined },
+        zooming: { mouseWheel: { enabled: true, type: 'x' } },
         panning: { enabled: true, type: 'x' },
         events: {
           load: function () { applyWatermark(this as any); },
@@ -324,21 +243,12 @@ const TotalBarChart: React.FC<ChartBaseProps> = React.memo(({ data, metric }) =>
           formatter: function (this: any) { return '$' + formatCompactNumber(this.value); }
         }
       },
-      tooltip: {
-        backgroundColor: isDark ? 'rgba(26, 28, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)',
-        borderColor: gridColor,
-        borderRadius: 8,
-        style: { color: isDark ? '#fff' : '#000' },
-        shared: false,
-        valuePrefix: '$',
-        valueDecimals: 0,
-        followPointer: false
-      },
+      tooltip: { enabled: false },
       plotOptions: {
         column: { borderWidth: 0, pointPadding: 0.1, groupPadding: 0.1 },
         series: { stickyTracking: false }
       },
-      series: [{ name: label, type: 'column', data: seriesData }]
+      series: [{ name: label, type: 'column', data: seriesData, lineWidth: 1 }]
     } as any);
 
     return () => {
@@ -349,26 +259,28 @@ const TotalBarChart: React.FC<ChartBaseProps> = React.memo(({ data, metric }) =>
     };
   }, [data, metric, isDark, textColor, gridColor]);
 
-  return <div ref={chartRef} className="w-full min-h-[460px]" />;
-});
+  return <div ref={chartRef} className="w-full min-h-[420px]" />;
+};
 
-const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }> = React.memo(({ data, metric, selectedTicker }) => {
+const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }> = ({ data, metric, selectedTicker, colorMap }) => {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<Highcharts.Chart | null>(null);
   const { isDark, textColor, gridColor } = useChartTheme();
 
   useEffect(() => {
-    if (!chartRef.current || !data || data.length === 0 || !selectedTicker) return;
+    if (!chartRef.current) return;
+    if (!data || data.length === 0 || !selectedTicker) return;
 
     const label = `${selectedTicker} ${metric === 'flows' ? 'Net Flow' : 'Volume'}`;
     if (chartInstance.current) chartInstance.current.destroy();
 
     chartInstance.current = Highcharts.chart(chartRef.current, {
+      time: { useUTC: true },
       chart: {
         backgroundColor: 'transparent',
         style: { fontFamily: 'Inter, sans-serif' },
         spacing: [10, 10, 10, 10],
-        zooming: { mouseWheel: { enabled: true, type: 'x' }, type: undefined },
+        zooming: { mouseWheel: { enabled: true, type: 'x' } },
         panning: { enabled: true, type: 'x' },
         events: {
           load: function () { applyWatermark(this as any); },
@@ -394,22 +306,14 @@ const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }
           formatter: function (this: any) { return '$' + formatCompactNumber(this.value); }
         }
       },
-      tooltip: {
-        backgroundColor: isDark ? 'rgba(26, 28, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)',
-        borderColor: gridColor,
-        borderRadius: 8,
-        style: { color: isDark ? '#fff' : '#000' },
-        shared: false,
-        valuePrefix: '$',
-        valueDecimals: 0
-      },
-      plotOptions: { series: { marker: { enabled: false } } },
+      tooltip: { enabled: false },
       series: [{
         name: label,
         type: 'spline',
         data: data.map(d => [d.date, Number(d[selectedTicker] ?? 0)]),
-        color: isDark ? '#ffffff' : '#000000',
-        lineWidth: 1
+        color: colorMap[selectedTicker] ?? (isDark ? '#ffffff' : '#000000'),
+        lineWidth: 2,
+        marker: { enabled: false }
       }]
     } as any);
 
@@ -423,7 +327,7 @@ const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }
 
   if (!selectedTicker) {
     return (
-      <div className="w-full min-h-[460px] flex items-center justify-center text-gray-400">
+      <div className="w-full min-h-[420px] flex items-center justify-center text-gray-400">
         <div className="flex flex-col items-center gap-2">
           <LineChart size={28} />
           <span className="text-xs font-black uppercase">Selecione uma ETF</span>
@@ -432,218 +336,232 @@ const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }
     );
   }
 
-  return <div ref={chartRef} className="w-full min-h-[460px]" />;
-});
+  return <div ref={chartRef} className="w-full min-h-[420px]" />;
+};
 
-// --- MINI TABLE (NO INTERNAL SCROLL; PAGE SCROLL ONLY) ---
+// --- MINI TABLE (NO INTERNAL SCROLL) ---
+
 const MarketSharePanel: React.FC<{
-  data: any[],
-  metric: Metric,
-  selectedIndex: number,
-  onIndexChange: (idx: number) => void,
-  allTickers: string[]
-}> = ({ data, metric, selectedIndex, onIndexChange, allTickers }) => {
+  data: any[];
+  metric: Metric;
+  asset: Asset;
+  selectedIndex: number;
+  onIndexChange: (idx: number) => void;
+  allTickers: string[];
+  colorMap: Record<string, string>;
+}> = ({ data, metric, selectedIndex, onIndexChange, allTickers, colorMap }) => {
 
-  const handlePrev = () => { if (selectedIndex > 0) onIndexChange(selectedIndex - 1); };
-  const handleNext = () => { if (selectedIndex < data.length - 1) onIndexChange(selectedIndex + 1); };
+  const clampIndex = (idx: number) => {
+    if (!Array.isArray(data) || data.length === 0) return -1;
+    return Math.max(0, Math.min(idx, data.length - 1));
+  };
 
-  const currentDay = data[selectedIndex];
+  const safeIndex = clampIndex(selectedIndex);
+  const currentDay = safeIndex >= 0 ? data[safeIndex] : null;
+
+  const handlePrev = () => {
+    const next = clampIndex((safeIndex >= 0 ? safeIndex : 0) - 1);
+    if (next >= 0) onIndexChange(next);
+  };
+  const handleNext = () => {
+    const next = clampIndex((safeIndex >= 0 ? safeIndex : 0) + 1);
+    if (next >= 0) onIndexChange(next);
+  };
 
   const dateStr = currentDay
-    ? new Date(currentDay.date).toLocaleDateString(undefined, { year: 'numeric', month: 'numeric', day: 'numeric' })
+    ? new Date(currentDay.date).toLocaleDateString(undefined, { year: 'numeric', month: 'numeric', day: 'numeric', timeZone: 'UTC' })
     : '--/--/----';
 
-  const stats = useMemo(() => {
-    if (!currentDay) return { d1: 0, d7: 0, d30: 0 };
-    const val1 = Number(currentDay.totalGlobal ?? 0);
+  const sumTickersAtIndex = (idx: number) => {
+    const day = data[idx];
+    if (!day) return 0;
+    let s = 0;
+    for (const t of allTickers) s += Number(day[t] ?? 0);
+    return s;
+  };
 
+  const stats = useMemo(() => {
+    if (!currentDay || safeIndex < 0) return { d1: 0, d7: 0, d30: 0 };
+
+    // 1D: soma EXATA da tabela no dia (com zeros)
+    const sum1 = sumTickersAtIndex(safeIndex);
+
+    // 7D/30D: soma da MESMA lógica da tabela, dia a dia (inclui o dia atual)
     let sum7 = 0;
-    for (let i = selectedIndex; i > Math.max(-1, selectedIndex - 7); i--) sum7 += Number(data[i]?.totalGlobal ?? 0);
+    for (let i = safeIndex; i >= 0 && i > safeIndex - 7; i--) sum7 += sumTickersAtIndex(i);
 
     let sum30 = 0;
-    for (let i = selectedIndex; i > Math.max(-1, selectedIndex - 30); i--) sum30 += Number(data[i]?.totalGlobal ?? 0);
+    for (let i = safeIndex; i >= 0 && i > safeIndex - 30; i--) sum30 += sumTickersAtIndex(i);
 
-    return { d1: val1, d7: sum7, d30: sum30 };
-  }, [data, selectedIndex, currentDay]);
+    return { d1: sum1, d7: sum7, d30: sum30 };
+  }, [data, safeIndex, currentDay, allTickers.join('|')]);
 
   const ranking = useMemo(() => {
     if (!currentDay) return [];
     return allTickers
-      .map(ticker => ({ ticker, value: Number(currentDay[ticker] ?? 0) }))
+      .map(t => ({ ticker: t, value: Number(currentDay[t] ?? 0) }))
       .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
-  }, [currentDay, allTickers]);
+  }, [currentDay, allTickers.join('|')]);
 
-  const SummaryCard = ({ label, value }: { label: string, value: number }) => (
-    <div className="flex flex-col items-center justify-center p-2 bg-gray-50 dark:bg-black/30 rounded-lg border border-gray-200 dark:border-slate-800 shadow-sm flex-1">
-      <span className="text-[10px] font-black text-gray-400 uppercase tracking-wide">{label}</span>
-      <span className={`text-sm font-black font-mono ${metric === 'volume' ? 'text-blue-500' : (value >= 0 ? 'text-green-500' : 'text-red-500')}`}>
-        ${formatCompactNumber(value)}
-      </span>
-    </div>
-  );
+  const SummaryCard = ({ label, value }: { label: string, value: number }) => {
+    const colorClass =
+      metric === 'volume' ? 'text-blue-400'
+      : (value >= 0 ? 'text-green-400' : 'text-red-400');
 
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex gap-2">
-        <SummaryCard label="1D" value={stats.d1} />
-        <SummaryCard label="7D" value={stats.d7} />
-        <SummaryCard label="30D" value={stats.d30} />
-      </div>
-
-      <div className="p-3 bg-gray-50 dark:bg-black/30 border border-gray-100 dark:border-slate-800 font-black text-xs uppercase text-gray-500 tracking-widest flex items-center justify-between rounded-lg">
-        <div className="flex items-center gap-2"><Layers size={14} /> Market Share</div>
-        <div className="flex items-center gap-2">
-          <button onClick={handlePrev} disabled={selectedIndex <= 0} className="p-1 hover:text-[#dd9933] disabled:opacity-30 disabled:hover:text-gray-500">
-            <ChevronLeft size={16} />
-          </button>
-          <span className="text-gray-800 dark:text-gray-200 font-mono">{dateStr}</span>
-          <button onClick={handleNext} disabled={selectedIndex >= data.length - 1} className="p-1 hover:text-[#dd9933] disabled:opacity-30 disabled:hover:text-gray-500">
-            <ChevronRight size={16} />
-          </button>
-        </div>
-      </div>
-
-      {ranking.length === 0 ? (
-        <div className="p-4 text-center text-xs text-gray-500">{NO_DATA_MSG}</div>
-      ) : (
-        <div className="rounded-xl border border-gray-100 dark:border-slate-800 overflow-hidden bg-white dark:bg-[#1a1c1e]">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-gray-50 dark:bg-black/20 text-gray-500 dark:text-slate-400 border-b border-gray-100 dark:border-slate-800">
-              <tr>
-                <th className="p-2 font-black uppercase">ETF</th>
-                <th className="p-2 text-right font-black uppercase">Value (USD)</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
-              {ranking.map(item => {
-                const isPos = item.value >= 0;
-                const colorClass = metric === 'volume'
-                  ? 'text-gray-900 dark:text-white'
-                  : (isPos ? 'text-green-500' : 'text-red-500');
-                return (
-                  <tr key={item.ticker} className="hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">
-                    <td className="p-2 font-bold text-gray-700 dark:text-slate-300">{item.ticker}</td>
-                    <td className={`p-2 text-right font-mono font-black ${colorClass}`}>
-                      ${formatCompactNumber(item.value)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// --- BUBBLES (ensure visible, never behind, never clipped) ---
-const EtfBubbles: React.FC<{
-  data: any[],
-  selectedIndex: number,
-  metric: Metric,
-  allTickers: string[]
-}> = ({ data, selectedIndex, metric, allTickers }) => {
-
-  const currentDay = data[selectedIndex];
-
-  const bubbles = useMemo(() => {
-    if (!currentDay) return [];
-    return allTickers.map(ticker => {
-      const hasVal = Object.prototype.hasOwnProperty.call(currentDay, ticker);
-      const val = Number(currentDay[ticker] ?? 0);
-      return {
-        id: ticker,
-        val,
-        absVal: Math.abs(val),
-        hasVal
-      };
-    }).sort((a, b) => b.absVal - a.absVal);
-  }, [currentDay, allTickers]);
-
-  if (!currentDay || bubbles.length === 0) {
     return (
-      <div className="w-full rounded-xl border border-gray-100 dark:border-slate-800/50 bg-gray-50 dark:bg-black/20 min-h-[460px] flex items-center justify-center text-xs text-gray-500 relative overflow-hidden">
-        <div className="px-4 py-2 rounded-lg bg-black/40 text-white text-sm font-black z-10">{NO_DATA_MSG}</div>
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <img src={WATERMARK_URL} className="w-[42%] opacity-[0.06]" alt="watermark" />
-        </div>
-      </div>
-    );
-  }
-
-  const maxVal = Math.max(...bubbles.map(b => b.absVal)) || 1;
-  const minSize = 42;
-  const maxSize = 140;
-
-  const scaleMarks = useMemo(() => {
-    const a = maxVal;
-    return {
-      p10: a * 0.10,
-      p50: a * 0.50,
-      p100: a
-    };
-  }, [maxVal]);
-
-  const BubbleScale = () => {
-    const sizes = [
-      { label: '10%', v: scaleMarks.p10 },
-      { label: '50%', v: scaleMarks.p50 },
-      { label: 'MAX', v: scaleMarks.p100 }
-    ];
-    return (
-      <div className="flex items-end gap-6">
-        {sizes.map(s => {
-          const size = minSize + ((Math.abs(s.v) / maxVal) * (maxSize - minSize));
-          return (
-            <div key={s.label} className="flex items-center gap-2">
-              <div
-                className="rounded-full border border-gray-300/40 dark:border-white/10 bg-gray-200/30 dark:bg-white/5 shadow-inner"
-                style={{ width: size * 0.38, height: size * 0.38 }}
-              />
-              <div className="flex flex-col leading-tight">
-                <span className="text-[10px] font-black text-gray-400 uppercase">{s.label}</span>
-                <span className="text-[10px] font-mono font-black text-gray-600 dark:text-gray-300">
-                  ${formatCompactNumber(s.v)}
-                </span>
-              </div>
-            </div>
-          );
-        })}
+      <div className="flex flex-col items-center justify-center p-2 bg-gray-50 dark:bg-black/30 rounded-lg border border-gray-200 dark:border-slate-800 shadow-sm flex-1">
+        <span className="text-[10px] font-black text-gray-400 uppercase tracking-wide">{label}</span>
+        <span className={`text-sm font-black font-mono ${colorClass}`}>
+          ${formatCompactNumber(value)}
+        </span>
       </div>
     );
   };
 
   return (
-    <div className="w-full bg-gray-50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-slate-800 relative overflow-hidden min-h-[460px]">
-      <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-        <img src={WATERMARK_URL} className="w-[40%] opacity-[0.05]" alt="watermark" />
+    <div className="flex flex-col">
+      <div className="flex gap-2 mb-3">
+        <SummaryCard label="1D" value={stats.d1} />
+        <SummaryCard label="7D" value={stats.d7} />
+        <SummaryCard label="30D" value={stats.d30} />
       </div>
 
-      <div className="flex justify-between items-start mb-3 gap-3 relative z-10">
+      <div className="p-3 bg-gray-50 dark:bg-black/30 border-b border-gray-100 dark:border-slate-800 font-black text-xs uppercase text-gray-500 tracking-widest flex items-center justify-between">
+        <div className="flex items-center gap-2"><Layers size={14} /> Market Share</div>
+        <div className="flex items-center gap-2">
+          <button onClick={handlePrev} disabled={safeIndex <= 0} className="p-1 hover:text-[#dd9933] disabled:opacity-30 disabled:hover:text-gray-500"><ChevronLeft size={16} /></button>
+          <span className="text-gray-800 dark:text-gray-200 font-mono">{dateStr}</span>
+          <button onClick={handleNext} disabled={safeIndex >= data.length - 1} className="p-1 hover:text-[#dd9933] disabled:opacity-30 disabled:hover:text-gray-500"><ChevronRight size={16} /></button>
+        </div>
+      </div>
+
+      {ranking.length === 0 ? (
+        <div className="p-4 text-center text-xs text-gray-500">Sem dados para esta data.</div>
+      ) : (
+        <table className="w-full text-left text-xs">
+          <thead className="bg-gray-50 dark:bg-black/20 text-gray-500 dark:text-slate-400 border-b border-gray-100 dark:border-slate-800">
+            <tr>
+              <th className="p-2 font-black uppercase">ETF</th>
+              <th className="p-2 text-right font-black uppercase">Value (USD)</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+            {ranking.map(item => {
+              const isPos = item.value >= 0;
+              const colorClass = metric === 'volume'
+                ? 'text-gray-900 dark:text-white'
+                : (isPos ? 'text-green-400' : 'text-red-400');
+
+              const dot = colorMap[item.ticker] ?? '#94a3b8';
+
+              return (
+                <tr key={item.ticker} className="hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">
+                  <td className="p-2 font-bold text-gray-700 dark:text-slate-300">
+                    <span className="inline-flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: dot }} />
+                      {item.ticker}
+                    </span>
+                  </td>
+                  <td className={`p-2 text-right font-mono font-black ${colorClass}`}>
+                    ${formatCompactNumber(item.value)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+};
+
+// --- BUBBLES ---
+
+const EtfBubbles: React.FC<{
+  data: any[];
+  selectedIndex: number;
+  metric: Metric;
+  allTickers: string[];
+  colorMap: Record<string, string>;
+}> = ({ data, selectedIndex, metric, allTickers, colorMap }) => {
+
+  const idx = useMemo(() => {
+    if (!Array.isArray(data) || data.length === 0) return -1;
+    if (selectedIndex < 0) return data.length - 1;
+    return Math.max(0, Math.min(selectedIndex, data.length - 1));
+  }, [data, selectedIndex]);
+
+  const currentDay = idx >= 0 ? data[idx] : null;
+
+  const bubbles = useMemo(() => {
+    if (!currentDay) return [];
+    return allTickers.map(t => {
+      const raw = currentDay[t];
+      const hasValue = raw !== undefined && raw !== null && Number.isFinite(Number(raw));
+      const val = hasValue ? Number(raw) : 0;
+      return { id: t, val, absVal: Math.abs(val), hasValue };
+    }).sort((a, b) => b.absVal - a.absVal);
+  }, [currentDay, allTickers.join('|')]);
+
+  if (!currentDay || bubbles.length === 0) {
+    return (
+      <div className="w-full bg-gray-50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-slate-800">
+        <div className="h-[260px] flex items-center justify-center text-xs text-gray-500">Sem dados de bolhas.</div>
+      </div>
+    );
+  }
+
+  const maxVal = Math.max(...bubbles.map(b => b.absVal)) || 1;
+
+  const minSize = 44;
+  const maxSize = 132;
+
+  const ScaleBubble = ({ pct, label }: { pct: number; label: string }) => {
+    const size = minSize + (pct * (maxSize - minSize));
+    return (
+      <div className="flex items-center gap-2">
+        <div className="rounded-full border border-white/20 bg-white/5 backdrop-blur-sm shadow-inner" style={{ width: size, height: size }} />
+        <div className="text-[10px] font-black text-gray-400">
+          {label}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="w-full bg-gray-50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-slate-800">
+      <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2 text-xs font-black uppercase text-gray-500 dark:text-gray-400">
           <DollarSign size={14} /> ETF Bubbles
         </div>
-        <BubbleScale />
+        <div className="flex items-center gap-4">
+          <ScaleBubble pct={0.10} label="10%" />
+          <ScaleBubble pct={0.50} label="50%" />
+          <ScaleBubble pct={1.00} label="MAX" />
+        </div>
       </div>
 
-      <div className="relative z-10 w-full flex flex-wrap justify-center content-center gap-4 p-4">
+      <div className="relative w-full min-h-[320px] flex flex-wrap content-center justify-center gap-4 p-3">
         {bubbles.map(b => {
-          const size = b.hasVal
+          const size = b.hasValue
             ? (minSize + ((b.absVal / maxVal) * (maxSize - minSize)))
-            : 48;
+            : 52;
 
-          const colorClass = !b.hasVal
-            ? 'bg-gray-400/15 border-gray-400/30 text-gray-300'
-            : (metric === 'volume'
-              ? 'bg-blue-500/20 border-blue-500/50 text-blue-100'
-              : (b.val >= 0 ? 'bg-green-500/20 border-green-500/50 text-green-100' : 'bg-red-500/20 border-red-500/50 text-red-100'));
+          const baseColor = colorMap[b.id] ?? '#94a3b8';
+
+          const bgStyle = b.hasValue
+            ? {
+              background: `radial-gradient(circle at 30% 30%, rgba(255,255,255,0.22), rgba(255,255,255,0.06) 40%, rgba(0,0,0,0.12) 100%), ${baseColor}22`
+            }
+            : {
+              background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.18), rgba(255,255,255,0.06) 45%, rgba(0,0,0,0.14) 100%), rgba(148,163,184,0.20)'
+            };
 
           return (
             <div
               key={b.id}
-              className={`rounded-full border flex flex-col items-center justify-center transition-all duration-300 hover:scale-105 shadow-lg cursor-default backdrop-blur-sm ${colorClass}`}
-              style={{ width: size, height: size }}
+              className="rounded-full border border-white/10 flex flex-col items-center justify-center transition-transform duration-300 hover:scale-110 shadow-lg backdrop-blur-sm text-slate-50"
+              style={{ width: size, height: size, ...bgStyle as any }}
             >
               <span className="font-black text-[10px] sm:text-xs leading-none">{b.id}</span>
               <span className="text-[9px] sm:text-[10px] font-bold mt-0.5">
@@ -657,19 +575,19 @@ const EtfBubbles: React.FC<{
   );
 };
 
-// --- TOOLTIP ---
+// --- HELP TOOLTIP (small) ---
 const HelpTooltip = () => (
   <div className="absolute top-2 right-2 group z-20">
     <Info size={16} className="text-gray-400 hover:text-[#dd9933] cursor-help" />
     <div className="absolute right-0 top-6 w-64 p-3 bg-white dark:bg-[#1a1c1e] border border-gray-200 dark:border-slate-700 rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none text-xs text-gray-600 dark:text-gray-300 z-50">
-      <p className="font-bold mb-1">Como ler este gráfico?</p>
-      <p>Os dados mostram o fluxo líquido (Net Flow) ou Volume diário dos ETFs Spot nos EUA.</p>
-      <p className="mt-1">Valores positivos indicam entrada de capital. Valores negativos indicam saída.</p>
+      <p className="font-bold mb-1">Como ler?</p>
+      <p>Empilhado: contribuição por ETF no dia.</p>
+      <p className="mt-1">Use roda do mouse para zoom horizontal e arraste para pan.</p>
     </div>
   </div>
 );
 
-// --- MAXIMIZED ---
+// --- MAXIMIZED WIDGET ---
 const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ language }) => {
   const [asset, setAsset] = useState<Asset>('BTC');
   const [metric, setMetric] = useState<Metric>('flows');
@@ -682,73 +600,99 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number>(-1);
 
+  // Summary (top KPI)
   useEffect(() => {
     fetchEtfFlow().then(res => setSummaryData(res));
   }, []);
 
-  const flowsNotAvailable = useMemo(() => {
-    return (asset === 'DOGE' || asset === 'LTC') && metric === 'flows';
-  }, [asset, metric]);
-
+  // Fetch main data ONLY when header toggles change
   useEffect(() => {
     setLoading(true);
+    fetchEtfDetailed(asset, metric).then(res => {
+      const arr = Array.isArray(res) ? res : [];
+      setData(arr);
 
-    fetchEtfDetailed(asset as any, metric as any).then(res => {
-      const flat = normalizeToFlatPoints(res);
-      setData(flat);
-      setSelectedIndex(flat.length > 0 ? flat.length - 1 : -1);
+      // Sempre “gruda” no último dia disponível
+      setSelectedIndex(arr.length > 0 ? arr.length - 1 : -1);
 
-      const keys = getAllTickerKeys(flat);
-      if (viewMode === 'lines') setSelectedTicker(keys[0] || null);
-
-      setLoading(false);
-    }).catch(() => {
-      setData([]);
-      setSelectedIndex(-1);
       setLoading(false);
     });
   }, [asset, metric]);
 
+  // Clamp index quando data muda (evita ficar preso no penúltimo por mismatch)
+  useEffect(() => {
+    if (!Array.isArray(data) || data.length === 0) {
+      if (selectedIndex !== -1) setSelectedIndex(-1);
+      return;
+    }
+    const last = data.length - 1;
+    if (selectedIndex < 0 || selectedIndex > last) setSelectedIndex(last);
+  }, [data, selectedIndex]);
+
   const allTickers = useMemo(() => {
-    return getAllTickerKeys(data);
+    return getAllTickersFromData(data);
   }, [data]);
 
+  const colorMap = useMemo(() => {
+    return makeColorMap(allTickers);
+  }, [allTickers.join('|')]);
+
+  // In lines mode ensure ticker exists
   useEffect(() => {
     if (viewMode !== 'lines') return;
     if (!allTickers.length) return;
-    if (!selectedTicker || !allTickers.includes(selectedTicker)) setSelectedTicker(allTickers[0] || null);
-  }, [viewMode, allTickers, selectedTicker]);
+    if (!selectedTicker || !allTickers.includes(selectedTicker)) setSelectedTicker(allTickers[0]);
+  }, [viewMode, allTickers.join('|')]);
 
-  const totalHeaderFlow = useMemo(() => {
+  // Header KPI: sum flows across assets we actually show (BTC/ETH/SOL/XRP only from summary)
+  const displayTotal = useMemo(() => {
     if (!summaryData) return 0;
-    const sum = (summaryData.btcValue || 0) + (summaryData.ethValue || 0) + (summaryData.solValue || 0) + (summaryData.xrpValue || 0);
-    return sum !== 0 ? sum : (summaryData.netFlow || 0);
+    const sum =
+      Number(summaryData.btcValue ?? 0) +
+      Number(summaryData.ethValue ?? 0) +
+      Number(summaryData.solValue ?? 0) +
+      Number(summaryData.xrpValue ?? 0);
+    return Number.isFinite(sum) && sum !== 0 ? sum : Number(summaryData.netFlow ?? 0);
   }, [summaryData]);
 
-  const flowColor = totalHeaderFlow >= 0 ? 'text-green-500' : 'text-red-500';
+  const flowColor = displayTotal >= 0 ? 'text-green-400' : 'text-red-400';
 
-  const ChartAreaEl = useMemo(() => {
-    if (loading) {
+  // Missing flows for DOGE/LTC (but allow volume)
+  const isMissingCombo = useMemo(() => {
+    if ((asset === 'DOGE' || asset === 'LTC') && metric === 'flows') return true;
+    return false;
+  }, [asset, metric]);
+
+  const tickerButtons = useMemo(() => allTickers, [allTickers.join('|')]);
+
+  const ChartArea = () => {
+    if (isMissingCombo) {
       return (
-        <div className="w-full min-h-[460px] flex items-center justify-center">
-          <Loader2 className="animate-spin text-gray-400" />
+        <div className="relative w-full">
+          <div className="w-full min-h-[420px] rounded-xl bg-black/10 blur-[2px]" />
+          <MissingDataOverlay />
         </div>
       );
     }
 
-    if (flowsNotAvailable) return <NoDataChart />;
+    if (loading) return <div className="flex items-center justify-center min-h-[420px]"><Loader2 className="animate-spin text-gray-400" /></div>;
 
     if (!data || data.length === 0) {
-      return <NoDataChart />;
+      return (
+        <div className="flex flex-col items-center justify-center text-gray-400 gap-2 min-h-[420px]">
+          <AlertTriangle size={32} />
+          <span className="text-sm font-bold uppercase">Sem dados disponíveis</span>
+        </div>
+      );
     }
 
-    if (viewMode === 'total') return <TotalBarChart data={data} metric={metric} asset={asset} />;
-    if (viewMode === 'lines') return <EtfLinesChart data={data} metric={metric} asset={asset} selectedTicker={selectedTicker} />;
-    return <StackedEtfChart data={data} metric={metric} asset={asset} />;
-  }, [loading, data, metric, asset, viewMode, selectedTicker, flowsNotAvailable]);
+    if (viewMode === 'total') return <TotalBarChart data={data} metric={metric} asset={asset} allTickers={allTickers} colorMap={colorMap} />;
+    if (viewMode === 'lines') return <EtfLinesChart data={data} metric={metric} asset={asset} allTickers={allTickers} colorMap={colorMap} selectedTicker={selectedTicker} />;
+    return <StackedEtfChart data={data} metric={metric} asset={asset} allTickers={allTickers} colorMap={colorMap} />;
+  };
 
   return (
-    <div className="bg-white dark:bg-[#1a1c1e] text-gray-900 dark:text-white p-6">
+    <div className="w-full flex flex-col bg-white dark:bg-[#1a1c1e] text-gray-900 dark:text-white p-6">
       {/* TOP BAR */}
       <div className="flex flex-col gap-3 mb-6 border-b border-gray-100 dark:border-slate-800 pb-4">
         <div className="flex justify-between items-center flex-wrap gap-4">
@@ -756,13 +700,13 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
             <div className="flex items-baseline gap-2">
               <div className="text-xs font-black text-gray-400 uppercase tracking-widest">Total Net Flow</div>
               <div className={`text-xl font-black font-mono ${summaryData ? flowColor : 'text-gray-400'}`}>
-                {summaryData ? '$' + formatCompactNumber(totalHeaderFlow) : '---'}
+                {summaryData ? '$' + formatCompactNumber(displayTotal) : '---'}
               </div>
             </div>
 
-            <div className="w-px h-6 bg-gray-200 dark:bg-slate-700 hidden md:block"></div>
+            <div className="w-px h-6 bg-gray-200 dark:bg-slate-700 hidden md:block" />
 
-            {/* ASSET */}
+            {/* ASSET SELECTOR */}
             <div className="flex bg-gray-100 dark:bg-black/30 p-1 rounded-lg border border-gray-200 dark:border-slate-700">
               {(Object.keys(ASSETS_CONFIG) as Asset[]).map((key) => (
                 <button
@@ -780,8 +724,7 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
             <div className="flex bg-gray-100 dark:bg-black/30 p-1 rounded-lg border border-gray-200 dark:border-slate-700">
               <button
                 onClick={() => setMetric('flows')}
-                disabled={asset === 'DOGE' || asset === 'LTC'}
-                className={`px-4 py-1.5 text-xs font-black rounded flex items-center gap-2 transition-all ${metric === 'flows' ? 'bg-white dark:bg-[#2f3032] text-[#dd9933] shadow' : 'text-gray-500 hover:text-white'} ${(asset === 'DOGE' || asset === 'LTC') ? 'opacity-40 cursor-not-allowed' : ''}`}
+                className={`px-4 py-1.5 text-xs font-black rounded flex items-center gap-2 transition-all ${metric === 'flows' ? 'bg-white dark:bg-[#2f3032] text-[#dd9933] shadow' : 'text-gray-500 hover:text-white'}`}
               >
                 <TrendingUp size={14} /> Flows
               </button>
@@ -811,15 +754,15 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
                 onClick={() => setViewMode('lines')}
                 className={`px-4 py-1.5 text-xs font-black rounded flex items-center gap-2 transition-all ${viewMode === 'lines' ? 'bg-white dark:bg-[#2f3032] text-gray-900 dark:text-white shadow' : 'text-gray-500 hover:text-white'}`}
               >
-                <BarChart3 size={14} /> Linhas
+                <BarChart3 size={14} /> ETFs
               </button>
             </div>
           </div>
         </div>
 
-        {viewMode === 'lines' && !flowsNotAvailable && (
+        {viewMode === 'lines' && !isMissingCombo && (
           <div className="flex gap-2 flex-wrap mt-2">
-            {allTickers.map(t => (
+            {tickerButtons.map(t => (
               <button
                 key={t}
                 onClick={() => setSelectedTicker(t)}
@@ -832,40 +775,47 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
         )}
       </div>
 
-      {/* LAYOUT FIX: NO INTERNAL SCROLL, NO OVERFLOW HIDDEN, HEIGHT = CONTENT */}
+      {/* MAIN GRID - no forced heights, no internal scrollbars */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* LEFT COLUMN: always stack both charts fully */}
-        <div className="lg:col-span-2 flex flex-col gap-6">
+        {/* LEFT */}
+        <div className="lg:col-span-2 flex flex-col gap-6 min-h-[1px]">
           <div className="relative bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4">
-            {ChartAreaEl}
-            {!flowsNotAvailable && !loading && data.length > 0 && <HelpTooltip />}
+            <ChartArea />
+            <HelpTooltip />
           </div>
 
-          <div className="relative">
-            {(flowsNotAvailable || loading || data.length === 0) ? (
-              <NoDataChart />
+          {/* BUBBLES (must always be visible) */}
+          <div className="min-h-[360px]">
+            {isMissingCombo ? (
+              <div className="relative">
+                <div className="w-full min-h-[360px] rounded-xl bg-black/10 blur-[2px]" />
+                <MissingDataOverlay />
+              </div>
             ) : (
               <EtfBubbles
                 data={data}
                 selectedIndex={selectedIndex}
                 metric={metric}
                 allTickers={allTickers}
+                colorMap={colorMap}
               />
             )}
           </div>
         </div>
 
-        {/* RIGHT COLUMN: NO internal scroll; let page scroll */}
-        <div className="bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-slate-800 rounded-xl p-4">
-          {loading ? (
-            <div className="min-h-[460px] flex items-center justify-center"><Loader2 className="animate-spin text-gray-400" /></div>
+        {/* RIGHT */}
+        <div className="bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-slate-800 rounded-xl p-3">
+          {loading && !isMissingCombo ? (
+            <div className="flex items-center justify-center min-h-[420px]"><Loader2 className="animate-spin text-gray-400" /></div>
           ) : (
             <MarketSharePanel
               data={data}
               metric={metric}
+              asset={asset}
               selectedIndex={selectedIndex}
               onIndexChange={setSelectedIndex}
               allTickers={allTickers}
+              colorMap={colorMap}
             />
           )}
         </div>
@@ -874,7 +824,7 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
   );
 };
 
-// --- MINIMIZED ---
+// --- MINIMIZED WIDGET (SUMMARY) ---
 const EtfSummary: React.FC<{ language: Language }> = ({ language }) => {
   const [etfData, setEtfData] = useState<EtfFlowData | null>(null);
   const t = getTranslations(language).workspace.widgets.etf;
@@ -900,7 +850,7 @@ const EtfSummary: React.FC<{ language: Language }> = ({ language }) => {
           </span>
         </div>
         <div className="text-xs text-slate-500">
-          {t.lastUpdate} {new Date(etfData.timestamp).toLocaleDateString()}
+          {t.lastUpdate} {new Date(etfData.timestamp).toLocaleDateString(undefined, { timeZone: 'UTC' })}
         </div>
       </div>
 
@@ -936,7 +886,9 @@ const EtfSummary: React.FC<{ language: Language }> = ({ language }) => {
 };
 
 const EtfFlowWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ item, language = 'pt' }) => {
-  if (item.isMaximized) return <EtfMaximized language={language} />;
+  if (item.isMaximized) {
+    return <EtfMaximized language={language} />;
+  }
   return <EtfSummary language={language} />;
 };
 

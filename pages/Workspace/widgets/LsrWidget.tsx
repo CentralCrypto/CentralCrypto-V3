@@ -1,8 +1,27 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Loader2, AlertTriangle, ChevronsUpDown } from 'lucide-react';
+import { Loader2, AlertTriangle, ChevronsUpDown, GripVertical } from 'lucide-react';
 import { LsrData, fetchLongShortRatio, fetchTopCoins } from '../services/api'; 
-import { DashboardItem, Language, ApiCoin } from '../../../types';
+import { DashboardItem, Language } from '../../../types';
 import { getTranslations } from '../../../locales';
+import { useBinanceWS } from '../../../services/BinanceWebSocketContext';
+
+// DND Kit Imports
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  horizontalListSortingStrategy,
+  useSortable
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 const LSR_SYMBOLS = [
     'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT', 'AVAXUSDT', 'SHIBUSDT', 'DOTUSDT',
@@ -11,6 +30,10 @@ const LSR_SYMBOLS = [
 
 const LSR_INTERVALS = ['5m', '15m', '30m', '1h', '2h', '4h', '6h', '12h', '1D'];
 const STABLECOINS = ['USDT', 'USDC', 'DAI', 'FDUSD', 'TUSD', 'USDD', 'PYUSD', 'USDE', 'GUSD'];
+
+const EXCHANGES = ['Binance', 'Bybit', 'OKX', 'Mexc', 'Aggregated'];
+
+// --- Helper Components ---
 
 const FlashCell = ({ value, formatter, isPercent, isPrice }: { value: number, formatter: (v:number) => string, isPercent?: boolean, isPrice?: boolean }) => {
     const prevValue = useRef(value);
@@ -40,19 +63,94 @@ const FlashCell = ({ value, formatter, isPercent, isPrice }: { value: number, fo
     );
 };
 
+// Live Row Component (Connected to WS)
+const LiveLsrRow = React.memo(({ row, colOrder }: { row: any, colOrder: string[] }) => {
+    const { tickers } = useBinanceWS();
+    // Assuming standard Binance symbol format for WS matching
+    const wsSymbol = row.symbol; 
+    const liveData = tickers[wsSymbol];
+    
+    let livePrice = row.price;
+    let liveChange = row.priceChangePercent;
+    
+    if (liveData) {
+        livePrice = parseFloat(liveData.c);
+        const open = parseFloat(liveData.o);
+        if (open > 0) liveChange = ((livePrice - open) / open) * 100;
+    }
+
+    const renderCell = (colId: string) => {
+        switch(colId) {
+            case 'asset':
+                return (
+                    <td key={colId} className="p-3">
+                        <div className="font-black flex items-center gap-3">
+                            {row.image && <img src={row.image} className="w-8 h-8 rounded-full bg-white p-0.5 border border-gray-200 dark:border-slate-700" alt="" />} 
+                            <div className="flex flex-col">
+                                <span className="text-base text-gray-900 dark:text-white leading-none">{row.symbol.replace('USDT', '')}</span>
+                            </div>
+                        </div>
+                    </td>
+                );
+            case 'price':
+                return (
+                    <td key={colId} className="p-3 text-right font-mono text-base">
+                        <FlashCell isPrice value={livePrice} formatter={v => `$${v < 1 ? v.toFixed(5) : v.toLocaleString()}`} />
+                    </td>
+                );
+            case 'lsr30m':
+                return <td key={colId} className="p-3 text-center font-black text-base">{row.lsr30m ? row.lsr30m.toFixed(2) : '-'}</td>;
+            case 'lsr4h':
+                return <td key={colId} className="p-3 text-center font-black text-base">{row.lsr4h ? row.lsr4h.toFixed(2) : '-'}</td>;
+            case 'lsr12h':
+                return <td key={colId} className="p-3 text-center font-black text-base">{row.lsr12h ? row.lsr12h.toFixed(2) : '-'}</td>;
+            case 'lsr24h':
+                return <td key={colId} className="p-3 text-center font-black text-base">{row.lsr24h ? row.lsr24h.toFixed(2) : '-'}</td>;
+            case 'change24h':
+                return (
+                    <td key={colId} className="p-3 text-right font-black text-base">
+                        <FlashCell value={liveChange} formatter={v => `${v > 0 ? '+' : ''}${v.toFixed(2)}%`} isPercent />
+                    </td>
+                );
+            default: return <td key={colId} className="p-3"></td>;
+        }
+    };
+
+    return (
+        <tr className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+            {colOrder.map((colId) => renderCell(colId))}
+        </tr>
+    );
+}, (prev, next) => {
+    // Only re-render if static row data changes, WebSocket updates handled internally via hook if we used custom hook logic,
+    // but since we access hook inside component, it will re-render on tick. 
+    // Optimization: Memo helps if parent re-renders but props are same.
+    return prev.row === next.row && prev.colOrder === next.colOrder;
+});
+
+// --- Main Widget Component ---
+
 const LsrWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ item, language = 'pt' }) => {
+    // Minimized State
     const [lsrData, setLsrData] = useState<LsrData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [lsrSymbol, setLsrSymbol] = useState('BTCUSDT');
     const [lsrPeriod, setLsrPeriod] = useState('5m');
     const [displayLsr, setDisplayLsr] = useState(0);
 
+    // Maximized State
     const [maximizedTickers, setMaximizedTickers] = useState<any[]>([]);
     const [isLoadingTable, setIsLoadingTable] = useState(false);
     const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+    const [selectedExchange, setSelectedExchange] = useState('Binance');
+
+    // Drag and Drop State
+    const [colOrder, setColOrder] = useState<string[]>(['asset', 'price', 'lsr30m', 'lsr4h', 'lsr12h', 'lsr24h', 'change24h']);
+    const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
     const t = getTranslations(language as Language).dashboard.widgets.lsr;
 
+    // Minimized Data Fetch
     useEffect(() => {
         if (item.isMaximized) return;
         setIsLoading(true);
@@ -63,10 +161,14 @@ const LsrWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ ite
         });
     }, [lsrSymbol, lsrPeriod, item.isMaximized]);
 
+    // Maximized Data Fetch
     useEffect(() => {
         if (!item.isMaximized) return;
+        
         const loadTableData = async () => {
             if(maximizedTickers.length === 0) setIsLoadingTable(true);
+            
+            // Get Coins
             const topCoins = await fetchTopCoins();
             const limitedTickers = topCoins
                 .filter(coin => coin && coin.symbol && !STABLECOINS.includes(coin.symbol.toUpperCase()))
@@ -76,23 +178,61 @@ const LsrWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ ite
                     symbol: coin.symbol.toUpperCase() + 'USDT',
                     price: coin.current_price || 0,
                     priceChangePercent: coin.price_change_percentage_24h || 0,
-                    image: coin.image
+                    image: coin.image,
+                    // Init placeholder values
+                    lsr30m: 0, lsr4h: 0, lsr12h: 0, lsr24h: 0
                 }));
+            
+            // Initial render to show list while loading LSRs
             setMaximizedTickers(limitedTickers);
             setIsLoadingTable(false);
 
-            for (let i = 0; i < limitedTickers.length; i++) {
-                const symbol = limitedTickers[i].symbol;
-                const [lsr30m, lsr4h, lsr12h, lsr1d] = await Promise.all([
-                    fetchLongShortRatio(symbol, '30m'), fetchLongShortRatio(symbol, '4h'),
-                    fetchLongShortRatio(symbol, '12h'), fetchLongShortRatio(symbol, '1D')
-                ]);
-                setMaximizedTickers(prev => prev.map(t => t.symbol === symbol ? { ...t, lsr30m: lsr30m.lsr || undefined, lsr4h: lsr4h.lsr || undefined, lsr12h: lsr12h.lsr || undefined, lsr24h: lsr1d.lsr || undefined } : t));
-                await new Promise(r => setTimeout(r, 100));
+            // Fetch LSRs for each coin
+            // NOTE: Aggregated Logic
+            const fetchLsrValue = async (symbol: string, period: string) => {
+                if (selectedExchange === 'Aggregated') {
+                    const [b, by, o] = await Promise.all([
+                        fetchLongShortRatio(symbol, period, 'Binance'),
+                        fetchLongShortRatio(symbol, period, 'Bybit'),
+                        fetchLongShortRatio(symbol, period, 'OKX')
+                    ]);
+                    
+                    const vals = [b.lsr, by.lsr, o.lsr].filter(v => v !== null && v !== undefined) as number[];
+                    if (vals.length === 0) return null;
+                    return vals.reduce((a, b) => a + b, 0) / vals.length;
+                } else {
+                    const data = await fetchLongShortRatio(symbol, period, selectedExchange);
+                    return data.lsr;
+                }
+            };
+
+            // Parallel fetch per coin to speed up (chunks of 5)
+            const chunkSize = 5;
+            for (let i = 0; i < limitedTickers.length; i += chunkSize) {
+                const chunk = limitedTickers.slice(i, i + chunkSize);
+                await Promise.all(chunk.map(async (coin) => {
+                     const [v30m, v4h, v12h, v1d] = await Promise.all([
+                         fetchLsrValue(coin.symbol, '30m'),
+                         fetchLsrValue(coin.symbol, '4h'),
+                         fetchLsrValue(coin.symbol, '12h'),
+                         fetchLsrValue(coin.symbol, '1D')
+                     ]);
+                     
+                     setMaximizedTickers(prev => prev.map(t => 
+                         t.symbol === coin.symbol ? { 
+                             ...t, 
+                             lsr30m: v30m || undefined, 
+                             lsr4h: v4h || undefined, 
+                             lsr12h: v12h || undefined, 
+                             lsr24h: v1d || undefined 
+                         } : t
+                     ));
+                }));
             }
         };
+        
         loadTableData();
-    }, [item.isMaximized]);
+    }, [item.isMaximized, selectedExchange]);
 
     const sortedTickers = useMemo(() => {
         if (!sortConfig) return maximizedTickers;
@@ -103,41 +243,117 @@ const LsrWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ ite
         });
     }, [maximizedTickers, sortConfig]);
 
+    const handleSort = (key: string) => {
+        let direction: 'asc' | 'desc' = 'desc';
+        if (sortConfig && sortConfig.key === key && sortConfig.direction === 'desc') {
+            direction = 'asc';
+        }
+        setSortConfig({ key, direction });
+    };
+
+    const handleDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
+        if (over && active.id !== over.id) {
+            setColOrder((items) => {
+                const oldIndex = items.indexOf(active.id as string);
+                const newIndex = items.indexOf(over.id as string);
+                return arrayMove(items, oldIndex, newIndex);
+            });
+        }
+    };
+
+    // Columns Definition
+    const COLS: Record<string, { id: string, label: string }> = {
+        asset: { id: 'asset', label: 'Ativo' },
+        price: { id: 'price', label: 'Preço Spot' },
+        lsr30m: { id: 'lsr30m', label: 'LSR 30m' },
+        lsr4h: { id: 'lsr4h', label: 'LSR 4h' },
+        lsr12h: { id: 'lsr12h', label: 'LSR 12h' },
+        lsr24h: { id: 'lsr24h', label: 'LSR 1d' },
+        change24h: { id: 'change24h', label: '24h %' }
+    };
+
+    const SortableTh = ({ colId, label }: { colId: string, label: string }) => {
+        const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: colId });
+        const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1, zIndex: isDragging ? 100 : 'auto' };
+        
+        return (
+            <th 
+                ref={setNodeRef} 
+                style={style} 
+                className={`p-3 bg-gray-100 dark:bg-[#1e2329] text-xs font-black text-gray-500 uppercase tracking-widest cursor-pointer select-none group ${colId === 'asset' ? 'text-left' : 'text-center'}`}
+                onClick={() => handleSort(colId)}
+            >
+                <div className={`flex items-center gap-2 ${colId === 'asset' ? 'justify-start' : 'justify-center'}`}>
+                    <span 
+                        {...attributes} {...listeners} 
+                        onClick={(e) => e.stopPropagation()} 
+                        className={`p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 cursor-grab ${isDragging ? 'cursor-grabbing' : ''}`}
+                    >
+                        <GripVertical size={12} />
+                    </span>
+                    {label}
+                    <ChevronsUpDown size={12} className={`text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity ${sortConfig?.key === colId ? 'opacity-100 text-[#dd9933]' : ''}`} />
+                </div>
+            </th>
+        );
+    };
+
     const Watermark = () => (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden opacity-[0.05] z-0">
             <img src="https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png" className="w-3/4 h-auto grayscale filter" />
         </div>
     );
 
+    // --- RENDER MAXIMIZED ---
     if (item.isMaximized) {
         return (
             <div className="h-full flex flex-col bg-white dark:bg-[#0b0e11] text-gray-900 dark:text-white overflow-hidden relative p-4">
-                <div className="grid grid-cols-[1.5fr_1fr_0.8fr_0.8fr_0.8fr_0.8fr_1fr] gap-4 px-6 py-4 bg-gray-100 dark:bg-[#1e2329] text-xs font-black text-gray-500 uppercase tracking-widest rounded-t-xl border-b border-gray-200 dark:border-slate-800">
-                    <span>Ativo</span><span className="text-right">Preço Spot</span><span className="text-center">LSR 30m</span><span className="text-center">LSR 4h</span><span className="text-center">LSR 12h</span><span className="text-center">LSR 1d</span><span className="text-right">24h %</span>
+                <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-4">
+                    <div className="text-lg font-black uppercase text-gray-700 dark:text-gray-200">Long/Short Ratio Matrix</div>
+                    
+                    <div className="flex bg-gray-100 dark:bg-[#1e2329] p-1 rounded-lg">
+                        {EXCHANGES.map(ex => (
+                            <button
+                                key={ex}
+                                onClick={() => setSelectedExchange(ex)}
+                                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${selectedExchange === ex ? 'bg-[#dd9933] text-black shadow-sm' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}
+                            >
+                                {ex}
+                            </button>
+                        ))}
+                    </div>
                 </div>
-                <div className="flex-1 overflow-y-auto custom-scrollbar">
-                    {isLoadingTable ? <div className="p-10 flex justify-center"><Loader2 className="animate-spin" /></div> : sortedTickers.map(row => (
-                        <div key={row.symbol} className="grid grid-cols-[1.5fr_1fr_0.8fr_0.8fr_0.8fr_0.8fr_1fr] gap-4 px-6 py-4 border-b border-gray-100 dark:border-gray-800 items-center text-sm">
-                            <div className="font-black flex items-center gap-3">
-                                {row.image && <img src={row.image} className="w-8 h-8 rounded-full bg-white p-0.5 border border-gray-200 dark:border-slate-700" />} 
-                                <div className="flex flex-col">
-                                    <span className="text-base text-gray-900 dark:text-white leading-none">{row.symbol.replace('USDT', '')}</span>
-                                    <span className="text-[10px] text-gray-500 uppercase font-bold">Binance Futures</span>
-                                </div>
-                            </div>
-                            <div className="text-right font-mono"><FlashCell isPrice value={row.price} formatter={v => `$${v < 1 ? v.toFixed(5) : v.toLocaleString()}`} /></div>
-                            <div className="text-center font-black text-base">{(row.lsr30m || 0).toFixed(2)}</div>
-                            <div className="text-center font-black text-base">{(row.lsr4h || 0).toFixed(2)}</div>
-                            <div className="text-center font-black text-base">{(row.lsr12h || 0).toFixed(2)}</div>
-                            <div className="text-center font-black text-base">{(row.lsr24h || 0).toFixed(2)}</div>
-                            <div className="text-right font-black text-base"><FlashCell value={row.priceChangePercent} formatter={v => `${v > 0 ? '+' : ''}${v.toFixed(2)}%`} isPercent /></div>
-                        </div>
-                    ))}
+
+                <div className="flex-1 overflow-auto custom-scrollbar border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-[#1a1c1e]">
+                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                        <table className="w-full text-left border-collapse">
+                            <thead className="sticky top-0 z-10">
+                                <tr>
+                                    <SortableContext items={colOrder} strategy={horizontalListSortingStrategy}>
+                                        {colOrder.map(colId => (
+                                            <SortableTh key={colId} colId={colId} label={COLS[colId].label} />
+                                        ))}
+                                    </SortableContext>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {isLoadingTable ? (
+                                    <tr><td colSpan={colOrder.length} className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-[#dd9933]" size={32}/></td></tr>
+                                ) : (
+                                    sortedTickers.map(row => (
+                                        <LiveLsrRow key={row.symbol} row={row} colOrder={colOrder} />
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </DndContext>
                 </div>
             </div>
         );
     }
 
+    // --- RENDER MINIMIZED ---
     const lsrVal = displayLsr || 0;
     const lsrAngle = ((Math.min(Math.max(lsrVal, 1), 5) - 1) / 4) * 180;
 
