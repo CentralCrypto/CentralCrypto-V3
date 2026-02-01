@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Loader2, TrendingUp, BarChart3, Layers, AlertTriangle, LineChart, Info, ChevronLeft, ChevronRight, DollarSign, ArrowUp, ArrowDown } from 'lucide-react';
+import { Loader2, TrendingUp, BarChart3, Layers, LineChart, Info, ChevronLeft, ChevronRight, DollarSign, ArrowUp, ArrowDown } from 'lucide-react';
 import { fetchEtfFlow, fetchEtfDetailed, EtfFlowData } from '../services/api';
 import { DashboardItem, Language } from '../../../types';
 import { getTranslations } from '../../../locales';
@@ -106,6 +106,85 @@ const NoDataChart: React.FC = () => {
   );
 };
 
+// ----------- NORMALIZERS (fix “JSON tem daily mas caiu no fallback”) -----------
+
+const normalizeToFlatPoints = (raw: any): any[] => {
+  if (!raw) return [];
+
+  const mkTs = (t: any) => {
+    const n = Number(t);
+    if (!Number.isFinite(n)) return 0;
+    if (n < 10000000000) return n * 1000;
+    return n;
+  };
+
+  const fromDailyWrapper = (obj: any) => {
+    const daily = obj?.daily;
+    if (!Array.isArray(daily) || daily.length === 0) return [];
+    return daily.map((d: any) => {
+      const date = mkTs(d.timestamp ?? d.date ?? d.Timestamp ?? d.Date);
+      const flat: any = {
+        date,
+        totalGlobal: Number(d.totalGlobal ?? d.total ?? 0)
+      };
+      const per = d.perEtf ?? d.per_etf ?? d.etfs ?? d.ETFs ?? null;
+      if (per && typeof per === 'object') {
+        Object.keys(per).forEach(k => { flat[k] = Number(per[k] ?? 0); });
+      }
+      return flat;
+    }).filter((p: any) => Number.isFinite(p.date) && p.date > 0).sort((a: any, b: any) => a.date - b.date);
+  };
+
+  // already flat array: [{date,totalGlobal,IBIT,...}]
+  const fromFlatArray = (arr: any[]) => {
+    if (!Array.isArray(arr) || arr.length === 0) return [];
+    const f = arr[0];
+    if (f && typeof f === 'object' && (f.date || f.totalGlobal !== undefined)) {
+      return arr.map(p => ({
+        ...p,
+        date: Number(p.date),
+        totalGlobal: Number(p.totalGlobal ?? 0)
+      })).filter((p: any) => Number.isFinite(p.date) && p.date > 0);
+    }
+    return [];
+  };
+
+  // cases:
+  // 1) raw already flat array
+  if (Array.isArray(raw)) {
+    const flat = fromFlatArray(raw);
+    if (flat.length) return flat;
+
+    // 2) array wrapper: [{asset,metric,daily:[...]}]
+    const first = raw[0];
+    if (first && typeof first === 'object') {
+      const d1 = fromDailyWrapper(first);
+      if (d1.length) return d1;
+
+      // 3) array wrapper: [{data:{daily:[...]}}]
+      const d2 = fromDailyWrapper(first?.data);
+      if (d2.length) return d2;
+
+      // 4) sometimes: [{0:{daily:[...]}}] or random nesting
+      for (const k of Object.keys(first)) {
+        const d3 = fromDailyWrapper((first as any)[k]);
+        if (d3.length) return d3;
+      }
+    }
+    return [];
+  }
+
+  // object wrapper: {daily:[...]} or {data:{daily:[...]}}
+  if (raw && typeof raw === 'object') {
+    const d1 = fromDailyWrapper(raw);
+    if (d1.length) return d1;
+    const d2 = fromDailyWrapper((raw as any).data);
+    if (d2.length) return d2;
+  }
+
+  return [];
+};
+
 // --- CHARTS ---
 const StackedEtfChart: React.FC<ChartBaseProps> = React.memo(({ data, metric }) => {
   const chartRef = useRef<HTMLDivElement>(null);
@@ -189,7 +268,7 @@ const StackedEtfChart: React.FC<ChartBaseProps> = React.memo(({ data, metric }) 
     };
   }, [data, metric, isDark, textColor, gridColor]);
 
-  return <div ref={chartRef} className="w-full h-full min-h-[420px]" />;
+  return <div ref={chartRef} className="w-full min-h-[460px]" />;
 });
 
 const TotalBarChart: React.FC<ChartBaseProps> = React.memo(({ data, metric }) => {
@@ -270,7 +349,7 @@ const TotalBarChart: React.FC<ChartBaseProps> = React.memo(({ data, metric }) =>
     };
   }, [data, metric, isDark, textColor, gridColor]);
 
-  return <div ref={chartRef} className="w-full h-full min-h-[420px]" />;
+  return <div ref={chartRef} className="w-full min-h-[460px]" />;
 });
 
 const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }> = React.memo(({ data, metric, selectedTicker }) => {
@@ -344,7 +423,7 @@ const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }
 
   if (!selectedTicker) {
     return (
-      <div className="w-full h-full min-h-[420px] flex items-center justify-center text-gray-400">
+      <div className="w-full min-h-[460px] flex items-center justify-center text-gray-400">
         <div className="flex flex-col items-center gap-2">
           <LineChart size={28} />
           <span className="text-xs font-black uppercase">Selecione uma ETF</span>
@@ -353,10 +432,10 @@ const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }
     );
   }
 
-  return <div ref={chartRef} className="w-full h-full min-h-[420px]" />;
+  return <div ref={chartRef} className="w-full min-h-[460px]" />;
 });
 
-// --- MINI TABLE WITH PAGINATION & CARDS ---
+// --- MINI TABLE (NO INTERNAL SCROLL; PAGE SCROLL ONLY) ---
 const MarketSharePanel: React.FC<{
   data: any[],
   metric: Metric,
@@ -404,14 +483,14 @@ const MarketSharePanel: React.FC<{
   );
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex gap-2 mb-3 shrink-0">
+    <div className="flex flex-col gap-3">
+      <div className="flex gap-2">
         <SummaryCard label="1D" value={stats.d1} />
         <SummaryCard label="7D" value={stats.d7} />
         <SummaryCard label="30D" value={stats.d30} />
       </div>
 
-      <div className="p-3 bg-gray-50 dark:bg-black/30 border-b border-gray-100 dark:border-slate-800 font-black text-xs uppercase text-gray-500 tracking-widest flex items-center justify-between">
+      <div className="p-3 bg-gray-50 dark:bg-black/30 border border-gray-100 dark:border-slate-800 font-black text-xs uppercase text-gray-500 tracking-widest flex items-center justify-between rounded-lg">
         <div className="flex items-center gap-2"><Layers size={14} /> Market Share</div>
         <div className="flex items-center gap-2">
           <button onClick={handlePrev} disabled={selectedIndex <= 0} className="p-1 hover:text-[#dd9933] disabled:opacity-30 disabled:hover:text-gray-500">
@@ -424,12 +503,12 @@ const MarketSharePanel: React.FC<{
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar">
-        {ranking.length === 0 ? (
-          <div className="p-4 text-center text-xs text-gray-500">Sem dados para esta data.</div>
-        ) : (
+      {ranking.length === 0 ? (
+        <div className="p-4 text-center text-xs text-gray-500">{NO_DATA_MSG}</div>
+      ) : (
+        <div className="rounded-xl border border-gray-100 dark:border-slate-800 overflow-hidden bg-white dark:bg-[#1a1c1e]">
           <table className="w-full text-left text-xs">
-            <thead className="sticky top-0 bg-gray-50 dark:bg-black/20 text-gray-500 dark:text-slate-400 border-b border-gray-100 dark:border-slate-800">
+            <thead className="bg-gray-50 dark:bg-black/20 text-gray-500 dark:text-slate-400 border-b border-gray-100 dark:border-slate-800">
               <tr>
                 <th className="p-2 font-black uppercase">ETF</th>
                 <th className="p-2 text-right font-black uppercase">Value (USD)</th>
@@ -452,13 +531,13 @@ const MarketSharePanel: React.FC<{
               })}
             </tbody>
           </table>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };
 
-// --- BUBBLES ---
+// --- BUBBLES (ensure visible, never behind, never clipped) ---
 const EtfBubbles: React.FC<{
   data: any[],
   selectedIndex: number,
@@ -484,15 +563,18 @@ const EtfBubbles: React.FC<{
 
   if (!currentDay || bubbles.length === 0) {
     return (
-      <div className="h-full min-h-[380px] flex items-center justify-center text-xs text-gray-500">
-        {NO_DATA_MSG}
+      <div className="w-full rounded-xl border border-gray-100 dark:border-slate-800/50 bg-gray-50 dark:bg-black/20 min-h-[460px] flex items-center justify-center text-xs text-gray-500 relative overflow-hidden">
+        <div className="px-4 py-2 rounded-lg bg-black/40 text-white text-sm font-black z-10">{NO_DATA_MSG}</div>
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <img src={WATERMARK_URL} className="w-[42%] opacity-[0.06]" alt="watermark" />
+        </div>
       </div>
     );
   }
 
   const maxVal = Math.max(...bubbles.map(b => b.absVal)) || 1;
-  const minSize = 38;
-  const maxSize = 128;
+  const minSize = 42;
+  const maxSize = 140;
 
   const scaleMarks = useMemo(() => {
     const a = maxVal;
@@ -533,7 +615,7 @@ const EtfBubbles: React.FC<{
   };
 
   return (
-    <div className="flex flex-col h-full min-h-[420px] bg-gray-50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-slate-800 relative overflow-hidden">
+    <div className="w-full bg-gray-50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-slate-800 relative overflow-hidden min-h-[460px]">
       <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
         <img src={WATERMARK_URL} className="w-[40%] opacity-[0.05]" alt="watermark" />
       </div>
@@ -545,11 +627,11 @@ const EtfBubbles: React.FC<{
         <BubbleScale />
       </div>
 
-      <div className="flex-1 relative overflow-hidden flex flex-wrap content-center justify-center gap-4 p-4 z-10">
+      <div className="relative z-10 w-full flex flex-wrap justify-center content-center gap-4 p-4">
         {bubbles.map(b => {
           const size = b.hasVal
             ? (minSize + ((b.absVal / maxVal) * (maxSize - minSize)))
-            : 44;
+            : 48;
 
           const colorClass = !b.hasVal
             ? 'bg-gray-400/15 border-gray-400/30 text-gray-300'
@@ -575,7 +657,7 @@ const EtfBubbles: React.FC<{
   );
 };
 
-// --- TOOLTIP (kept) ---
+// --- TOOLTIP ---
 const HelpTooltip = () => (
   <div className="absolute top-2 right-2 group z-20">
     <Info size={16} className="text-gray-400 hover:text-[#dd9933] cursor-help" />
@@ -604,17 +686,25 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
     fetchEtfFlow().then(res => setSummaryData(res));
   }, []);
 
+  const flowsNotAvailable = useMemo(() => {
+    return (asset === 'DOGE' || asset === 'LTC') && metric === 'flows';
+  }, [asset, metric]);
+
   useEffect(() => {
     setLoading(true);
 
     fetchEtfDetailed(asset as any, metric as any).then(res => {
-      const arr = Array.isArray(res) ? res : [];
-      setData(arr);
-      setSelectedIndex(arr.length > 0 ? arr.length - 1 : -1);
+      const flat = normalizeToFlatPoints(res);
+      setData(flat);
+      setSelectedIndex(flat.length > 0 ? flat.length - 1 : -1);
 
-      const allKeys = getAllTickerKeys(arr);
-      if (viewMode === 'lines') setSelectedTicker(allKeys[0] || null);
+      const keys = getAllTickerKeys(flat);
+      if (viewMode === 'lines') setSelectedTicker(keys[0] || null);
 
+      setLoading(false);
+    }).catch(() => {
+      setData([]);
+      setSelectedIndex(-1);
       setLoading(false);
     });
   }, [asset, metric]);
@@ -637,21 +727,16 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
 
   const flowColor = totalHeaderFlow >= 0 ? 'text-green-500' : 'text-red-500';
 
-  const unsupportedCombo = useMemo(() => {
-    const flowsNotAvailable = (asset === 'DOGE' || asset === 'LTC') && metric === 'flows';
-    return flowsNotAvailable;
-  }, [asset, metric]);
-
   const ChartAreaEl = useMemo(() => {
     if (loading) {
       return (
-        <div className="absolute inset-0 flex items-center justify-center">
+        <div className="w-full min-h-[460px] flex items-center justify-center">
           <Loader2 className="animate-spin text-gray-400" />
         </div>
       );
     }
 
-    if (unsupportedCombo) return <NoDataChart />;
+    if (flowsNotAvailable) return <NoDataChart />;
 
     if (!data || data.length === 0) {
       return <NoDataChart />;
@@ -660,10 +745,10 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
     if (viewMode === 'total') return <TotalBarChart data={data} metric={metric} asset={asset} />;
     if (viewMode === 'lines') return <EtfLinesChart data={data} metric={metric} asset={asset} selectedTicker={selectedTicker} />;
     return <StackedEtfChart data={data} metric={metric} asset={asset} />;
-  }, [loading, data, metric, asset, viewMode, selectedTicker, unsupportedCombo]);
+  }, [loading, data, metric, asset, viewMode, selectedTicker, flowsNotAvailable]);
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-[#1a1c1e] text-gray-900 dark:text-white overflow-hidden p-6">
+    <div className="bg-white dark:bg-[#1a1c1e] text-gray-900 dark:text-white p-6">
       {/* TOP BAR */}
       <div className="flex flex-col gap-3 mb-6 border-b border-gray-100 dark:border-slate-800 pb-4">
         <div className="flex justify-between items-center flex-wrap gap-4">
@@ -695,7 +780,8 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
             <div className="flex bg-gray-100 dark:bg-black/30 p-1 rounded-lg border border-gray-200 dark:border-slate-700">
               <button
                 onClick={() => setMetric('flows')}
-                className={`px-4 py-1.5 text-xs font-black rounded flex items-center gap-2 transition-all ${metric === 'flows' ? 'bg-white dark:bg-[#2f3032] text-[#dd9933] shadow' : 'text-gray-500 hover:text-white'}`}
+                disabled={asset === 'DOGE' || asset === 'LTC'}
+                className={`px-4 py-1.5 text-xs font-black rounded flex items-center gap-2 transition-all ${metric === 'flows' ? 'bg-white dark:bg-[#2f3032] text-[#dd9933] shadow' : 'text-gray-500 hover:text-white'} ${(asset === 'DOGE' || asset === 'LTC') ? 'opacity-40 cursor-not-allowed' : ''}`}
               >
                 <TrendingUp size={14} /> Flows
               </button>
@@ -731,7 +817,7 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
           </div>
         </div>
 
-        {viewMode === 'lines' && !unsupportedCombo && (
+        {viewMode === 'lines' && !flowsNotAvailable && (
           <div className="flex gap-2 flex-wrap mt-2">
             {allTickers.map(t => (
               <button
@@ -746,17 +832,17 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
         )}
       </div>
 
-      {/* MAIN GRID LAYOUT (no hard height lock / no % split) */}
-      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* LEFT */}
-        <div className="lg:col-span-2 flex flex-col gap-6 min-h-0 overflow-visible">
-          <div className="relative bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4 overflow-visible min-h-[460px]">
+      {/* LAYOUT FIX: NO INTERNAL SCROLL, NO OVERFLOW HIDDEN, HEIGHT = CONTENT */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* LEFT COLUMN: always stack both charts fully */}
+        <div className="lg:col-span-2 flex flex-col gap-6">
+          <div className="relative bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4">
             {ChartAreaEl}
-            {!unsupportedCombo && !loading && data.length > 0 && <HelpTooltip />}
+            {!flowsNotAvailable && !loading && data.length > 0 && <HelpTooltip />}
           </div>
 
-          <div className="min-h-[460px] overflow-visible">
-            {unsupportedCombo || loading || data.length === 0 ? (
+          <div className="relative">
+            {(flowsNotAvailable || loading || data.length === 0) ? (
               <NoDataChart />
             ) : (
               <EtfBubbles
@@ -769,10 +855,10 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
           </div>
         </div>
 
-        {/* RIGHT */}
-        <div className="bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-slate-800 rounded-xl flex flex-col overflow-hidden min-h-0">
+        {/* RIGHT COLUMN: NO internal scroll; let page scroll */}
+        <div className="bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-slate-800 rounded-xl p-4">
           {loading ? (
-            <div className="flex-1 flex items-center justify-center"><Loader2 className="animate-spin text-gray-400" /></div>
+            <div className="min-h-[460px] flex items-center justify-center"><Loader2 className="animate-spin text-gray-400" /></div>
           ) : (
             <MarketSharePanel
               data={data}
