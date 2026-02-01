@@ -13,7 +13,7 @@ import {
   fetchRsiTable,
   fetchRsiTablePage,
   fetchRsiTrackerHist
-} from '../services/api';
+} from '../../../services/api';
 
 import {
   DndContext,
