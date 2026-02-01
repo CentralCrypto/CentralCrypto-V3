@@ -6,7 +6,7 @@ import * as RGL from 'react-grid-layout';
 import * as uuidModule from 'uuid';
 import { CheckCircle, Loader2, Plus, Save, RotateCcw, Layout as LayoutIcon } from 'lucide-react';
 import { DashboardItem, WidgetType, ApiCoin, Language, Layout } from '../types';
-import { fetchTopCoins } from './Workspace/services/api';
+import { fetchTopCoins } from '../services/api';
 import GridHeader from './Workspace/components/GridHeader';
 import TVChartContainer from './Cockpit/components/TVChartContainer';
 

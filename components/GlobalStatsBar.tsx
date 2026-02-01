@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { fetchWithFallback } from '../pages/Workspace/services/api';
+import { fetchWithFallback } from '../services/api';
 
 const formatUSD = (num: number) => {
   if (num > 1e12) return "$" + (num/1e12).toFixed(2) + "T";

@@ -3,7 +3,7 @@ import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { ResponsiveContainer, Treemap } from 'recharts';
 import { createPortal } from 'react-dom';
 import { Loader2, Maximize2, RefreshCw, AlertTriangle, BarChart2, PieChart, Minimize2, Layers, ZoomOut } from 'lucide-react';
-import { fetchWithFallback } from '../services/api';
+import { fetchWithFallback } from '../../../services/api';
 import { DashboardItem } from '../../../types';
 import CoinLogo from '../../../components/CoinLogo';
 

@@ -27,7 +27,7 @@ import {
 import { ViewMode, Language } from '../types';
 import { UserData } from '../services/auth';
 import { getTranslations, LANGUAGES_CONFIG } from '../locales';
-import { fetchTopCoins } from '../pages/Workspace/services/api';
+import { fetchTopCoins } from '../services/api';
 import { useBinanceWS } from '../services/BinanceWebSocketContext';
 import CoinLogo from './CoinLogo';
 

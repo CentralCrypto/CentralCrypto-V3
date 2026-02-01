@@ -19,7 +19,7 @@ import {
     fetchMarketCapHistory,
     fetchEconomicCalendar,
     fetchFearAndGreed
-} from './Workspace/services/api';
+} from '../services/api';
 import CoinLogo from '../components/CoinLogo';
 
 interface DashboardProps {
@@ -243,25 +243,14 @@ const RsiWidget = ({ language, onNavigate }: { language: Language; onNavigate: (
 
   const refresh = async () => {
     try {
-      // Direct call to ensure filename is correct (/rsiavg.json)
-      const res: any = await fetchWithFallback('/cachecko/rsiavg.json');
+      const res: any = await fetchRsiAverage();
       if (res) {
-          let o = res;
-          // Robust parsing logic for n8n array vs object structure
-          if (Array.isArray(res) && res.length > 0) {
-              o = res[0]?.data?.overall || res[0];
-          } else if (res?.data?.overall) {
-              o = res.data.overall;
-          }
-
-          if (o) {
-              setData({
-                  averageRsi: Number(o.averageRsi ?? 50),
-                  yesterday: Number(o.yesterday ?? 50),
-                  days7Ago: Number(o.days7Ago ?? 50),
-                  days30Ago: Number(o.days30Ago ?? 50)
-              });
-          }
+          setData({
+              averageRsi: Number(res.averageRsi ?? 50),
+              yesterday: Number(res.yesterday ?? 50),
+              days7Ago: Number(res.days7Ago ?? 50),
+              days30Ago: Number(res.days30Ago ?? 50)
+          });
       }
     } finally {
       setLoading(false);

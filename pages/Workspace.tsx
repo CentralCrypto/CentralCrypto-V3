@@ -7,7 +7,7 @@ import { CheckCircle, Loader2, Lock, Crown, AlertTriangle, X } from 'lucide-reac
 
 import { Dashboard, DashboardItem, WidgetType, DashboardState, UserTier, ApiCoin, Language, Layout } from '../types';
 import { createNewDashboard, COLS, ROW_HEIGHT, BREAKPOINTS, AVAILABLE_WIDGETS, TIER_LIMITS, FALLBACK_COINS } from './Workspace/constants';
-import { fetchTopCoins } from './Workspace/services/api';
+import { fetchTopCoins } from '../services/api';
 
 import Toolbar from './Workspace/components/Toolbar';
 import GridHeader from './Workspace/components/GridHeader';

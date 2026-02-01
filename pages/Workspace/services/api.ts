@@ -165,8 +165,8 @@ export interface EtfFlowData {
   ethValue: number;
   netFlow: number;
   timestamp: number;
-  chartDataBTC: any[];
-  chartDataETH: any[];
+  chartDataBTC: any[]; 
+  chartDataETH: any[]; 
   history: { lastWeek: number; lastMonth: number; last90d: number; };
   solValue: number;
   xrpValue: number;
@@ -273,11 +273,11 @@ export interface RsiTablePageResult {
   totalItems: number;
 }
 
-export interface MacdTablePageResult {
-  items: MacdTrackerPoint[];
-  page: number;
-  totalPages: number;
-  totalItems: number;
+export interface MacdTablePageResult { 
+  items: MacdTrackerPoint[]; 
+  page: number; 
+  totalPages: number; 
+  totalItems: number; 
 }
 
 const tfKeyFromSort = (sort: string): RsiTimeframeKey | null => {
@@ -603,10 +603,243 @@ export const fetchEconomicCalendar = async (): Promise<EconEvent[]> => {
 
 // -------------------- ETF --------------------
 
+// Simple fetch for summary widget
+export const fetchEtfFlow = async (): Promise<EtfFlowData | null> => {
+  try {
+      const summaryRaw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.etfNetFlow));
+      if (!summaryRaw) return null;
+
+      const root = Array.isArray(summaryRaw) ? summaryRaw[0] : summaryRaw;
+      const data = (root && typeof root === 'object' && (root as any).data) ? (root as any).data : root;
+      const status = (root && typeof root === 'object' && (root as any).status) ? (root as any).status : null;
+
+      return {
+        btcValue: Number(data?.totalBtcValue ?? data?.btcValue ?? 0),
+        ethValue: Number(data?.totalEthValue ?? data?.ethValue ?? 0),
+        netFlow: Number(data?.total ?? data?.netFlow ?? 0),
+        timestamp: status?.timestamp ? new Date(status.timestamp).getTime() : Date.now(),
+        chartDataBTC: [], // Used detailed fetcher instead
+        chartDataETH: [], // Used detailed fetcher instead
+        history: data?.history || { lastWeek: 0, lastMonth: 0, last90d: 0 },
+        solValue: Number(data?.solValue ?? 0),
+        xrpValue: Number(data?.xrpValue ?? 0)
+      };
+  } catch (e) {
+      console.error("Error fetching ETF data", e);
+      return null;
+  }
+};
+
+export type EtfAsset = 'BTC' | 'ETH' | 'SOL' | 'XRP' | 'DOGE' | 'LTC';
+export type EtfMetric = 'flows' | 'volume';
+
+const resolveEtfEndpoint = (asset: EtfAsset, metric: EtfMetric): string | null => {
+  const filesObj = (ENDPOINTS as any)?.cachecko?.files ?? (ENDPOINTS as any)?.cachecko?.files ?? (ENDPOINTS as any)?.cachecko?.files;
+
+  const obj = filesObj || (ENDPOINTS as any)?.cachecko?.files || (ENDPOINTS as any)?.cachecko?.files || {};
+  const pick = (...keys: string[]) => {
+    for (const k of keys) {
+      const v = obj?.[k];
+      if (typeof v === 'string' && v.trim()) return v;
+    }
+    return null;
+  };
+
+  if (asset === 'BTC') return metric === 'flows'
+    ? pick('etfBtcFlows')
+    : pick('etfBtcVolume', 'etfBtcVolumes');
+
+  if (asset === 'ETH') return metric === 'flows'
+    ? pick('etfEthFlows')
+    : pick('etfEthVolume', 'etfEthVolumes');
+
+  if (asset === 'SOL') return metric === 'flows'
+    ? pick('etfSolFlows')
+    : pick('etfSolVolume', 'etfSolVolumes');
+
+  if (asset === 'XRP') return metric === 'flows'
+    ? pick('etfXrpFlows')
+    : pick('etfXrpVolume', 'etfXrpVolumes');
+
+  if (asset === 'DOGE') return metric === 'volume'
+    ? (pick('etfDogeVolume', 'etfDogeVolumes') || 'spot-doge-etf-volumes.json')
+    : null;
+
+  if (asset === 'LTC') return metric === 'volume'
+    ? (pick('etfLtcVolume', 'etfLtcVolumes') || 'spot-ltc-etf-volumes.json')
+    : null;
+
+  return null;
+};
+
+// Processador seguro de data - CORRIGIDO PARA DETECTAR SEGUNDOS VS MS
+const processChartDate = (dateInput: string | number) => {
+    if (!dateInput) return 0;
+    
+    // Se for número
+    if (typeof dateInput === 'number') {
+        if (dateInput < 10000000000) {
+            return dateInput * 1000;
+        }
+        return dateInput;
+    }
+    
+    // Se for string
+    const date = new Date(dateInput);
+    return !isNaN(date.getTime()) ? date.getTime() : 0;
+};
+
+// Helpers para “desembrulhar” JSONs do TheBlock/TBStat/cache n8n
+const tryJsonParse = (v: any): any => {
+  if (typeof v !== 'string') return v;
+  const s = v.trim();
+  if (!s) return null;
+  try {
+    return JSON.parse(s);
+  } catch {
+    return null;
+  }
+};
+
+const unwrapPossibleDataNode = (raw: any): any => {
+  if (!raw) return null;
+
+  // Caso: [{ slug, data: "{...}" }]
+  if (Array.isArray(raw) && raw.length > 0 && raw[0] && typeof raw[0] === 'object') {
+    const first = raw[0] as any;
+    // prioridade: first.data, first.jsonFile?.data, first.data?.jsonFile?.data
+    const cand =
+      first.data ??
+      first.jsonFile?.data ??
+      first.data?.jsonFile?.data ??
+      null;
+
+    const parsed = tryJsonParse(cand);
+    return parsed ?? cand ?? first;
+  }
+
+  // Caso: { data: "{...}" } ou { jsonFile: { data: "{...}" } }
+  if (raw && typeof raw === 'object') {
+    const cand =
+      (raw as any).data ??
+      (raw as any).jsonFile?.data ??
+      (raw as any).jsonFile ??
+      null;
+
+    const parsed = tryJsonParse(cand);
+    return parsed ?? cand ?? raw;
+  }
+
+  // Caso: string direta
+  const parsed = tryJsonParse(raw);
+  return parsed ?? raw;
+};
+
+// Converte TBStat Series -> daily[]
+const seriesToDaily = (seriesObj: any): any[] => {
+  if (!seriesObj || typeof seriesObj !== 'object') return [];
+
+  const byTs: Record<number, { timestamp: number; totalGlobal: number; perEtf: Record<string, number> }> = {};
+
+  Object.keys(seriesObj).forEach((ticker) => {
+    const node = seriesObj[ticker];
+    const arr = node?.Data;
+    if (!Array.isArray(arr)) return;
+
+    arr.forEach((p: any) => {
+      const tsSec = Number(p?.Timestamp);
+      const val = Number(p?.Result);
+      if (!Number.isFinite(tsSec) || !Number.isFinite(val)) return;
+
+      if (!byTs[tsSec]) {
+        byTs[tsSec] = { timestamp: tsSec, totalGlobal: 0, perEtf: {} };
+      }
+      byTs[tsSec].perEtf[ticker] = val;
+      byTs[tsSec].totalGlobal += val;
+    });
+  });
+
+  return Object.values(byTs).sort((a, b) => a.timestamp - b.timestamp);
+};
+
+export const fetchEtfDetailed = async (asset: EtfAsset, metric: EtfMetric): Promise<any[]> => {
+    const endpoint = resolveEtfEndpoint(asset, metric);
+    if (!endpoint) return [];
+
+    const raw = await fetchWithFallback(getCacheckoUrl(endpoint));
+    if (!raw) return [];
+
+    const unwrapped = unwrapPossibleDataNode(raw);
+
+    let dailyData: any[] = [];
+
+    if (unwrapped?.daily && Array.isArray(unwrapped.daily)) {
+      dailyData = unwrapped.daily;
+    } else if (unwrapped?.data?.daily && Array.isArray(unwrapped.data.daily)) {
+      dailyData = unwrapped.data.daily;
+    } else if (Array.isArray(unwrapped)) {
+      dailyData = unwrapped;
+    }
+
+    if (dailyData.length === 0) {
+      const seriesObj =
+        unwrapped?.Series ??
+        unwrapped?.jsonFile?.Series ??
+        unwrapped?.data?.Series ??
+        null;
+
+      if (seriesObj && typeof seriesObj === 'object') {
+        dailyData = seriesToDaily(seriesObj);
+      }
+    }
+
+    if (!Array.isArray(dailyData) || dailyData.length === 0) return [];
+
+    return dailyData.map((d: any) => {
+        const tsIn =
+          d.timestamp ??
+          d.Timestamp ??
+          d.date ??
+          d.Date ??
+          null;
+
+        const timestamp = processChartDate(tsIn as any);
+
+        const flatPoint: any = {
+            date: timestamp,
+            totalGlobal: Number(d.totalGlobal ?? d.total ?? 0)
+        };
+
+        const per =
+          (d.perEtf && typeof d.perEtf === 'object') ? d.perEtf :
+          (d.etfs && typeof d.etfs === 'object') ? d.etfs :
+          (d.ETFs && typeof d.ETFs === 'object') ? d.ETFs :
+          null;
+
+        if (per) {
+          let sum = 0;
+          Object.keys(per).forEach(ticker => {
+            const val = Number(per[ticker]);
+            const n = Number.isFinite(val) ? val : 0;
+            flatPoint[ticker] = n;
+            sum += n;
+          });
+          if (!Number.isFinite(flatPoint.totalGlobal) || flatPoint.totalGlobal === 0) {
+            flatPoint.totalGlobal = sum;
+          }
+        }
+
+        return flatPoint;
+    }).filter(p => Number.isFinite(p.date) && p.date > 0).sort((a: any, b: any) => a.date - b.date);
+};
+
+// -------------------- BINANCE & EXCHANGES LSR --------------------
+
+// Modificado para suportar múltiplas exchanges
 export const fetchLongShortRatio = async (symbol: string, period: string, exchange: string = 'Binance'): Promise<LsrData> => {
   const cleanSymbol = symbol.toUpperCase().endsWith('USDT') ? symbol.toUpperCase() : `${symbol.toUpperCase()}USDT`;
   const cleanPeriod = period.toLowerCase();
-
+  
   try {
       if (exchange === 'Binance') {
           const binanceUrl = `https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol=${cleanSymbol}&period=${cleanPeriod}&limit=1`;
@@ -615,14 +848,15 @@ export const fetchLongShortRatio = async (symbol: string, period: string, exchan
           if (Array.isArray(data) && data.length > 0) {
             const p = data[0];
             return {
+              exchange,
               lsr: isFinite(parseFloat(p.longShortRatio)) ? parseFloat(p.longShortRatio) : null,
               longs: isFinite(parseFloat(p.longAccount)) ? parseFloat(p.longAccount) * 100 : null,
-              shorts: isFinite(parseFloat(p.shortAccount)) ? parseFloat(p.shortAccount) * 100 : null,
-              exchange
+              shorts: isFinite(parseFloat(p.shortAccount)) ? parseFloat(p.shortAccount) * 100 : null
             };
           }
       } 
       else if (exchange === 'Bybit') {
+           // Bybit usa símbolos diferentes, ex: BTCUSDT. 
            let bbPeriod = cleanPeriod;
            if (bbPeriod === '1d') bbPeriod = '1d';
            else if (bbPeriod === '5m') bbPeriod = '5min'; 
@@ -637,16 +871,18 @@ export const fetchLongShortRatio = async (symbol: string, period: string, exchan
            if (json.retCode === 0 && json.result && json.result.list && json.result.list.length > 0) {
                const item = json.result.list[0];
                return {
+                   exchange,
                    lsr: parseFloat(item.ratio),
                    longs: parseFloat(item.buyRatio) * 100,
-                   shorts: parseFloat(item.sellRatio) * 100,
-                   exchange
+                   shorts: parseFloat(item.sellRatio) * 100
                };
            }
       }
       else if (exchange === 'OKX') {
+           // OKX usa instId com hifen, ex: BTC-USDT-SWAP
            const instId = cleanSymbol.replace('USDT', '-USDT-SWAP');
-           let okPeriod = cleanPeriod.toUpperCase();
+           // Period: 5m, 1H->1h
+           let okPeriod = cleanPeriod.toUpperCase(); // OKX usa upper case
            const url = `https://www.okx.com/api/v5/rubik/stat/taker-long-short-ratio?instId=${instId}&period=${okPeriod}`;
            const res = await fetch(url);
            const json = await res.json();
@@ -654,13 +890,18 @@ export const fetchLongShortRatio = async (symbol: string, period: string, exchan
                const item = json.data[0];
                const ratio = parseFloat(item.buySellRatio);
                return {
+                   exchange,
                    lsr: ratio,
-                   longs: null,
-                   shorts: null,
-                   exchange
+                   longs: null, 
+                   shorts: null
                };
            }
       }
+      else if (exchange === 'Mexc') {
+          // Mexc public LSR endpoint is tricky or requires auth often. Placeholder.
+          return { lsr: null, longs: null, shorts: null, exchange };
+      }
+
   } catch (e) {
       console.warn(`LSR fetch failed for ${exchange}`, e);
   }

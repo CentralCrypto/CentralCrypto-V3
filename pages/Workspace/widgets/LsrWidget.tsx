@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Loader2, AlertTriangle, ChevronsUpDown, GripVertical } from 'lucide-react';
-import { LsrData, fetchLongShortRatio, fetchTopCoins } from '../services/api'; 
+import { LsrData, fetchLongShortRatio, fetchTopCoins } from '../../../services/api'; 
 import { DashboardItem, Language } from '../../../types';
 import { getTranslations } from '../../../locales';
 import { useBinanceWS } from '../../../services/BinanceWebSocketContext';
