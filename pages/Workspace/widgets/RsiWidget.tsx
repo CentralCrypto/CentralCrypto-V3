@@ -791,7 +791,7 @@ export const RsiFaq: React.FC<{ language?: Language }> = ({ language = 'pt' }) =
 };
 
 const RsiWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ item, language = 'pt' }) => {
-    // 1. Grid Mode: Simplified Widget
+    // 1. Grid Mode: Simplified Widget:
     if (!item.isMaximized) {
         return <RsiGridWidget language={language} />;
     }

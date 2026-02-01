@@ -832,7 +832,7 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
   );
 };
 
-// --- MINIMIZED WIDGET (SUMMARY) ---
+// --- MINIMIZED WIDGET (SUMMARY): ---
 const EtfSummary: React.FC<{ language: Language }> = ({ language }) => {
   const [etfData, setEtfData] = useState<EtfFlowData | null>(null);
   const t = getTranslations(language).workspace.widgets.etf;
