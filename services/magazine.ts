@@ -221,7 +221,28 @@ export async function fetchMagazinePosts(params: {
   });
 
   const rawPosts = Array.isArray(data) ? data : [];
-  const posts = rawPosts.map(normalizePost).filter((p: any) => p.id > 0);
+  let posts = rawPosts.map(normalizePost).filter((p: any) => p.id > 0);
+
+  // CLIENT-SIDE FILTERING (FALLBACK)
+  // Garante que mesmo que a API ignore o categories_exclude (cache do WP, etc),
+  // o front remove os posts proibidos manualmente.
+  if (params.categoriesExclude) {
+    const excludedIds = String(params.categoriesExclude)
+        .split(',')
+        .map(id => parseInt(id.trim(), 10))
+        .filter(n => !isNaN(n));
+
+    if (excludedIds.length > 0) {
+        posts = posts.filter(post => {
+            // Se o post não tem categorias, mantemos (segurança)
+            if (!post.categories || post.categories.length === 0) return true;
+            
+            // Se o post tiver ALGUMA das categorias proibidas, ele é removido
+            const hasExcluded = post.categories.some(catId => excludedIds.includes(catId));
+            return !hasExcluded;
+        });
+    }
+  }
 
   let total = posts.length;
   let totalPages = 1;

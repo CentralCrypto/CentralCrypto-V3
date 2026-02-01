@@ -1,3 +1,4 @@
+
 import { ApiCoin } from '../types';
 import { httpGetJson } from './http';
 import { getCacheckoUrl, ENDPOINTS } from './endpoints';
@@ -647,11 +648,11 @@ const resolveEtfEndpoint = (asset: EtfAsset, metric: EtfMetric): string | null =
 
   if (asset === 'BTC') return metric === 'flows'
     ? pick('etfBtcFlows')
-    : pick('etfBtcVolume', 'etfBtcVolumes');
+    : (pick('etfBtcVolume', 'etfBtcVolumes') || 'spot-btc-etf-volumes.json');
 
   if (asset === 'ETH') return metric === 'flows'
     ? pick('etfEthFlows')
-    : pick('etfEthVolume', 'etfEthVolumes');
+    : (pick('etfEthVolume', 'etfEthVolumes') || 'spot-eth-etf-volumes.json');
 
   if (asset === 'SOL') return metric === 'flows'
     ? pick('etfSolFlows')

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Loader2, TrendingUp, BarChart3, Layers, AlertTriangle, LineChart, Info, ChevronLeft, ChevronRight, DollarSign, ArrowUp, ArrowDown } from 'lucide-react';
 import { fetchEtfFlow, fetchEtfDetailed, EtfFlowData } from '../../../services/api';
@@ -184,7 +185,7 @@ const StackedEtfChart: React.FC<ChartBaseProps> = ({ data, metric, allTickers, c
     };
   }, [data, metric, allTickers.join('|'), isDark, textColor, gridColor]);
 
-  return <div ref={chartRef} className="w-full min-h-[420px]" />;
+  return <div ref={chartRef} className="w-full h-full min-h-[300px]" />;
 };
 
 const TotalBarChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
@@ -259,7 +260,7 @@ const TotalBarChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
     };
   }, [data, metric, isDark, textColor, gridColor]);
 
-  return <div ref={chartRef} className="w-full min-h-[420px]" />;
+  return <div ref={chartRef} className="w-full h-full min-h-[300px]" />;
 };
 
 const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }> = ({ data, metric, selectedTicker, colorMap }) => {
@@ -327,7 +328,7 @@ const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }
 
   if (!selectedTicker) {
     return (
-      <div className="w-full min-h-[420px] flex items-center justify-center text-gray-400">
+      <div className="w-full h-full min-h-[300px] flex items-center justify-center text-gray-400">
         <div className="flex flex-col items-center gap-2">
           <LineChart size={28} />
           <span className="text-xs font-black uppercase">Selecione uma ETF</span>
@@ -336,7 +337,7 @@ const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }
     );
   }
 
-  return <div ref={chartRef} className="w-full min-h-[420px]" />;
+  return <div ref={chartRef} className="w-full h-full min-h-[300px]" />;
 };
 
 // --- MINI TABLE (NO INTERNAL SCROLL) ---
@@ -417,14 +418,14 @@ const MarketSharePanel: React.FC<{
   };
 
   return (
-    <div className="flex flex-col h-full min-h-0">
-      <div className="flex gap-2 mb-3">
+    <div className="flex flex-col h-full overflow-hidden">
+      <div className="flex gap-2 mb-3 shrink-0">
         <SummaryCard label="1D" value={stats.d1} />
         <SummaryCard label="7D" value={stats.d7} />
         <SummaryCard label="30D" value={stats.d30} />
       </div>
 
-      <div className="p-3 bg-gray-50 dark:bg-black/30 border-b border-gray-100 dark:border-slate-800 font-black text-xs uppercase text-gray-500 tracking-widest flex items-center justify-between">
+      <div className="p-3 bg-gray-50 dark:bg-black/30 border-b border-gray-100 dark:border-slate-800 font-black text-xs uppercase text-gray-500 tracking-widest flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2"><Layers size={14} /> Market Share</div>
         <div className="flex items-center gap-2">
           <button onClick={handlePrev} disabled={safeIndex <= 0} className="p-1 hover:text-[#dd9933] disabled:opacity-30 disabled:hover:text-gray-500"><ChevronLeft size={16} /></button>
@@ -433,42 +434,44 @@ const MarketSharePanel: React.FC<{
         </div>
       </div>
 
-      {ranking.length === 0 ? (
-        <div className="p-4 text-center text-xs text-gray-500">Sem dados para esta data.</div>
-      ) : (
-        <table className="w-full text-left text-xs">
-          <thead className="bg-gray-50 dark:bg-black/20 text-gray-500 dark:text-slate-400 border-b border-gray-100 dark:border-slate-800">
-            <tr>
-              <th className="p-2 font-black uppercase">ETF</th>
-              <th className="p-2 text-right font-black uppercase">Value (USD)</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
-            {ranking.map(item => {
-              const isPos = item.value >= 0;
-              const colorClass = metric === 'volume'
-                ? 'text-gray-900 dark:text-white'
-                : (isPos ? 'text-green-400' : 'text-red-400');
+      <div className="flex-1 overflow-y-auto custom-scrollbar">
+        {ranking.length === 0 ? (
+          <div className="p-4 text-center text-xs text-gray-500">Sem dados para esta data.</div>
+        ) : (
+          <table className="w-full text-left text-xs">
+            <thead className="bg-gray-50 dark:bg-black/20 text-gray-500 dark:text-slate-400 border-b border-gray-100 dark:border-slate-800 sticky top-0 z-10">
+              <tr>
+                <th className="p-2 font-black uppercase">ETF</th>
+                <th className="p-2 text-right font-black uppercase">Value (USD)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+              {ranking.map(item => {
+                const isPos = item.value >= 0;
+                const colorClass = metric === 'volume'
+                  ? 'text-gray-900 dark:text-white'
+                  : (isPos ? 'text-green-400' : 'text-red-400');
 
-              const dot = colorMap[item.ticker] ?? '#94a3b8';
+                const dot = colorMap[item.ticker] ?? '#94a3b8';
 
-              return (
-                <tr key={item.ticker} className="hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">
-                  <td className="p-2 font-bold text-gray-700 dark:text-slate-300">
-                    <span className="inline-flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: dot }} />
-                      {item.ticker}
-                    </span>
-                  </td>
-                  <td className={`p-2 text-right font-mono font-black ${colorClass}`}>
-                    ${formatCompactNumber(item.value)}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      )}
+                return (
+                  <tr key={item.ticker} className="hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">
+                    <td className="p-2 font-bold text-gray-700 dark:text-slate-300">
+                      <span className="inline-flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: dot }} />
+                        {item.ticker}
+                      </span>
+                    </td>
+                    <td className={`p-2 text-right font-mono font-black ${colorClass}`}>
+                      ${formatCompactNumber(item.value)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 };
@@ -503,8 +506,8 @@ const EtfBubbles: React.FC<{
 
   if (!currentDay || bubbles.length === 0) {
     return (
-      <div className="w-full bg-gray-50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-slate-800">
-        <div className="h-[260px] flex items-center justify-center text-xs text-gray-500">Sem dados de bolhas.</div>
+      <div className="flex-1 h-full bg-gray-50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-slate-800 flex items-center justify-center">
+        <div className="text-xs text-gray-500">Sem dados de bolhas.</div>
       </div>
     );
   }
@@ -527,8 +530,8 @@ const EtfBubbles: React.FC<{
   };
 
   return (
-    <div className="w-full bg-gray-50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-slate-800">
-      <div className="flex items-center justify-between mb-3">
+    <div className="flex flex-col h-full bg-gray-50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-slate-800 overflow-hidden">
+      <div className="flex items-center justify-between mb-3 shrink-0">
         <div className="flex items-center gap-2 text-xs font-black uppercase text-gray-500 dark:text-gray-400">
           <DollarSign size={14} /> ETF Bubbles
         </div>
@@ -539,35 +542,37 @@ const EtfBubbles: React.FC<{
         </div>
       </div>
 
-      <div className="relative w-full min-h-[320px] flex flex-wrap content-center justify-center gap-4 p-3">
-        {bubbles.map(b => {
-          const size = b.hasValue
-            ? (minSize + ((b.absVal / maxVal) * (maxSize - minSize)))
-            : 52;
+      <div className="flex-1 relative w-full overflow-y-auto custom-scrollbar">
+        <div className="flex flex-wrap content-start justify-center gap-4 p-3 min-h-full">
+            {bubbles.map(b => {
+            const size = b.hasValue
+                ? (minSize + ((b.absVal / maxVal) * (maxSize - minSize)))
+                : 52;
 
-          const baseColor = colorMap[b.id] ?? '#94a3b8';
+            const baseColor = colorMap[b.id] ?? '#94a3b8';
 
-          const bgStyle = b.hasValue
-            ? {
-              background: `radial-gradient(circle at 30% 30%, rgba(255,255,255,0.22), rgba(255,255,255,0.06) 40%, rgba(0,0,0,0.12) 100%), ${baseColor}22`
-            }
-            : {
-              background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.18), rgba(255,255,255,0.06) 45%, rgba(0,0,0,0.14) 100%), rgba(148,163,184,0.20)'
-            };
+            const bgStyle = b.hasValue
+                ? {
+                background: `radial-gradient(circle at 30% 30%, rgba(255,255,255,0.22), rgba(255,255,255,0.06) 40%, rgba(0,0,0,0.12) 100%), ${baseColor}22`
+                }
+                : {
+                background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.18), rgba(255,255,255,0.06) 45%, rgba(0,0,0,0.14) 100%), rgba(148,163,184,0.20)'
+                };
 
-          return (
-            <div
-              key={b.id}
-              className="rounded-full border border-white/10 flex flex-col items-center justify-center transition-transform duration-300 hover:scale-110 shadow-lg backdrop-blur-sm text-slate-50"
-              style={{ width: size, height: size, ...(bgStyle as any) }}
-            >
-              <span className="font-black text-[10px] sm:text-xs leading-none">{b.id}</span>
-              <span className="text-[9px] sm:text-[10px] font-bold mt-0.5">
-                ${formatCompactNumber(b.val)}
-              </span>
-            </div>
-          );
-        })}
+            return (
+                <div
+                key={b.id}
+                className="rounded-full border border-white/10 flex flex-col items-center justify-center transition-transform duration-300 hover:scale-110 shadow-lg backdrop-blur-sm text-slate-50 shrink-0"
+                style={{ width: size, height: size, ...(bgStyle as any) }}
+                >
+                <span className="font-black text-[10px] sm:text-xs leading-none">{b.id}</span>
+                <span className="text-[9px] sm:text-[10px] font-bold mt-0.5">
+                    ${formatCompactNumber(b.val)}
+                </span>
+                </div>
+            );
+            })}
+        </div>
       </div>
     </div>
   );
@@ -666,18 +671,18 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
   const ChartArea = () => {
     if (isMissingCombo) {
       return (
-        <div className="relative w-full min-h-[420px]">
-          <div className="w-full h-full min-h-[420px] rounded-xl bg-black/10 blur-[2px]" />
+        <div className="relative w-full h-full min-h-[300px]">
+          <div className="w-full h-full rounded-xl bg-black/10 blur-[2px]" />
           <MissingDataOverlay />
         </div>
       );
     }
 
-    if (loading) return <div className="flex items-center justify-center min-h-[420px]"><Loader2 className="animate-spin text-gray-400" /></div>;
+    if (loading) return <div className="flex items-center justify-center h-full min-h-[300px]"><Loader2 className="animate-spin text-gray-400" /></div>;
 
     if (!data || data.length === 0) {
       return (
-        <div className="flex flex-col items-center justify-center text-gray-400 gap-2 min-h-[420px]">
+        <div className="flex flex-col items-center justify-center text-gray-400 gap-2 h-full min-h-[300px]">
           <AlertTriangle size={32} />
           <span className="text-sm font-bold uppercase">Sem dados disponíveis</span>
         </div>
@@ -690,9 +695,9 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
   };
 
   return (
-    <div className="w-full h-full flex flex-col bg-white dark:bg-[#1a1c1e] text-gray-900 dark:text-white p-6">
+    <div className="w-full h-full flex flex-col bg-white dark:bg-[#1a1c1e] text-gray-900 dark:text-white p-6 overflow-hidden">
       {/* TOP BAR */}
-      <div className="flex flex-col gap-3 mb-6 border-b border-gray-100 dark:border-slate-800 pb-4">
+      <div className="flex flex-col gap-3 mb-6 border-b border-gray-100 dark:border-slate-800 pb-4 shrink-0">
         <div className="flex justify-between items-center flex-wrap gap-4">
           <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-baseline gap-2">
@@ -773,20 +778,25 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
         )}
       </div>
 
-      {/* MAIN GRID - agora estica de verdade (altura do container) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0 items-stretch">
-        {/* LEFT */}
-        <div className="lg:col-span-2 flex flex-col gap-6 min-h-0 h-full">
-          <div className="relative bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4 flex-1 min-h-[420px]">
-            <ChartArea />
-            <HelpTooltip />
+      {/* MAIN GRID - Using Grid Layout with fixed rows to control height distribution */}
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* LEFT COLUMN: Charts & Bubbles */}
+        <div className="lg:col-span-2 flex flex-col gap-6 h-full min-h-0 overflow-hidden">
+          
+          {/* TOP CHART - Takes more space */}
+          <div className="relative bg-gray-5 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4 flex-[3] min-h-0 flex flex-col">
+             <div className="flex-1 relative min-h-0">
+                 <ChartArea />
+             </div>
+             <HelpTooltip />
           </div>
 
-          {/* BUBBLES (must always be visible) */}
-          <div className="min-h-[360px]">
+          {/* BUBBLES - Takes less space, fits available area */}
+          <div className="flex-[2] min-h-0 flex flex-col">
             {isMissingCombo ? (
-              <div className="relative">
-                <div className="w-full min-h-[360px] rounded-xl bg-black/10 blur-[2px]" />
+              <div className="relative h-full">
+                <div className="w-full h-full rounded-xl bg-black/10 blur-[2px]" />
                 <MissingDataOverlay />
               </div>
             ) : (
@@ -801,10 +811,10 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
           </div>
         </div>
 
-        {/* RIGHT */}
-        <div className="bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-slate-800 rounded-xl p-3 h-full min-h-0">
+        {/* RIGHT COLUMN: Table */}
+        <div className="bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-slate-800 rounded-xl p-3 h-full min-h-0 flex flex-col overflow-hidden">
           {loading && !isMissingCombo ? (
-            <div className="flex items-center justify-center min-h-[420px]"><Loader2 className="animate-spin text-gray-400" /></div>
+            <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-gray-400" /></div>
           ) : (
             <MarketSharePanel
               data={data}
