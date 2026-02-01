@@ -31,7 +31,7 @@ import {
   TikTok, 
   Spotify 
 } from '../../../components/Icons';
-import { fetchTopCoins } from '../services/api';
+import { fetchTopCoins } from '../../../services/api';
 import { useBinanceWS } from '../../../services/BinanceWebSocketContext';
 
 // --- SOUND CONFIGURATION ---
@@ -2433,7 +2433,7 @@ const CryptoMarketBubbles = ({ language, onClose, isWidget = false, item }: Cryp
       )}
 
       {showGameIntro && isGameMode && (
-        <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in zoom-in duration-300">
+        <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md animate-in fade-in zoom-in duration-300">
             <div className="bg-white dark:bg-[#1a1c1e] p-8 rounded-2xl max-w-md text-center border border-gray-200 dark:border-white/10 shadow-2xl relative">
                 <button onClick={() => setShowGameIntro(false)} className="absolute top-3 right-3 p-2 text-gray-400 hover:text-black dark:hover:text-white transition-colors"><CloseIcon size={20}/></button>
                 <div className="w-16 h-16 bg-[#dd9933]/10 rounded-full flex items-center justify-center mx-auto mb-4 text-[#dd9933]">

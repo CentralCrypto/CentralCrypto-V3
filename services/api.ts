@@ -33,7 +33,6 @@ function extractDataArray(raw: any): any[] {
 
   if (Array.isArray(raw)) {
     if (raw.length === 0) return [];
-    // Verifica se é um array de objetos wrapper tipo [{data: [...]}]
     const first = raw[0];
     if (first && typeof first === 'object') {
       if (first.data?.heatmap?.items && Array.isArray(first.data.heatmap.items)) {
@@ -45,7 +44,6 @@ function extractDataArray(raw: any): any[] {
       if (first.data && Array.isArray(first.data.data)) {
         return first.data.data;
       }
-      // Caso ETF n8n: [{ daily: [...] }]
       if (Array.isArray(first.daily)) {
         return first.daily;
       }
@@ -337,11 +335,8 @@ export const fetchRsiAverage = async (): Promise<RsiAvgData | null> => {
 
   const root = Array.isArray(raw) ? raw[0] : raw;
   const dataNode = (root as any)?.data || root;
-
-  // Aceita tanto {overall:{...}} quanto objeto direto
   const overall = (dataNode as any)?.overall || dataNode;
 
-  // Padroniza e preserva compatibilidade
   return {
     averageRsi: safeNum((overall as any)?.averageRsi, 50),
     yesterday: safeNum((overall as any)?.yesterday, 50),
@@ -404,7 +399,6 @@ export const fetchRsiTable = async (opts?: { force?: boolean; ttlMs?: number }):
     let items = extractDataArray(raw);
 
     if (items.length === 0) {
-      // Fallback para o arquivo que o usuário mostrou (rsitrackerhist.json)
       raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTrackerHist));
       items = extractDataArray(raw);
     }
@@ -464,7 +458,6 @@ export const fetchRsiTablePage = async (args: {
 
   const all = await fetchRsiTable({ force: args.force });
 
-  // filter
   let filtered = all;
   if (q) {
     filtered = all.filter(i => {
@@ -474,7 +467,6 @@ export const fetchRsiTablePage = async (args: {
     });
   }
 
-  // sort
   const tf = tfKeyFromSort(sort);
   const sorted = [...filtered].sort((a, b) => {
     let av = 0;
