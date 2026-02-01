@@ -1,4 +1,3 @@
-
 import { ApiCoin } from '../types';
 import { httpGetJson } from './http';
 import { getCacheckoUrl, ENDPOINTS } from './endpoints';
@@ -29,43 +28,43 @@ export const isStablecoin = (symbol: string) => STABLECOINS.includes(symbol.toUp
  * Helper: Tenta extrair um array de dados de qualquer estrutura JSON
  */
 function extractDataArray(raw: any): any[] {
-    if (!raw) return [];
+  if (!raw) return [];
 
-    if (Array.isArray(raw)) {
-        if (raw.length === 0) return [];
-        // Verifica se é um array de objetos wrapper tipo [{data: [...]}]
-        const first = raw[0];
-        if (first && typeof first === 'object') {
-             if (first.data?.heatmap?.items && Array.isArray(first.data.heatmap.items)) {
-                 return first.data.heatmap.items;
-             }
-             if (Array.isArray(first.data)) {
-                 return first.data;
-             }
-             if (first.data && Array.isArray(first.data.data)) {
-                 return first.data.data;
-             }
-             // Caso ETF n8n: [{ daily: [...] }]
-             if (Array.isArray(first.daily)) {
-                 return first.daily;
-             }
-        }
-        return raw;
+  if (Array.isArray(raw)) {
+    if (raw.length === 0) return [];
+    // Verifica se é um array de objetos wrapper tipo [{data: [...]}]
+    const first = raw[0];
+    if (first && typeof first === 'object') {
+      if (first.data?.heatmap?.items && Array.isArray(first.data.heatmap.items)) {
+        return first.data.heatmap.items;
+      }
+      if (Array.isArray(first.data)) {
+        return first.data;
+      }
+      if (first.data && Array.isArray(first.data.data)) {
+        return first.data.data;
+      }
+      // Caso ETF n8n: [{ daily: [...] }]
+      if (Array.isArray(first.daily)) {
+        return first.daily;
+      }
     }
+    return raw;
+  }
 
-    if (typeof raw === 'object') {
-        if (raw.daily && Array.isArray(raw.daily)) return raw.daily; // ETF Standard format
-        if (raw.data?.heatmap?.items && Array.isArray(raw.data.heatmap.items)) return raw.data.heatmap.items;
-        if (Array.isArray(raw.data)) return raw.data;
-        if (Array.isArray(raw.items)) return raw.items;
+  if (typeof raw === 'object') {
+    if (raw.daily && Array.isArray(raw.daily)) return raw.daily; // ETF Standard format
+    if (raw.data?.heatmap?.items && Array.isArray(raw.data.heatmap.items)) return raw.data.heatmap.items;
+    if (Array.isArray(raw.data)) return raw.data;
+    if (Array.isArray(raw.items)) return raw.items;
 
-        const keys = Object.keys(raw);
-        for (const key of keys) {
-            if (Array.isArray(raw[key]) && raw[key].length > 0) return raw[key];
-        }
+    const keys = Object.keys(raw);
+    for (const key of keys) {
+      if (Array.isArray((raw as any)[key]) && (raw as any)[key].length > 0) return (raw as any)[key];
     }
+  }
 
-    return [];
+  return [];
 }
 
 /**
@@ -166,8 +165,8 @@ export interface EtfFlowData {
   ethValue: number;
   netFlow: number;
   timestamp: number;
-  chartDataBTC: any[]; 
-  chartDataETH: any[]; 
+  chartDataBTC: any[];
+  chartDataETH: any[];
   history: { lastWeek: number; lastMonth: number; last90d: number; };
   solValue: number;
   xrpValue: number;
@@ -274,11 +273,11 @@ export interface RsiTablePageResult {
   totalItems: number;
 }
 
-export interface MacdTablePageResult { 
-  items: MacdTrackerPoint[]; 
-  page: number; 
-  totalPages: number; 
-  totalItems: number; 
+export interface MacdTablePageResult {
+  items: MacdTrackerPoint[];
+  page: number;
+  totalPages: number;
+  totalItems: number;
 }
 
 const tfKeyFromSort = (sort: string): RsiTimeframeKey | null => {
@@ -314,7 +313,7 @@ export const fetchAltcoinSeason = async (): Promise<AltSeasonData | null> => {
 
 export const fetchAltcoinSeasonHistory = async (): Promise<AltSeasonHistoryPoint[]> => {
   const data = await fetchAltcoinSeason();
-  return Array.isArray(data?.history) ? (data!.history as AltSeasonHistoryPoint[]) : [];
+  return Array.isArray((data as any)?.history) ? ((data as any).history as AltSeasonHistoryPoint[]) : [];
 };
 
 export const fetchTrumpData = async (): Promise<TrumpData | null> => {
@@ -336,18 +335,18 @@ export const fetchRsiAverage = async (): Promise<RsiAvgData | null> => {
   if (!raw) return null;
 
   const root = Array.isArray(raw) ? raw[0] : raw;
-  const dataNode = root?.data || root;
+  const dataNode = (root as any)?.data || root;
 
   // Aceita tanto {overall:{...}} quanto objeto direto
-  const overall = dataNode?.overall || dataNode;
+  const overall = (dataNode as any)?.overall || dataNode;
 
   // Padroniza e preserva compatibilidade
   return {
-    averageRsi: safeNum(overall?.averageRsi, 50),
-    yesterday: safeNum(overall?.yesterday, 50),
-    days7Ago: safeNum(overall?.days7Ago, 50),
-    days30Ago: safeNum(overall?.days30Ago, 50),
-    days90Ago: Number.isFinite(Number(overall?.days90Ago)) ? Number(overall?.days90Ago) : undefined
+    averageRsi: safeNum((overall as any)?.averageRsi, 50),
+    yesterday: safeNum((overall as any)?.yesterday, 50),
+    days7Ago: safeNum((overall as any)?.days7Ago, 50),
+    days30Ago: safeNum((overall as any)?.days30Ago, 50),
+    days90Ago: Number.isFinite(Number((overall as any)?.days90Ago)) ? Number((overall as any)?.days90Ago) : undefined
   };
 };
 
@@ -404,9 +403,9 @@ export const fetchRsiTable = async (opts?: { force?: boolean; ttlMs?: number }):
     let items = extractDataArray(raw);
 
     if (items.length === 0) {
-        // Fallback para o arquivo que o usuário mostrou (rsitrackerhist.json)
-        raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTrackerHist));
-        items = extractDataArray(raw);
+      // Fallback para o arquivo que o usuário mostrou (rsitrackerhist.json)
+      raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.rsiTrackerHist));
+      items = extractDataArray(raw);
     }
 
     if (!items.length) {
@@ -481,28 +480,28 @@ export const fetchRsiTablePage = async (args: {
     let bv = 0;
 
     if (tf) {
-      av = safeNum(a.rsi?.[tf], 0);
-      bv = safeNum(b.rsi?.[tf], 0);
+      av = safeNum((a as any).rsi?.[tf], 0);
+      bv = safeNum((b as any).rsi?.[tf], 0);
     } else if (sort === 'marketCap') {
-      av = safeNum(a.marketCap, 0);
-      bv = safeNum(b.marketCap, 0);
+      av = safeNum((a as any).marketCap, 0);
+      bv = safeNum((b as any).marketCap, 0);
     } else if (sort === 'volume24h') {
-      av = safeNum(a.volume24h, 0);
-      bv = safeNum(b.volume24h, 0);
+      av = safeNum((a as any).volume24h, 0);
+      bv = safeNum((b as any).volume24h, 0);
     } else if (sort === 'price24h') {
-      av = safeNum(a.change, 0);
-      bv = safeNum(b.change, 0);
+      av = safeNum((a as any).change, 0);
+      bv = safeNum((b as any).change, 0);
     } else if (sort === 'rank') {
-      av = safeNum(a.rank, 0);
-      bv = safeNum(b.rank, 0);
+      av = safeNum((a as any).rank, 0);
+      bv = safeNum((b as any).rank, 0);
     } else {
-      av = safeNum(a.rsi?.['4h'], 0);
-      bv = safeNum(b.rsi?.['4h'], 0);
+      av = safeNum((a as any).rsi?.['4h'], 0);
+      bv = safeNum((b as any).rsi?.['4h'], 0);
     }
 
     if (av === bv) {
-      const am = safeNum(a.marketCap, 0);
-      const bm = safeNum(b.marketCap, 0);
+      const am = safeNum((a as any).marketCap, 0);
+      const bm = safeNum((b as any).marketCap, 0);
       return bm - am;
     }
 
@@ -526,17 +525,17 @@ export const fetchMacdAverage = async (): Promise<MacdAvgData | null> => {
   const raw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.macdAvg));
   if (!raw) return null;
   const root = Array.isArray(raw) ? raw[0] : raw;
-  const d = root?.data?.overall || root?.data || root;
+  const d = (root as any)?.data?.overall || (root as any)?.data || root;
 
   return {
-      averageMacd: safeNum(d.averageMacd, 0),
-      averageNMacd: safeNum(d.averageNMacd, 0),
-      bullishPercentage: safeNum(d.bullishPercentage, 50),
-      bearishPercentage: safeNum(d.bearishPercentage, 50),
-      yesterday: safeNum(d.yesterday, 0),
-      days7Ago: safeNum(d.days7Ago, 0),
-      days30Ago: safeNum(d.days30Ago, 0),
-      yesterdayNMacd: safeNum(d.yesterdayNMacd, 0),
+    averageMacd: safeNum((d as any).averageMacd, 0),
+    averageNMacd: safeNum((d as any).averageNMacd, 0),
+    bullishPercentage: safeNum((d as any).bullishPercentage, 50),
+    bearishPercentage: safeNum((d as any).bearishPercentage, 50),
+    yesterday: safeNum((d as any).yesterday, 0),
+    days7Ago: safeNum((d as any).days7Ago, 0),
+    days30Ago: safeNum((d as any).days30Ago, 0),
+    yesterdayNMacd: safeNum((d as any).yesterdayNMacd, 0),
   };
 };
 
@@ -545,54 +544,54 @@ export const fetchMacdTracker = async (opts?: { force?: boolean }): Promise<Macd
   const items = extractDataArray(raw);
 
   return items.map((i: any) => {
-      const symbol = String(i.symbol || '').toUpperCase();
-      const macdNode = i.macd || {};
-      
-      return {
-          id: i.id || symbol.toLowerCase(),
-          symbol,
-          name: i.name || symbol,
-          price: safeNum(i.price, 0),
-          change24h: safeNum(i.price24h, 0),
-          marketCap: safeNum(i.marketCap, 0),
-          logo: i.image || i.logo || `https://assets.coincap.io/assets/icons/${symbol.toLowerCase()}@2x.png`,
-          macd: {
-              "15m": { nmacd: safeNum(macdNode.macd15m?.nmacd, 0), macd: safeNum(macdNode.macd15m?.macd, 0), histogram: safeNum(macdNode.macd15m?.histogram, 0), signalLine: safeNum(macdNode.macd15m?.signalLine, 0) },
-              "1h": { nmacd: safeNum(macdNode.macd1h?.nmacd, 0), macd: safeNum(macdNode.macd1h?.macd, 0), histogram: safeNum(macdNode.macd1h?.histogram, 0), signalLine: safeNum(macdNode.macd1h?.signalLine, 0) },
-              "4h": { nmacd: safeNum(macdNode.macd4h?.nmacd, 0), macd: safeNum(macdNode.macd4h?.macd, 0), histogram: safeNum(macdNode.macd4h?.histogram, 0), signalLine: safeNum(macdNode.macd4h?.signalLine, 0) },
-              "24h": { nmacd: safeNum(macdNode.macd24h?.nmacd, 0), macd: safeNum(macdNode.macd24h?.macd, 0), histogram: safeNum(macdNode.macd24h?.histogram, 0), signalLine: safeNum(macdNode.macd24h?.signalLine, 0) },
-              "7d": { nmacd: safeNum(macdNode.macd7d?.nmacd, 0), macd: safeNum(macdNode.macd7d?.macd, 0), histogram: safeNum(macdNode.macd7d?.histogram, 0), signalLine: safeNum(macdNode.macd7d?.signalLine, 0) },
-          }
-      };
-  }).filter(x => x.marketCap > 0);
+    const symbol = String(i.symbol || '').toUpperCase();
+    const macdNode = i.macd || {};
+
+    return {
+      id: i.id || symbol.toLowerCase(),
+      symbol,
+      name: i.name || symbol,
+      price: safeNum(i.price, 0),
+      change24h: safeNum(i.price24h, 0),
+      marketCap: safeNum(i.marketCap, 0),
+      logo: i.image || i.logo || `https://assets.coincap.io/assets/icons/${symbol.toLowerCase()}@2x.png`,
+      macd: {
+        "15m": { nmacd: safeNum(macdNode.macd15m?.nmacd, 0), macd: safeNum(macdNode.macd15m?.macd, 0), histogram: safeNum(macdNode.macd15m?.histogram, 0), signalLine: safeNum(macdNode.macd15m?.signalLine, 0) },
+        "1h": { nmacd: safeNum(macdNode.macd1h?.nmacd, 0), macd: safeNum(macdNode.macd1h?.macd, 0), histogram: safeNum(macdNode.macd1h?.histogram, 0), signalLine: safeNum(macdNode.macd1h?.signalLine, 0) },
+        "4h": { nmacd: safeNum(macdNode.macd4h?.nmacd, 0), macd: safeNum(macdNode.macd4h?.macd, 0), histogram: safeNum(macdNode.macd4h?.histogram, 0), signalLine: safeNum(macdNode.macd4h?.signalLine, 0) },
+        "24h": { nmacd: safeNum(macdNode.macd24h?.nmacd, 0), macd: safeNum(macdNode.macd24h?.macd, 0), histogram: safeNum(macdNode.macd24h?.histogram, 0), signalLine: safeNum(macdNode.macd24h?.signalLine, 0) },
+        "7d": { nmacd: safeNum(macdNode.macd7d?.nmacd, 0), macd: safeNum(macdNode.macd7d?.macd, 0), histogram: safeNum(macdNode.macd7d?.histogram, 0), signalLine: safeNum(macdNode.macd7d?.signalLine, 0) },
+      }
+    };
+  }).filter((x: any) => x.marketCap > 0);
 };
 
 export const fetchMacdTablePage = async (args: { page: number; limit: number; sort?: string; timeframe?: string; ascendingOrder?: boolean; filterText?: string; force?: boolean; }): Promise<MacdTablePageResult> => {
-    const all = await fetchMacdTracker({ force: args.force });
-    const q = normalizeSearch(args.filterText || '');
-    let filtered = all;
-    if (q) filtered = all.filter(i => i.symbol.toLowerCase().includes(q) || i.name.toLowerCase().includes(q));
+  const all = await fetchMacdTracker({ force: args.force });
+  const q = normalizeSearch(args.filterText || '');
+  let filtered = all;
+  if (q) filtered = all.filter(i => i.symbol.toLowerCase().includes(q) || i.name.toLowerCase().includes(q));
 
-    const tf = (args.timeframe || '4h') as '15m'|'1h'|'4h'|'24h'|'7d';
-    const sort = args.sort || 'marketCap';
-    const asc = args.ascendingOrder;
+  const tf = (args.timeframe || '4h') as '15m' | '1h' | '4h' | '24h' | '7d';
+  const sort = args.sort || 'marketCap';
+  const asc = args.ascendingOrder;
 
-    const sorted = [...filtered].sort((a, b) => {
-        let av = 0, bv = 0;
-        if (sort === 'nmacd') { av = a.macd?.[tf]?.nmacd ?? 0; bv = b.macd?.[tf]?.nmacd ?? 0; }
-        else if (sort === 'macd') { av = a.macd?.[tf]?.macd ?? 0; bv = b.macd?.[tf]?.macd ?? 0; }
-        else if (sort === 'change24h') { av = a.change24h; bv = b.change24h; }
-        else { av = a.marketCap; bv = b.marketCap; } 
-        return asc ? (av - bv) : (bv - av);
-    });
+  const sorted = [...filtered].sort((a, b) => {
+    let av = 0, bv = 0;
+    if (sort === 'nmacd') { av = a.macd?.[tf]?.nmacd ?? 0; bv = b.macd?.[tf]?.nmacd ?? 0; }
+    else if (sort === 'macd') { av = a.macd?.[tf]?.macd ?? 0; bv = b.macd?.[tf]?.macd ?? 0; }
+    else if (sort === 'change24h') { av = a.change24h; bv = b.change24h; }
+    else { av = a.marketCap; bv = b.marketCap; }
+    return asc ? (av - bv) : (bv - av);
+  });
 
-    const limit = Math.max(1, args.limit);
-    const totalItems = sorted.length;
-    const totalPages = Math.ceil(totalItems / limit);
-    const page = Math.min(Math.max(1, args.page), totalPages);
-    const start = (page - 1) * limit;
+  const limit = Math.max(1, args.limit);
+  const totalItems = sorted.length;
+  const totalPages = Math.ceil(totalItems / limit);
+  const page = Math.min(Math.max(1, args.page), totalPages);
+  const start = (page - 1) * limit;
 
-    return { items: sorted.slice(start, start + limit), page, totalPages, totalItems };
+  return { items: sorted.slice(start, start + limit), page, totalPages, totalItems };
 };
 
 // -------------------- ECON --------------------
@@ -607,27 +606,27 @@ export const fetchEconomicCalendar = async (): Promise<EconEvent[]> => {
 // Simple fetch for summary widget
 export const fetchEtfFlow = async (): Promise<EtfFlowData | null> => {
   try {
-      const summaryRaw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.etfNetFlow));
-      if (!summaryRaw) return null;
+    const summaryRaw = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.etfNetFlow));
+    if (!summaryRaw) return null;
 
-      const root = Array.isArray(summaryRaw) ? summaryRaw[0] : summaryRaw;
-      const data = (root && typeof root === 'object' && (root as any).data) ? (root as any).data : root;
-      const status = (root && typeof root === 'object' && (root as any).status) ? (root as any).status : null;
+    const root = Array.isArray(summaryRaw) ? summaryRaw[0] : summaryRaw;
+    const data = (root && typeof root === 'object' && (root as any).data) ? (root as any).data : root;
+    const status = (root && typeof root === 'object' && (root as any).status) ? (root as any).status : null;
 
-      return {
-        btcValue: Number(data?.totalBtcValue ?? data?.btcValue ?? 0),
-        ethValue: Number(data?.totalEthValue ?? data?.ethValue ?? 0),
-        netFlow: Number(data?.total ?? data?.netFlow ?? 0),
-        timestamp: status?.timestamp ? new Date(status.timestamp).getTime() : Date.now(),
-        chartDataBTC: [], // Used detailed fetcher instead
-        chartDataETH: [], // Used detailed fetcher instead
-        history: data?.history || { lastWeek: 0, lastMonth: 0, last90d: 0 },
-        solValue: Number(data?.solValue ?? 0),
-        xrpValue: Number(data?.xrpValue ?? 0)
-      };
+    return {
+      btcValue: Number((data as any)?.totalBtcValue ?? (data as any)?.btcValue ?? 0),
+      ethValue: Number((data as any)?.totalEthValue ?? (data as any)?.ethValue ?? 0),
+      netFlow: Number((data as any)?.total ?? (data as any)?.netFlow ?? 0),
+      timestamp: status?.timestamp ? new Date(status.timestamp).getTime() : Date.now(),
+      chartDataBTC: [],
+      chartDataETH: [],
+      history: (data as any)?.history || { lastWeek: 0, lastMonth: 0, last90d: 0 },
+      solValue: Number((data as any)?.solValue ?? 0),
+      xrpValue: Number((data as any)?.xrpValue ?? 0)
+    };
   } catch (e) {
-      console.error("Error fetching ETF data", e);
-      return null;
+    console.error("Error fetching ETF data", e);
+    return null;
   }
 };
 
@@ -640,7 +639,7 @@ const resolveEtfEndpoint = (asset: EtfAsset, metric: EtfMetric): string | null =
   const obj = filesObj || (ENDPOINTS as any)?.cachecko?.files || (ENDPOINTS as any)?.cachecko?.files || {};
   const pick = (...keys: string[]) => {
     for (const k of keys) {
-      const v = obj?.[k];
+      const v = (obj as any)?.[k];
       if (typeof v === 'string' && v.trim()) return v;
     }
     return null;
@@ -675,19 +674,19 @@ const resolveEtfEndpoint = (asset: EtfAsset, metric: EtfMetric): string | null =
 
 // Processador seguro de data - CORRIGIDO PARA DETECTAR SEGUNDOS VS MS
 const processChartDate = (dateInput: string | number) => {
-    if (!dateInput) return 0;
-    
-    // Se for número
-    if (typeof dateInput === 'number') {
-        if (dateInput < 10000000000) {
-            return dateInput * 1000;
-        }
-        return dateInput;
+  if (!dateInput) return 0;
+
+  // Se for número
+  if (typeof dateInput === 'number') {
+    if (dateInput < 10000000000) {
+      return dateInput * 1000;
     }
-    
-    // Se for string
-    const date = new Date(dateInput);
-    return !isNaN(date.getTime()) ? date.getTime() : 0;
+    return dateInput;
+  }
+
+  // Se for string
+  const date = new Date(dateInput);
+  return !isNaN(date.getTime()) ? date.getTime() : 0;
 };
 
 // Helpers para “desembrulhar” JSONs do TheBlock/TBStat/cache n8n
@@ -708,7 +707,6 @@ const unwrapPossibleDataNode = (raw: any): any => {
   // Caso: [{ slug, data: "{...}" }]
   if (Array.isArray(raw) && raw.length > 0 && raw[0] && typeof raw[0] === 'object') {
     const first = raw[0] as any;
-    // prioridade: first.data, first.jsonFile?.data, first.data?.jsonFile?.data
     const cand =
       first.data ??
       first.jsonFile?.data ??
@@ -763,75 +761,90 @@ const seriesToDaily = (seriesObj: any): any[] => {
   return Object.values(byTs).sort((a, b) => a.timestamp - b.timestamp);
 };
 
+/**
+ * Ajuste: agora anexamos `__etfs` no array retornado para o widget conseguir
+ * uma lista consistente de tickers detectados.
+ */
 export const fetchEtfDetailed = async (asset: EtfAsset, metric: EtfMetric): Promise<any[]> => {
-    const endpoint = resolveEtfEndpoint(asset, metric);
-    if (!endpoint) return [];
+  const endpoint = resolveEtfEndpoint(asset, metric);
+  if (!endpoint) return [];
 
-    const raw = await fetchWithFallback(getCacheckoUrl(endpoint));
-    if (!raw) return [];
+  const raw = await fetchWithFallback(getCacheckoUrl(endpoint));
+  if (!raw) return [];
 
-    const unwrapped = unwrapPossibleDataNode(raw);
+  const unwrapped = unwrapPossibleDataNode(raw);
 
-    let dailyData: any[] = [];
+  let dailyData: any[] = [];
 
-    if (unwrapped?.daily && Array.isArray(unwrapped.daily)) {
-      dailyData = unwrapped.daily;
-    } else if (unwrapped?.data?.daily && Array.isArray(unwrapped.data.daily)) {
-      dailyData = unwrapped.data.daily;
-    } else if (Array.isArray(unwrapped)) {
-      dailyData = unwrapped;
+  if (unwrapped?.daily && Array.isArray(unwrapped.daily)) {
+    dailyData = unwrapped.daily;
+  } else if (unwrapped?.data?.daily && Array.isArray(unwrapped.data.daily)) {
+    dailyData = unwrapped.data.daily;
+  } else if (Array.isArray(unwrapped)) {
+    dailyData = unwrapped;
+  }
+
+  if (dailyData.length === 0) {
+    const seriesObj =
+      unwrapped?.Series ??
+      unwrapped?.jsonFile?.Series ??
+      unwrapped?.data?.Series ??
+      null;
+
+    if (seriesObj && typeof seriesObj === 'object') {
+      dailyData = seriesToDaily(seriesObj);
     }
+  }
 
-    if (dailyData.length === 0) {
-      const seriesObj =
-        unwrapped?.Series ??
-        unwrapped?.jsonFile?.Series ??
-        unwrapped?.data?.Series ??
-        null;
+  if (!Array.isArray(dailyData) || dailyData.length === 0) return [];
 
-      if (seriesObj && typeof seriesObj === 'object') {
-        dailyData = seriesToDaily(seriesObj);
+  const mapped = dailyData.map((d: any) => {
+    const tsIn =
+      d.timestamp ??
+      d.Timestamp ??
+      d.date ??
+      d.Date ??
+      null;
+
+    const timestamp = processChartDate(tsIn as any);
+
+    const flatPoint: any = {
+      date: timestamp,
+      totalGlobal: Number(d.totalGlobal ?? d.total ?? 0)
+    };
+
+    const per =
+      (d.perEtf && typeof d.perEtf === 'object') ? d.perEtf :
+      (d.etfs && typeof d.etfs === 'object') ? d.etfs :
+      (d.ETFs && typeof d.ETFs === 'object') ? d.ETFs :
+      null;
+
+    if (per) {
+      let sum = 0;
+      Object.keys(per).forEach(ticker => {
+        const val = Number(per[ticker]);
+        const n = Number.isFinite(val) ? val : 0;
+        flatPoint[ticker] = n;
+        sum += n;
+      });
+      if (!Number.isFinite(flatPoint.totalGlobal) || flatPoint.totalGlobal === 0) {
+        flatPoint.totalGlobal = sum;
       }
     }
 
-    if (!Array.isArray(dailyData) || dailyData.length === 0) return [];
+    return flatPoint;
+  }).filter((p: any) => Number.isFinite(p.date) && p.date > 0).sort((a: any, b: any) => a.date - b.date);
 
-    return dailyData.map((d: any) => {
-        const tsIn =
-          d.timestamp ??
-          d.Timestamp ??
-          d.date ??
-          d.Date ??
-          null;
+  // ---- anexa __etfs ----
+  const tickers = new Set<string>();
+  for (const row of mapped) {
+    Object.keys(row || {}).forEach(k => {
+      if (k !== 'date' && k !== 'totalGlobal' && k !== 'timestamp') tickers.add(k);
+    });
+  }
+  (mapped as any).__etfs = Array.from(tickers);
 
-        const timestamp = processChartDate(tsIn as any);
-
-        const flatPoint: any = {
-            date: timestamp,
-            totalGlobal: Number(d.totalGlobal ?? d.total ?? 0)
-        };
-
-        const per =
-          (d.perEtf && typeof d.perEtf === 'object') ? d.perEtf :
-          (d.etfs && typeof d.etfs === 'object') ? d.etfs :
-          (d.ETFs && typeof d.ETFs === 'object') ? d.ETFs :
-          null;
-
-        if (per) {
-          let sum = 0;
-          Object.keys(per).forEach(ticker => {
-            const val = Number(per[ticker]);
-            const n = Number.isFinite(val) ? val : 0;
-            flatPoint[ticker] = n;
-            sum += n;
-          });
-          if (!Number.isFinite(flatPoint.totalGlobal) || flatPoint.totalGlobal === 0) {
-            flatPoint.totalGlobal = sum;
-          }
-        }
-
-        return flatPoint;
-    }).filter(p => Number.isFinite(p.date) && p.date > 0).sort((a: any, b: any) => a.date - b.date);
+  return mapped;
 };
 
 // -------------------- BINANCE & EXCHANGES LSR --------------------
@@ -840,71 +853,67 @@ export const fetchEtfDetailed = async (asset: EtfAsset, metric: EtfMetric): Prom
 export const fetchLongShortRatio = async (symbol: string, period: string, exchange: string = 'Binance'): Promise<LsrData> => {
   const cleanSymbol = symbol.toUpperCase().endsWith('USDT') ? symbol.toUpperCase() : `${symbol.toUpperCase()}USDT`;
   const cleanPeriod = period.toLowerCase();
-  
-  try {
-      if (exchange === 'Binance') {
-          const binanceUrl = `https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol=${cleanSymbol}&period=${cleanPeriod}&limit=1`;
-          const res = await fetch(binanceUrl);
-          const data = await res.json();
-          if (Array.isArray(data) && data.length > 0) {
-            const p = data[0];
-            return {
-              exchange,
-              lsr: isFinite(parseFloat(p.longShortRatio)) ? parseFloat(p.longShortRatio) : null,
-              longs: isFinite(parseFloat(p.longAccount)) ? parseFloat(p.longAccount) * 100 : null,
-              shorts: isFinite(parseFloat(p.shortAccount)) ? parseFloat(p.shortAccount) * 100 : null
-            };
-          }
-      } 
-      else if (exchange === 'Bybit') {
-           // Bybit usa símbolos diferentes, ex: BTCUSDT. 
-           let bbPeriod = cleanPeriod;
-           if (bbPeriod === '1d') bbPeriod = '1d';
-           else if (bbPeriod === '5m') bbPeriod = '5min'; 
-           else if (bbPeriod === '15m') bbPeriod = '15min';
-           else if (bbPeriod === '30m') bbPeriod = '30min';
-           else if (bbPeriod === '1h') bbPeriod = '1h';
-           else if (bbPeriod === '4h') bbPeriod = '4h';
 
-           const url = `https://api.bybit.com/v5/market/account-ratio?category=linear&symbol=${cleanSymbol}&period=${bbPeriod}&limit=1`;
-           const res = await fetch(url);
-           const json = await res.json();
-           if (json.retCode === 0 && json.result && json.result.list && json.result.list.length > 0) {
-               const item = json.result.list[0];
-               return {
-                   exchange,
-                   lsr: parseFloat(item.ratio),
-                   longs: parseFloat(item.buyRatio) * 100,
-                   shorts: parseFloat(item.sellRatio) * 100
-               };
-           }
+  try {
+    if (exchange === 'Binance') {
+      const binanceUrl = `https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol=${cleanSymbol}&period=${cleanPeriod}&limit=1`;
+      const res = await fetch(binanceUrl);
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        const p = data[0];
+        return {
+          exchange,
+          lsr: isFinite(parseFloat(p.longShortRatio)) ? parseFloat(p.longShortRatio) : null,
+          longs: isFinite(parseFloat(p.longAccount)) ? parseFloat(p.longAccount) * 100 : null,
+          shorts: isFinite(parseFloat(p.shortAccount)) ? parseFloat(p.shortAccount) * 100 : null
+        };
       }
-      else if (exchange === 'OKX') {
-           // OKX usa instId com hifen, ex: BTC-USDT-SWAP
-           const instId = cleanSymbol.replace('USDT', '-USDT-SWAP');
-           // Period: 5m, 1H->1h
-           let okPeriod = cleanPeriod.toUpperCase(); // OKX usa upper case
-           const url = `https://www.okx.com/api/v5/rubik/stat/taker-long-short-ratio?instId=${instId}&period=${okPeriod}`;
-           const res = await fetch(url);
-           const json = await res.json();
-           if (json.code === '0' && json.data && json.data.length > 0) {
-               const item = json.data[0];
-               const ratio = parseFloat(item.buySellRatio);
-               return {
-                   exchange,
-                   lsr: ratio,
-                   longs: null, 
-                   shorts: null
-               };
-           }
+    }
+    else if (exchange === 'Bybit') {
+      let bbPeriod = cleanPeriod;
+      if (bbPeriod === '1d') bbPeriod = '1d';
+      else if (bbPeriod === '5m') bbPeriod = '5min';
+      else if (bbPeriod === '15m') bbPeriod = '15min';
+      else if (bbPeriod === '30m') bbPeriod = '30min';
+      else if (bbPeriod === '1h') bbPeriod = '1h';
+      else if (bbPeriod === '4h') bbPeriod = '4h';
+
+      const url = `https://api.bybit.com/v5/market/account-ratio?category=linear&symbol=${cleanSymbol}&period=${bbPeriod}&limit=1`;
+      const res = await fetch(url);
+      const json = await res.json();
+      if (json.retCode === 0 && json.result && json.result.list && json.result.list.length > 0) {
+        const item = json.result.list[0];
+        return {
+          exchange,
+          lsr: parseFloat(item.ratio),
+          longs: parseFloat(item.buyRatio) * 100,
+          shorts: parseFloat(item.sellRatio) * 100
+        };
       }
-      else if (exchange === 'Mexc') {
-          // Mexc public LSR endpoint is tricky or requires auth often. Placeholder.
-          return { lsr: null, longs: null, shorts: null, exchange };
+    }
+    else if (exchange === 'OKX') {
+      const instId = cleanSymbol.replace('USDT', '-USDT-SWAP');
+      let okPeriod = cleanPeriod.toUpperCase();
+      const url = `https://www.okx.com/api/v5/rubik/stat/taker-long-short-ratio?instId=${instId}&period=${okPeriod}`;
+      const res = await fetch(url);
+      const json = await res.json();
+      if (json.code === '0' && json.data && json.data.length > 0) {
+        const item = json.data[0];
+        const ratio = parseFloat(item.buySellRatio);
+        return {
+          exchange,
+          lsr: ratio,
+          longs: null,
+          shorts: null
+        };
       }
+    }
+    else if (exchange === 'Mexc') {
+      return { lsr: null, longs: null, shorts: null, exchange };
+    }
 
   } catch (e) {
-      console.warn(`LSR fetch failed for ${exchange}`, e);
+    console.warn(`LSR fetch failed for ${exchange}`, e);
   }
   return { lsr: null, longs: null, shorts: null, exchange };
 };
@@ -913,8 +922,8 @@ export const fetchGainersLosers = async (): Promise<any> => {
   const coins = await fetchTopCoins();
   if (!coins || coins.length === 0) return { gainers: [], losers: [] };
 
-  const filtered = coins.filter(c => c && c.symbol && !isStablecoin(c.symbol));
-  const sorted = [...filtered].sort((a, b) => (b.price_change_percentage_24h || 0) - (a.price_change_percentage_24h || 0));
+  const filtered = coins.filter(c => c && (c as any).symbol && !isStablecoin((c as any).symbol));
+  const sorted = [...filtered].sort((a: any, b: any) => ((b as any).price_change_percentage_24h || 0) - ((a as any).price_change_percentage_24h || 0));
   return { gainers: sorted.slice(0, 100), losers: [...sorted].reverse().slice(0, 100) };
 };
 

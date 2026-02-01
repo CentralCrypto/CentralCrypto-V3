@@ -1,3 +1,4 @@
+
 /**
  * MOTOR MAGAZINE V5.1
  * - Cache TTL + dedupe (home rápida)
@@ -192,6 +193,7 @@ export async function fetchMagazinePosts(params: {
   page?: number;
   perPage?: number;
   categories?: number | string;
+  categoriesExclude?: number | string; // NEW: Support for exclusion
   lightweight?: boolean; // default: true (home/listas)
   cacheTtlMs?: number; // override
   forceFresh?: boolean; // ignora cache
@@ -207,7 +209,8 @@ export async function fetchMagazinePosts(params: {
     search: params.search,
     page: params.page,
     per_page: params.perPage || 10,
-    categories: params.categories
+    categories: params.categories,
+    categories_exclude: params.categoriesExclude
   };
 
   const { data, headers } = await magazineFetch(ENDPOINTS.magazine.posts, query, {

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Loader2, TrendingUp, BarChart3, Layers, AlertTriangle, LineChart, Info, ChevronLeft, ChevronRight, DollarSign, ArrowUp, ArrowDown } from 'lucide-react';
 import { fetchEtfFlow, fetchEtfDetailed, EtfFlowData } from '../../../services/api';
@@ -81,7 +80,7 @@ const applyWatermark = (chart: Highcharts.Chart) => {
       .image(WATERMARK_URL, x, y, size, size)
       .attr({ opacity: WATERMARK_OPACITY })
       .add();
-  } catch (e) {}
+  } catch (e) { }
 };
 
 const getTickerKeysUnion = (data: any[]) => {
@@ -384,10 +383,8 @@ const MarketSharePanel: React.FC<{
   const stats = useMemo(() => {
     if (!currentDay || safeIndex < 0) return { d1: 0, d7: 0, d30: 0 };
 
-    // 1D: soma EXATA da tabela no dia (com zeros)
     const sum1 = sumTickersAtIndex(safeIndex);
 
-    // 7D/30D: soma da MESMA lógica da tabela, dia a dia (inclui o dia atual)
     let sum7 = 0;
     for (let i = safeIndex; i >= 0 && i > safeIndex - 7; i--) sum7 += sumTickersAtIndex(i);
 
@@ -407,7 +404,7 @@ const MarketSharePanel: React.FC<{
   const SummaryCard = ({ label, value }: { label: string, value: number }) => {
     const colorClass =
       metric === 'volume' ? 'text-blue-400'
-      : (value >= 0 ? 'text-green-400' : 'text-red-400');
+        : (value >= 0 ? 'text-green-400' : 'text-red-400');
 
     return (
       <div className="flex flex-col items-center justify-center p-2 bg-gray-50 dark:bg-black/30 rounded-lg border border-gray-200 dark:border-slate-800 shadow-sm flex-1">
@@ -420,7 +417,7 @@ const MarketSharePanel: React.FC<{
   };
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col h-full min-h-0">
       <div className="flex gap-2 mb-3">
         <SummaryCard label="1D" value={stats.d1} />
         <SummaryCard label="7D" value={stats.d7} />
@@ -562,7 +559,7 @@ const EtfBubbles: React.FC<{
             <div
               key={b.id}
               className="rounded-full border border-white/10 flex flex-col items-center justify-center transition-transform duration-300 hover:scale-110 shadow-lg backdrop-blur-sm text-slate-50"
-              style={{ width: size, height: size, ...bgStyle as any }}
+              style={{ width: size, height: size, ...(bgStyle as any) }}
             >
               <span className="font-black text-[10px] sm:text-xs leading-none">{b.id}</span>
               <span className="text-[9px] sm:text-[10px] font-bold mt-0.5">
@@ -669,8 +666,8 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
   const ChartArea = () => {
     if (isMissingCombo) {
       return (
-        <div className="relative w-full">
-          <div className="w-full min-h-[420px] rounded-xl bg-black/10 blur-[2px]" />
+        <div className="relative w-full min-h-[420px]">
+          <div className="w-full h-full min-h-[420px] rounded-xl bg-black/10 blur-[2px]" />
           <MissingDataOverlay />
         </div>
       );
@@ -693,7 +690,7 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
   };
 
   return (
-    <div className="w-full flex flex-col bg-white dark:bg-[#1a1c1e] text-gray-900 dark:text-white p-6">
+    <div className="w-full h-full flex flex-col bg-white dark:bg-[#1a1c1e] text-gray-900 dark:text-white p-6">
       {/* TOP BAR */}
       <div className="flex flex-col gap-3 mb-6 border-b border-gray-100 dark:border-slate-800 pb-4">
         <div className="flex justify-between items-center flex-wrap gap-4">
@@ -776,11 +773,11 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
         )}
       </div>
 
-      {/* MAIN GRID - no forced heights, no internal scrollbars */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* MAIN GRID - agora estica de verdade (altura do container) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0 items-stretch">
         {/* LEFT */}
-        <div className="lg:col-span-2 flex flex-col gap-6 min-h-[1px]">
-          <div className="relative bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4">
+        <div className="lg:col-span-2 flex flex-col gap-6 min-h-0 h-full">
+          <div className="relative bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4 flex-1 min-h-[420px]">
             <ChartArea />
             <HelpTooltip />
           </div>
@@ -805,7 +802,7 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
         </div>
 
         {/* RIGHT */}
-        <div className="bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-slate-800 rounded-xl p-3">
+        <div className="bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-slate-800 rounded-xl p-3 h-full min-h-0">
           {loading && !isMissingCombo ? (
             <div className="flex items-center justify-center min-h-[420px]"><Loader2 className="animate-spin text-gray-400" /></div>
           ) : (

@@ -30,6 +30,9 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
   };
   const currentLocale = localeMap[language];
 
+  // EXCLUDE IDs 7 (Infografico) and 17 (Podcast)
+  const EXCLUDED_CATS = '7,17';
+
   const decodeHTML = (html: string) => {
     if (!html) return '';
     const txt = document.createElement("textarea");
@@ -47,11 +50,12 @@ const NewsGrid: React.FC<NewsGridProps> = ({ onPostClick, language }) => {
       const editorCat = cats.find(c => c.slug?.includes('editor'));
 
       const [resEstudos, resAnalises, resMaisLidas] = await Promise.all([
-          fetchMagazinePosts({ categories: estudosCat?.id, perPage: 2 }).catch(() => ({ posts: [] })),
-          fetchMagazinePosts({ categories: analisesCat?.id, perPage: 5 }).catch(() => ({ posts: [] })),
+          fetchMagazinePosts({ categories: estudosCat?.id, perPage: 2, categoriesExclude: EXCLUDED_CATS }).catch(() => ({ posts: [] })),
+          fetchMagazinePosts({ categories: analisesCat?.id, perPage: 5, categoriesExclude: EXCLUDED_CATS }).catch(() => ({ posts: [] })),
           fetchMagazinePosts({ 
             categories: [analisesCat?.id, editorCat?.id].filter(Boolean).join(','), 
-            perPage: 10 
+            perPage: 10,
+            categoriesExclude: EXCLUDED_CATS
           }).catch(() => ({ posts: [] }))
       ]);
 

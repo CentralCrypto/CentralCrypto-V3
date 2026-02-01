@@ -39,6 +39,9 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ onPostClick, language }) => {
   };
   const currentLocale = localeMap[language];
 
+  // EXCLUDE IDs 7 (Infografico) and 17 (Podcast)
+  const EXCLUDED_CATS = '7,17';
+
   const fetchLists = useCallback(async () => {
         try {
             setError('');
@@ -51,12 +54,13 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ onPostClick, language }) => {
             const bulletinsId = cats.find((c:any) => c.slug?.includes('boletim'))?.id;
 
             const [d, cf, b] = await Promise.all([
-                fetchMagazinePosts({ categories: dailyId || 0, perPage: 5 }).catch(() => ({ posts: [] })),
+                fetchMagazinePosts({ categories: dailyId || 0, perPage: 5, categoriesExclude: EXCLUDED_CATS }).catch(() => ({ posts: [] })),
                 fetchMagazinePosts({ 
                     categories: [estudosId, editorId].filter(Boolean).join(','), 
-                    perPage: 5 
+                    perPage: 5,
+                    categoriesExclude: EXCLUDED_CATS
                 }).catch(() => ({ posts: [] })),
-                fetchMagazinePosts({ categories: bulletinsId || 0, perPage: 5 }).catch(() => ({ posts: [] }))
+                fetchMagazinePosts({ categories: bulletinsId || 0, perPage: 5, categoriesExclude: EXCLUDED_CATS }).catch(() => ({ posts: [] }))
             ]);
 
             setDailyNews(d.posts);
@@ -71,7 +75,7 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ onPostClick, language }) => {
   const fetchFeed = useCallback(async () => {
         setLoadingMain(true);
         try {
-            const data = await fetchMagazinePosts({ page, perPage: 10 });
+            const data = await fetchMagazinePosts({ page, perPage: 10, categoriesExclude: EXCLUDED_CATS });
             setMainFeed(data.posts);
             if (page > 1) {
                 const el = document.getElementById('main-feed-anchor');

@@ -9,6 +9,9 @@ interface MagazineTickerProps {
 const MagazineTicker: React.FC<MagazineTickerProps> = ({ onPostClick }) => {
   const [posts, setPosts] = useState<MagazinePost[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // EXCLUDE IDs 7 (Infografico) and 17 (Podcast)
+  const EXCLUDED_CATS = '7,17';
 
   useEffect(() => {
     const fetchTickerPosts = async () => {
@@ -17,17 +20,18 @@ const MagazineTicker: React.FC<MagazineTickerProps> = ({ onPostClick }) => {
         const cats = await fetchMagazineCategories();
         const analisesCat = cats.find((c: any) => c.slug.includes('analise'));
         
-        // Tenta buscar analises primeiro
+        // Tenta buscar analises primeiro, with exclusion
         const data = await fetchMagazinePosts({ 
             categories: analisesCat?.id || '', 
-            perPage: 15 
+            perPage: 15,
+            categoriesExclude: EXCLUDED_CATS
         });
         
         if (data.posts && data.posts.length > 0) {
           setPosts(data.posts);
         } else {
-            // Fallback para os últimos posts gerais caso não haja análises específicas
-            const latest = await fetchMagazinePosts({ perPage: 15 });
+            // Fallback para os últimos posts gerais caso não haja análises específicas, with exclusion
+            const latest = await fetchMagazinePosts({ perPage: 15, categoriesExclude: EXCLUDED_CATS });
             setPosts(latest.posts || []);
         }
       } catch (e) {
