@@ -114,7 +114,7 @@ const MissingDataOverlay: React.FC = () => (
   </div>
 );
 
-// --- COMPONENTES VISUAIS (Charts, Tables) ---
+// --- COMPONENTES VISUAIS (Charts, Tables) .---
 
 const StackedEtfChart: React.FC<ChartBaseProps> = ({ data, metric, allTickers, colorMap }) => {
   const chartRef = useRef<HTMLDivElement>(null);
