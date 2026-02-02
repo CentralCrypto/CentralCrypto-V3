@@ -175,7 +175,17 @@ const StackedEtfChart: React.FC<ChartBaseProps> = ({ data, metric, allTickers, c
         column: { stacking: 'normal', borderWidth: 0, dataLabels: { enabled: false } },
         series: { stickyTracking: false, states: { inactive: { opacity: 1 } } }
       },
-      tooltip: { enabled: false },
+      tooltip: { 
+        enabled: true,
+        backgroundColor: isDark ? 'rgba(26, 28, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+        borderColor: isDark ? '#374151' : '#e2e8f0',
+        borderRadius: 8,
+        style: { color: isDark ? '#fff' : '#333', fontSize: '11px', fontWeight: 'bold' },
+        formatter: function () {
+            // @ts-ignore
+            return new Date(this.x).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        }
+      },
       series
     } as any);
 
@@ -246,7 +256,17 @@ const TotalBarChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
           formatter: function (this: any) { return '$' + formatCompactNumber(this.value); }
         }
       },
-      tooltip: { enabled: false },
+      tooltip: { 
+        enabled: true,
+        backgroundColor: isDark ? 'rgba(26, 28, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+        borderColor: isDark ? '#374151' : '#e2e8f0',
+        borderRadius: 8,
+        style: { color: isDark ? '#fff' : '#333', fontSize: '11px', fontWeight: 'bold' },
+        formatter: function () {
+            // @ts-ignore
+            return new Date(this.x).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        }
+      },
       plotOptions: {
         column: { borderWidth: 0, pointPadding: 0.1, groupPadding: 0.1 },
         series: { stickyTracking: false }
@@ -1106,48 +1126,56 @@ const EtfSummary: React.FC<{ language: Language }> = ({ language }) => {
       { name: 'ETH', val: etfData.ethValue, color: '#627eea' },
       { name: 'SOL', val: etfData.solValue, color: '#14f195' },
       { name: 'XRP', val: etfData.xrpValue, color: '#23292f' },
+      { name: 'DOGE', val: etfData.dogeValue, color: '#c2a633' },
+      { name: 'LTC', val: etfData.ltcValue, color: '#b8b8b8' },
   ];
 
   return (
-    <div className="h-full flex flex-col p-3 relative text-center bg-white dark:bg-[#2f3032]">
-      <div className="flex flex-col items-center shrink-0">
-        <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{t.dailyFlow}</div>
+    <div className="h-full flex flex-col p-2 relative text-center bg-white dark:bg-[#2f3032]">
+      <div className="flex flex-col items-center shrink-0 mb-1">
+        <div className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{t.dailyFlow}</div>
         <div className={`mt-0.5 flex items-center justify-center gap-1`}>
-          <FlowArrow size={24} strokeWidth={4} className={arrowColor} />
-          <span className="text-3xl font-black text-black dark:text-white tracking-tighter">
+          <FlowArrow size={20} strokeWidth={4} className={arrowColor} />
+          <span className="text-2xl font-black text-black dark:text-white tracking-tighter">
             ${formatCompactNumber(Math.abs(totalFlow))}
           </span>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar my-2 pr-1 border-y border-gray-100 dark:border-slate-700/50 py-2">
-          <div className="flex flex-col gap-1.5">
+      <div className="flex-1 overflow-y-auto custom-scrollbar my-1 pr-1 border-t border-gray-100 dark:border-slate-700/50 py-1">
+          <div className="flex flex-col gap-1">
               {assets.map(asset => (
-                  <div key={asset.name} className="flex items-center justify-between px-2 py-1 bg-gray-50 dark:bg-black/10 rounded">
+                  <div key={asset.name} className="flex items-center justify-between px-2 py-0.5 hover:bg-gray-50 dark:hover:bg-black/10 rounded">
                       <div className="flex items-center gap-2">
                           <div className="w-1.5 h-1.5 rounded-full" style={{backgroundColor: asset.color}}></div>
-                          <span className="text-xs font-bold text-gray-600 dark:text-gray-300">{asset.name}</span>
+                          <span className="text-[10px] font-bold text-gray-600 dark:text-gray-300">{asset.name}</span>
                       </div>
-                      <span className="text-xs font-mono font-bold text-gray-900 dark:text-white">
-                          ${formatCompactNumber(asset.val)}
+                      <span className="text-[10px] font-mono font-bold text-gray-900 dark:text-white">
+                          ${formatCompactNumber(asset.val || 0)}
                       </span>
                   </div>
               ))}
           </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-1 shrink-0">
-        <div className="bg-gray-50 dark:bg-black/10 rounded p-1">
-          <div className={`text-xs font-bold ${etfData.history.lastWeek >= 0 ? 'text-green-500' : 'text-red-500'}`}>${formatCompactNumber(etfData.history.lastWeek)}</div>
-          <div className="text-[8px] text-slate-500 font-bold uppercase">{t.last7d}</div>
+      <div className="flex justify-between items-center pt-2 mt-1 border-t border-gray-100 dark:border-slate-700/50">
+        <div className="text-center">
+          <div className="text-[9px] text-gray-500 dark:text-slate-500 font-bold uppercase tracking-tighter">7D</div>
+          <div className={`text-xs font-mono font-black ${etfData.history.lastWeek >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+            ${formatCompactNumber(etfData.history.lastWeek)}
+          </div>
         </div>
-        <div className="bg-gray-50 dark:bg-black/10 rounded p-1">
-          <div className={`text-xs font-bold ${etfData.history.lastMonth >= 0 ? 'text-green-500' : 'text-red-500'}`}>${formatCompactNumber(etfData.history.lastMonth)}</div>
-          <div className="text-[8px] text-slate-500 font-bold uppercase">{t.last30d}</div>
+        <div className="text-center">
+          <div className="text-[9px] text-gray-500 dark:text-slate-500 font-bold uppercase tracking-tighter">30D</div>
+          <div className={`text-xs font-mono font-black ${etfData.history.lastMonth >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+            ${formatCompactNumber(etfData.history.lastMonth)}
+          </div>
         </div>
-        <div className="bg-gray-50 dark:bg-black/10 rounded p-1">
-          <div className={`text-xs font-bold ${etfData.history.last90d >= 0 ? 'text-green-500' : 'text-red-500'}`}>${formatCompactNumber(etfData.history.last90d)}</div>
-          <div className="text-[8px] text-slate-500 font-bold uppercase">{t.last90d}</div>
+        <div className="text-center">
+          <div className="text-[9px] text-gray-500 dark:text-slate-500 font-bold uppercase tracking-tighter">90D</div>
+          <div className={`text-xs font-mono font-black ${etfData.history.last90d >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+            ${formatCompactNumber(etfData.history.last90d)}
+          </div>
         </div>
       </div>
       

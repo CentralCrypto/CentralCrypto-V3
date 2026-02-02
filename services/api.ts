@@ -162,13 +162,15 @@ export interface NewsItem {
 export interface EtfFlowData {
   btcValue: number;
   ethValue: number;
+  solValue: number;
+  xrpValue: number;
+  dogeValue?: number; // Added
+  ltcValue?: number;  // Added
   netFlow: number;
   timestamp: number;
   chartDataBTC: any[];
   chartDataETH: any[];
   history: { lastWeek: number; lastMonth: number; last90d: number; };
-  solValue: number;
-  xrpValue: number;
 }
 
 export interface LsrData { lsr: number | null; longs: number | null; shorts: number | null; exchange?: string; }
@@ -605,6 +607,26 @@ export const fetchEtfFlow = async (): Promise<EtfFlowData | null> => {
     const root = Array.isArray(summaryRaw) ? summaryRaw[0] : summaryRaw;
     const data = (root && typeof root === 'object' && (root as any).data) ? (root as any).data : root;
     const status = (root && typeof root === 'object' && (root as any).status) ? (root as any).status : null;
+    
+    // Calculate history manually if available data points exist
+    let history = (data as any)?.history || { lastWeek: 0, lastMonth: 0, last90d: 0 };
+    
+    // Try to calculate history from points if default history is zero/empty
+    const points = (data as any)?.points;
+    if (Array.isArray(points) && points.length > 0) {
+         // Sort by date ascending
+         const sortedPoints = [...points].sort((a,b) => a.timestamp - b.timestamp);
+         
+         const sumLastN = (n: number) => {
+             const slice = sortedPoints.slice(-n);
+             return slice.reduce((acc, p) => acc + (Number(p.total ?? p.value ?? 0)), 0);
+         };
+
+         // If original history is zero or suspicious, override
+         if (history.lastWeek === 0) history.lastWeek = sumLastN(7);
+         if (history.lastMonth === 0) history.lastMonth = sumLastN(30);
+         if (history.last90d === 0) history.last90d = sumLastN(90);
+    }
 
     return {
       btcValue: Number((data as any)?.totalBtcValue ?? (data as any)?.btcValue ?? 0),
@@ -613,9 +635,11 @@ export const fetchEtfFlow = async (): Promise<EtfFlowData | null> => {
       timestamp: status?.timestamp ? new Date(status.timestamp).getTime() : Date.now(),
       chartDataBTC: [],
       chartDataETH: [],
-      history: (data as any)?.history || { lastWeek: 0, lastMonth: 0, last90d: 0 },
+      history: history,
       solValue: Number((data as any)?.solValue ?? 0),
-      xrpValue: Number((data as any)?.xrpValue ?? 0)
+      xrpValue: Number((data as any)?.xrpValue ?? 0),
+      dogeValue: Number((data as any)?.dogeValue ?? 0), // Add
+      ltcValue: Number((data as any)?.ltcValue ?? 0)    // Add
     };
   } catch (e) {
     console.error("Error fetching ETF data", e);
