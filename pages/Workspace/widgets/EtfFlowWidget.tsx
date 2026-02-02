@@ -32,7 +32,7 @@ const PALETTE = [
 ];
 
 const WATERMARK_URL = 'https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png';
-const WATERMARK_OPACITY = 0.08; 
+const WATERMARK_OPACITY = 0.055;
 
 type Metric = 'flows' | 'volume';
 type Asset = 'BTC' | 'ETH' | 'SOL' | 'XRP' | 'DOGE' | 'LTC';
@@ -73,7 +73,7 @@ const applyWatermark = (chart: Highcharts.Chart) => {
     const h = chart.chartHeight;
     if (!w || !h) return;
 
-    const size = Math.min(w, h) * 0.80;
+    const size = Math.min(w, h) * 0.75;
     const x = (w - size) / 2;
     const y = (h - size) / 2;
 
@@ -342,31 +342,47 @@ const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }
   return <div ref={chartRef} className="w-full h-full" />;
 };
 
-const MarketSharePanel: React.FC<{ 
-    currentData: any, 
-    allTickers: string[], 
-    colorMap: Record<string, string>, 
-    metric: Metric, 
-    asset: string,
-    stats: { d1: number, d7: number, d30: number },
-    onPrev: () => void,
-    onNext: () => void,
-    isFirst: boolean,
-    isLast: boolean
-}> = ({ currentData, allTickers, colorMap, metric, asset, stats, onPrev, onNext, isFirst, isLast }) => {
-    
-    // Ensure we list ALL tickers, sorting by value desc (zeros at bottom)
-    const sortedTickers = useMemo(() => {
-        // Map all tickers, get value (or 0 if missing/null)
-        const items = allTickers.map(t => {
-            const val = currentData ? Number(currentData[t] || 0) : 0;
-            return { ticker: t, val };
+const MarketSharePanel: React.FC<{ data: any[], allTickers: string[], colorMap: Record<string, string>, metric: Metric, asset: string }> = ({ data, allTickers, colorMap, metric, asset }) => {
+    // Calculate aggregate for table
+    const aggregate = useMemo(() => {
+        const map: Record<string, number> = {};
+        let total = 0;
+        data.forEach(d => {
+            allTickers.forEach(t => {
+                const val = Number(d[t] || 0);
+                if (val > 0) {
+                    map[t] = (map[t] || 0) + val;
+                    total += val;
+                }
+            });
         });
-        // Sort descending by value
-        return items.sort((a, b) => b.val - a.val);
-    }, [currentData, allTickers]);
+        const sorted = Object.entries(map).sort((a,b) => b[1] - a[1]);
+        return { sorted, total };
+    }, [data, allTickers]);
 
-    const dateStr = currentData ? new Date(currentData.date).toLocaleDateString(undefined, { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' }) : '---';
+    // Calculate Summary Stats (1D, 7D, 30D) for the selected asset
+    const stats = useMemo(() => {
+        if (!data || data.length === 0) return { d1: 0, d7: 0, d30: 0 };
+        
+        // Helper to sum all tickers for a given slice of data
+        const sumFlow = (slice: any[]) => {
+            let sum = 0;
+            slice.forEach(day => {
+                // If the API returns a totalGlobal calculated correctly, use it.
+                // Otherwise, sum the known tickers.
+                // Assuming data[i].totalGlobal is the sum of tickers for that day.
+                sum += Number(day.totalGlobal || 0);
+            });
+            return sum;
+        };
+
+        const len = data.length;
+        const d1 = sumFlow(data.slice(-1));
+        const d7 = sumFlow(data.slice(-7));
+        const d30 = sumFlow(data.slice(-30));
+
+        return { d1, d7, d30 };
+    }, [data]);
 
     const StatBox = ({ label, value }: { label: string, value: number }) => (
         <div className="flex flex-col items-center justify-center bg-gray-100 dark:bg-[#2f3032] rounded-lg p-2 border border-gray-200 dark:border-slate-700">
@@ -389,47 +405,27 @@ const MarketSharePanel: React.FC<{
                 </div>
             </div>
 
-            {/* Date Paginator */}
-            <div className="p-2 border-b border-gray-100 dark:border-slate-800/50 flex items-center justify-between bg-gray-50 dark:bg-black/20">
-                <button 
-                    onClick={onPrev} 
-                    disabled={isFirst}
-                    className="p-1 rounded hover:bg-gray-200 dark:hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                    <ChevronLeft size={16} className="text-gray-600 dark:text-slate-300" />
-                </button>
-                <span className="text-xs font-black text-gray-700 dark:text-slate-200 uppercase">{dateStr}</span>
-                <button 
-                    onClick={onNext} 
-                    disabled={isLast}
-                    className="p-1 rounded hover:bg-gray-200 dark:hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                    <ChevronRight size={16} className="text-gray-600 dark:text-slate-300" />
-                </button>
+            <div className="p-3 border-b border-gray-100 dark:border-slate-800/50 font-black text-xs text-gray-500 uppercase tracking-widest">
+                Market Share (Period)
             </div>
-
             <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
                 <table className="w-full text-xs">
                     <tbody>
-                        {sortedTickers.map(({ticker, val}) => {
-                            const isZero = val === 0;
+                        {aggregate.sorted.map(([ticker, val]) => {
+                            const pct = aggregate.total > 0 ? (val / aggregate.total) * 100 : 0;
                             return (
-                                <tr key={ticker} className="border-b border-gray-50 dark:border-slate-800/30 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
-                                    <td className="py-2 pl-1">
+                                <tr key={ticker} className="border-b border-gray-50 dark:border-slate-800/30">
+                                    <td className="py-2">
                                         <div className="flex items-center gap-2">
-                                            <div className={`w-2.5 h-2.5 rounded-full shadow-sm ${isZero ? 'opacity-30 grayscale' : ''}`} style={{ backgroundColor: colorMap[ticker] || '#ccc' }} />
-                                            <span className={`font-bold ${isZero ? 'text-gray-400' : 'text-gray-700 dark:text-gray-300'}`}>{ticker}</span>
+                                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: colorMap[ticker] || '#ccc' }} />
+                                            <span className="font-bold text-gray-700 dark:text-gray-300">{ticker}</span>
                                         </div>
                                     </td>
-                                    <td className={`py-2 text-right font-mono font-bold ${isZero ? 'text-gray-300 dark:text-gray-600' : 'text-gray-500 dark:text-slate-400'}`}>
-                                        ${formatCompactNumber(val)}
-                                    </td>
+                                    <td className="py-2 text-right font-mono text-gray-500">${formatCompactNumber(val)}</td>
+                                    <td className="py-2 text-right font-bold text-[#dd9933]">{pct.toFixed(1)}%</td>
                                 </tr>
                             );
                         })}
-                        {sortedTickers.length === 0 && (
-                            <tr><td colSpan={2} className="text-center py-4 text-gray-400">Sem dados</td></tr>
-                        )}
                     </tbody>
                 </table>
             </div>
@@ -438,80 +434,55 @@ const MarketSharePanel: React.FC<{
 };
 
 // --- PHYSICS BUBBLES ---
-const EtfBubbles: React.FC<{ currentData: any, allTickers: string[], colorMap: Record<string,string> }> = ({ currentData, allTickers, colorMap }) => {
+const EtfBubbles: React.FC<{ data: any[], allTickers: string[], colorMap: Record<string,string> }> = ({ data, allTickers, colorMap }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const requestRef = useRef<number>(0);
     const particlesRef = useRef<any[]>([]);
-    
-    // Tooltip State
-    const [tooltip, setTooltip] = useState<{visible: boolean, x: number, y: number, content: any} | null>(null);
 
     useEffect(() => {
-        // Safe check for missing data to avoid crashes
-        if (!currentData || !allTickers.length) {
-            particlesRef.current = [];
-            return;
-        }
+        if (!data.length || !allTickers.length) return;
 
-        // 1. Extract values for current day
-        const vals: Record<string, number> = {};
-        let maxVal = 0;
-        
-        allTickers.forEach(t => {
-            const v = Number(currentData[t] || 0);
-            if (v > 0) {
-                vals[t] = v;
-                if (v > maxVal) maxVal = v;
-            }
+        // 1. Prepare Data
+        const sums: Record<string, number> = {};
+        allTickers.forEach(t => sums[t] = 0);
+        data.forEach(d => {
+            allTickers.forEach(t => {
+                const v = Number(d[t] || 0);
+                if (v > 0) sums[t] += v;
+            });
         });
 
-        const activeTickers = Object.keys(vals);
+        // Filter out zero sums
+        const activeTickers = allTickers.filter(t => sums[t] > 0);
+        if (activeTickers.length === 0) return;
+
+        const maxVal = Math.max(...activeTickers.map(t => sums[t]));
         
-        // 2. Initialize Particles (Reusing logic for smoothness)
+        // 2. Initialize Particles
         const container = containerRef.current;
         if (!container) return;
         const width = container.clientWidth;
         const height = container.clientHeight;
 
-        const newParticles = activeTickers.map(t => {
-            const val = vals[t];
-            // Radius proportional to sqrt of value (area), clamped min 15 max 55
-            const radius = 15 + (Math.sqrt(val) / Math.sqrt(maxVal || 1)) * 55;
+        particlesRef.current = activeTickers.map(t => {
+            const val = sums[t];
+            // Radius proportional to sqrt of value (area)
+            const radius = 15 + (Math.sqrt(val) / Math.sqrt(maxVal)) * 45;
             
-            // Try to find existing to preserve position and smooth transition
-            const existing = particlesRef.current.find(p => p.id === t);
-            
-            if (existing) {
-                existing.targetRadius = radius;
-                existing.val = val;
-                // Wake up inactive particles if size changes
-                if(Math.abs(existing.radius - radius) > 1) {
-                    existing.vx += (Math.random() - 0.5);
-                    existing.vy += (Math.random() - 0.5);
-                }
-                return existing;
-            }
-
             return {
                 id: t,
                 x: Math.random() * (width - radius * 2) + radius,
                 y: Math.random() * (height - radius * 2) + radius,
                 vx: (Math.random() - 0.5) * 1.5,
                 vy: (Math.random() - 0.5) * 1.5,
-                radius: 0, // Start small and grow
-                targetRadius: radius,
+                radius,
                 color: colorMap[t] || '#888',
                 val,
                 mass: radius
             };
         });
-        
-        particlesRef.current = newParticles;
 
-    }, [currentData, allTickers, colorMap]);
-
-    useEffect(() => {
         const animate = () => {
             const canvas = canvasRef.current;
             if (!canvas) return;
@@ -524,91 +495,80 @@ const EtfBubbles: React.FC<{ currentData: any, allTickers: string[], colorMap: R
             ctx.clearRect(0, 0, w, h);
 
             const particles = particlesRef.current;
-            if (!particles || particles.length === 0) {
-                 requestRef.current = requestAnimationFrame(animate);
-                 return;
-            }
 
+            // Physics Update
             for (let i = 0; i < particles.length; i++) {
                 const p = particles[i];
                 
-                // Animate Radius (Lerp)
-                p.radius += (p.targetRadius - p.radius) * 0.1;
-
                 // Move
                 p.x += p.vx;
                 p.y += p.vy;
 
-                // Wall Collision (Simple bounce)
+                // Wall Collision
                 if (p.x - p.radius < 0) { p.x = p.radius; p.vx *= -1; }
                 if (p.x + p.radius > w) { p.x = w - p.radius; p.vx *= -1; }
                 if (p.y - p.radius < 0) { p.y = p.radius; p.vy *= -1; }
                 if (p.y + p.radius > h) { p.y = h - p.radius; p.vy *= -1; }
 
-                // Bubble Collision (Overlap Resolution + Impulse)
+                // Bubble Collision (Simple Elastic)
                 for (let j = i + 1; j < particles.length; j++) {
                     const p2 = particles[j];
                     const dx = p2.x - p.x;
                     const dy = p2.y - p.y;
-                    const distSq = dx*dx + dy*dy;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
                     const minDist = p.radius + p2.radius;
-                    const minDistSq = minDist * minDist;
 
-                    if (distSq < minDistSq) {
-                        const dist = Math.sqrt(distSq) || 0.001;
-                        const nx = dx / dist;
-                        const ny = dy / dist;
-                        const overlap = minDist - dist;
-                        
-                        // Push away
-                        const ax = nx * overlap * 0.05; 
-                        const ay = ny * overlap * 0.05;
-                        
+                    if (dist < minDist) {
+                        // Resolve Overlap
+                        const angle = Math.atan2(dy, dx);
+                        const tx = p.x + Math.cos(angle) * minDist;
+                        const ty = p.y + Math.sin(angle) * minDist;
+                        const ax = (tx - p2.x) * 0.5; // push factor
+                        const ay = (ty - p2.y) * 0.5;
                         p.x -= ax; p.y -= ay;
                         p2.x += ax; p2.y += ay;
 
-                        // Bounce (Exchange energy dampening)
+                        // Bounce (Swap velocities roughly based on mass)
+                        const v1 = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+                        const v2 = Math.sqrt(p2.vx * p2.vx + p2.vy * p2.vy);
+                        // Simplified bounce: exchange vectors slightly damped
                         const tempVx = p.vx;
                         const tempVy = p.vy;
-                        p.vx = p2.vx * 0.9; 
-                        p.vy = p2.vy * 0.9;
-                        p2.vx = tempVx * 0.9;
-                        p2.vy = tempVy * 0.9;
-                        
-                        // Add Jitter to prevent stacking
-                        p.vx += (Math.random() - 0.5) * 0.1;
-                        p.vy += (Math.random() - 0.5) * 0.1;
+                        p.vx = p2.vx; 
+                        p.vy = p2.vy;
+                        p2.vx = tempVx;
+                        p2.vy = tempVy;
                     }
                 }
-                
-                // Friction
-                p.vx *= 0.98;
-                p.vy *= 0.98;
 
-                // DRAWING (Performance Optimized)
-                // Using standard fill + white shine instead of RadialGradient for speed
+                // Draw
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-                ctx.fillStyle = p.color;
+                
+                // Gradient for 3D effect
+                const grad = ctx.createRadialGradient(p.x - p.radius/3, p.y - p.radius/3, p.radius/10, p.x, p.y, p.radius);
+                grad.addColorStop(0, '#ffffff');
+                grad.addColorStop(0.3, p.color);
+                grad.addColorStop(1, p.color); // solid color edge
+                
+                ctx.fillStyle = p.color; // Fallback or flat
+                ctx.globalAlpha = 0.8;
                 ctx.fill();
                 
-                // Simple Shine (Top Left)
-                ctx.beginPath();
-                ctx.arc(p.x - p.radius * 0.3, p.y - p.radius * 0.3, p.radius * 0.25, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(255,255,255,0.3)';
-                ctx.fill();
+                ctx.strokeStyle = "rgba(255,255,255,0.3)";
+                ctx.lineWidth = 1;
+                ctx.stroke();
                 
                 // Text
-                if (p.radius > 12) {
-                    ctx.fillStyle = "#ffffff";
-                    ctx.font = `bold ${Math.max(10, p.radius/2.5)}px Inter, sans-serif`;
-                    ctx.textAlign = "center";
-                    ctx.textBaseline = "middle";
-                    ctx.shadowColor = "rgba(0,0,0,0.5)";
-                    ctx.shadowBlur = 3;
-                    ctx.fillText(p.id, p.x, p.y);
-                    ctx.shadowBlur = 0;
-                }
+                ctx.globalAlpha = 1;
+                ctx.fillStyle = "#ffffff";
+                ctx.font = `bold ${Math.max(10, p.radius/2.5)}px Inter, sans-serif`;
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.shadowColor = "rgba(0,0,0,0.5)";
+                ctx.shadowBlur = 4;
+                ctx.fillText(p.id, p.x, p.y);
+                ctx.shadowBlur = 0;
             }
 
             requestRef.current = requestAnimationFrame(animate);
@@ -617,6 +577,7 @@ const EtfBubbles: React.FC<{ currentData: any, allTickers: string[], colorMap: R
         const handleResize = () => {
             if (containerRef.current && canvasRef.current) {
                 const rect = containerRef.current.getBoundingClientRect();
+                // Handle high DPI
                 const dpr = window.devicePixelRatio || 1;
                 canvasRef.current.width = rect.width * dpr;
                 canvasRef.current.height = rect.height * dpr;
@@ -624,6 +585,7 @@ const EtfBubbles: React.FC<{ currentData: any, allTickers: string[], colorMap: R
                 const ctx = canvasRef.current.getContext('2d');
                 if (ctx) ctx.scale(dpr, dpr);
                 
+                // Reposition out of bounds particles
                 particlesRef.current.forEach(p => {
                     p.x = Math.min(p.x, rect.width - p.radius);
                     p.y = Math.min(p.y, rect.height - p.radius);
@@ -632,60 +594,22 @@ const EtfBubbles: React.FC<{ currentData: any, allTickers: string[], colorMap: R
         };
 
         window.addEventListener('resize', handleResize);
-        handleResize();
+        handleResize(); // Init size
         requestRef.current = requestAnimationFrame(animate);
 
         return () => {
             window.removeEventListener('resize', handleResize);
             cancelAnimationFrame(requestRef.current);
         };
-    }, []);
-
-    const handleMouseMove = (e: React.MouseEvent) => {
-        const rect = canvasRef.current?.getBoundingClientRect();
-        if(!rect) return;
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        
-        const found = particlesRef.current.find(p => {
-            const dx = p.x - x;
-            const dy = p.y - y;
-            return dx*dx + dy*dy < p.radius*p.radius;
-        });
-
-        if (found) {
-            setTooltip({
-                visible: true,
-                x: e.clientX,
-                y: e.clientY,
-                content: { name: found.id, flow: found.val }
-            });
-        } else {
-            setTooltip(null);
-        }
-    };
-
-    const handleMouseLeave = () => setTooltip(null);
+    }, [data, allTickers, colorMap]);
 
     return (
-        <div ref={containerRef} className="w-full h-full relative overflow-hidden bg-white dark:bg-[#1a1c1e] cursor-crosshair">
+        <div ref={containerRef} className="w-full h-full relative overflow-hidden bg-white dark:bg-[#1a1c1e]">
             <canvas 
                 ref={canvasRef} 
                 className="w-full h-full block" 
                 style={{ width: '100%', height: '100%' }}
-                onMouseMove={handleMouseMove}
-                onMouseLeave={handleMouseLeave}
             />
-            {tooltip && createPortal(
-                <div 
-                    className="fixed z-[9999] pointer-events-none bg-black/90 backdrop-blur text-white p-3 rounded-xl border border-gray-700 shadow-2xl flex flex-col gap-1 min-w-[140px]"
-                    style={{ top: tooltip.y + 10, left: tooltip.x + 10 }}
-                >
-                    <div className="font-black text-[#dd9933] uppercase text-sm border-b border-white/10 pb-1 mb-1">{tooltip.content.name}</div>
-                    <div className="flex justify-between text-xs"><span className="text-gray-400">Flow:</span> <span className="font-mono font-bold">${formatCompactNumber(tooltip.content.flow)}</span></div>
-                </div>,
-                document.body
-            )}
         </div>
     );
 };
@@ -773,26 +697,37 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void, item: D
   const [loading, setLoading] = useState(true);
 
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
-  
-  // PAGINATION STATE
-  const [viewDateIndex, setViewDateIndex] = useState<number>(-1);
+  const [selectedIndex, setSelectedIndex] = useState<number>(-1);
 
+  // DETECT IF THIS IS THE "FULL PAGE" OR "MAIN BOARD MAXIMIZED"
+  // If item.id is 'etf-page' (from IndicatorPage.tsx), show extras.
+  // If item.id is anything else (e.g. 'main-etf' from Workspace/constants), hide extras.
   const showExtras = item.id === 'etf-page';
 
+  // Summary (top KPI)
   useEffect(() => {
     fetchEtfFlow().then(res => setSummaryData(res));
   }, []);
 
+  // Fetch main data ONLY when header toggles change
   useEffect(() => {
     setLoading(true);
     fetchEtfDetailed(asset, metric).then(res => {
       const arr = Array.isArray(res) ? res : [];
       setData(arr);
-      // Set to last available date by default
-      setViewDateIndex(arr.length > 0 ? arr.length - 1 : -1);
+      setSelectedIndex(arr.length > 0 ? arr.length - 1 : -1);
       setLoading(false);
     });
   }, [asset, metric]);
+
+  useEffect(() => {
+    if (!Array.isArray(data) || data.length === 0) {
+      if (selectedIndex !== -1) setSelectedIndex(-1);
+      return;
+    }
+    const last = data.length - 1;
+    if (selectedIndex < 0 || selectedIndex > last) setSelectedIndex(last);
+  }, [data, selectedIndex]);
 
   const allTickers = useMemo(() => {
     return getAllTickersFromData(data);
@@ -827,33 +762,6 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void, item: D
 
   const tickerButtons = useMemo(() => allTickers, [allTickers.join('|')]);
 
-  const sidebarStats = useMemo(() => {
-      if (!data || data.length === 0) return { d1: 0, d7: 0, d30: 0 };
-      
-      const sumFlow = (slice: any[]) => {
-          let sum = 0;
-          slice.forEach(day => sum += Number(day.totalGlobal || 0));
-          return sum;
-      };
-
-      // Ensure data exists before slicing
-      const d1 = data.length > 0 ? sumFlow(data.slice(-1)) : 0;
-      const d7 = data.length > 6 ? sumFlow(data.slice(-7)) : 0;
-      const d30 = data.length > 29 ? sumFlow(data.slice(-30)) : 0;
-
-      return { d1, d7, d30 };
-  }, [data]);
-
-  const currentDayData = useMemo(() => {
-      if (viewDateIndex >= 0 && viewDateIndex < data.length) {
-          return data[viewDateIndex];
-      }
-      return null;
-  }, [data, viewDateIndex]);
-
-  const handlePrevDay = () => setViewDateIndex(i => Math.max(0, i - 1));
-  const handleNextDay = () => setViewDateIndex(i => Math.min(data.length - 1, i + 1));
-
   const ChartArea = () => {
     if (isMissingCombo) {
       return (
@@ -882,6 +790,7 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void, item: D
 
   return (
     <div className="w-full flex flex-col bg-white dark:bg-[#1a1c1e] text-gray-900 dark:text-white p-6 h-full min-h-0">
+      {/* TOP BAR */}
       <div className="flex flex-col gap-3 mb-6 border-b border-gray-100 dark:border-slate-800 pb-4 shrink-0">
         <div className="flex justify-between items-center flex-wrap gap-4">
           <div className="flex items-center gap-4 flex-wrap">
@@ -897,6 +806,7 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void, item: D
 
             <div className="w-px h-8 bg-gray-200 dark:bg-slate-700 hidden md:block mx-2" />
 
+            {/* ASSET SELECTOR */}
             <div className="flex bg-gray-100 dark:bg-black/30 p-1 rounded-lg border border-gray-200 dark:border-slate-700">
               {(Object.keys(ASSETS_CONFIG) as Asset[]).map((key) => (
                 <button
@@ -910,6 +820,7 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void, item: D
               ))}
             </div>
 
+            {/* METRIC */}
             <div className="flex bg-gray-100 dark:bg-black/30 p-1 rounded-lg border border-gray-200 dark:border-slate-700">
               <button
                 onClick={() => setMetric('flows')}
@@ -925,6 +836,7 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void, item: D
               </button>
             </div>
 
+            {/* VIEW MODE */}
             <div className="flex bg-gray-100 dark:bg-black/30 p-1 rounded-lg border border-gray-200 dark:border-slate-700">
               <button
                 onClick={() => setViewMode('stacked')}
@@ -963,20 +875,16 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void, item: D
         )}
       </div>
 
+      {/* GRID CONTAINER - CONDITIONAL RENDER */}
       {showExtras ? (
-          <div className="grid grid-cols-12 gap-4" style={{ height: '620px', minHeight: '620px' }}>
-              <div className="col-span-12 lg:col-span-2 overflow-hidden bg-gray-5 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 flex flex-col">
+          <div className="flex-1 min-h-0 grid grid-cols-12 gap-4">
+              <div className="col-span-12 lg:col-span-2 overflow-hidden bg-gray-5 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50">
                   <MarketSharePanel 
-                    currentData={currentDayData} 
+                    data={data} 
                     allTickers={allTickers} 
                     colorMap={colorMap} 
                     metric={metric} 
-                    asset={asset}
-                    stats={sidebarStats}
-                    onPrev={handlePrevDay}
-                    onNext={handleNextDay}
-                    isFirst={viewDateIndex <= 0}
-                    isLast={viewDateIndex >= data.length - 1}
+                    asset={asset} 
                   />
               </div>
               <div className="col-span-12 lg:col-span-7 overflow-hidden relative bg-gray-5 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4 flex flex-col">
@@ -986,13 +894,14 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void, item: D
                   <HelpTooltip />
               </div>
               <div className="col-span-12 lg:col-span-3 overflow-hidden bg-gray-5 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4 flex flex-col relative">
-                  <h4 className="text-xs font-bold text-gray-500 uppercase mb-2 text-center tracking-widest">Share Volumétrico (Dia)</h4>
-                  <div className="flex-1 min-h-0 relative bg-black/5 dark:bg-black/20 rounded-lg">
-                      <EtfBubbles currentData={currentDayData} allTickers={allTickers} colorMap={colorMap} />
+                  <h4 className="text-xs font-bold text-gray-500 uppercase mb-2 text-center tracking-widest">Share Volumétrico</h4>
+                  <div className="flex-1 min-h-0 relative">
+                      <EtfBubbles data={data} allTickers={allTickers} colorMap={colorMap} />
                   </div>
               </div>
           </div>
       ) : (
+          /* SIMPLE MODE (MAIN BOARD MAXIMIZED) */
           <div className="flex-1 min-h-0 relative bg-gray-5 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4 flex flex-col">
              <div className="relative flex-1 min-h-0">
                  <ChartArea />
@@ -1019,58 +928,47 @@ const EtfSummary: React.FC<{ language: Language }> = ({ language }) => {
   const FlowArrow = totalFlow >= 0 ? ArrowUp : ArrowDown;
   const arrowColor = totalFlow >= 0 ? 'text-green-400' : 'text-red-400';
 
-  const assets = [
-      { name: 'BTC', val: etfData.btcValue, color: '#f7931a' },
-      { name: 'ETH', val: etfData.ethValue, color: '#627eea' },
-      { name: 'SOL', val: etfData.solValue, color: '#14f195' },
-      { name: 'XRP', val: etfData.xrpValue, color: '#23292f' },
-  ];
-
   return (
-    <div className="h-full flex flex-col p-3 relative text-center bg-white dark:bg-[#2f3032]">
-      <div className="flex flex-col items-center shrink-0">
-        <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{t.dailyFlow}</div>
-        <div className={`mt-0.5 flex items-center justify-center gap-1`}>
-          <FlowArrow size={24} strokeWidth={4} className={arrowColor} />
-          <span className="text-3xl font-black text-black dark:text-white tracking-tighter">
+    <div className="h-full flex flex-col justify-between p-4 relative text-center bg-white dark:bg-[#2f3032]">
+      <div className="flex flex-col items-center">
+        <div className="text-xs text-slate-400 font-bold uppercase">{t.dailyFlow}</div>
+        <div className={`mt-1 p-2 rounded flex items-center justify-center gap-2 bg-transparent`}>
+          <FlowArrow size={48} strokeWidth={3} className={arrowColor} />
+          <span className="text-5xl font-black text-black dark:text-white">
             ${formatCompactNumber(Math.abs(totalFlow))}
           </span>
         </div>
+        <div className="text-xs text-slate-500">
+          {t.lastUpdate} {new Date(etfData.timestamp).toLocaleDateString(undefined, { timeZone: 'UTC' })}
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar my-2 pr-1 border-y border-gray-100 dark:border-slate-700/50 py-2">
-          <div className="flex flex-col gap-1.5">
-              {assets.map(asset => (
-                  <div key={asset.name} className="flex items-center justify-between px-2 py-1 bg-gray-50 dark:bg-black/10 rounded">
-                      <div className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 rounded-full" style={{backgroundColor: asset.color}}></div>
-                          <span className="text-xs font-bold text-gray-600 dark:text-gray-300">{asset.name}</span>
-                      </div>
-                      <span className="text-xs font-mono font-bold text-gray-900 dark:text-white">
-                          ${formatCompactNumber(asset.val)}
-                      </span>
-                  </div>
-              ))}
+      <div className="flex flex-col gap-1 mt-2 text-center">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <div className="text-xl font-bold text-gray-900 dark:text-white">${formatCompactNumber(etfData.btcValue)}</div>
+            <div className="text-xs text-slate-500 font-bold uppercase">{t.btcEtf}</div>
           </div>
+          <div>
+            <div className="text-xl font-bold text-gray-900 dark:text-white">${formatCompactNumber(etfData.ethValue)}</div>
+            <div className="text-xs text-slate-500 font-bold uppercase">{t.ethEtf}</div>
+          </div>
+        </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-1 shrink-0">
-        <div className="bg-gray-50 dark:bg-black/10 rounded p-1">
-          <div className={`text-xs font-bold ${etfData.history.lastWeek >= 0 ? 'text-green-500' : 'text-red-500'}`}>${formatCompactNumber(etfData.history.lastWeek)}</div>
-          <div className="text-[8px] text-slate-500 font-bold uppercase">{t.last7d}</div>
+      <div className="grid grid-cols-3 gap-2 mt-4 text-center border-t border-gray-100 dark:border-slate-700/50 pt-3">
+        <div>
+          <div className={`text-sm font-bold ${etfData.history.lastWeek >= 0 ? 'text-green-500' : 'text-red-500'}`}>${formatCompactNumber(etfData.history.lastWeek)}</div>
+          <div className="text-[9px] text-slate-500 font-bold uppercase">{t.last7d}</div>
         </div>
-        <div className="bg-gray-50 dark:bg-black/10 rounded p-1">
-          <div className={`text-xs font-bold ${etfData.history.lastMonth >= 0 ? 'text-green-500' : 'text-red-500'}`}>${formatCompactNumber(etfData.history.lastMonth)}</div>
-          <div className="text-[8px] text-slate-500 font-bold uppercase">{t.last30d}</div>
+        <div>
+          <div className={`text-sm font-bold ${etfData.history.lastMonth >= 0 ? 'text-green-500' : 'text-red-500'}`}>${formatCompactNumber(etfData.history.lastMonth)}</div>
+          <div className="text-[9px] text-slate-500 font-bold uppercase">{t.last30d}</div>
         </div>
-        <div className="bg-gray-50 dark:bg-black/10 rounded p-1">
-          <div className={`text-xs font-bold ${etfData.history.last90d >= 0 ? 'text-green-500' : 'text-red-500'}`}>${formatCompactNumber(etfData.history.last90d)}</div>
-          <div className="text-[8px] text-slate-500 font-bold uppercase">{t.last90d}</div>
+        <div>
+          <div className={`text-sm font-bold ${etfData.history.last90d >= 0 ? 'text-green-500' : 'text-red-500'}`}>${formatCompactNumber(etfData.history.last90d)}</div>
+          <div className="text-[9px] text-slate-500 font-bold uppercase">{t.last90d}</div>
         </div>
-      </div>
-      
-      <div className="text-[8px] text-slate-600 mt-1 uppercase tracking-widest opacity-60">
-          Total Market Net Flow
       </div>
     </div>
   );
