@@ -3,10 +3,27 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Highcharts from 'highcharts/highstock';
 import HC3D from 'highcharts/highcharts-3d';
 import HCWheelZoom from 'highcharts/modules/mouse-wheel-zoom';
-import { Loader2, AlertTriangle, ChevronDown, ChevronUp, Eye, EyeOff } from 'lucide-react';
+import { Loader2, AlertTriangle, ChevronDown, ChevronUp, Eye, EyeOff, GripVertical, ChevronsUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { DashboardItem, Language } from '../../../types';
 import { fetchLongShortRatio, LsrData } from '../../../services/api';
 import { getTranslations } from '../../../locales';
+
+// DnD Kit
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  horizontalListSortingStrategy,
+  useSortable
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 const init3D = (HC3D as any)?.default ?? HC3D;
 const initWheelZoom = (HCWheelZoom as any)?.default ?? HCWheelZoom;
@@ -46,10 +63,6 @@ type Lsr20Coin = {
   marketCap?: number;
   openInterest?: number;
   volUsd?: number;
-  liquidationUsd24h?: number;
-  liquidationUsd12h?: number;
-  liquidationUsd4h?: number;
-  liquidationUsd1h?: number;
   ls5m?: number;
   ls15m?: number;
   ls30m?: number;
@@ -57,15 +70,8 @@ type Lsr20Coin = {
   ls4h?: number;
   ls12h?: number;
   ls24h?: number;
-  longVolUsd5m?: number;
-  shortVolUsd5m?: number;
-  longVolUsd1h?: number;
-  shortVolUsd1h?: number;
-  longVolUsd12h?: number;
-  shortVolUsd12h?: number;
-  longVolUsd24h?: number;
-  shortVolUsd24h?: number;
   iconUrl?: string;
+  // Outros campos ignorados conforme pedido
 };
 
 const SYMBOLS: Sym[] = ['BTC', 'ETH', 'SOL'];
@@ -87,7 +93,7 @@ const fmtUSD = (v: number) => {
 };
 
 const fmtPct = (v: number) => `${(Number.isFinite(v) ? v : 0).toFixed(2)}%`;
-const fmtLSR = (v: number) => (Number.isFinite(v) ? v.toFixed(3) : '-');
+const fmtLSR = (v: number) => (Number.isFinite(v) ? v.toFixed(2) : '-');
 
 const sortByTotalVolDesc = (rows: ExchangeRow[]) =>
   [...rows].sort((a, b) => (b.buyVolUsd + b.sellVolUsd) - (a.buyVolUsd + a.sellVolUsd));
@@ -105,22 +111,9 @@ const Badge = ({ children }: { children: React.ReactNode }) => (
 async function fetchJsonStrict(url: string): Promise<any> {
   const res = await fetch(url, { cache: 'no-store' });
   const ct = res.headers.get('content-type') || '';
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`HTTP ${res.status} (${url})${text ? ` | ${text.slice(0, 80)}...` : ''}`);
-  }
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const raw = await res.text();
-  const trimmed = raw.trim();
-  if (!ct.includes('application/json')) {
-    if (trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html')) {
-      throw new Error(`Resposta não é JSON (${url}). Recebi HTML (SPA/404).`);
-    }
-  }
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    throw new Error(`Conteúdo inválido (não é JSON) em ${url}.`);
-  }
+  try { return JSON.parse(raw); } catch { throw new Error(`Invalid JSON`); }
 }
 
 function pickLsrByTf(coin: Lsr20Coin, tf: Tf) {
@@ -130,12 +123,9 @@ function pickLsrByTf(coin: Lsr20Coin, tf: Tf) {
   return Number(coin.ls24h) || 0;
 }
 
-function pickLiqByTf(coin: Lsr20Coin, tf: Tf) {
-  if (tf === '5m') return Number(coin.liquidationUsd1h) || 0;
-  if (tf === '1h') return Number(coin.liquidationUsd1h) || 0;
-  if (tf === '12h') return Number(coin.liquidationUsd12h) || 0;
-  return Number(coin.liquidationUsd24h) || 0;
-}
+// CORES EXATAS DOS BOXES (Emerald-500 / Rose-500)
+const COLOR_LONG = '#10b981';
+const COLOR_SHORT = '#f43f5e';
 
 export function LsrCockpitPage() {
   const [symbol, setSymbol] = useState<Sym>('BTC');
@@ -150,41 +140,41 @@ export function LsrCockpitPage() {
   const [errorPulse, setErrorPulse] = useState<string | null>(null);
 
   const [showTable, setShowTable] = useState(true);
+  const [activeTab, setActiveTab] = useState<'exchanges' | 'coins'>('exchanges');
   const [barsMode, setBarsMode] = useState<'usd' | 'ratio'>('usd');
-
-  const [sortKey, setSortKey] = useState<'exchange' | 'longPct' | 'shortPct' | 'longUsd' | 'shortUsd' | 'totalUsd'>('totalUsd');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   // Series Toggles
   const [showLongs, setShowLongs] = useState(true);
   const [showShorts, setShowShorts] = useState(true);
+
+  // Sorting
+  const [sortKey, setSortKey] = useState<string>('totalUsd');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
+  // Column Orders
+  const [exColOrder, setExColOrder] = useState(['exchange', 'longPct', 'shortPct', 'lsr', 'longUsd', 'shortUsd', 'totalUsd']);
+  const [coinColOrder, setCoinColOrder] = useState(['asset', 'price', 'ls5m', 'ls15m', 'ls30m', 'ls1h', 'ls4h', 'ls24h']);
 
   const pulseChartRef = useRef<Highcharts.Chart | null>(null);
   const barsChartRef = useRef<Highcharts.Chart | null>(null);
   
   // 3D Rotation State
   const rotationStartRef = useRef<{ x: number, y: number, alpha: number, beta: number } | null>(null);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
+  // FETCH DATA
   useEffect(() => {
     let alive = true;
     const run = async () => {
-      setLoadingExchange(true);
-      setErrorExchange(null);
+      setLoadingExchange(true); setErrorExchange(null);
       try {
-        const url = cachePathForExchange(symbol, tf);
-        const json = await fetchJsonStrict(url);
+        const json = await fetchJsonStrict(cachePathForExchange(symbol, tf));
         if (!alive) return;
-
-        const snap: ExchangeSnapshot = Array.isArray(json) ? json[0] : json;
-        setExchangeSnap(snap);
+        setExchangeSnap(Array.isArray(json) ? json[0] : json);
       } catch (e: any) {
         if (!alive) return;
-        setExchangeSnap(null);
-        setErrorExchange(e?.message || 'Falha ao carregar snapshot de exchanges');
-      } finally {
-        if (!alive) return;
-        setLoadingExchange(false);
-      }
+        setErrorExchange(e?.message);
+      } finally { if (alive) setLoadingExchange(false); }
     };
     run();
     return () => { alive = false; };
@@ -193,64 +183,42 @@ export function LsrCockpitPage() {
   useEffect(() => {
     let alive = true;
     const run = async () => {
-      setLoadingPulse(true);
-      setErrorPulse(null);
+      setLoadingPulse(true); setErrorPulse(null);
       try {
         const json = await fetchJsonStrict(cachePathForTopCoins());
         if (!alive) return;
-
         let arr: any[] = [];
-        if (Array.isArray(json)) {
-          if (json.length && json[0]?.data && Array.isArray(json[0].data)) arr = json[0].data;
-          else arr = json;
-        } else if (json?.data && Array.isArray(json.data)) {
-          arr = json.data;
-        }
-
-        const cleaned = arr
-          .filter(x => x && x.symbol)
-          .map(x => ({
+        if (Array.isArray(json)) arr = json[0]?.data || json;
+        else if (json?.data) arr = json.data;
+        
+        const cleaned = arr.map(x => ({
             ...x,
             symbol: String(x.symbol).toUpperCase(),
-            openInterest: Number(x.openInterest) || 0,
-            volUsd: Number(x.volUsd) || 0
-          })) as Lsr20Coin[];
-
+            price: Number(x.price),
+            ls5m: Number(x.ls5m), ls15m: Number(x.ls15m), ls30m: Number(x.ls30m),
+            ls1h: Number(x.ls1h), ls4h: Number(x.ls4h), ls12h: Number(x.ls12h), ls24h: Number(x.ls24h)
+        })) as Lsr20Coin[];
         setTopCoins(cleaned);
       } catch (e: any) {
         if (!alive) return;
-        setTopCoins([]);
-        setErrorPulse(e?.message || 'Falha ao carregar /cachecko/lsr-20-coins.json');
-      } finally {
-        if (!alive) return;
-        setLoadingPulse(false);
-      }
+        setErrorPulse(e?.message);
+      } finally { if (alive) setLoadingPulse(false); }
     };
     run();
     return () => { alive = false; };
   }, []);
 
+  // COMPUTED DATA
   const exchangeRows = useMemo(() => {
     const list = exchangeSnap?.data?.[0]?.list || [];
-    const cleaned = list
-      .filter(x => x && x.exchange)
-      .map(x => ({
-        ...x,
-        buyRatio: Number(x.buyRatio) || 0,
-        sellRatio: Number(x.sellRatio) || 0,
-        buyVolUsd: Number(x.buyVolUsd) || 0,
-        sellVolUsd: Number(x.sellVolUsd) || 0,
-      }));
+    const cleaned = list.map(x => ({
+        exchange: x.exchange,
+        buyRatio: Number(x.buyRatio)||0, sellRatio: Number(x.sellRatio)||0,
+        buyVolUsd: Number(x.buyVolUsd)||0, sellVolUsd: Number(x.sellVolUsd)||0,
+        iconUrl: x.iconUrl
+    }));
     return sortByTotalVolDesc(cleaned);
   }, [exchangeSnap]);
-
-  const exchangeIconByName = useMemo(() => {
-    const m = new Map<string, string>();
-    exchangeRows.forEach(r => {
-      if (r.iconUrl) m.set(r.exchange, r.iconUrl);
-    });
-    return m;
-  }, [exchangeRows]);
 
   const agg = useMemo(() => {
     const d = exchangeSnap?.data?.[0];
@@ -263,630 +231,285 @@ export function LsrCockpitPage() {
     };
   }, [exchangeSnap]);
 
-  const sortedTableRows = useMemo(() => {
-    const rows = [...exchangeRows];
-    const dir = sortDir === 'asc' ? 1 : -1;
-
-    rows.sort((a, b) => {
-      const aTotal = a.buyVolUsd + a.sellVolUsd;
-      const bTotal = b.buyVolUsd + b.sellVolUsd;
-
-      if (sortKey === 'totalUsd') return (aTotal - bTotal) * dir;
-
-      const pick = (r: ExchangeRow) => {
-        if (sortKey === 'exchange') return r.exchange.toLowerCase().charCodeAt(0);
-        if (sortKey === 'longPct') return r.buyRatio;
-        if (sortKey === 'shortPct') return r.sellRatio;
-        if (sortKey === 'longUsd') return r.buyVolUsd;
-        if (sortKey === 'shortUsd') return r.sellVolUsd;
-        return 0;
-      };
-
-      return (pick(a) - pick(b)) * dir;
-    });
-
-    return rows;
-  }, [exchangeRows, sortKey, sortDir]);
-
-  const toggleSort = (key: typeof sortKey) => {
-    if (sortKey === key) setSortDir(prev => (prev === 'desc' ? 'asc' : 'desc'));
-    else {
-      setSortKey(key);
-      setSortDir('desc');
-    }
-  };
-
-  const pulseCoin = useMemo(() => {
-    const c = topCoins.find(x => String(x.symbol).toUpperCase() === symbol);
-    return c || null;
-  }, [topCoins, symbol]);
-
+  const pulseCoin = useMemo(() => topCoins.find(x => x.symbol === symbol), [topCoins, symbol]);
+  
   const pulseMetrics = useMemo(() => {
     if (!pulseCoin) return null;
-
-    const lsr = pickLsrByTf(pulseCoin, tf);
-    const liq = pickLiqByTf(pulseCoin, tf);
-
     return {
       iconUrl: pulseCoin.iconUrl || '',
-      price: Number(pulseCoin.price) || 0,
-      openInterest: Number(pulseCoin.openInterest) || 0,
-      volUsd: Number(pulseCoin.volUsd) || 0,
-      liquidationUsd: Number(liq) || 0,
-      lsr: Number(lsr) || 0
+      price: Number(pulseCoin.price)||0,
+      openInterest: Number(pulseCoin.openInterest)||0,
+      volUsd: Number(pulseCoin.volUsd)||0,
+      lsr: pickLsrByTf(pulseCoin, tf)
     };
   }, [pulseCoin, tf]);
 
-  // Update Series Visibility without recreating chart
+  // SORTING
+  const handleSort = (key: string) => {
+      if (sortKey === key) setSortDir(prev => prev === 'desc' ? 'asc' : 'desc');
+      else { setSortKey(key); setSortDir('desc'); }
+  };
+
+  const sortedData = useMemo(() => {
+      const data = activeTab === 'exchanges' ? [...exchangeRows] : [...topCoins];
+      const dir = sortDir === 'asc' ? 1 : -1;
+      
+      data.sort((a: any, b: any) => {
+          let av = 0, bv = 0;
+          
+          if (activeTab === 'exchanges') {
+              if (sortKey === 'totalUsd') { av = a.buyVolUsd + a.sellVolUsd; bv = b.buyVolUsd + b.sellVolUsd; }
+              else if (sortKey === 'lsr') { av = a.sellVolUsd ? a.buyVolUsd/a.sellVolUsd : 0; bv = b.sellVolUsd ? b.buyVolUsd/b.sellVolUsd : 0; }
+              else if (sortKey === 'exchange') return a.exchange.localeCompare(b.exchange) * dir;
+              else av = a[sortKey]; bv = b[sortKey];
+          } else {
+              if (sortKey === 'asset') return a.symbol.localeCompare(b.symbol) * dir;
+              av = a[sortKey]; bv = b[sortKey];
+          }
+          return (av - bv) * dir;
+      });
+      return data;
+  }, [activeTab, exchangeRows, topCoins, sortKey, sortDir]);
+
+  // DRAG AND DROP
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+        const setOrder = activeTab === 'exchanges' ? setExColOrder : setCoinColOrder;
+        setOrder((items) => {
+            const oldIndex = items.indexOf(active.id as string);
+            const newIndex = items.indexOf(over.id as string);
+            return arrayMove(items, oldIndex, newIndex);
+        });
+    }
+  };
+
+  // 3D CHART EFFECT
   useEffect(() => {
-      if (barsChartRef.current) {
-          const chart = barsChartRef.current;
-          if (chart.series[0]) chart.series[0].setVisible(showLongs, false);
-          if (chart.series[1]) chart.series[1].setVisible(showShorts, false);
-          chart.redraw();
-      }
+    if (barsChartRef.current) {
+        const chart = barsChartRef.current;
+        if (chart.series[0]) chart.series[0].setVisible(showLongs, false);
+        if (chart.series[1]) chart.series[1].setVisible(showShorts, false);
+        chart.redraw();
+    }
   }, [showLongs, showShorts]);
 
-  // 3D Interaction Handlers
-  const handle3DMouseDown = (e: React.MouseEvent) => {
-      if (barsChartRef.current) {
-          const chart = barsChartRef.current;
-          e.preventDefault();
-          rotationStartRef.current = {
-              x: e.clientX,
-              y: e.clientY,
-              alpha: chart.options.chart?.options3d?.alpha || 10,
-              beta: chart.options.chart?.options3d?.beta || 18
-          };
-      }
-  };
-
-  const handle3DMouseMove = (e: React.MouseEvent) => {
-      if (rotationStartRef.current && barsChartRef.current) {
-          const start = rotationStartRef.current;
-          const chart = barsChartRef.current;
-          
-          const sensitivity = 5;
-          const newBeta = start.beta + (e.clientX - start.x) / sensitivity;
-          const newAlpha = start.alpha + (e.clientY - start.y) / sensitivity;
-
-          chart.update({
-              chart: {
-                  options3d: {
-                      alpha: Math.max(0, Math.min(60, newAlpha)), // Limit Elevation
-                      beta: newBeta
-                  }
-              }
-          }, false, false, false); // No redraw for performance
-          
-          // Request simple redraw frame
-          requestAnimationFrame(() => chart.redraw(false));
-      }
-  };
-
-  const handle3DMouseUp = () => {
-      rotationStartRef.current = null;
-  };
-
   useEffect(() => {
-    if (loadingPulse || errorPulse) return;
-    if (!pulseMetrics) return;
-
-    if (pulseChartRef.current) {
-      pulseChartRef.current.destroy();
-      pulseChartRef.current = null;
-    }
-
-    const el = document.getElementById('lsr-pulse-chart');
-    if (!el) return;
-
-    const categories = ['Open Interest', 'Volume', 'Liquidations', 'LSR'];
-
-    const usdVals = [
-      pulseMetrics.openInterest,
-      pulseMetrics.volUsd,
-      pulseMetrics.liquidationUsd,
-      null
-    ];
-
-    const lsrVals = [
-      null,
-      null,
-      null,
-      pulseMetrics.lsr
-    ];
-
-    pulseChartRef.current = Highcharts.chart('lsr-pulse-chart', {
-      chart: {
-        backgroundColor: 'transparent',
-        height: 520, // Reduced height
-        animation: false,
-        zooming: {
-          mouseWheel: { enabled: true, sensitivity: 1.15 },
-          type: 'x'
-        },
-        panning: { enabled: true, type: 'x' },
-        panKey: 'shift',
-        spacingBottom: 40, 
-        marginBottom: 80
-      },
-      title: { text: '' },
-      credits: { enabled: false },
-
-      xAxis: {
-        categories,
-        lineColor: 'rgba(255,255,255,0.10)',
-        tickColor: 'rgba(255,255,255,0.08)',
-        labels: {
-          style: {
-            color: 'rgba(255,255,255,0.75)',
-            fontWeight: '400'
-          }
-        }
-      },
-
-      yAxis: [
-        {
-          title: { text: 'USD' },
-          gridLineWidth: 1,
-          gridLineColor: 'rgba(255,255,255,0.05)',
-          minorGridLineWidth: 0,
-          lineWidth: 0,
-          tickWidth: 0,
-          labels: {
-            style: { color: 'rgba(255,255,255,0.70)' },
-            formatter: function () {
-              return fmtUSD(Number((this as any).value));
-            }
-          }
-        },
-        {
-          title: { text: 'LSR' },
-          opposite: true,
-          min: 0,
-          max: 3,
-          gridLineWidth: 0,
-          lineWidth: 0,
-          tickWidth: 0,
-          labels: {
-            style: { color: 'rgba(255,255,255,0.70)' },
-            formatter: function () {
-              return Number((this as any).value).toFixed(2);
-            }
-          }
-        }
-      ],
-
-      legend: {
-        enabled: true,
-        align: 'center',
-        verticalAlign: 'bottom',
-        itemStyle: {
-          color: 'rgba(255,255,255,0.75)',
-          fontWeight: '400'
-        }
-      },
-
-      tooltip: {
-        shared: true,
-        useHTML: true,
-        borderWidth: 0,
-        backgroundColor: 'rgba(17, 24, 39, 0.92)',
-        style: { color: '#fff' },
-        headerFormat: '',
-        pointFormat: '',
-        formatter: function () {
-          const icon = pulseMetrics.iconUrl
-            ? `<img src="${pulseMetrics.iconUrl}" style="width:22px;height:22px;border-radius:6px;background:#fff;padding:1px" />`
-            : '';
-          const head = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">${icon}<div style="font-weight:800">${symbol} · ${tf.toUpperCase()}</div></div>`;
-
-          const usdLine = (label: string, val: number) => `<div>${label}: <b>${fmtUSD(val)}</b></div>`;
-
-          return `
-            ${head}
-            ${usdLine('Open Interest', pulseMetrics.openInterest)}
-            ${usdLine('Volume', pulseMetrics.volUsd)}
-            ${usdLine('Liquidations', pulseMetrics.liquidationUsd)}
-            <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.12)">
-              LSR: <b>${fmtLSR(pulseMetrics.lsr)}</b>
-            </div>
-          `;
-        }
-      },
-
-      plotOptions: {
-        series: { animation: false }
-      },
-
-      series: [
-        {
-          type: 'column',
-          name: 'USD Metrics',
-          yAxis: 0,
-          data: usdVals as any,
-          color: 'rgba(221,153,51,0.70)',
-          borderWidth: 0
-        },
-        {
-          type: 'line',
-          name: 'LSR',
-          yAxis: 1,
-          data: lsrVals as any,
-          color: 'rgba(255,255,255,0.80)',
-          lineWidth: 2,
-          marker: { enabled: true, radius: 4 }
-        }
-      ]
-    } as any);
-
-    return () => {
-      if (pulseChartRef.current) {
-        pulseChartRef.current.destroy();
-        pulseChartRef.current = null;
-      }
-    };
-  }, [loadingPulse, errorPulse, pulseMetrics, symbol, tf]);
-
-  useEffect(() => {
-    if (loadingExchange || errorExchange) return;
-    if (!exchangeRows.length) return;
-
-    if (barsChartRef.current) {
-      barsChartRef.current.destroy();
-      barsChartRef.current = null;
-    }
+    if (loadingExchange || !exchangeRows.length) return;
+    if (barsChartRef.current) { barsChartRef.current.destroy(); barsChartRef.current = null; }
 
     const el = document.getElementById('lsr-exchange-3d');
     if (!el) return;
 
-    const categories = exchangeRows.map(x => x.exchange);
-
-    const longData = exchangeRows.map(r => ({
-      y: barsMode === 'ratio' ? clamp(r.buyRatio, 0, 100) : r.buyVolUsd,
-      exchange: r.exchange,
-      iconUrl: r.iconUrl || ''
-    }));
-
-    const shortData = exchangeRows.map(r => ({
-      y: barsMode === 'ratio' ? clamp(r.sellRatio, 0, 100) : r.sellVolUsd,
-      exchange: r.exchange,
-      iconUrl: r.iconUrl || ''
-    }));
-
-    // DARKER PASTEL COLORS
-    const LONG_PASTEL = 'rgba(34, 197, 94, 0.85)'; // Emerald 500, higher opacity
-    const SHORT_PASTEL = 'rgba(239, 68, 68, 0.85)'; // Red 500, higher opacity
+    const longData = exchangeRows.map(r => ({ y: barsMode === 'ratio' ? clamp(r.buyRatio, 0, 100) : r.buyVolUsd, exchange: r.exchange, iconUrl: r.iconUrl }));
+    const shortData = exchangeRows.map(r => ({ y: barsMode === 'ratio' ? clamp(r.sellRatio, 0, 100) : r.sellVolUsd, exchange: r.exchange, iconUrl: r.iconUrl }));
 
     barsChartRef.current = Highcharts.chart('lsr-exchange-3d', {
       chart: {
         type: 'column',
         backgroundColor: 'transparent',
-        height: 520, // Reduced from 740
-        spacingBottom: 50,
-        marginBottom: 90,
+        height: 340, // REDUZIDO
+        spacingBottom: 10,
+        marginBottom: 70,
         options3d: {
           enabled: true,
-          alpha: 10,
-          beta: 18,
-          depth: 250, // Increased depth for better look
-          viewDistance: 25,
-          frame: {
-            bottom: { size: 1, color: 'rgba(255,255,255,0.05)' },
-            side: { size: 1, color: 'rgba(255,255,255,0.05)' },
-            back: { size: 1, color: 'rgba(255,255,255,0.05)' }
-          }
+          alpha: 10, beta: 18, depth: 250, viewDistance: 25,
+          frame: { bottom: { size: 1, color: 'rgba(255,255,255,0.05)' }, side: { size: 1, color: 'rgba(255,255,255,0.05)' }, back: { size: 1, color: 'rgba(255,255,255,0.05)' } }
         }
       },
-      title: { text: '' },
-      credits: { enabled: false },
-
-      legend: {
-        enabled: true,
-        align: 'center',
-        verticalAlign: 'bottom',
-        margin: 10,
-        padding: 10,
-        itemStyle: {
-          color: 'rgba(255,255,255,0.75)',
-          fontWeight: '400'
-        },
-        itemHoverStyle: { color: 'rgba(255,255,255,1)' }
-      },
-
+      title: { text: null }, credits: { enabled: false },
+      legend: { enabled: true, align: 'center', verticalAlign: 'bottom', itemStyle: { color: 'rgba(255,255,255,0.75)' } },
       xAxis: {
-        categories,
+        categories: exchangeRows.map(x => x.exchange),
         gridLineWidth: 0,
-        lineColor: 'rgba(255,255,255,0.10)',
-        tickColor: 'rgba(255,255,255,0.08)',
-        tickLength: 0,
-        labels: {
-          useHTML: false, // Turned off HTML
-          style: {
-              color: 'rgba(255,255,255,0.60)',
-              fontSize: '10px',
-              fontWeight: '600'
-          },
-          formatter: function () {
-             return String(this.value); // Just the name
-          }
-        }
+        labels: { style: { color: 'rgba(255,255,255,0.60)', fontSize: '10px', fontWeight: 'bold' }, rotation: -45, autoRotation: [-45] }
       },
-
       yAxis: {
         min: 0,
-        title: { text: barsMode === 'ratio' ? 'Long/Short (%)' : 'Volume (USD)' },
-        gridLineWidth: 1,
+        title: { text: null },
         gridLineColor: 'rgba(255,255,255,0.05)',
-        minorGridLineWidth: 0,
-        lineWidth: 0,
-        tickWidth: 0,
-        labels: {
-          formatter: function () {
-            const v = Number((this as any).value);
-            return barsMode === 'ratio' ? `${v.toFixed(0)}%` : fmtUSD(v);
-          },
-          style: { color: 'rgba(255,255,255,0.70)', fontWeight: '400' }
-        }
+        labels: { formatter: function () { const v = Number(this.value); return barsMode === 'ratio' ? `${v}%` : fmtUSD(v); }, style: { color: 'rgba(255,255,255,0.5)' } }
       },
-
+      // IMPORTANT: DISABLE NAVIGATOR/SCROLLBAR TO FIX OVERLAP
+      navigator: { enabled: false },
+      scrollbar: { enabled: false },
+      rangeSelector: { enabled: false },
       tooltip: {
-        shared: true,
-        useHTML: true,
-        borderWidth: 0,
-        backgroundColor: 'rgba(17, 24, 39, 0.95)',
-        style: { color: '#fff' },
-        headerFormat: '',
-        pointFormat: '',
+        shared: true, useHTML: true, backgroundColor: 'rgba(17, 24, 39, 0.95)', style: { color: '#fff' }, borderWidth: 0,
         formatter: function () {
-          const ctx: any = this as any;
-          const pts: any[] = ctx.points || [];
-
-          const pLong = pts.find(p => p?.series?.name === 'Long');
-          const pShort = pts.find(p => p?.series?.name === 'Short');
-          
-          // Get correct point to extract data from
+          const pts: any[] = (this as any).points || [];
+          const pLong = pts.find(p => p.series.name === 'Long');
+          const pShort = pts.find(p => p.series.name === 'Short');
           const point = pLong ? pLong.point : (pShort ? pShort.point : null);
           if (!point) return '';
+          
+          const lVal = pLong?.y ?? 0;
+          const sVal = pShort?.y ?? 0;
+          const lsr = sVal > 0 ? lVal/sVal : 0;
+          const head = point.iconUrl 
+            ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><img src="${point.iconUrl}" style="width:20px;height:20px;border-radius:4px" /><b>${point.exchange}</b></div>` 
+            : `<b>${point.exchange}</b>`;
 
-          const exName = point.exchange;
-          const icon = point.iconUrl;
-
-          const longY = Number(pLong?.y ?? 0);
-          const shortY = Number(pShort?.y ?? 0);
-
-          const longTxt = barsMode === 'ratio' ? `${longY.toFixed(2)}%` : fmtUSD(longY);
-          const shortTxt = barsMode === 'ratio' ? `${shortY.toFixed(2)}%` : fmtUSD(shortY);
-
-          const lsr = shortY > 0 ? (longY / shortY) : 0;
-
-          const head = icon
-            ? `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-                 <img src="${icon}" style="width:24px;height:24px;border-radius:6px;background:#fff;padding:1px" />
-                 <div style="font-weight:900;font-size:14px;text-transform:uppercase;">${exName}</div>
-               </div>`
-            : `<div style="font-weight:900;font-size:14px;text-transform:uppercase;margin-bottom:8px">${exName}</div>`;
-
-          return `
-            ${head}
-            <div>Long: <b style="color:#4ade80">${longTxt}</b></div>
-            <div>Short: <b style="color:#f87171">${shortTxt}</b></div>
-            <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.12)">
-              LSR: <b style="color:#dd9933">${fmtLSR(lsr)}</b>
-            </div>
-          `;
+          return `${head}
+            <div>Long: <b style="color:${COLOR_LONG}">${barsMode==='ratio'?lVal.toFixed(2)+'%':fmtUSD(lVal)}</b></div>
+            <div>Short: <b style="color:${COLOR_SHORT}">${barsMode==='ratio'?sVal.toFixed(2)+'%':fmtUSD(sVal)}</b></div>
+            <div style="margin-top:4px;border-top:1px solid rgba(255,255,255,0.1)">LSR: <b style="color:#dd9933">${fmtLSR(lsr)}</b></div>`;
         }
       },
-
-      plotOptions: {
-        column: {
-          depth: 40, // Increased depth per column
-          borderWidth: 0,
-          stacking: 'normal',
-          groupPadding: 0.1,
-          pointPadding: 0.05,
-          dataLabels: { enabled: false }
-        },
-        series: { animation: false }
-      },
-
+      plotOptions: { column: { depth: 40, stacking: 'normal', borderWidth: 0, groupPadding: 0.1 } },
       series: [
-        {
-          name: 'Long',
-          color: LONG_PASTEL,
-          data: longData as any,
-          visible: showLongs
-        },
-        {
-          name: 'Short',
-          color: SHORT_PASTEL,
-          data: shortData as any,
-          visible: showShorts
-        }
+        { name: 'Long', color: COLOR_LONG, data: longData, visible: showLongs },
+        { name: 'Short', color: COLOR_SHORT, data: shortData, visible: showShorts }
       ]
     } as any);
+  }, [loadingExchange, exchangeRows, barsMode]);
 
-    return () => {
-      if (barsChartRef.current) {
-        barsChartRef.current.destroy();
-        barsChartRef.current = null;
+  // COLUMNS CONFIG
+  const EX_COLS: Record<string, { label: string, key?: string, align?: string }> = {
+      exchange: { label: "Exchange", key: "exchange", align: "left" },
+      longPct: { label: "Long %", key: "buyRatio", align: "right" },
+      shortPct: { label: "Short %", key: "sellRatio", align: "right" },
+      lsr: { label: "LSR", key: "lsr", align: "right" },
+      longUsd: { label: "Long $", key: "buyVolUsd", align: "right" },
+      shortUsd: { label: "Short $", key: "sellVolUsd", align: "right" },
+      totalUsd: { label: "Total $", key: "totalUsd", align: "right" }
+  };
+
+  const COIN_COLS: Record<string, { label: string, key?: string, align?: string }> = {
+      asset: { label: "Ativo", key: "asset", align: "left" },
+      price: { label: "Preço", key: "price", align: "right" },
+      ls5m: { label: "LSR 5m", key: "ls5m", align: "center" },
+      ls15m: { label: "LSR 15m", key: "ls15m", align: "center" },
+      ls30m: { label: "LSR 30m", key: "ls30m", align: "center" },
+      ls1h: { label: "LSR 1h", key: "ls1h", align: "center" },
+      ls4h: { label: "LSR 4h", key: "ls4h", align: "center" },
+      ls12h: { label: "LSR 12h", key: "ls12h", align: "center" },
+      ls24h: { label: "LSR 24h", key: "ls24h", align: "center" }
+  };
+
+  // DnD Helper Components
+  const SortableTh = ({ colId, label, sortKey, activeKey, onSort, align }: any) => {
+        const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: colId });
+        const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1, zIndex: isDragging ? 100 : 'auto' };
+        return (
+            <th ref={setNodeRef} style={style} className={`p-3 bg-[#0b0e11] cursor-pointer group select-none ${align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'}`} onClick={() => sortKey && onSort(sortKey)}>
+                <div className={`flex items-center gap-1 ${align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : 'justify-start'}`}>
+                    <span className={`p-1 rounded hover:bg-white/10 cursor-grab ${isDragging ? 'cursor-grabbing' : ''}`} {...attributes} {...listeners} onClick={e => e.stopPropagation()}><GripVertical size={12} className="text-gray-600" /></span>
+                    <span className="text-xs font-black text-gray-400 uppercase">{label}</span>
+                    {sortKey && <ChevronsUpDown size={12} className={`text-gray-600 transition-colors ${activeKey === sortKey ? 'text-[#dd9933]' : 'opacity-0 group-hover:opacity-100'}`} />}
+                </div>
+            </th>
+        );
+  };
+
+  const renderExchangeCell = (r: any, colId: string) => {
+      const lsr = r.sellVolUsd > 0 ? r.buyVolUsd/r.sellVolUsd : 0;
+      switch(colId) {
+          case 'exchange': return (
+              <td className="p-3">
+                  <div className="flex items-center gap-3">
+                      {r.iconUrl ? <img src={r.iconUrl} className="w-6 h-6 rounded bg-white p-0.5" /> : <div className="w-6 h-6 rounded bg-white/10" />}
+                      <span className="font-bold text-white">{r.exchange}</span>
+                  </div>
+              </td>
+          );
+          case 'longPct': return <td className="p-3 text-right font-black" style={{color: COLOR_LONG}}>{fmtPct(r.buyRatio)}</td>;
+          case 'shortPct': return <td className="p-3 text-right font-black" style={{color: COLOR_SHORT}}>{fmtPct(r.sellRatio)}</td>;
+          case 'lsr': return <td className="p-3 text-right font-black font-mono text-[#dd9933]">{fmtLSR(lsr)}</td>;
+          case 'longUsd': return <td className="p-3 text-right font-mono text-gray-400 text-xs">{fmtUSD(r.buyVolUsd)}</td>;
+          case 'shortUsd': return <td className="p-3 text-right font-mono text-gray-400 text-xs">{fmtUSD(r.sellVolUsd)}</td>;
+          case 'totalUsd': return <td className="p-3 text-right font-mono font-bold text-gray-300 text-xs">{fmtUSD(r.buyVolUsd + r.sellVolUsd)}</td>;
+          default: return <td className="p-3"></td>;
       }
-    };
-  }, [loadingExchange, errorExchange, exchangeRows, barsMode, exchangeIconByName]);
+  };
 
-  const lastUpdated = useMemo(() => {
-    const a = exchangeSnap?.updatedAt ? new Date(exchangeSnap.updatedAt).toLocaleString() : null;
-    return { exchange: a };
-  }, [exchangeSnap]);
+  const renderCoinCell = (r: any, colId: string) => {
+      const lsrColor = (v: number) => {
+          if (v >= 2) return 'text-red-500';
+          if (v <= 0.8) return 'text-green-500';
+          return 'text-gray-400';
+      };
+      
+      switch(colId) {
+          case 'asset': return (
+              <td className="p-3">
+                  <div className="flex items-center gap-3">
+                      <img src={`https://assets.coincap.io/assets/icons/${r.symbol.toLowerCase()}@2x.png`} className="w-6 h-6 rounded-full" onError={(e) => e.currentTarget.style.display='none'} />
+                      <div className="flex flex-col"><span className="font-bold text-white leading-none">{r.symbol}</span></div>
+                  </div>
+              </td>
+          );
+          case 'price': return <td className="p-3 text-right font-mono font-bold text-gray-300">${r.price < 1 ? r.price.toFixed(4) : r.price.toLocaleString()}</td>;
+          case 'ls5m': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls5m)}`}>{fmtLSR(r.ls5m)}</td>;
+          case 'ls15m': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls15m)}`}>{fmtLSR(r.ls15m)}</td>;
+          case 'ls30m': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls30m)}`}>{fmtLSR(r.ls30m)}</td>;
+          case 'ls1h': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls1h)}`}>{fmtLSR(r.ls1h)}</td>;
+          case 'ls4h': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls4h)}`}>{fmtLSR(r.ls4h)}</td>;
+          case 'ls12h': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls12h)}`}>{fmtLSR(r.ls12h)}</td>;
+          case 'ls24h': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls24h)}`}>{fmtLSR(r.ls24h)}</td>;
+          default: return <td className="p-3"></td>;
+      }
+  };
 
   return (
-    <div
-      className="min-h-screen bg-[#0b0e11] text-white"
-      style={{
-        paddingBottom: 'calc(140px + env(safe-area-inset-bottom))'
-      }}
-    >
+    <div className="min-h-screen bg-[#0b0e11] text-white" style={{ paddingBottom: '140px' }}>
       <div className="max-w-[1400px] mx-auto p-4 sm:p-6">
+        
+        {/* HEADER CONTROLS */}
         <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
-              Long/Short Ratio Cockpit
-              <span className="ml-3 text-sm font-black text-white/60">{symbol} · {tf.toUpperCase()}</span>
-            </h1>
-            <p className="text-white/60 text-sm mt-1">
-              Market Pulse usa /cachecko/lsr-20-coins.json (snapshot). Exchange 3D usa cache por TF/símbolo.
-            </p>
-            <div className="flex flex-wrap gap-2 mt-3">
-              <Badge>Pulse: OI + Vol + Liq + LSR</Badge>
-              <Badge>3D: Stack Long+Short (Draggable)</Badge>
-              <Badge>Toggle: Click Box to Filter</Badge>
-            </div>
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight">Long/Short Ratio Cockpit <span className="ml-3 text-sm font-black text-white/60">{symbol} · {tf.toUpperCase()}</span></h1>
+            <p className="text-white/60 text-sm mt-1">Dados de LSR em tempo real das principais exchanges e agregados.</p>
           </div>
-
-          <div className="flex flex-wrap gap-3 items-center justify-start lg:justify-end">
+          <div className="flex flex-wrap gap-3 items-center">
             <div className="bg-white/5 border border-white/10 rounded-xl p-1 flex">
-              {SYMBOLS.map(s => (
-                <button
-                  key={s}
-                  onClick={() => setSymbol(s)}
-                  className={`px-4 py-2 rounded-lg text-sm font-black transition ${
-                    symbol === s ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'
-                  }`}
-                >
-                  {s}
-                </button>
-              ))}
+              {SYMBOLS.map(s => (<button key={s} onClick={() => setSymbol(s)} className={`px-4 py-2 rounded-lg text-sm font-black transition ${symbol === s ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'}`}>{s}</button>))}
             </div>
-
             <div className="bg-white/5 border border-white/10 rounded-xl p-1 flex">
-              {TFS.map(x => (
-                <button
-                  key={x}
-                  onClick={() => setTf(x)}
-                  className={`px-4 py-2 rounded-lg text-sm font-black transition ${
-                    tf === x ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'
-                  }`}
-                >
-                  {x.toUpperCase()}
-                </button>
-              ))}
+              {TFS.map(x => (<button key={x} onClick={() => setTf(x)} className={`px-4 py-2 rounded-lg text-sm font-black transition ${tf === x ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'}`}>{x.toUpperCase()}</button>))}
             </div>
-
             <div className="bg-white/5 border border-white/10 rounded-xl p-1 flex">
-              <button
-                onClick={() => setBarsMode('usd')}
-                className={`px-4 py-2 rounded-lg text-sm font-black transition ${
-                  barsMode === 'usd' ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'
-                }`}
-              >
-                USD
-              </button>
-              <button
-                onClick={() => setBarsMode('ratio')}
-                className={`px-4 py-2 rounded-lg text-sm font-black transition ${
-                  barsMode === 'ratio' ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'
-                }`}
-              >
-                %
-              </button>
+              <button onClick={() => setBarsMode('usd')} className={`px-4 py-2 rounded-lg text-sm font-black transition ${barsMode === 'usd' ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'}`}>USD</button>
+              <button onClick={() => setBarsMode('ratio')} className={`px-4 py-2 rounded-lg text-sm font-black transition ${barsMode === 'ratio' ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'}`}>%</button>
             </div>
           </div>
         </div>
 
+        {/* TOP SECTION: PULSE + 3D */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6 items-stretch">
+          
+          {/* MARKET PULSE (LEFT) */}
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4 pb-8 overflow-visible">
             <div className="flex items-center justify-between mb-3">
-              <div>
-                <div className="text-sm font-black text-white/80 uppercase tracking-widest">Market Pulse</div>
-                <div className="text-xs text-white/50 mt-1">
-                  Fonte: /cachecko/lsr-20-coins.json
-                </div>
-              </div>
+              <div><div className="text-sm font-black text-white/80 uppercase tracking-widest">Market Pulse</div></div>
               {loadingPulse && <Loader2 className="animate-spin text-[#dd9933]" size={18} />}
             </div>
-
-            {errorPulse ? (
-              <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-200 flex gap-2">
-                <AlertTriangle size={18} className="mt-0.5" />
-                <div className="text-sm">
-                  <div className="font-black">Falha no Market Pulse</div>
-                  <div className="opacity-80">{errorPulse}</div>
-                </div>
-              </div>
-            ) : loadingPulse ? (
-              <Skeleton h={520} />
-            ) : (
-              <div id="lsr-pulse-chart" className="min-h-[520px]" />
-            )}
-
-            <div className="mt-3 text-xs text-white/50">
-              Pan: Shift + arrastar. Zoom: scroll.
-            </div>
+            {errorPulse ? <div className="p-4 text-red-200 bg-red-900/20 border border-red-900/50 rounded">{errorPulse}</div> : 
+             loadingPulse ? <Skeleton h={520} /> : <div id="lsr-pulse-chart" className="min-h-[520px]" />
+            }
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 pb-10 overflow-visible flex flex-col">
+          {/* EXCHANGE 3D (RIGHT) */}
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 pb-6 overflow-visible flex flex-col">
             <div className="flex items-center justify-between mb-3 shrink-0">
-              <div>
-                <div className="text-sm font-black text-white/80 uppercase tracking-widest">Exchange 3D</div>
-                <div className="text-xs text-white/50 mt-1">
-                  {lastUpdated.exchange ? `Atualizado: ${lastUpdated.exchange}` : 'Sem timestamp'}
-                </div>
-              </div>
+              <div><div className="text-sm font-black text-white/80 uppercase tracking-widest">Exchange 3D</div></div>
               {loadingExchange && <Loader2 className="animate-spin text-[#dd9933]" size={18} />}
             </div>
-
             <div className="flex-1 min-h-0 relative">
-                {errorExchange ? (
-                <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-200 flex gap-2">
-                    <AlertTriangle size={18} className="mt-0.5" />
-                    <div className="text-sm">
-                    <div className="font-black">Falha no snapshot de Exchanges</div>
-                    <div className="opacity-80">{errorExchange}</div>
-                    </div>
-                </div>
-                ) : loadingExchange ? (
-                <Skeleton h={520} />
-                ) : (
-                <div 
-                    id="lsr-exchange-3d" 
-                    className="min-h-[520px] cursor-move"
-                    onMouseDown={handle3DMouseDown}
-                    onMouseMove={handle3DMouseMove}
-                    onMouseUp={handle3DMouseUp}
-                    onMouseLeave={handle3DMouseUp}
-                />
-                )}
-                <div className="absolute top-2 right-2 text-[10px] bg-black/40 px-2 py-1 rounded text-white/50 pointer-events-none">
-                    Arraste para girar
-                </div>
+                {errorExchange ? <div className="p-4 text-red-200 bg-red-900/20 border border-red-900/50 rounded">{errorExchange}</div> :
+                 loadingExchange ? <Skeleton h={340} /> : 
+                 <div id="lsr-exchange-3d" className="min-h-[340px]" />
+                }
             </div>
-
             {agg && (
               <div className="mt-4 grid grid-cols-2 gap-3 shrink-0">
-                <button 
-                    onClick={() => setShowLongs(!showLongs)}
-                    className={`rounded-xl border p-3 transition-all text-left group ${showLongs ? 'bg-emerald-900/20 border-emerald-500/30' : 'bg-black/20 border-white/5 opacity-50'}`}
-                >
-                  <div className="flex justify-between items-center">
-                    <div className="text-xs text-emerald-400 uppercase font-black tracking-widest flex items-center gap-2">
-                        {showLongs ? <Eye size={12}/> : <EyeOff size={12}/>} Aggregated Long
-                    </div>
-                    {showLongs && <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>}
-                  </div>
+                <button onClick={() => setShowLongs(!showLongs)} className={`rounded-xl border p-3 transition-all text-left group ${showLongs ? 'bg-emerald-900/20 border-emerald-500/30' : 'bg-black/20 border-white/5 opacity-50'}`}>
+                  <div className="flex justify-between items-center"><div className="text-xs text-emerald-400 uppercase font-black tracking-widest flex items-center gap-2">{showLongs ? <Eye size={12}/> : <EyeOff size={12}/>} Aggregated Long</div>{showLongs && <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>}</div>
                   <div className={`text-lg font-black mt-1 ${showLongs ? 'text-white' : 'text-gray-500'}`}>{fmtPct(agg.buyRatio)}</div>
                   <div className="text-sm text-white/70">{fmtUSD(agg.buyVolUsd)}</div>
                 </button>
-                
-                <button 
-                    onClick={() => setShowShorts(!showShorts)}
-                    className={`rounded-xl border p-3 transition-all text-left group ${showShorts ? 'bg-rose-900/20 border-rose-500/30' : 'bg-black/20 border-white/5 opacity-50'}`}
-                >
-                  <div className="flex justify-between items-center">
-                     <div className="text-xs text-rose-400 uppercase font-black tracking-widest flex items-center gap-2">
-                        {showShorts ? <Eye size={12}/> : <EyeOff size={12}/>} Aggregated Short
-                     </div>
-                     {showShorts && <div className="w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]"></div>}
-                  </div>
+                <button onClick={() => setShowShorts(!showShorts)} className={`rounded-xl border p-3 transition-all text-left group ${showShorts ? 'bg-rose-900/20 border-rose-500/30' : 'bg-black/20 border-white/5 opacity-50'}`}>
+                  <div className="flex justify-between items-center"><div className="text-xs text-rose-400 uppercase font-black tracking-widest flex items-center gap-2">{showShorts ? <Eye size={12}/> : <EyeOff size={12}/>} Aggregated Short</div>{showShorts && <div className="w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]"></div>}</div>
                   <div className={`text-lg font-black mt-1 ${showShorts ? 'text-white' : 'text-gray-500'}`}>{fmtPct(agg.sellRatio)}</div>
                   <div className="text-sm text-white/70">{fmtUSD(agg.sellVolUsd)}</div>
                 </button>
@@ -895,70 +518,43 @@ export function LsrCockpitPage() {
           </div>
         </div>
 
+        {/* BOTTOM TABLE SECTION */}
         <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm font-black text-white/80 uppercase tracking-widest">Exchanges Table</div>
-              <div className="text-xs text-white/50 mt-1">
-                Clique nos headers para ordenar.
-              </div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex gap-4">
+                <button onClick={() => setActiveTab('exchanges')} className={`text-sm font-black uppercase tracking-widest pb-1 border-b-2 transition-colors ${activeTab === 'exchanges' ? 'text-[#dd9933] border-[#dd9933]' : 'text-gray-500 border-transparent hover:text-white'}`}>Exchanges (Detail)</button>
+                <button onClick={() => setActiveTab('coins')} className={`text-sm font-black uppercase tracking-widest pb-1 border-b-2 transition-colors ${activeTab === 'coins' ? 'text-[#dd9933] border-[#dd9933]' : 'text-gray-500 border-transparent hover:text-white'}`}>Coins (LSR Overview)</button>
             </div>
-            <button
-              onClick={() => setShowTable(v => !v)}
-              className="px-3 py-2 rounded-xl bg-black/20 border border-white/10 hover:bg-black/30 transition flex items-center gap-2 text-sm font-black"
-            >
-              {showTable ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-              {showTable ? 'Ocultar' : 'Mostrar'}
+            <button onClick={() => setShowTable(v => !v)} className="px-3 py-2 rounded-xl bg-black/20 border border-white/10 hover:bg-black/30 transition flex items-center gap-2 text-sm font-black">
+              {showTable ? <ChevronUp size={16} /> : <ChevronDown size={16} />}{showTable ? 'Ocultar' : 'Mostrar'}
             </button>
           </div>
 
           {showTable && (
-            <div className="mt-4 overflow-auto rounded-xl border border-white/10">
+            <div className="overflow-auto rounded-xl border border-white/10">
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-[#0b0e11]">
-                  <tr className="text-white/70">
-                    <th className="p-3 text-left cursor-pointer" onClick={() => toggleSort('exchange')}>Exchange</th>
-                    <th className="p-3 text-right cursor-pointer" onClick={() => toggleSort('longPct')}>Long %</th>
-                    <th className="p-3 text-right cursor-pointer" onClick={() => toggleSort('shortPct')}>Short %</th>
-                    <th className="p-3 text-right cursor-pointer" onClick={() => toggleSort('longUsd')}>Long USD</th>
-                    <th className="p-3 text-right cursor-pointer" onClick={() => toggleSort('shortUsd')}>Short USD</th>
-                    <th className="p-3 text-right cursor-pointer" onClick={() => toggleSort('totalUsd')}>Total USD</th>
-                    <th className="p-3 text-right">LSR</th>
+                <thead className="sticky top-0 bg-[#0b0e11] z-10">
+                  <tr className="border-b border-white/10">
+                    <SortableContext items={activeTab === 'exchanges' ? exColOrder : coinColOrder} strategy={horizontalListSortingStrategy}>
+                        {(activeTab === 'exchanges' ? exColOrder : coinColOrder).map(colId => {
+                            const def = activeTab === 'exchanges' ? EX_COLS[colId] : COIN_COLS[colId];
+                            return <SortableTh key={colId} colId={colId} label={def.label} sortKey={def.key} activeKey={sortKey} onSort={handleSort} align={def.align} />;
+                        })}
+                    </SortableContext>
                   </tr>
                 </thead>
-                <tbody>
-                  {loadingExchange ? (
-                    <tr><td colSpan={7} className="p-8 text-center"><Loader2 className="animate-spin mx-auto text-[#dd9933]" /></td></tr>
-                  ) : errorExchange ? (
-                    <tr><td colSpan={7} className="p-6 text-red-200">{errorExchange}</td></tr>
+                <tbody className="divide-y divide-white/5">
+                  {activeTab === 'exchanges' ? (
+                      loadingExchange ? <tr><td colSpan={exColOrder.length} className="p-8 text-center"><Loader2 className="animate-spin mx-auto text-[#dd9933]" /></td></tr> :
+                      sortedData.map((r: any) => <tr key={r.exchange} className="hover:bg-white/5 transition">{exColOrder.map(c => renderExchangeCell(r, c))}</tr>)
                   ) : (
-                    sortedTableRows.map((r) => {
-                      const total = r.buyVolUsd + r.sellVolUsd;
-                      const lsr = r.sellVolUsd > 0 ? (r.buyVolUsd / r.sellVolUsd) : 0;
-                      return (
-                        <tr key={r.exchange} className="border-t border-white/10 hover:bg-white/5 transition">
-                          <td className="p-3">
-                            <div className="flex items-center gap-3">
-                              {r.iconUrl ? (
-                                <img src={r.iconUrl} alt="" className="w-7 h-7 rounded-lg bg-white p-0.5" loading="lazy" />
-                              ) : (
-                                <div className="w-7 h-7 rounded-lg bg-white/10" />
-                              )}
-                              <div className="font-black text-white">{r.exchange}</div>
-                            </div>
-                          </td>
-                          <td className="p-3 text-right font-black text-emerald-400">{fmtPct(r.buyRatio)}</td>
-                          <td className="p-3 text-right font-black text-rose-400">{fmtPct(r.sellRatio)}</td>
-                          <td className="p-3 text-right text-white/80 font-mono">{fmtUSD(r.buyVolUsd)}</td>
-                          <td className="p-3 text-right text-white/80 font-mono">{fmtUSD(r.sellVolUsd)}</td>
-                          <td className="p-3 text-right text-white font-mono font-black">{fmtUSD(total)}</td>
-                          <td className="p-3 text-right text-[#dd9933] font-black font-mono">{fmtLSR(lsr)}</td>
-                        </tr>
-                      );
-                    })
+                      loadingPulse ? <tr><td colSpan={coinColOrder.length} className="p-8 text-center"><Loader2 className="animate-spin mx-auto text-[#dd9933]" /></td></tr> :
+                      sortedData.map((r: any) => <tr key={r.symbol} className="hover:bg-white/5 transition">{coinColOrder.map(c => renderCoinCell(r, c))}</tr>)
                   )}
                 </tbody>
               </table>
+              </DndContext>
             </div>
           )}
         </div>
