@@ -935,7 +935,7 @@ export const fetchOrderBook = async (symbol: string): Promise<OrderBookData | nu
   return null;
 };
 
-// -------------------- MARKETCAP HIST --------------------
+// -------------------- MARKETCAP HIST ---------------------
 
 export const fetchMarketCapHistory = async (): Promise<any | null> => {
   const data = await fetchWithFallback(getCacheckoUrl(ENDPOINTS.cachecko.files.mktcapHist));

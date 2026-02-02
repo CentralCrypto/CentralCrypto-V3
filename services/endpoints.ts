@@ -18,7 +18,7 @@ export const ENDPOINTS = {
       fng: "/fearandgreed_data.json",
       rsiAvg: "/rsiavg.json", 
       rsiTrackerHist: "/rsitrackerhist.json", // Scatter Plot Data
-      rsiTable: "/rsitracker.json",           // Table Data
+      rsiTable: "/rsitracker.json",           // Table Data`.
       macdAvg: "/macdavg.json",
       macdTracker: "/macdtracker.json",
       trump: "/trumpometer.json",
