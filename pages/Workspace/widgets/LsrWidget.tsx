@@ -3,8 +3,10 @@ import Highcharts from 'highcharts/highstock';
 import HC3D from 'highcharts/highcharts-3d';
 import HCWheelZoom from 'highcharts/modules/mouse-wheel-zoom';
 import { Loader2, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import { DashboardItem, Language } from '../../../types';
+import { fetchLongShortRatio, LsrData } from '../../../services/api';
+import { getTranslations } from '../../../locales';
 
-// ---- Highcharts module init (Vite/ESM-safe) ----
 const init3D = (HC3D as any)?.default ?? HC3D;
 const initWheelZoom = (HCWheelZoom as any)?.default ?? HCWheelZoom;
 
@@ -43,12 +45,10 @@ type Lsr20Coin = {
   marketCap?: number;
   openInterest?: number;
   volUsd?: number;
-
   liquidationUsd24h?: number;
   liquidationUsd12h?: number;
   liquidationUsd4h?: number;
   liquidationUsd1h?: number;
-
   ls5m?: number;
   ls15m?: number;
   ls30m?: number;
@@ -56,32 +56,14 @@ type Lsr20Coin = {
   ls4h?: number;
   ls12h?: number;
   ls24h?: number;
-
-  oiChangePercent5m?: number;
-  oiChangePercent15m?: number;
-  oiChangePercent30m?: number;
-  oiChangePercent1h?: number;
-  oiChangePercent4h?: number;
-  oiChangePercent24h?: number;
-
-  volChangePercent5m?: number;
-  volChangePercent15m?: number;
-  volChangePercent30m?: number;
-  volChangePercent1h?: number;
-  volChangePercent4h?: number;
-  volChangePercent24h?: number;
-
-  priceChangePercent5m?: number;
-  priceChangePercent15m?: number;
-  priceChangePercent30m?: number;
-  priceChangePercent1h?: number;
-  priceChangePercent4h?: number;
-  priceChangePercent12h?: number;
-  priceChangePercent24h?: number;
-
-  avgFundingRateByOi?: number;
-  avgFundingRateByVol?: number;
-
+  longVolUsd5m?: number;
+  shortVolUsd5m?: number;
+  longVolUsd1h?: number;
+  shortVolUsd1h?: number;
+  longVolUsd12h?: number;
+  shortVolUsd12h?: number;
+  longVolUsd24h?: number;
+  shortVolUsd24h?: number;
   iconUrl?: string;
 };
 
@@ -154,7 +136,7 @@ function pickLiqByTf(coin: Lsr20Coin, tf: Tf) {
   return Number(coin.liquidationUsd24h) || 0;
 }
 
-export default function LsrCockpitPage() {
+export function LsrCockpitPage() {
   const [symbol, setSymbol] = useState<Sym>('BTC');
   const [tf, setTf] = useState<Tf>('5m');
 
@@ -175,7 +157,6 @@ export default function LsrCockpitPage() {
   const pulseChartRef = useRef<Highcharts.Chart | null>(null);
   const barsChartRef = useRef<Highcharts.Chart | null>(null);
 
-  // --- Fetch Exchange Snapshot (cache) ---
   useEffect(() => {
     let alive = true;
     const run = async () => {
@@ -201,7 +182,6 @@ export default function LsrCockpitPage() {
     return () => { alive = false; };
   }, [symbol, tf]);
 
-  // --- Fetch Top Coins Snapshot for Market Pulse ---
   useEffect(() => {
     let alive = true;
     const run = async () => {
@@ -242,7 +222,6 @@ export default function LsrCockpitPage() {
     return () => { alive = false; };
   }, []);
 
-  // --- Exchange Rows ---
   const exchangeRows = useMemo(() => {
     const list = exchangeSnap?.data?.[0]?.list || [];
     const cleaned = list
@@ -276,7 +255,6 @@ export default function LsrCockpitPage() {
     };
   }, [exchangeSnap]);
 
-  // --- Table Sorting ---
   const sortedTableRows = useMemo(() => {
     const rows = [...exchangeRows];
     const dir = sortDir === 'asc' ? 1 : -1;
@@ -310,7 +288,6 @@ export default function LsrCockpitPage() {
     }
   };
 
-  // --- Market Pulse derived from lsr-20-coins.json ---
   const pulseCoin = useMemo(() => {
     const c = topCoins.find(x => String(x.symbol).toUpperCase() === symbol);
     return c || null;
@@ -332,7 +309,6 @@ export default function LsrCockpitPage() {
     };
   }, [pulseCoin, tf]);
 
-  // --- Render Market Pulse ---
   useEffect(() => {
     if (loadingPulse || errorPulse) return;
     if (!pulseMetrics) return;
@@ -364,7 +340,7 @@ export default function LsrCockpitPage() {
     pulseChartRef.current = Highcharts.chart('lsr-pulse-chart', {
       chart: {
         backgroundColor: 'transparent',
-        height: 620, // 👈 maior
+        height: 620,
         animation: false,
         zooming: {
           mouseWheel: { enabled: true, sensitivity: 1.15 },
@@ -372,8 +348,8 @@ export default function LsrCockpitPage() {
         },
         panning: { enabled: true, type: 'x' },
         panKey: 'shift',
-        spacingBottom: 56, // 👈 evita corte embaixo
-        marginBottom: 90   // 👈 garante espaço pro eixo/labels
+        spacingBottom: 56, 
+        marginBottom: 90
       },
       title: { text: '' },
       credits: { enabled: false },
@@ -394,7 +370,7 @@ export default function LsrCockpitPage() {
         {
           title: { text: 'USD' },
           gridLineWidth: 1,
-          gridLineColor: 'rgba(255,255,255,0.05)', // 👈 mais suave
+          gridLineColor: 'rgba(255,255,255,0.05)',
           minorGridLineWidth: 0,
           lineWidth: 0,
           tickWidth: 0,
@@ -493,7 +469,6 @@ export default function LsrCockpitPage() {
     };
   }, [loadingPulse, errorPulse, pulseMetrics, symbol, tf]);
 
-  // --- Render 3D Bars (STACKED) ---
   useEffect(() => {
     if (loadingExchange || errorExchange) return;
     if (!exchangeRows.length) return;
@@ -520,17 +495,16 @@ export default function LsrCockpitPage() {
       iconUrl: r.iconUrl || ''
     }));
 
-    // 👇 Pastéis suaves (melhor no dark)
-    const LONG_PASTEL = 'rgba(167, 243, 208, 0.88)';  // mint
-    const SHORT_PASTEL = 'rgba(251, 182, 206, 0.88)'; // rose pastel
+    const LONG_PASTEL = 'rgba(167, 243, 208, 0.88)';
+    const SHORT_PASTEL = 'rgba(251, 182, 206, 0.88)';
 
     barsChartRef.current = Highcharts.chart('lsr-exchange-3d', {
       chart: {
         type: 'column',
         backgroundColor: 'transparent',
-        height: 740,       // 👈 maior
-        spacingBottom: 72, // 👈 não corta labels/legenda
-        marginBottom: 110, // 👈 reforço contra corte
+        height: 740,
+        spacingBottom: 72,
+        marginBottom: 110,
         options3d: {
           enabled: true,
           alpha: 10,
@@ -684,11 +658,10 @@ export default function LsrCockpitPage() {
     <div
       className="min-h-screen bg-[#0b0e11] text-white"
       style={{
-        paddingBottom: 'calc(140px + env(safe-area-inset-bottom))' // 👈 anti-corte definitivo
+        paddingBottom: 'calc(140px + env(safe-area-inset-bottom))'
       }}
     >
       <div className="max-w-[1400px] mx-auto p-4 sm:p-6">
-        {/* Header */}
         <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
@@ -706,7 +679,6 @@ export default function LsrCockpitPage() {
           </div>
 
           <div className="flex flex-wrap gap-3 items-center justify-start lg:justify-end">
-            {/* Symbol */}
             <div className="bg-white/5 border border-white/10 rounded-xl p-1 flex">
               {SYMBOLS.map(s => (
                 <button
@@ -721,7 +693,6 @@ export default function LsrCockpitPage() {
               ))}
             </div>
 
-            {/* TF */}
             <div className="bg-white/5 border border-white/10 rounded-xl p-1 flex">
               {TFS.map(x => (
                 <button
@@ -736,7 +707,6 @@ export default function LsrCockpitPage() {
               ))}
             </div>
 
-            {/* Bars Mode */}
             <div className="bg-white/5 border border-white/10 rounded-xl p-1 flex">
               <button
                 onClick={() => setBarsMode('usd')}
@@ -758,9 +728,7 @@ export default function LsrCockpitPage() {
           </div>
         </div>
 
-        {/* Cards */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6 items-stretch">
-          {/* Pulse */}
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4 pb-8 overflow-visible">
             <div className="flex items-center justify-between mb-3">
               <div>
@@ -791,7 +759,6 @@ export default function LsrCockpitPage() {
             </div>
           </div>
 
-          {/* 3D Bars */}
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4 pb-10 overflow-visible">
             <div className="flex items-center justify-between mb-3">
               <div>
@@ -834,7 +801,6 @@ export default function LsrCockpitPage() {
           </div>
         </div>
 
-        {/* Table */}
         <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
           <div className="flex items-center justify-between">
             <div>
@@ -887,8 +853,8 @@ export default function LsrCockpitPage() {
                               <div className="font-black text-white">{r.exchange}</div>
                             </div>
                           </td>
-                          <td className="p-3 text-right font-black text-emerald-200">{fmtPct(r.buyRatio)}</td>
-                          <td className="p-3 text-right font-black text-pink-200">{fmtPct(r.sellRatio)}</td>
+                          <td className="p-3 text-right font-black text-emerald-300">{fmtPct(r.buyRatio)}</td>
+                          <td className="p-3 text-right font-black text-rose-300">{fmtPct(r.sellRatio)}</td>
                           <td className="p-3 text-right text-white/80 font-mono">{fmtUSD(r.buyVolUsd)}</td>
                           <td className="p-3 text-right text-white/80 font-mono">{fmtUSD(r.sellVolUsd)}</td>
                           <td className="p-3 text-right text-white font-mono font-black">{fmtUSD(total)}</td>
@@ -902,10 +868,163 @@ export default function LsrCockpitPage() {
             </div>
           )}
         </div>
-
-        {/* extra buffer */}
-        <div className="h-24" />
+        <div className="h-12" />
       </div>
     </div>
   );
 }
+
+// === LsrGridWidget (Minimized) ===
+const LsrGridWidget: React.FC<{ language: Language }> = ({ language }) => {
+  const [symbol, setSymbol] = useState('BTCUSDT');
+  const [period, setPeriod] = useState('5m');
+  const [data, setData] = useState<LsrData | null>(null);
+  const t = getTranslations(language).dashboard.widgets.lsr;
+
+  useEffect(() => {
+    fetchLongShortRatio(symbol, period).then(setData).catch(() => setData(null));
+  }, [symbol, period]);
+
+  const val = data?.lsr ?? 1;
+  const clampedVal = Math.min(Math.max(val, 1), 5);
+  const rotation = -90 + ((clampedVal - 1) / 4) * 180;
+
+  const GAUGE_CX = 100;
+  const GAUGE_CY = 75;
+  const MINI_GAUGE_R = 70;
+  const MINI_GAUGE_RY = 70;
+  const GAUGE_STROKE = 10;
+  const LABEL_R = MINI_GAUGE_R + (GAUGE_STROKE / 2) + 8;
+  const CAP_PAD = (GAUGE_STROKE / 2) + 4;
+  const TEXT_VAL_Y = 104;
+
+  return (
+    <div className="h-full flex flex-col bg-white dark:bg-[#2f3032] p-2 relative">
+      <div className="flex justify-center gap-1 mb-1 z-10 relative">
+        <select
+          value={symbol}
+          onChange={e => setSymbol(e.target.value)}
+          className="bg-gray-100 dark:bg-[#1a1c1e] text-gray-800 dark:text-gray-200 text-[10px] font-bold rounded px-1.5 py-0.5 border border-transparent dark:border-slate-700 outline-none"
+        >
+          <option value="BTCUSDT">BTC</option>
+          <option value="ETHUSDT">ETH</option>
+          <option value="SOLUSDT">SOL</option>
+        </select>
+
+        <select
+          value={period}
+          onChange={e => setPeriod(e.target.value)}
+          className="bg-gray-100 dark:bg-[#1a1c1e] text-gray-800 dark:text-gray-200 text-[10px] font-bold rounded px-1.5 py-0.5 border border-transparent dark:border-slate-700 outline-none"
+        >
+          <option value="5m">5m</option>
+          <option value="1h">1h</option>
+          <option value="1D">1D</option>
+        </select>
+      </div>
+
+      <div className="flex-1 relative w-full flex justify-center items-center pb-1 overflow-visible">
+        <svg viewBox="0 0 200 110" className="w-[85%] overflow-visible" preserveAspectRatio="xMidYMax meet">
+          <defs>
+            <linearGradient id="lsrGradientMinimized" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="#CD534B" />
+              <stop offset="50%" stopColor="#eab308" />
+              <stop offset="100%" stopColor="#548f3f" />
+            </linearGradient>
+          </defs>
+
+          <path
+            d={`M ${GAUGE_CX - MINI_GAUGE_R} ${GAUGE_CY} A ${MINI_GAUGE_R} ${MINI_GAUGE_RY} 0 0 1 ${GAUGE_CX + MINI_GAUGE_R} ${GAUGE_CY}`}
+            fill="none"
+            stroke="currentColor"
+            className="text-gray-200 dark:text-[#333]"
+            strokeWidth={GAUGE_STROKE}
+            strokeLinecap="round"
+          />
+
+          <path
+            d={`M ${GAUGE_CX - MINI_GAUGE_R} ${GAUGE_CY} A ${MINI_GAUGE_R} ${MINI_GAUGE_RY} 0 0 1 ${GAUGE_CX + MINI_GAUGE_R} ${GAUGE_CY}`}
+            fill="none"
+            stroke="url(#lsrGradientMinimized)"
+            strokeWidth={GAUGE_STROKE}
+            strokeLinecap="round"
+          />
+
+          {[1, 2, 3, 4, 5].map(v => {
+            const angleDeg = 180 - ((v - 1) / 4) * 180;
+            const theta = (angleDeg * Math.PI) / 180;
+            const px = GAUGE_CX + MINI_GAUGE_R * Math.cos(theta);
+            const py = GAUGE_CY - MINI_GAUGE_RY * Math.sin(theta);
+            const nx = Math.cos(theta);
+            const ny = -Math.sin(theta);
+            let tx = px + nx * (LABEL_R - MINI_GAUGE_R);
+            let ty = py + ny * (LABEL_R - MINI_GAUGE_R);
+            if (v === 1) tx -= CAP_PAD;
+            if (v === 5) tx += CAP_PAD;
+            const anchor: 'start' | 'middle' | 'end' = v === 1 ? 'start' : v === 5 ? 'end' : 'middle';
+
+            return (
+              <text
+                key={v}
+                x={tx}
+                y={ty}
+                textAnchor={anchor}
+                dominantBaseline="middle"
+                fill="currentColor"
+                className="text-gray-500 dark:text-gray-400 font-black"
+                fontSize="8"
+              >
+                {v}
+              </text>
+            );
+          })}
+
+          <g transform={`rotate(${rotation} ${GAUGE_CX} ${GAUGE_CY})`}>
+            <path
+              d={`M ${GAUGE_CX} ${GAUGE_CY} L ${GAUGE_CX} ${GAUGE_CY - MINI_GAUGE_RY + 2}`}
+              stroke="var(--color-text-main)"
+              strokeWidth="4"
+              strokeLinecap="round"
+            />
+            <circle cx={GAUGE_CX} cy={GAUGE_CY} r="5" fill="var(--color-text-main)" />
+          </g>
+
+          <text
+            x={GAUGE_CX}
+            y={TEXT_VAL_Y - 3}
+            textAnchor="middle"
+            fill="var(--color-gauge-val)"
+            fontSize="22"
+            fontWeight="900"
+            fontFamily="monospace"
+          >
+            {Number.isFinite(val) ? val.toFixed(2) : '--'}
+          </text>
+        </svg>
+      </div>
+
+      <div className="flex justify-between px-2 pt-1 border-t border-gray-100 dark:border-slate-700/50 mt-1">
+        <div className="text-center">
+          <div className="text-[10px] text-gray-500 dark:text-slate-500 font-black uppercase tracking-tighter">Shorts</div>
+          <div className="text-xs font-mono font-black text-red-500">
+            {data?.shorts != null ? `${data.shorts.toFixed(1)}%` : '--'}
+          </div>
+        </div>
+        <div className="text-center">
+          <div className="text-[10px] text-gray-500 dark:text-slate-500 font-black uppercase tracking-tighter">Longs</div>
+          <div className="text-xs font-mono font-black text-green-500">
+            {data?.longs != null ? `${data.longs.toFixed(1)}%` : '--'}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const LsrWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ item, language = 'pt' }) => {
+  if (item.isMaximized) {
+    return <LsrCockpitPage />;
+  }
+  return <LsrGridWidget language={language} />;
+};
+
+export default LsrWidget;

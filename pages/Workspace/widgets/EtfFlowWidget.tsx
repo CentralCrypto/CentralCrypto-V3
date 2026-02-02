@@ -355,23 +355,23 @@ const MarketSharePanel: React.FC<{
     isLast: boolean
 }> = ({ currentData, allTickers, colorMap, metric, asset, stats, onPrev, onNext, isFirst, isLast }) => {
     
-    // Sort logic for the day (with Share % calc)
+    // Sort logic for the day (Sort by ABSOLUTE value to show importance)
     const sortedTickers = useMemo(() => {
         if (!currentData) return [];
         
-        let dayTotal = 0;
+        let totalAbs = 0;
         const items = allTickers.map(t => {
             const val = Number(currentData[t] || 0);
-            if (val > 0) dayTotal += val;
+            totalAbs += Math.abs(val);
             return { ticker: t, val };
         });
 
-        // Filter and Sort descending by value
+        // Sort descending by ABSOLUTE value to show biggest movers (in or out)
         return items
-            .sort((a, b) => b.val - a.val)
+            .sort((a, b) => Math.abs(b.val) - Math.abs(a.val))
             .map(item => ({
                 ...item,
-                share: dayTotal > 0 && item.val > 0 ? (item.val / dayTotal) * 100 : 0
+                share: totalAbs > 0 ? (Math.abs(item.val) / totalAbs) * 100 : 0
             }));
     }, [currentData, allTickers]);
 
@@ -417,18 +417,18 @@ const MarketSharePanel: React.FC<{
                 </button>
             </div>
             
-            {/* Table Header */}
-             <div className="grid grid-cols-[1fr_1fr_1fr] px-2 py-1 bg-gray-50 dark:bg-black/10 border-b border-gray-100 dark:border-slate-800/50 text-[9px] font-bold text-gray-400 uppercase tracking-widest">
+            {/* Table Header - SIMPLIFIED */}
+             <div className="grid grid-cols-[1fr_1fr] px-2 py-1 bg-gray-50 dark:bg-black/10 border-b border-gray-100 dark:border-slate-800/50 text-[9px] font-bold text-gray-400 uppercase tracking-widest">
                 <span>Ativo</span>
-                <span className="text-right">Flow</span>
-                <span className="text-right">Share %</span>
+                <span className="text-right">Valor (USD)</span>
             </div>
 
             <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
                 <table className="w-full text-xs">
                     <tbody>
-                        {sortedTickers.map(({ticker, val, share}) => {
+                        {sortedTickers.map(({ticker, val}) => {
                             const isZero = val === 0;
+                            const isPositive = val >= 0;
                             return (
                                 <tr key={ticker} className="border-b border-gray-50 dark:border-slate-800/30 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
                                     <td className="py-2 pl-1 w-[40%]">
@@ -437,17 +437,14 @@ const MarketSharePanel: React.FC<{
                                             <span className={`font-bold ${isZero ? 'text-gray-400' : 'text-gray-700 dark:text-gray-300'}`}>{ticker}</span>
                                         </div>
                                     </td>
-                                    <td className={`py-2 text-right font-mono font-bold w-[35%] ${isZero ? 'text-gray-300 dark:text-gray-600' : 'text-gray-500 dark:text-slate-400'}`}>
+                                    <td className={`py-2 text-right font-mono font-bold w-[60%] ${isZero ? 'text-gray-300 dark:text-gray-600' : (isPositive ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500')}`}>
                                         ${formatCompactNumber(val)}
-                                    </td>
-                                    <td className={`py-2 text-right font-bold w-[25%] ${share > 10 ? 'text-[#dd9933]' : 'text-gray-400'}`}>
-                                        {share > 0 ? share.toFixed(1) + '%' : '-'}
                                     </td>
                                 </tr>
                             );
                         })}
                         {sortedTickers.length === 0 && (
-                            <tr><td colSpan={3} className="text-center py-4 text-gray-400">Sem dados</td></tr>
+                            <tr><td colSpan={2} className="text-center py-4 text-gray-400">Sem dados</td></tr>
                         )}
                     </tbody>
                 </table>
@@ -474,15 +471,13 @@ const EtfBubbles: React.FC<{ currentData: any, allTickers: string[], colorMap: R
 
         // 1. Extract values for current day
         const vals: Record<string, number> = {};
-        let maxVal = 0;
-        let totalVal = 0;
+        let maxAbsVal = 0;
         
         allTickers.forEach(t => {
             const v = Number(currentData[t] || 0);
-            if (v > 0) {
+            if (v !== 0) { // Keep even negatives
                 vals[t] = v;
-                totalVal += v;
-                if (v > maxVal) maxVal = v;
+                if (Math.abs(v) > maxAbsVal) maxAbsVal = Math.abs(v);
             }
         });
 
@@ -496,8 +491,8 @@ const EtfBubbles: React.FC<{ currentData: any, allTickers: string[], colorMap: R
 
         const newParticles = activeTickers.map(t => {
             const val = vals[t];
-            const share = totalVal > 0 ? (val / totalVal) * 100 : 0;
-            const radius = 15 + (Math.sqrt(val) / Math.sqrt(maxVal || 1)) * 55;
+            // Radius proportional to sqrt of ABSOLUTE value
+            const radius = 15 + (Math.sqrt(Math.abs(val)) / Math.sqrt(maxAbsVal || 1)) * 55;
             
             // Reuse existing particle to keep position
             const existing = particlesRef.current.find(p => p.id === t);
@@ -505,7 +500,6 @@ const EtfBubbles: React.FC<{ currentData: any, allTickers: string[], colorMap: R
             if (existing) {
                 existing.targetRadius = radius;
                 existing.val = val;
-                existing.share = share;
                 return existing;
             }
 
@@ -519,7 +513,6 @@ const EtfBubbles: React.FC<{ currentData: any, allTickers: string[], colorMap: R
                 targetRadius: radius,
                 color: colorMap[t] || '#888',
                 val,
-                share,
                 mass: radius
             };
         });
@@ -602,16 +595,30 @@ const EtfBubbles: React.FC<{ currentData: any, allTickers: string[], colorMap: R
                 // DRAW
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-                ctx.fillStyle = p.color;
-                ctx.globalAlpha = 0.85;
-                ctx.fill();
-                ctx.globalAlpha = 1.0;
                 
-                // Shine
-                ctx.beginPath();
-                ctx.arc(p.x - p.radius * 0.3, p.y - p.radius * 0.3, p.radius * 0.25, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(255,255,255,0.2)';
-                ctx.fill();
+                if (p.val >= 0) {
+                    // Positive Flow: Solid Color
+                    ctx.fillStyle = p.color;
+                    ctx.globalAlpha = 0.85;
+                    ctx.fill();
+                    ctx.globalAlpha = 1.0;
+                    
+                    // Shine
+                    ctx.beginPath();
+                    ctx.arc(p.x - p.radius * 0.3, p.y - p.radius * 0.3, p.radius * 0.25, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+                    ctx.fill();
+                } else {
+                    // Negative Flow: Hollow/Translucent with Red Ring
+                    ctx.fillStyle = p.color;
+                    ctx.globalAlpha = 0.2; // Very faint fill
+                    ctx.fill();
+                    ctx.globalAlpha = 1.0;
+                    
+                    ctx.lineWidth = 3;
+                    ctx.strokeStyle = '#ef4444'; // Red Stroke
+                    ctx.stroke();
+                }
 
                 // Text
                 if (p.radius > 12) {
@@ -619,8 +626,8 @@ const EtfBubbles: React.FC<{ currentData: any, allTickers: string[], colorMap: R
                     ctx.font = `bold ${Math.max(10, p.radius/2.5)}px Inter, sans-serif`;
                     ctx.textAlign = "center";
                     ctx.textBaseline = "middle";
-                    ctx.shadowColor = "rgba(0,0,0,0.5)";
-                    ctx.shadowBlur = 3;
+                    ctx.shadowColor = "rgba(0,0,0,0.8)";
+                    ctx.shadowBlur = 4;
                     ctx.fillText(p.id, p.x, p.y);
                     ctx.shadowBlur = 0;
                 }
@@ -673,7 +680,7 @@ const EtfBubbles: React.FC<{ currentData: any, allTickers: string[], colorMap: R
                 visible: true,
                 x: e.clientX,
                 y: e.clientY,
-                content: { name: found.id, flow: found.val, share: found.share }
+                content: { name: found.id, flow: found.val }
             });
         } else {
             setTooltip(null);
@@ -697,8 +704,12 @@ const EtfBubbles: React.FC<{ currentData: any, allTickers: string[], colorMap: R
                     style={{ top: tooltip.y + 10, left: tooltip.x + 10 }}
                 >
                     <div className="font-black text-[#dd9933] uppercase text-sm border-b border-white/10 pb-1 mb-1">{tooltip.content.name}</div>
-                    <div className="flex justify-between text-xs"><span className="text-gray-400">Flow:</span> <span className="font-mono font-bold">${formatCompactNumber(tooltip.content.flow)}</span></div>
-                    <div className="flex justify-between text-xs"><span className="text-gray-400">Share:</span> <span className="font-mono font-bold text-green-400">{tooltip.content.share.toFixed(1)}%</span></div>
+                    <div className="flex justify-between text-xs">
+                        <span className="text-gray-400">Flow:</span> 
+                        <span className={`font-mono font-bold ${tooltip.content.flow >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            ${formatCompactNumber(tooltip.content.flow)}
+                        </span>
+                    </div>
                 </div>,
                 document.body
             )}
