@@ -7,9 +7,13 @@ import { DashboardItem, Language } from '../../../types';
 import { getTranslations } from '../../../locales';
 import Highcharts from 'highcharts';
 import mouseWheelZoom from 'highcharts/modules/mouse-wheel-zoom';
+import highchartsMore from 'highcharts/highcharts-more';
 
 if (typeof mouseWheelZoom === 'function') {
   (mouseWheelZoom as any)(Highcharts);
+}
+if (typeof highchartsMore === 'function') {
+  (highchartsMore as any)(Highcharts);
 }
 
 const formatCompactNumber = (number: number) => {
@@ -114,6 +118,8 @@ const MissingDataOverlay: React.FC = () => (
     </div>
   </div>
 );
+
+// --- COMPONENTES VISUAIS (Charts, Tables) ---
 
 const StackedEtfChart: React.FC<ChartBaseProps> = ({ data, metric, allTickers, colorMap }) => {
   const chartRef = useRef<HTMLDivElement>(null);
@@ -341,6 +347,86 @@ const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }
   return <div ref={chartRef} className="w-full h-full" />;
 };
 
+const MarketSharePanel: React.FC<{ data: any[], allTickers: string[] }> = ({ data, allTickers }) => {
+    const aggregate = useMemo(() => {
+        const map: Record<string, number> = {};
+        let total = 0;
+        data.forEach(d => {
+            allTickers.forEach(t => {
+                const val = Number(d[t] || 0);
+                if (val > 0) { // Only positive flows count for share visual
+                    map[t] = (map[t] || 0) + val;
+                    total += val;
+                }
+            });
+        });
+        const sorted = Object.entries(map).sort((a,b) => b[1] - a[1]);
+        return { sorted, total };
+    }, [data, allTickers]);
+
+    return (
+        <div className="flex flex-col h-full bg-white dark:bg-[#1a1c1e] border-l border-gray-100 dark:border-slate-800/50">
+            <div className="p-3 border-b border-gray-100 dark:border-slate-800/50 font-black text-xs text-gray-500 uppercase tracking-widest">
+                Market Share (Period)
+            </div>
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
+                <table className="w-full text-xs">
+                    <tbody>
+                        {aggregate.sorted.map(([ticker, val]) => {
+                            const pct = aggregate.total > 0 ? (val / aggregate.total) * 100 : 0;
+                            return (
+                                <tr key={ticker} className="border-b border-gray-50 dark:border-slate-800/30">
+                                    <td className="py-2 font-bold text-gray-700 dark:text-gray-300">{ticker}</td>
+                                    <td className="py-2 text-right font-mono text-gray-500">${formatCompactNumber(val)}</td>
+                                    <td className="py-2 text-right font-bold text-[#dd9933]">{pct.toFixed(1)}%</td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+};
+
+const EtfBubbles: React.FC<{ data: any[], allTickers: string[], colorMap: Record<string,string> }> = ({ data, allTickers, colorMap }) => {
+    const chartRef = useRef<HTMLDivElement>(null);
+    const { isDark, textColor } = useChartTheme();
+
+    useEffect(() => {
+        if(!chartRef.current || !data.length) return;
+
+        // Aggregate total positive volume for bubble size
+        const seriesData = allTickers.map(t => {
+            const totalVal = data.reduce((acc, curr) => acc + Math.max(0, Number(curr[t]||0)), 0);
+            return {
+                name: t,
+                value: totalVal,
+                color: colorMap[t]
+            };
+        }).filter(d => d.value > 0);
+
+        Highcharts.chart(chartRef.current, {
+            chart: { type: 'packedbubble', backgroundColor: 'transparent', height: '100%' },
+            title: { text: null },
+            tooltip: { useHTML: true, pointFormat: '<b>{point.name}:</b> ${point.value:,.0f}' },
+            plotOptions: {
+                packedbubble: {
+                    minSize: '30%',
+                    maxSize: '120%',
+                    layoutAlgorithm: { gravitationalConstant: 0.05, splitSeries: false, seriesInteraction: true, dragBetweenSeries: true, parentNodeLimit: true },
+                    dataLabels: { enabled: true, format: '{point.name}', filter: { property: 'y', operator: '>', value: 0 }, style: { color: 'black', textOutline: 'none', fontWeight: 'normal' } }
+                }
+            },
+            series: [{ name: 'ETFs', data: seriesData }],
+            credits: { enabled: false },
+            legend: { enabled: false }
+        } as any);
+    }, [data, allTickers, colorMap, isDark]);
+
+    return <div ref={chartRef} className="w-full h-full" />;
+};
+
 // --- PORTAL TOOLTIP COMPONENT ---
 const PortalTooltip = ({ content }: { content: string }) => {
   const [visible, setVisible] = useState(false);
@@ -414,7 +500,7 @@ const HelpTooltip = () => {
 };
 
 // --- MAXIMIZED WIDGET ---
-const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ language }) => {
+const EtfMaximized: React.FC<{ language: Language, onClose?: () => void, item: DashboardItem }> = ({ language, item }) => {
   const [asset, setAsset] = useState<Asset>('BTC');
   const [metric, setMetric] = useState<Metric>('flows');
   const [viewMode, setViewMode] = useState<ViewMode>('stacked');
@@ -425,6 +511,11 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
 
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number>(-1);
+
+  // DETECT IF THIS IS THE "FULL PAGE" OR "MAIN BOARD MAXIMIZED"
+  // If item.id is 'etf-page' (from IndicatorPage.tsx), show extras.
+  // If item.id is anything else (e.g. 'main-etf' from Workspace/constants), hide extras.
+  const showExtras = item.id === 'etf-page';
 
   // Summary (top KPI)
   useEffect(() => {
@@ -437,15 +528,11 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
     fetchEtfDetailed(asset, metric).then(res => {
       const arr = Array.isArray(res) ? res : [];
       setData(arr);
-
-      // Sempre “gruda” no último dia disponível
       setSelectedIndex(arr.length > 0 ? arr.length - 1 : -1);
-
       setLoading(false);
     });
   }, [asset, metric]);
 
-  // Clamp index quando data muda (evita ficar preso no penúltimo por mismatch)
   useEffect(() => {
     if (!Array.isArray(data) || data.length === 0) {
       if (selectedIndex !== -1) setSelectedIndex(-1);
@@ -463,14 +550,12 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
     return makeColorMap(allTickers);
   }, [allTickers.join('|')]);
 
-  // In lines mode ensure ticker exists
   useEffect(() => {
     if (viewMode !== 'lines') return;
     if (!allTickers.length) return;
     if (!selectedTicker || !allTickers.includes(selectedTicker)) setSelectedTicker(allTickers[0]);
   }, [viewMode, allTickers.join('|')]);
 
-  // Header KPI: sum flows across assets we actually show (BTC/ETH/SOL/XRP only from summary)
   const displayTotal = useMemo(() => {
     if (!summaryData) return 0;
     const sum =
@@ -483,7 +568,6 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
 
   const flowColor = displayTotal >= 0 ? 'text-green-400' : 'text-red-400';
 
-  // Missing flows for DOGE/LTC (but allow volume)
   const isMissingCombo = useMemo(() => {
     if ((asset === 'DOGE' || asset === 'LTC') && metric === 'flows') return true;
     return false;
@@ -604,13 +688,34 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
         )}
       </div>
 
-      {/* MAIN CHART CONTAINER - FULL HEIGHT, NO GRID */}
-      <div className="flex-1 min-h-0 relative bg-gray-5 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4 flex flex-col">
-         <div className="relative flex-1 min-h-0">
-             <ChartArea />
-         </div>
-         <HelpTooltip />
-      </div>
+      {/* GRID CONTAINER - CONDITIONAL RENDER */}
+      {showExtras ? (
+          <div className="flex-1 min-h-0 grid grid-cols-12 gap-4">
+              <div className="col-span-12 lg:col-span-2 overflow-hidden bg-gray-5 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50">
+                  <MarketSharePanel data={data} allTickers={allTickers} />
+              </div>
+              <div className="col-span-12 lg:col-span-7 overflow-hidden relative bg-gray-5 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4 flex flex-col">
+                  <div className="relative flex-1 min-h-0">
+                      <ChartArea />
+                  </div>
+                  <HelpTooltip />
+              </div>
+              <div className="col-span-12 lg:col-span-3 overflow-hidden bg-gray-5 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4 flex flex-col">
+                  <h4 className="text-xs font-bold text-gray-500 uppercase mb-2 text-center tracking-widest">Share Volumétrico</h4>
+                  <div className="flex-1 min-h-0">
+                      <EtfBubbles data={data} allTickers={allTickers} colorMap={colorMap} />
+                  </div>
+              </div>
+          </div>
+      ) : (
+          /* SIMPLE MODE (MAIN BOARD MAXIMIZED) */
+          <div className="flex-1 min-h-0 relative bg-gray-5 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4 flex flex-col">
+             <div className="relative flex-1 min-h-0">
+                 <ChartArea />
+             </div>
+             <HelpTooltip />
+          </div>
+      )}
     </div>
   );
 };
@@ -678,7 +783,7 @@ const EtfSummary: React.FC<{ language: Language }> = ({ language }) => {
 
 const EtfFlowWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ item, language = 'pt' }) => {
   if (item.isMaximized) {
-    return <EtfMaximized language={language} />;
+    return <EtfMaximized language={language} item={item} />;
   }
   return <EtfSummary language={language} />;
 };
