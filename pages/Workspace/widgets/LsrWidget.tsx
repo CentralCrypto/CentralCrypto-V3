@@ -348,9 +348,9 @@ export function LsrCockpitPage() {
       chart: {
         type: 'column',
         backgroundColor: 'transparent',
-        height: 340,
-        margin: [0, 0, 40, 0], // Elimina espaços extras, deixa só embaixo pros labels
-        spacingBottom: 0,
+        height: 310, // Adjusted height
+        margin: [0, 0, 30, 0], // Elimina espaços extras, deixa só embaixo pros labels (eixo X)
+        spacing: [0, 0, 0, 0], // Zero spacing
         options3d: {
           enabled: true,
           alpha: 10, beta: 18, depth: 250, viewDistance: 25,
@@ -546,8 +546,8 @@ export function LsrCockpitPage() {
             </div>
             <div className="flex-1 min-h-0 relative">
                 {errorExchange ? <div className="p-4 text-red-200 bg-red-900/20 border border-red-900/50 rounded">{errorExchange}</div> :
-                 loadingExchange ? <Skeleton h={340} /> : 
-                 <div id="lsr-exchange-3d" className="min-h-[340px]" />
+                 loadingExchange ? <Skeleton h={310} /> : 
+                 <div id="lsr-exchange-3d" className="min-h-[310px]" />
                 }
             </div>
             {agg && (
