@@ -32,11 +32,13 @@ export const ENDPOINTS = {
       etfBtcFlows: "/spot-btc-etf-flows.json",
       etfBtcVolume: "/spot-btc-etf-volumes.json", 
       etfEthFlows: "/spot-eth-etf-flows.json",
-      etfEthVolume: "/spot-eth-etf-volumes.json", // FIXED: Plural "volumes"
+      etfEthVolume: "/spot-eth-etf-volumes.json", 
       etfSolFlows: "/spot-sol-etf-flows.json",
       etfSolVolumes: "/spot-sol-etf-volumes.json",
       etfXrpFlows: "/spot-xrp-etf-flows.json",
       etfXrpVolumes: "/spot-xrp-etf-volumes.json",
+      etfDogeVolumes: "/spot-doge-etf-volumes.json", // Added
+      etfLtcVolumes: "/spot-ltc-etf-volumes.json",   // Added
       top10gnl: "/top10gnl.json",
       top10mktcap: "/top10mktcap.json"
     }

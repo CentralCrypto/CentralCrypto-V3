@@ -655,11 +655,11 @@ const resolveEtfEndpoint = (asset: EtfAsset, metric: EtfMetric): string | null =
     : pick('etfXrpVolume', 'etfXrpVolumes');
 
   if (asset === 'DOGE') return metric === 'volume'
-    ? (pick('etfDogeVolume', 'etfDogeVolumes') || 'spot-doge-etf-volumes.json')
+    ? (pick('etfDogeVolume', 'etfDogeVolumes') || '/spot-doge-etf-volumes.json')
     : null;
 
   if (asset === 'LTC') return metric === 'volume'
-    ? (pick('etfLtcVolume', 'etfLtcVolumes') || 'spot-ltc-etf-volumes.json')
+    ? (pick('etfLtcVolume', 'etfLtcVolumes') || '/spot-ltc-etf-volumes.json')
     : null;
 
   return null;

@@ -1,11 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Highcharts from 'highcharts/highstock';
-import Highcharts3D from 'highcharts/highcharts-3d';
-import MouseWheelZoom from 'highcharts/modules/mouse-wheel-zoom';
+import HC3D from 'highcharts/highcharts-3d';
+import HCWheelZoom from 'highcharts/modules/mouse-wheel-zoom';
 import { Loader2, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 
-Highcharts3D(Highcharts);
-MouseWheelZoom(Highcharts);
+// ---- Highcharts module init (Vite/ESM-safe) ----
+// Some Highcharts modules load as { default: fn } under ESM.
+// This normalizes both cases.
+const init3D = (HC3D as any)?.default ?? HC3D;
+const initWheelZoom = (HCWheelZoom as any)?.default ?? HCWheelZoom;
+
+if (typeof init3D === 'function') init3D(Highcharts);
+if (typeof initWheelZoom === 'function') initWheelZoom(Highcharts);
 
 type Tf = '5m' | '1h' | '12h' | '1d';
 type Sym = 'BTC' | 'ETH' | 'SOL';
@@ -37,7 +43,7 @@ type MarketPoint = {
   ts: number; // ms epoch
   price?: number;
   openInterest?: number;
-  ls?: number; // LSR do TF selecionado
+  ls?: number; // LSR do TF selecionado (você controla no backend)
   longVolUsd?: number;
   shortVolUsd?: number;
   liquidationUsd?: number;
@@ -55,8 +61,7 @@ const TFS: Tf[] = ['5m', '1h', '12h', '1d'];
 // Ajuste conforme sua convenção real de arquivo
 const cachePathForExchange = (sym: Sym, tf: Tf) => `/cachecko/lsr-exchange-${sym.toLowerCase()}-${tf}.json`;
 
-// Se você ainda não tem esse cache pronto, você pode iniciar com:
-// - um endpoint seu que junta pages do /mv/futures-market-data e grava como points[]
+// Endpoint esperado pelo Pulse (você cria no backend lendo seu cache de histórico)
 const apiPathForMarketHistory = (sym: Sym) => `/api/lsr/market-history?symbol=${sym}`;
 
 const fmtUSD = (v: number) => {
@@ -196,9 +201,12 @@ export default function LsrCockpitPage() {
   const sortedTableRows = useMemo(() => {
     const rows = [...exchangeRows];
     const dir = sortDir === 'asc' ? 1 : -1;
+
     rows.sort((a, b) => {
       const aTotal = a.buyVolUsd + a.sellVolUsd;
       const bTotal = b.buyVolUsd + b.sellVolUsd;
+
+      if (sortKey === 'totalUsd') return (aTotal - bTotal) * dir;
 
       const pick = (r: ExchangeRow) => {
         if (sortKey === 'exchange') return r.exchange.toLowerCase().charCodeAt(0);
@@ -206,13 +214,12 @@ export default function LsrCockpitPage() {
         if (sortKey === 'shortPct') return r.sellRatio;
         if (sortKey === 'longUsd') return r.buyVolUsd;
         if (sortKey === 'shortUsd') return r.sellVolUsd;
-        return aTotal; // fallback
+        return 0;
       };
 
-      // totalUsd
-      if (sortKey === 'totalUsd') return (aTotal - bTotal) * dir;
       return (pick(a) - pick(b)) * dir;
     });
+
     return rows;
   }, [exchangeRows, sortKey, sortDir]);
 
@@ -227,19 +234,17 @@ export default function LsrCockpitPage() {
   // --- Build Pulse Series ---
   const pulseSeries = useMemo(() => {
     const pts = marketHist?.points || [];
-    // proteção: só pontos com ts válido
-    const p = pts.filter(x => Number.isFinite(x.ts)).sort((a, b) => a.ts - b.ts);
+    const p = pts
+      .filter(x => Number.isFinite(x.ts))
+      .sort((a, b) => a.ts - b.ts);
 
     const price = p.map(x => [x.ts, Number(x.price) || 0]);
     const oi = p.map(x => [x.ts, Number(x.openInterest) || 0]);
     const lsr = p.map(x => [x.ts, Number(x.ls) || 0]);
 
-    // liquidações e vol (barras)
     const liq = p.map(x => [x.ts, Number(x.liquidationUsd) || 0]);
-    const longVol = p.map(x => [x.ts, Number(x.longVolUsd) || 0]);
-    const shortVol = p.map(x => [x.ts, Number(x.shortVolUsd) || 0]);
 
-    return { price, oi, lsr, liq, longVol, shortVol };
+    return { price, oi, lsr, liq };
   }, [marketHist]);
 
   // --- Render Pulse Chart ---
@@ -247,7 +252,6 @@ export default function LsrCockpitPage() {
     if (loadingMarket || errorMarket) return;
     if (!marketHist || !pulseSeries.price.length) return;
 
-    // Destroy previous
     if (pulseChartRef.current) {
       pulseChartRef.current.destroy();
       pulseChartRef.current = null;
@@ -286,7 +290,7 @@ export default function LsrCockpitPage() {
           title: { text: 'USD' },
           opposite: true,
           gridLineColor: 'rgba(255,255,255,0.06)',
-          labels: { formatter: function () { return fmtUSD(Number(this.value)); } }
+          labels: { formatter: function () { return fmtUSD(Number((this as any).value)); } }
         }
       ],
       tooltip: {
@@ -317,21 +321,33 @@ export default function LsrCockpitPage() {
           name: 'Open Interest',
           yAxis: 1,
           data: pulseSeries.oi,
-          tooltip: { pointFormatter: function () { return `<span>OI: <b>${fmtUSD(Number(this.y))}</b></span><br/>`; } }
+          tooltip: {
+            pointFormatter: function () {
+              return `<span>OI: <b>${fmtUSD(Number((this as any).y))}</b></span><br/>`;
+            }
+          }
         },
         {
           type: 'column',
           name: 'Liquidations',
           yAxis: 1,
           data: pulseSeries.liq,
-          tooltip: { pointFormatter: function () { return `<span>Liq: <b>${fmtUSD(Number(this.y))}</b></span><br/>`; } }
+          tooltip: {
+            pointFormatter: function () {
+              return `<span>Liq: <b>${fmtUSD(Number((this as any).y))}</b></span><br/>`;
+            }
+          }
         },
         {
           type: 'line',
           name: 'Price',
           yAxis: 1,
           data: pulseSeries.price,
-          tooltip: { pointFormatter: function () { return `<span>Price: <b>${fmtUSD(Number(this.y))}</b></span><br/>`; } }
+          tooltip: {
+            pointFormatter: function () {
+              return `<span>Price: <b>${fmtUSD(Number((this as any).y))}</b></span><br/>`;
+            }
+          }
         }
       ]
     } as any);
@@ -349,7 +365,6 @@ export default function LsrCockpitPage() {
     if (loadingExchange || errorExchange) return;
     if (!exchangeRows.length) return;
 
-    // Destroy previous
     if (barsChartRef.current) {
       barsChartRef.current.destroy();
       barsChartRef.current = null;
@@ -394,7 +409,8 @@ export default function LsrCockpitPage() {
         title: { text: barsMode === 'ratio' ? 'Long/Short (%)' : 'Volume (USD)' },
         labels: {
           formatter: function () {
-            return barsMode === 'ratio' ? `${Number(this.value).toFixed(0)}%` : fmtUSD(Number(this.value));
+            const v = Number((this as any).value);
+            return barsMode === 'ratio' ? `${v.toFixed(0)}%` : fmtUSD(v);
           },
           style: { color: 'rgba(255,255,255,0.75)' }
         },
@@ -413,8 +429,8 @@ export default function LsrCockpitPage() {
           const name = (this as any).x;
           const longY = pts[0]?.y ?? 0;
           const shortY = pts[1]?.y ?? 0;
-          const longTxt = barsMode === 'ratio' ? `${longY.toFixed(2)}%` : fmtUSD(longY);
-          const shortTxt = barsMode === 'ratio' ? `${shortY.toFixed(2)}%` : fmtUSD(shortY);
+          const longTxt = barsMode === 'ratio' ? `${Number(longY).toFixed(2)}%` : fmtUSD(Number(longY));
+          const shortTxt = barsMode === 'ratio' ? `${Number(shortY).toFixed(2)}%` : fmtUSD(Number(shortY));
           return `<b>${name}</b><br/>Long: <b>${longTxt}</b><br/>Short: <b>${shortTxt}</b>`;
         }
       },
@@ -457,7 +473,7 @@ export default function LsrCockpitPage() {
               <span className="ml-3 text-sm font-black text-white/60">{symbol} · {tf.toUpperCase()}</span>
             </h1>
             <p className="text-white/60 text-sm mt-1">
-              Zoom no scroll, pan no mouse (segure <b>Shift</b>). Linha agregada + breakdown por exchange.
+              Zoom no scroll e pan no mouse (segure <b>Shift</b>). Linha agregada + breakdown por exchange.
             </p>
             <div className="flex flex-wrap gap-2 mt-3">
               <Badge>Pulse: OI + LSR + Liq + Price</Badge>
@@ -686,11 +702,11 @@ export default function LsrCockpitPage() {
         {/* Footer tips */}
         <div className="mt-6 text-xs text-white/45">
           <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-            <div className="font-black text-white/70 mb-2">Notas de design (pra ficar “diferente” sem inventar dado)</div>
+            <div className="font-black text-white/70 mb-2">Notas</div>
             <ul className="list-disc pl-5 space-y-1">
-              <li>3D é “impacto visual”. A tabela garante leitura precisa.</li>
-              <li>Pulse chart conta história: quando OI sobe e liquidações explodem, você enxerga o stress do mercado.</li>
-              <li>Zoom/pan já está habilitado; isso vira análise real, não só dashboard.</li>
+              <li>3D é impacto visual. A tabela garante leitura precisa.</li>
+              <li>Pulse chart: quando OI sobe e liquidações explodem, você enxerga stress do mercado.</li>
+              <li>Zoom/pan já está habilitado.</li>
             </ul>
           </div>
         </div>
