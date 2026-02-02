@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import { Loader2, ExternalLink } from 'lucide-react';
-import { TrumpData, fetchTrumpData } from '../services/api';
+import { TrumpData, fetchTrumpData } from '../../../services/api';
 import { DashboardItem, Language } from '../../../types';
 import { getTranslations } from '../../../locales';
 

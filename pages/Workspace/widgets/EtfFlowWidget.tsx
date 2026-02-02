@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Loader2, TrendingUp, BarChart3, Layers, AlertTriangle, LineChart, Info, ChevronLeft, ChevronRight, DollarSign, ArrowUp, ArrowDown } from 'lucide-react';
@@ -7,13 +6,9 @@ import { DashboardItem, Language } from '../../../types';
 import { getTranslations } from '../../../locales';
 import Highcharts from 'highcharts';
 import mouseWheelZoom from 'highcharts/modules/mouse-wheel-zoom';
-import highchartsMore from 'highcharts/highcharts-more';
 
 if (typeof mouseWheelZoom === 'function') {
   (mouseWheelZoom as any)(Highcharts);
-}
-if (typeof highchartsMore === 'function') {
-  (highchartsMore as any)(Highcharts);
 }
 
 const formatCompactNumber = (number: number) => {
@@ -78,7 +73,7 @@ const applyWatermark = (chart: Highcharts.Chart) => {
     const h = chart.chartHeight;
     if (!w || !h) return;
 
-    const size = Math.min(w, h) * 0.52;
+    const size = Math.min(w, h) * 0.75;
     const x = (w - size) / 2;
     const y = (h - size) / 2;
 
@@ -347,14 +342,15 @@ const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }
   return <div ref={chartRef} className="w-full h-full" />;
 };
 
-const MarketSharePanel: React.FC<{ data: any[], allTickers: string[] }> = ({ data, allTickers }) => {
+const MarketSharePanel: React.FC<{ data: any[], allTickers: string[], colorMap: Record<string, string>, metric: Metric, asset: string }> = ({ data, allTickers, colorMap, metric, asset }) => {
+    // Calculate aggregate for table
     const aggregate = useMemo(() => {
         const map: Record<string, number> = {};
         let total = 0;
         data.forEach(d => {
             allTickers.forEach(t => {
                 const val = Number(d[t] || 0);
-                if (val > 0) { // Only positive flows count for share visual
+                if (val > 0) {
                     map[t] = (map[t] || 0) + val;
                     total += val;
                 }
@@ -364,8 +360,51 @@ const MarketSharePanel: React.FC<{ data: any[], allTickers: string[] }> = ({ dat
         return { sorted, total };
     }, [data, allTickers]);
 
+    // Calculate Summary Stats (1D, 7D, 30D) for the selected asset
+    const stats = useMemo(() => {
+        if (!data || data.length === 0) return { d1: 0, d7: 0, d30: 0 };
+        
+        // Helper to sum all tickers for a given slice of data
+        const sumFlow = (slice: any[]) => {
+            let sum = 0;
+            slice.forEach(day => {
+                // If the API returns a totalGlobal calculated correctly, use it.
+                // Otherwise, sum the known tickers.
+                // Assuming data[i].totalGlobal is the sum of tickers for that day.
+                sum += Number(day.totalGlobal || 0);
+            });
+            return sum;
+        };
+
+        const len = data.length;
+        const d1 = sumFlow(data.slice(-1));
+        const d7 = sumFlow(data.slice(-7));
+        const d30 = sumFlow(data.slice(-30));
+
+        return { d1, d7, d30 };
+    }, [data]);
+
+    const StatBox = ({ label, value }: { label: string, value: number }) => (
+        <div className="flex flex-col items-center justify-center bg-gray-100 dark:bg-[#2f3032] rounded-lg p-2 border border-gray-200 dark:border-slate-700">
+            <span className="text-[9px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-wider">{label}</span>
+            <span className={`text-xs font-black ${value >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                ${formatCompactNumber(value)}
+            </span>
+        </div>
+    );
+
     return (
         <div className="flex flex-col h-full bg-white dark:bg-[#1a1c1e] border-l border-gray-100 dark:border-slate-800/50">
+            {/* NEW STATS HEADER */}
+            <div className="p-3 border-b border-gray-100 dark:border-slate-800/50">
+                <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 text-center">{asset} {metric === 'flows' ? 'Net Flow' : 'Volume'}</div>
+                <div className="grid grid-cols-3 gap-2">
+                    <StatBox label="1D" value={stats.d1} />
+                    <StatBox label="7D" value={stats.d7} />
+                    <StatBox label="30D" value={stats.d30} />
+                </div>
+            </div>
+
             <div className="p-3 border-b border-gray-100 dark:border-slate-800/50 font-black text-xs text-gray-500 uppercase tracking-widest">
                 Market Share (Period)
             </div>
@@ -376,7 +415,12 @@ const MarketSharePanel: React.FC<{ data: any[], allTickers: string[] }> = ({ dat
                             const pct = aggregate.total > 0 ? (val / aggregate.total) * 100 : 0;
                             return (
                                 <tr key={ticker} className="border-b border-gray-50 dark:border-slate-800/30">
-                                    <td className="py-2 font-bold text-gray-700 dark:text-gray-300">{ticker}</td>
+                                    <td className="py-2">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: colorMap[ticker] || '#ccc' }} />
+                                            <span className="font-bold text-gray-700 dark:text-gray-300">{ticker}</span>
+                                        </div>
+                                    </td>
                                     <td className="py-2 text-right font-mono text-gray-500">${formatCompactNumber(val)}</td>
                                     <td className="py-2 text-right font-bold text-[#dd9933]">{pct.toFixed(1)}%</td>
                                 </tr>
@@ -389,42 +433,185 @@ const MarketSharePanel: React.FC<{ data: any[], allTickers: string[] }> = ({ dat
     );
 };
 
+// --- PHYSICS BUBBLES ---
 const EtfBubbles: React.FC<{ data: any[], allTickers: string[], colorMap: Record<string,string> }> = ({ data, allTickers, colorMap }) => {
-    const chartRef = useRef<HTMLDivElement>(null);
-    const { isDark, textColor } = useChartTheme();
+    const containerRef = useRef<HTMLDivElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const requestRef = useRef<number>(0);
+    const particlesRef = useRef<any[]>([]);
 
     useEffect(() => {
-        if(!chartRef.current || !data.length) return;
+        if (!data.length || !allTickers.length) return;
 
-        // Aggregate total positive volume for bubble size
-        const seriesData = allTickers.map(t => {
-            const totalVal = data.reduce((acc, curr) => acc + Math.max(0, Number(curr[t]||0)), 0);
+        // 1. Prepare Data
+        const sums: Record<string, number> = {};
+        allTickers.forEach(t => sums[t] = 0);
+        data.forEach(d => {
+            allTickers.forEach(t => {
+                const v = Number(d[t] || 0);
+                if (v > 0) sums[t] += v;
+            });
+        });
+
+        // Filter out zero sums
+        const activeTickers = allTickers.filter(t => sums[t] > 0);
+        if (activeTickers.length === 0) return;
+
+        const maxVal = Math.max(...activeTickers.map(t => sums[t]));
+        
+        // 2. Initialize Particles
+        const container = containerRef.current;
+        if (!container) return;
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+
+        particlesRef.current = activeTickers.map(t => {
+            const val = sums[t];
+            // Radius proportional to sqrt of value (area)
+            const radius = 15 + (Math.sqrt(val) / Math.sqrt(maxVal)) * 45;
+            
             return {
-                name: t,
-                value: totalVal,
-                color: colorMap[t]
+                id: t,
+                x: Math.random() * (width - radius * 2) + radius,
+                y: Math.random() * (height - radius * 2) + radius,
+                vx: (Math.random() - 0.5) * 1.5,
+                vy: (Math.random() - 0.5) * 1.5,
+                radius,
+                color: colorMap[t] || '#888',
+                val,
+                mass: radius
             };
-        }).filter(d => d.value > 0);
+        });
 
-        Highcharts.chart(chartRef.current, {
-            chart: { type: 'packedbubble', backgroundColor: 'transparent', height: '100%' },
-            title: { text: null },
-            tooltip: { useHTML: true, pointFormat: '<b>{point.name}:</b> ${point.value:,.0f}' },
-            plotOptions: {
-                packedbubble: {
-                    minSize: '30%',
-                    maxSize: '120%',
-                    layoutAlgorithm: { gravitationalConstant: 0.05, splitSeries: false, seriesInteraction: true, dragBetweenSeries: true, parentNodeLimit: true },
-                    dataLabels: { enabled: true, format: '{point.name}', filter: { property: 'y', operator: '>', value: 0 }, style: { color: 'black', textOutline: 'none', fontWeight: 'normal' } }
+        const animate = () => {
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+
+            const w = canvas.width;
+            const h = canvas.height;
+
+            ctx.clearRect(0, 0, w, h);
+
+            const particles = particlesRef.current;
+
+            // Physics Update
+            for (let i = 0; i < particles.length; i++) {
+                const p = particles[i];
+                
+                // Move
+                p.x += p.vx;
+                p.y += p.vy;
+
+                // Wall Collision
+                if (p.x - p.radius < 0) { p.x = p.radius; p.vx *= -1; }
+                if (p.x + p.radius > w) { p.x = w - p.radius; p.vx *= -1; }
+                if (p.y - p.radius < 0) { p.y = p.radius; p.vy *= -1; }
+                if (p.y + p.radius > h) { p.y = h - p.radius; p.vy *= -1; }
+
+                // Bubble Collision (Simple Elastic)
+                for (let j = i + 1; j < particles.length; j++) {
+                    const p2 = particles[j];
+                    const dx = p2.x - p.x;
+                    const dy = p2.y - p.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    const minDist = p.radius + p2.radius;
+
+                    if (dist < minDist) {
+                        // Resolve Overlap
+                        const angle = Math.atan2(dy, dx);
+                        const tx = p.x + Math.cos(angle) * minDist;
+                        const ty = p.y + Math.sin(angle) * minDist;
+                        const ax = (tx - p2.x) * 0.5; // push factor
+                        const ay = (ty - p2.y) * 0.5;
+                        p.x -= ax; p.y -= ay;
+                        p2.x += ax; p2.y += ay;
+
+                        // Bounce (Swap velocities roughly based on mass)
+                        const v1 = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+                        const v2 = Math.sqrt(p2.vx * p2.vx + p2.vy * p2.vy);
+                        // Simplified bounce: exchange vectors slightly damped
+                        const tempVx = p.vx;
+                        const tempVy = p.vy;
+                        p.vx = p2.vx; 
+                        p.vy = p2.vy;
+                        p2.vx = tempVx;
+                        p2.vy = tempVy;
+                    }
                 }
-            },
-            series: [{ name: 'ETFs', data: seriesData }],
-            credits: { enabled: false },
-            legend: { enabled: false }
-        } as any);
-    }, [data, allTickers, colorMap, isDark]);
 
-    return <div ref={chartRef} className="w-full h-full" />;
+                // Draw
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                
+                // Gradient for 3D effect
+                const grad = ctx.createRadialGradient(p.x - p.radius/3, p.y - p.radius/3, p.radius/10, p.x, p.y, p.radius);
+                grad.addColorStop(0, '#ffffff');
+                grad.addColorStop(0.3, p.color);
+                grad.addColorStop(1, p.color); // solid color edge
+                
+                ctx.fillStyle = p.color; // Fallback or flat
+                ctx.globalAlpha = 0.8;
+                ctx.fill();
+                
+                ctx.strokeStyle = "rgba(255,255,255,0.3)";
+                ctx.lineWidth = 1;
+                ctx.stroke();
+                
+                // Text
+                ctx.globalAlpha = 1;
+                ctx.fillStyle = "#ffffff";
+                ctx.font = `bold ${Math.max(10, p.radius/2.5)}px Inter, sans-serif`;
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.shadowColor = "rgba(0,0,0,0.5)";
+                ctx.shadowBlur = 4;
+                ctx.fillText(p.id, p.x, p.y);
+                ctx.shadowBlur = 0;
+            }
+
+            requestRef.current = requestAnimationFrame(animate);
+        };
+
+        const handleResize = () => {
+            if (containerRef.current && canvasRef.current) {
+                const rect = containerRef.current.getBoundingClientRect();
+                // Handle high DPI
+                const dpr = window.devicePixelRatio || 1;
+                canvasRef.current.width = rect.width * dpr;
+                canvasRef.current.height = rect.height * dpr;
+                
+                const ctx = canvasRef.current.getContext('2d');
+                if (ctx) ctx.scale(dpr, dpr);
+                
+                // Reposition out of bounds particles
+                particlesRef.current.forEach(p => {
+                    p.x = Math.min(p.x, rect.width - p.radius);
+                    p.y = Math.min(p.y, rect.height - p.radius);
+                });
+            }
+        };
+
+        window.addEventListener('resize', handleResize);
+        handleResize(); // Init size
+        requestRef.current = requestAnimationFrame(animate);
+
+        return () => {
+            window.removeEventListener('resize', handleResize);
+            cancelAnimationFrame(requestRef.current);
+        };
+    }, [data, allTickers, colorMap]);
+
+    return (
+        <div ref={containerRef} className="w-full h-full relative overflow-hidden bg-white dark:bg-[#1a1c1e]">
+            <canvas 
+                ref={canvasRef} 
+                className="w-full h-full block" 
+                style={{ width: '100%', height: '100%' }}
+            />
+        </div>
+    );
 };
 
 // --- PORTAL TOOLTIP COMPONENT ---
@@ -692,7 +879,13 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void, item: D
       {showExtras ? (
           <div className="flex-1 min-h-0 grid grid-cols-12 gap-4">
               <div className="col-span-12 lg:col-span-2 overflow-hidden bg-gray-5 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50">
-                  <MarketSharePanel data={data} allTickers={allTickers} />
+                  <MarketSharePanel 
+                    data={data} 
+                    allTickers={allTickers} 
+                    colorMap={colorMap} 
+                    metric={metric} 
+                    asset={asset} 
+                  />
               </div>
               <div className="col-span-12 lg:col-span-7 overflow-hidden relative bg-gray-5 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4 flex flex-col">
                   <div className="relative flex-1 min-h-0">
@@ -700,9 +893,9 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void, item: D
                   </div>
                   <HelpTooltip />
               </div>
-              <div className="col-span-12 lg:col-span-3 overflow-hidden bg-gray-5 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4 flex flex-col">
+              <div className="col-span-12 lg:col-span-3 overflow-hidden bg-gray-5 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4 flex flex-col relative">
                   <h4 className="text-xs font-bold text-gray-500 uppercase mb-2 text-center tracking-widest">Share Volumétrico</h4>
-                  <div className="flex-1 min-h-0">
+                  <div className="flex-1 min-h-0 relative">
                       <EtfBubbles data={data} allTickers={allTickers} colorMap={colorMap} />
                   </div>
               </div>
