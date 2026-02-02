@@ -355,12 +355,15 @@ const MarketSharePanel: React.FC<{
     isLast: boolean
 }> = ({ currentData, allTickers, colorMap, metric, asset, stats, onPrev, onNext, isFirst, isLast }) => {
     
-    // Sort logic for the day
+    // Ensure we list ALL tickers, sorting by value desc (zeros at bottom)
     const sortedTickers = useMemo(() => {
-        if (!currentData) return [];
-        return allTickers
-            .map(t => ({ ticker: t, val: Number(currentData[t] || 0) }))
-            .sort((a,b) => b.val - a.val);
+        // Map all tickers, get value (or 0 if missing/null)
+        const items = allTickers.map(t => {
+            const val = currentData ? Number(currentData[t] || 0) : 0;
+            return { ticker: t, val };
+        });
+        // Sort descending by value
+        return items.sort((a, b) => b.val - a.val);
     }, [currentData, allTickers]);
 
     const dateStr = currentData ? new Date(currentData.date).toLocaleDateString(undefined, { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' }) : '---';
@@ -409,15 +412,18 @@ const MarketSharePanel: React.FC<{
                 <table className="w-full text-xs">
                     <tbody>
                         {sortedTickers.map(({ticker, val}) => {
+                            const isZero = val === 0;
                             return (
                                 <tr key={ticker} className="border-b border-gray-50 dark:border-slate-800/30 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
                                     <td className="py-2 pl-1">
                                         <div className="flex items-center gap-2">
-                                            <div className="w-2.5 h-2.5 rounded-full shadow-sm" style={{ backgroundColor: colorMap[ticker] || '#ccc' }} />
-                                            <span className="font-bold text-gray-700 dark:text-gray-300">{ticker}</span>
+                                            <div className={`w-2.5 h-2.5 rounded-full shadow-sm ${isZero ? 'opacity-30 grayscale' : ''}`} style={{ backgroundColor: colorMap[ticker] || '#ccc' }} />
+                                            <span className={`font-bold ${isZero ? 'text-gray-400' : 'text-gray-700 dark:text-gray-300'}`}>{ticker}</span>
                                         </div>
                                     </td>
-                                    <td className="py-2 text-right font-mono text-gray-500 dark:text-slate-400 font-bold">${formatCompactNumber(val)}</td>
+                                    <td className={`py-2 text-right font-mono font-bold ${isZero ? 'text-gray-300 dark:text-gray-600' : 'text-gray-500 dark:text-slate-400'}`}>
+                                        ${formatCompactNumber(val)}
+                                    </td>
                                 </tr>
                             );
                         })}
@@ -442,6 +448,7 @@ const EtfBubbles: React.FC<{ currentData: any, allTickers: string[], colorMap: R
     const [tooltip, setTooltip] = useState<{visible: boolean, x: number, y: number, content: any} | null>(null);
 
     useEffect(() => {
+        // Safe check for missing data to avoid crashes
         if (!currentData || !allTickers.length) {
             particlesRef.current = [];
             return;
@@ -461,7 +468,7 @@ const EtfBubbles: React.FC<{ currentData: any, allTickers: string[], colorMap: R
 
         const activeTickers = Object.keys(vals);
         
-        // 2. Initialize Particles
+        // 2. Initialize Particles (Reusing logic for smoothness)
         const container = containerRef.current;
         if (!container) return;
         const width = container.clientWidth;
@@ -469,14 +476,20 @@ const EtfBubbles: React.FC<{ currentData: any, allTickers: string[], colorMap: R
 
         const newParticles = activeTickers.map(t => {
             const val = vals[t];
+            // Radius proportional to sqrt of value (area), clamped min 15 max 55
             const radius = 15 + (Math.sqrt(val) / Math.sqrt(maxVal || 1)) * 55;
             
-            // Try to find existing to preserve position
+            // Try to find existing to preserve position and smooth transition
             const existing = particlesRef.current.find(p => p.id === t);
             
             if (existing) {
                 existing.targetRadius = radius;
                 existing.val = val;
+                // Wake up inactive particles if size changes
+                if(Math.abs(existing.radius - radius) > 1) {
+                    existing.vx += (Math.random() - 0.5);
+                    existing.vy += (Math.random() - 0.5);
+                }
                 return existing;
             }
 
@@ -484,9 +497,9 @@ const EtfBubbles: React.FC<{ currentData: any, allTickers: string[], colorMap: R
                 id: t,
                 x: Math.random() * (width - radius * 2) + radius,
                 y: Math.random() * (height - radius * 2) + radius,
-                vx: (Math.random() - 0.5) * 0.5, // Slower start
-                vy: (Math.random() - 0.5) * 0.5,
-                radius: 0, // Animate in
+                vx: (Math.random() - 0.5) * 1.5,
+                vy: (Math.random() - 0.5) * 1.5,
+                radius: 0, // Start small and grow
                 targetRadius: radius,
                 color: colorMap[t] || '#888',
                 val,
@@ -511,87 +524,88 @@ const EtfBubbles: React.FC<{ currentData: any, allTickers: string[], colorMap: R
             ctx.clearRect(0, 0, w, h);
 
             const particles = particlesRef.current;
+            if (!particles || particles.length === 0) {
+                 requestRef.current = requestAnimationFrame(animate);
+                 return;
+            }
 
             for (let i = 0; i < particles.length; i++) {
                 const p = particles[i];
                 
-                // Animate Radius
+                // Animate Radius (Lerp)
                 p.radius += (p.targetRadius - p.radius) * 0.1;
 
-                // Move (Calmer)
+                // Move
                 p.x += p.vx;
                 p.y += p.vy;
 
-                // Wall Collision
+                // Wall Collision (Simple bounce)
                 if (p.x - p.radius < 0) { p.x = p.radius; p.vx *= -1; }
                 if (p.x + p.radius > w) { p.x = w - p.radius; p.vx *= -1; }
                 if (p.y - p.radius < 0) { p.y = p.radius; p.vy *= -1; }
                 if (p.y + p.radius > h) { p.y = h - p.radius; p.vy *= -1; }
 
-                // Bubble Collision
+                // Bubble Collision (Overlap Resolution + Impulse)
                 for (let j = i + 1; j < particles.length; j++) {
                     const p2 = particles[j];
                     const dx = p2.x - p.x;
                     const dy = p2.y - p.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    const distSq = dx*dx + dy*dy;
                     const minDist = p.radius + p2.radius;
+                    const minDistSq = minDist * minDist;
 
-                    if (dist < minDist) {
-                        const angle = Math.atan2(dy, dx);
-                        const tx = p.x + Math.cos(angle) * minDist;
-                        const ty = p.y + Math.sin(angle) * minDist;
-                        const ax = (tx - p2.x) * 0.05; // Soft push
-                        const ay = (ty - p2.y) * 0.05;
+                    if (distSq < minDistSq) {
+                        const dist = Math.sqrt(distSq) || 0.001;
+                        const nx = dx / dist;
+                        const ny = dy / dist;
+                        const overlap = minDist - dist;
+                        
+                        // Push away
+                        const ax = nx * overlap * 0.05; 
+                        const ay = ny * overlap * 0.05;
+                        
                         p.x -= ax; p.y -= ay;
                         p2.x += ax; p2.y += ay;
 
+                        // Bounce (Exchange energy dampening)
                         const tempVx = p.vx;
                         const tempVy = p.vy;
                         p.vx = p2.vx * 0.9; 
                         p.vy = p2.vy * 0.9;
                         p2.vx = tempVx * 0.9;
                         p2.vy = tempVy * 0.9;
+                        
+                        // Add Jitter to prevent stacking
+                        p.vx += (Math.random() - 0.5) * 0.1;
+                        p.vy += (Math.random() - 0.5) * 0.1;
                     }
                 }
                 
-                // Friction & Jitter
-                p.vx *= 0.99;
-                p.vy *= 0.99;
-                p.vx += (Math.random() - 0.5) * 0.02;
-                p.vy += (Math.random() - 0.5) * 0.02;
+                // Friction
+                p.vx *= 0.98;
+                p.vy *= 0.98;
 
-                // Draw Metallic Bubble
+                // DRAWING (Performance Optimized)
+                // Using standard fill + white shine instead of RadialGradient for speed
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-                
-                const grad = ctx.createRadialGradient(p.x - p.radius*0.3, p.y - p.radius*0.3, p.radius*0.1, p.x, p.y, p.radius);
-                grad.addColorStop(0, '#ffffff');
-                grad.addColorStop(0.2, p.color);
-                grad.addColorStop(0.8, p.color);
-                grad.addColorStop(1, '#000000');
-                
-                ctx.fillStyle = grad;
+                ctx.fillStyle = p.color;
                 ctx.fill();
                 
-                // Shine
+                // Simple Shine (Top Left)
                 ctx.beginPath();
-                ctx.ellipse(p.x - p.radius*0.4, p.y - p.radius*0.4, p.radius*0.25, p.radius*0.15, Math.PI/4, 0, Math.PI*2);
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+                ctx.arc(p.x - p.radius * 0.3, p.y - p.radius * 0.3, p.radius * 0.25, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255,255,255,0.3)';
                 ctx.fill();
-
-                ctx.strokeStyle = "rgba(0,0,0,0.2)";
-                ctx.lineWidth = 1;
-                ctx.stroke();
                 
                 // Text
-                if (p.radius > 10) {
-                    ctx.globalAlpha = 1;
+                if (p.radius > 12) {
                     ctx.fillStyle = "#ffffff";
                     ctx.font = `bold ${Math.max(10, p.radius/2.5)}px Inter, sans-serif`;
                     ctx.textAlign = "center";
                     ctx.textBaseline = "middle";
-                    ctx.shadowColor = "rgba(0,0,0,0.8)";
-                    ctx.shadowBlur = 4;
+                    ctx.shadowColor = "rgba(0,0,0,0.5)";
+                    ctx.shadowBlur = 3;
                     ctx.fillText(p.id, p.x, p.y);
                     ctx.shadowBlur = 0;
                 }
@@ -654,10 +668,10 @@ const EtfBubbles: React.FC<{ currentData: any, allTickers: string[], colorMap: R
     const handleMouseLeave = () => setTooltip(null);
 
     return (
-        <div ref={containerRef} className="w-full h-full relative overflow-hidden bg-white dark:bg-[#1a1c1e]">
+        <div ref={containerRef} className="w-full h-full relative overflow-hidden bg-white dark:bg-[#1a1c1e] cursor-crosshair">
             <canvas 
                 ref={canvasRef} 
-                className="w-full h-full block cursor-crosshair" 
+                className="w-full h-full block" 
                 style={{ width: '100%', height: '100%' }}
                 onMouseMove={handleMouseMove}
                 onMouseLeave={handleMouseLeave}
@@ -774,6 +788,7 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void, item: D
     fetchEtfDetailed(asset, metric).then(res => {
       const arr = Array.isArray(res) ? res : [];
       setData(arr);
+      // Set to last available date by default
       setViewDateIndex(arr.length > 0 ? arr.length - 1 : -1);
       setLoading(false);
     });
@@ -821,9 +836,10 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void, item: D
           return sum;
       };
 
-      const d1 = sumFlow(data.slice(-1));
-      const d7 = sumFlow(data.slice(-7));
-      const d30 = sumFlow(data.slice(-30));
+      // Ensure data exists before slicing
+      const d1 = data.length > 0 ? sumFlow(data.slice(-1)) : 0;
+      const d7 = data.length > 6 ? sumFlow(data.slice(-7)) : 0;
+      const d30 = data.length > 29 ? sumFlow(data.slice(-30)) : 0;
 
       return { d1, d7, d30 };
   }, [data]);
@@ -948,8 +964,8 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void, item: D
       </div>
 
       {showExtras ? (
-          <div className="flex-1 min-h-0 grid grid-cols-12 gap-4">
-              <div className="col-span-12 lg:col-span-2 overflow-hidden bg-gray-5 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50">
+          <div className="grid grid-cols-12 gap-4" style={{ height: '620px', minHeight: '620px' }}>
+              <div className="col-span-12 lg:col-span-2 overflow-hidden bg-gray-5 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 flex flex-col">
                   <MarketSharePanel 
                     currentData={currentDayData} 
                     allTickers={allTickers} 
