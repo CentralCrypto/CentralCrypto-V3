@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { fetchWithFallback } from '../services/api';
+import { fetchWithFallback } from '../../../services/api';
 import { DashboardItem, Language } from '../../../types';
 import { getCacheckoUrl, ENDPOINTS } from '../../../services/endpoints';
 import { useBinanceWS } from '../../../services/BinanceWebSocketContext';

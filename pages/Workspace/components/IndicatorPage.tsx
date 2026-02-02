@@ -1,3 +1,4 @@
+
 // IndicatorPage.tsx
 import React, { useState, useMemo, useEffect } from 'react';
 import { ApiCoin, Language, WidgetType, UserTier } from '../../../types';
@@ -306,7 +307,8 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
             {activePage === 'MARKETCAP' && <MarketCapTable language={language} />}
             {activePage === 'HEATMAP' && <div className="h-[800px] w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'heatmap-page', type: WidgetType.HEATMAP, title: 'Crypto Heatmap', symbol: 'MARKET', isMaximized: true }} language={language} /></div>}
             
-            {activePage === 'ETF' && <div className="h-[600px] w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'etf-page', type: WidgetType.ETF_NET_FLOW, title: 'ETF Net Flow', symbol: 'GLOBAL', isMaximized: true }} language={language} /></div>}
+            {/* ETF CONTAINER FIX: Use min-h instead of fixed h to allow auto expansion */}
+            {activePage === 'ETF' && <div className="w-full h-auto min-h-[600px] rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'etf-page', type: WidgetType.ETF_NET_FLOW, title: 'ETF Net Flow', symbol: 'GLOBAL', isMaximized: true }} language={language} /></div>}
             
             {activePage === 'RSI' && <RsiPageLayout language={language} />}
             {activePage === 'MACD' && <MacdPageLayout language={language} />}
