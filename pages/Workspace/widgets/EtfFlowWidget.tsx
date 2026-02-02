@@ -517,28 +517,11 @@ const EtfBubbles: React.FC<{
   const minSize = 44;
   const maxSize = 132;
 
-  const ScaleBubble = ({ pct, label }: { pct: number; label: string }) => {
-    const size = minSize + (pct * (maxSize - minSize));
-    return (
-      <div className="flex items-center gap-2">
-        <div className="rounded-full border border-white/20 bg-white/5 backdrop-blur-sm shadow-inner" style={{ width: size, height: size }} />
-        <div className="text-[10px] font-black text-gray-400">
-          {label}
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div className="flex flex-col h-full bg-gray-50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-slate-800 overflow-hidden">
       <div className="flex items-center justify-between mb-3 shrink-0">
         <div className="flex items-center gap-2 text-xs font-black uppercase text-gray-500 dark:text-gray-400">
           <DollarSign size={14} /> ETF Bubbles
-        </div>
-        <div className="flex items-center gap-4">
-          <ScaleBubble pct={0.10} label="10%" />
-          <ScaleBubble pct={0.50} label="50%" />
-          <ScaleBubble pct={1.00} label="MAX" />
         </div>
       </div>
 

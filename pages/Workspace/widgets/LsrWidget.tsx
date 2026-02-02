@@ -1,404 +1,700 @@
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import Highcharts from 'highcharts/highstock';
+import Highcharts3D from 'highcharts/highcharts-3d';
+import MouseWheelZoom from 'highcharts/modules/mouse-wheel-zoom';
+import { Loader2, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Loader2, AlertTriangle, ChevronsUpDown, GripVertical } from 'lucide-react';
-import { LsrData, fetchLongShortRatio, fetchTopCoins } from '../../../services/api'; 
-import { DashboardItem, Language } from '../../../types';
-import { getTranslations } from '../../../locales';
-import { useBinanceWS } from '../../../services/BinanceWebSocketContext';
+Highcharts3D(Highcharts);
+MouseWheelZoom(Highcharts);
 
-// DND Kit Imports
-import {
-  DndContext,
-  closestCenter,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent
-} from '@dnd-kit/core';
-import {
-  SortableContext,
-  arrayMove,
-  horizontalListSortingStrategy,
-  useSortable
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
+type Tf = '5m' | '1h' | '12h' | '1d';
+type Sym = 'BTC' | 'ETH' | 'SOL';
 
-const LSR_SYMBOLS = [
-    'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT', 'AVAXUSDT', 'SHIBUSDT', 'DOTUSDT',
-    'TRXUSDT', 'LINKUSDT', 'MATICUSDT', 'LTCUSDT', 'BCHUSDT', 'NEARUSDT', 'UNIUSDT', 'INJUSDT', 'OPUSDT', 'ARBUSDT'
-];
-
-const LSR_INTERVALS = ['5m', '15m', '30m', '1h', '2h', '4h', '6h', '12h', '1D'];
-const STABLECOINS = ['USDT', 'USDC', 'DAI', 'FDUSD', 'TUSD', 'USDD', 'PYUSD', 'USDE', 'GUSD'];
-
-const EXCHANGES = ['Binance', 'Bybit', 'OKX', 'Mexc', 'Aggregated'];
-
-// --- Helper Components ---
-
-const FlashCell = ({ value, formatter, isPercent, isPrice }: { value: number, formatter: (v:number) => string, isPercent?: boolean, isPrice?: boolean }) => {
-    const prevValue = useRef(value);
-    const [flashClass, setFlashClass] = useState('');
-
-    useEffect(() => {
-        if (value === undefined || value === null) return;
-        if (value > prevValue.current) {
-            setFlashClass('bg-green-500/30 text-green-600 dark:text-green-200');
-        } else if (value < prevValue.current) {
-            setFlashClass('bg-red-500/30 text-red-600 dark:text-red-200');
-        }
-        prevValue.current = value;
-        const timer = setTimeout(() => setFlashClass(''), 800);
-        return () => clearTimeout(timer);
-    }, [value]);
-
-    const safeVal = value || 0;
-    let textColor = 'text-gray-900 dark:text-gray-300';
-    if (isPercent) textColor = safeVal >= 0 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500';
-    if (isPrice) textColor = 'text-gray-900 dark:text-white font-black';
-
-    return (
-        <span className={`transition-colors duration-500 rounded px-1.5 py-0.5 inline-block ${flashClass} ${textColor}`}>
-            {formatter(safeVal)}
-        </span>
-    );
+type ExchangeRow = {
+  exchange: string;
+  buyRatio: number;   // long %
+  sellRatio: number;  // short %
+  buyVolUsd: number;  // long vol
+  sellVolUsd: number; // short vol
+  iconUrl?: string;
 };
 
-// Live Row Component (Connected to WS)
-const LiveLsrRow = React.memo(({ row, colOrder }: { row: any, colOrder: string[] }) => {
-    const { tickers } = useBinanceWS();
-    // Assuming standard Binance symbol format for WS matching
-    const wsSymbol = row.symbol; 
-    const liveData = tickers[wsSymbol];
-    
-    let livePrice = row.price;
-    let liveChange = row.priceChangePercent;
-    
-    if (liveData) {
-        livePrice = parseFloat(liveData.c);
-        const open = parseFloat(liveData.o);
-        if (open > 0) liveChange = ((livePrice - open) / open) * 100;
+type ExchangeSnapshot = {
+  updatedAt?: string;
+  range: Tf;
+  symbol: Sym;
+  data: Array<{
+    symbol: Sym;
+    buyRatio: number;
+    sellRatio: number;
+    buyVolUsd: number;
+    sellVolUsd: number;
+    list: ExchangeRow[];
+  }>;
+};
+
+type MarketPoint = {
+  ts: number; // ms epoch
+  price?: number;
+  openInterest?: number;
+  ls?: number; // LSR do TF selecionado
+  longVolUsd?: number;
+  shortVolUsd?: number;
+  liquidationUsd?: number;
+};
+
+type MarketHistory = {
+  symbol: Sym;
+  updatedAt: number;
+  points: MarketPoint[];
+};
+
+const SYMBOLS: Sym[] = ['BTC', 'ETH', 'SOL'];
+const TFS: Tf[] = ['5m', '1h', '12h', '1d'];
+
+// Ajuste conforme sua convenção real de arquivo
+const cachePathForExchange = (sym: Sym, tf: Tf) => `/cachecko/lsr-exchange-${sym.toLowerCase()}-${tf}.json`;
+
+// Se você ainda não tem esse cache pronto, você pode iniciar com:
+// - um endpoint seu que junta pages do /mv/futures-market-data e grava como points[]
+const apiPathForMarketHistory = (sym: Sym) => `/api/lsr/market-history?symbol=${sym}`;
+
+const fmtUSD = (v: number) => {
+  const n = Number.isFinite(v) ? v : 0;
+  const abs = Math.abs(n);
+  if (abs >= 1e12) return `$${(n / 1e12).toFixed(2)}T`;
+  if (abs >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
+  if (abs >= 1e3) return `$${(n / 1e3).toFixed(2)}K`;
+  return `$${n.toFixed(0)}`;
+};
+
+const fmtPct = (v: number) => `${(Number.isFinite(v) ? v : 0).toFixed(2)}%`;
+const fmtLSR = (v: number) => (Number.isFinite(v) ? v.toFixed(3) : '-');
+
+const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+
+const sortByTotalVolDesc = (rows: ExchangeRow[]) =>
+  [...rows].sort((a, b) => (b.buyVolUsd + b.sellVolUsd) - (a.buyVolUsd + a.sellVolUsd));
+
+const Skeleton = ({ h = 180 }: { h?: number }) => (
+  <div className="animate-pulse rounded-xl bg-gray-100 dark:bg-white/5" style={{ height: h }} />
+);
+
+const Badge = ({ children }: { children: React.ReactNode }) => (
+  <span className="px-2 py-1 rounded-md text-xs font-black bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-gray-200">
+    {children}
+  </span>
+);
+
+export default function LsrCockpitPage() {
+  const [symbol, setSymbol] = useState<Sym>('BTC');
+  const [tf, setTf] = useState<Tf>('5m');
+
+  const [exchangeSnap, setExchangeSnap] = useState<ExchangeSnapshot | null>(null);
+  const [marketHist, setMarketHist] = useState<MarketHistory | null>(null);
+
+  const [loadingExchange, setLoadingExchange] = useState(false);
+  const [loadingMarket, setLoadingMarket] = useState(false);
+  const [errorExchange, setErrorExchange] = useState<string | null>(null);
+  const [errorMarket, setErrorMarket] = useState<string | null>(null);
+
+  const [showTable, setShowTable] = useState(true);
+  const [barsMode, setBarsMode] = useState<'usd' | 'ratio'>('usd');
+
+  // simple sort
+  const [sortKey, setSortKey] = useState<'exchange' | 'longPct' | 'shortPct' | 'longUsd' | 'shortUsd' | 'totalUsd'>('totalUsd');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
+  const pulseChartRef = useRef<Highcharts.Chart | null>(null);
+  const barsChartRef = useRef<Highcharts.Chart | null>(null);
+
+  // --- Fetch Exchange Snapshot (cache) ---
+  useEffect(() => {
+    let alive = true;
+    const run = async () => {
+      setLoadingExchange(true);
+      setErrorExchange(null);
+      try {
+        const url = cachePathForExchange(symbol, tf);
+        const res = await fetch(url, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status} (${url})`);
+        const json = await res.json();
+        if (!alive) return;
+
+        // Seu arquivo pode estar como array (no exemplo veio entre colchetes)
+        const snap: ExchangeSnapshot = Array.isArray(json) ? json[0] : json;
+        setExchangeSnap(snap);
+      } catch (e: any) {
+        if (!alive) return;
+        setExchangeSnap(null);
+        setErrorExchange(e?.message || 'Falha ao carregar snapshot de exchanges');
+      } finally {
+        if (!alive) return;
+        setLoadingExchange(false);
+      }
+    };
+    run();
+    return () => { alive = false; };
+  }, [symbol, tf]);
+
+  // --- Fetch Market History (cartesiano) ---
+  useEffect(() => {
+    let alive = true;
+    const run = async () => {
+      setLoadingMarket(true);
+      setErrorMarket(null);
+      try {
+        const url = apiPathForMarketHistory(symbol);
+        const res = await fetch(url, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status} (${url})`);
+        const json = await res.json();
+        if (!alive) return;
+
+        // Esperado: { symbol, updatedAt, points: [{ts, price, openInterest, ls, liquidationUsd, longVolUsd, shortVolUsd}] }
+        setMarketHist(json);
+      } catch (e: any) {
+        if (!alive) return;
+        setMarketHist(null);
+        setErrorMarket(e?.message || 'Falha ao carregar histórico do mercado');
+      } finally {
+        if (!alive) return;
+        setLoadingMarket(false);
+      }
+    };
+    run();
+    return () => { alive = false; };
+  }, [symbol]);
+
+  // --- Compute Exchange Rows ---
+  const exchangeRows = useMemo(() => {
+    const list = exchangeSnap?.data?.[0]?.list || [];
+    const cleaned = list
+      .filter(x => x && x.exchange)
+      .map(x => ({
+        ...x,
+        buyRatio: Number(x.buyRatio) || 0,
+        sellRatio: Number(x.sellRatio) || 0,
+        buyVolUsd: Number(x.buyVolUsd) || 0,
+        sellVolUsd: Number(x.sellVolUsd) || 0,
+      }));
+    return sortByTotalVolDesc(cleaned);
+  }, [exchangeSnap]);
+
+  const agg = useMemo(() => {
+    const d = exchangeSnap?.data?.[0];
+    if (!d) return null;
+    return {
+      buyRatio: Number(d.buyRatio) || 0,
+      sellRatio: Number(d.sellRatio) || 0,
+      buyVolUsd: Number(d.buyVolUsd) || 0,
+      sellVolUsd: Number(d.sellVolUsd) || 0,
+    };
+  }, [exchangeSnap]);
+
+  // --- Sort Table Rows ---
+  const sortedTableRows = useMemo(() => {
+    const rows = [...exchangeRows];
+    const dir = sortDir === 'asc' ? 1 : -1;
+    rows.sort((a, b) => {
+      const aTotal = a.buyVolUsd + a.sellVolUsd;
+      const bTotal = b.buyVolUsd + b.sellVolUsd;
+
+      const pick = (r: ExchangeRow) => {
+        if (sortKey === 'exchange') return r.exchange.toLowerCase().charCodeAt(0);
+        if (sortKey === 'longPct') return r.buyRatio;
+        if (sortKey === 'shortPct') return r.sellRatio;
+        if (sortKey === 'longUsd') return r.buyVolUsd;
+        if (sortKey === 'shortUsd') return r.sellVolUsd;
+        return aTotal; // fallback
+      };
+
+      // totalUsd
+      if (sortKey === 'totalUsd') return (aTotal - bTotal) * dir;
+      return (pick(a) - pick(b)) * dir;
+    });
+    return rows;
+  }, [exchangeRows, sortKey, sortDir]);
+
+  const toggleSort = (key: typeof sortKey) => {
+    if (sortKey === key) setSortDir(prev => (prev === 'desc' ? 'asc' : 'desc'));
+    else {
+      setSortKey(key);
+      setSortDir('desc');
+    }
+  };
+
+  // --- Build Pulse Series ---
+  const pulseSeries = useMemo(() => {
+    const pts = marketHist?.points || [];
+    // proteção: só pontos com ts válido
+    const p = pts.filter(x => Number.isFinite(x.ts)).sort((a, b) => a.ts - b.ts);
+
+    const price = p.map(x => [x.ts, Number(x.price) || 0]);
+    const oi = p.map(x => [x.ts, Number(x.openInterest) || 0]);
+    const lsr = p.map(x => [x.ts, Number(x.ls) || 0]);
+
+    // liquidações e vol (barras)
+    const liq = p.map(x => [x.ts, Number(x.liquidationUsd) || 0]);
+    const longVol = p.map(x => [x.ts, Number(x.longVolUsd) || 0]);
+    const shortVol = p.map(x => [x.ts, Number(x.shortVolUsd) || 0]);
+
+    return { price, oi, lsr, liq, longVol, shortVol };
+  }, [marketHist]);
+
+  // --- Render Pulse Chart ---
+  useEffect(() => {
+    if (loadingMarket || errorMarket) return;
+    if (!marketHist || !pulseSeries.price.length) return;
+
+    // Destroy previous
+    if (pulseChartRef.current) {
+      pulseChartRef.current.destroy();
+      pulseChartRef.current = null;
     }
 
-    const renderCell = (colId: string) => {
-        switch(colId) {
-            case 'asset':
-                return (
-                    <td key={colId} className="p-3">
-                        <div className="font-black flex items-center gap-3">
-                            {row.image && <img src={row.image} className="w-8 h-8 rounded-full bg-white p-0.5 border border-gray-200 dark:border-slate-700" alt="" />} 
-                            <div className="flex flex-col">
-                                <span className="text-base text-gray-900 dark:text-white leading-none">{row.symbol.replace('USDT', '')}</span>
-                            </div>
-                        </div>
-                    </td>
-                );
-            case 'price':
-                return (
-                    <td key={colId} className="p-3 text-right font-mono text-base">
-                        <FlashCell isPrice value={livePrice} formatter={v => `$${v < 1 ? v.toFixed(5) : v.toLocaleString()}`} />
-                    </td>
-                );
-            case 'lsr30m':
-                return <td key={colId} className="p-3 text-center font-black text-base">{row.lsr30m ? row.lsr30m.toFixed(2) : '-'}</td>;
-            case 'lsr4h':
-                return <td key={colId} className="p-3 text-center font-black text-base">{row.lsr4h ? row.lsr4h.toFixed(2) : '-'}</td>;
-            case 'lsr12h':
-                return <td key={colId} className="p-3 text-center font-black text-base">{row.lsr12h ? row.lsr12h.toFixed(2) : '-'}</td>;
-            case 'lsr24h':
-                return <td key={colId} className="p-3 text-center font-black text-base">{row.lsr24h ? row.lsr24h.toFixed(2) : '-'}</td>;
-            case 'change24h':
-                return (
-                    <td key={colId} className="p-3 text-right font-black text-base">
-                        <FlashCell value={liveChange} formatter={v => `${v > 0 ? '+' : ''}${v.toFixed(2)}%`} isPercent />
-                    </td>
-                );
-            default: return <td key={colId} className="p-3"></td>;
+    const el = document.getElementById('lsr-pulse-chart');
+    if (!el) return;
+
+    pulseChartRef.current = Highcharts.stockChart('lsr-pulse-chart', {
+      chart: {
+        backgroundColor: 'transparent',
+        height: 420,
+        animation: false,
+        zooming: {
+          mouseWheel: { enabled: true, sensitivity: 1.15 },
+          type: 'x'
+        },
+        panning: { enabled: true, type: 'x' },
+        panKey: 'shift'
+      },
+      title: { text: '' },
+      credits: { enabled: false },
+      rangeSelector: { enabled: false },
+      navigator: { enabled: true },
+      scrollbar: { enabled: true },
+      xAxis: { type: 'datetime' },
+      yAxis: [
+        {
+          title: { text: 'LSR' },
+          opposite: false,
+          min: 0,
+          max: 3,
+          gridLineColor: 'rgba(255,255,255,0.06)'
+        },
+        {
+          title: { text: 'USD' },
+          opposite: true,
+          gridLineColor: 'rgba(255,255,255,0.06)',
+          labels: { formatter: function () { return fmtUSD(Number(this.value)); } }
         }
-    };
-
-    return (
-        <tr className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
-            {colOrder.map((colId) => renderCell(colId))}
-        </tr>
-    );
-}, (prev, next) => {
-    // Only re-render if static row data changes, WebSocket updates handled internally via hook if we used custom hook logic,
-    // but since we access hook inside component, it will re-render on tick. 
-    // Optimization: Memo helps if parent re-renders but props are same.
-    return prev.row === next.row && prev.colOrder === next.colOrder;
-});
-
-// --- Main Widget Component ---
-
-const LsrWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ item, language = 'pt' }) => {
-    // Minimized State
-    const [lsrData, setLsrData] = useState<LsrData | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [lsrSymbol, setLsrSymbol] = useState('BTCUSDT');
-    const [lsrPeriod, setLsrPeriod] = useState('5m');
-    const [displayLsr, setDisplayLsr] = useState(0);
-
-    // Maximized State
-    const [maximizedTickers, setMaximizedTickers] = useState<any[]>([]);
-    const [isLoadingTable, setIsLoadingTable] = useState(false);
-    const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
-    const [selectedExchange, setSelectedExchange] = useState('Binance');
-
-    // Drag and Drop State
-    const [colOrder, setColOrder] = useState<string[]>(['asset', 'price', 'lsr30m', 'lsr4h', 'lsr12h', 'lsr24h', 'change24h']);
-    const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
-
-    const t = getTranslations(language as Language).dashboard.widgets.lsr;
-
-    // Minimized Data Fetch
-    useEffect(() => {
-        if (item.isMaximized) return;
-        setIsLoading(true);
-        fetchLongShortRatio(lsrSymbol, lsrPeriod).then((data) => {
-            setLsrData(data);
-            setIsLoading(false);
-            if (data && data.lsr !== null) setDisplayLsr(data.lsr || 0);
-        });
-    }, [lsrSymbol, lsrPeriod, item.isMaximized]);
-
-    // Maximized Data Fetch
-    useEffect(() => {
-        if (!item.isMaximized) return;
-        
-        const loadTableData = async () => {
-            if(maximizedTickers.length === 0) setIsLoadingTable(true);
-            
-            // Get Coins
-            const topCoins = await fetchTopCoins();
-            const limitedTickers = topCoins
-                .filter(coin => coin && coin.symbol && !STABLECOINS.includes(coin.symbol.toUpperCase()))
-                .slice(0, 20)
-                .map((coin, index) => ({
-                    rank: index + 1,
-                    symbol: coin.symbol.toUpperCase() + 'USDT',
-                    price: coin.current_price || 0,
-                    priceChangePercent: coin.price_change_percentage_24h || 0,
-                    image: coin.image,
-                    // Init placeholder values
-                    lsr30m: 0, lsr4h: 0, lsr12h: 0, lsr24h: 0
-                }));
-            
-            // Initial render to show list while loading LSRs
-            setMaximizedTickers(limitedTickers);
-            setIsLoadingTable(false);
-
-            // Fetch LSRs for each coin
-            // NOTE: Aggregated Logic
-            const fetchLsrValue = async (symbol: string, period: string) => {
-                if (selectedExchange === 'Aggregated') {
-                    const [b, by, o] = await Promise.all([
-                        fetchLongShortRatio(symbol, period, 'Binance'),
-                        fetchLongShortRatio(symbol, period, 'Bybit'),
-                        fetchLongShortRatio(symbol, period, 'OKX')
-                    ]);
-                    
-                    const vals = [b.lsr, by.lsr, o.lsr].filter(v => v !== null && v !== undefined) as number[];
-                    if (vals.length === 0) return null;
-                    return vals.reduce((a, b) => a + b, 0) / vals.length;
-                } else {
-                    const data = await fetchLongShortRatio(symbol, period, selectedExchange);
-                    return data.lsr;
-                }
-            };
-
-            // Parallel fetch per coin to speed up (chunks of 5)
-            const chunkSize = 5;
-            for (let i = 0; i < limitedTickers.length; i += chunkSize) {
-                const chunk = limitedTickers.slice(i, i + chunkSize);
-                await Promise.all(chunk.map(async (coin) => {
-                     const [v30m, v4h, v12h, v1d] = await Promise.all([
-                         fetchLsrValue(coin.symbol, '30m'),
-                         fetchLsrValue(coin.symbol, '4h'),
-                         fetchLsrValue(coin.symbol, '12h'),
-                         fetchLsrValue(coin.symbol, '1D')
-                     ]);
-                     
-                     setMaximizedTickers(prev => prev.map(t => 
-                         t.symbol === coin.symbol ? { 
-                             ...t, 
-                             lsr30m: v30m || undefined, 
-                             lsr4h: v4h || undefined, 
-                             lsr12h: v12h || undefined, 
-                             lsr24h: v1d || undefined 
-                         } : t
-                     ));
-                }));
-            }
-        };
-        
-        loadTableData();
-    }, [item.isMaximized, selectedExchange]);
-
-    const sortedTickers = useMemo(() => {
-        if (!sortConfig) return maximizedTickers;
-        return [...maximizedTickers].sort((a: any, b: any) => {
-            const aVal = a[sortConfig.key] || 0;
-            const bVal = b[sortConfig.key] || 0;
-            return sortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal;
-        });
-    }, [maximizedTickers, sortConfig]);
-
-    const handleSort = (key: string) => {
-        let direction: 'asc' | 'desc' = 'desc';
-        if (sortConfig && sortConfig.key === key && sortConfig.direction === 'desc') {
-            direction = 'asc';
+      ],
+      tooltip: {
+        shared: true,
+        borderWidth: 0,
+        backgroundColor: 'rgba(17, 24, 39, 0.92)',
+        style: { color: '#fff' }
+      },
+      plotOptions: {
+        series: {
+          animation: false,
+          dataGrouping: { enabled: false }
+        },
+        column: {
+          borderWidth: 0
         }
-        setSortConfig({ key, direction });
-    };
-
-    const handleDragEnd = (event: DragEndEvent) => {
-        const { active, over } = event;
-        if (over && active.id !== over.id) {
-            setColOrder((items) => {
-                const oldIndex = items.indexOf(active.id as string);
-                const newIndex = items.indexOf(over.id as string);
-                return arrayMove(items, oldIndex, newIndex);
-            });
+      },
+      series: [
+        {
+          type: 'line',
+          name: 'LSR',
+          yAxis: 0,
+          data: pulseSeries.lsr,
+          tooltip: { valueDecimals: 3 }
+        },
+        {
+          type: 'line',
+          name: 'Open Interest',
+          yAxis: 1,
+          data: pulseSeries.oi,
+          tooltip: { pointFormatter: function () { return `<span>OI: <b>${fmtUSD(Number(this.y))}</b></span><br/>`; } }
+        },
+        {
+          type: 'column',
+          name: 'Liquidations',
+          yAxis: 1,
+          data: pulseSeries.liq,
+          tooltip: { pointFormatter: function () { return `<span>Liq: <b>${fmtUSD(Number(this.y))}</b></span><br/>`; } }
+        },
+        {
+          type: 'line',
+          name: 'Price',
+          yAxis: 1,
+          data: pulseSeries.price,
+          tooltip: { pointFormatter: function () { return `<span>Price: <b>${fmtUSD(Number(this.y))}</b></span><br/>`; } }
         }
-    };
+      ]
+    } as any);
 
-    // Columns Definition
-    const COLS: Record<string, { id: string, label: string }> = {
-        asset: { id: 'asset', label: 'Ativo' },
-        price: { id: 'price', label: 'Preço Spot' },
-        lsr30m: { id: 'lsr30m', label: 'LSR 30m' },
-        lsr4h: { id: 'lsr4h', label: 'LSR 4h' },
-        lsr12h: { id: 'lsr12h', label: 'LSR 12h' },
-        lsr24h: { id: 'lsr24h', label: 'LSR 1d' },
-        change24h: { id: 'change24h', label: '24h %' }
+    return () => {
+      if (pulseChartRef.current) {
+        pulseChartRef.current.destroy();
+        pulseChartRef.current = null;
+      }
     };
+  }, [loadingMarket, errorMarket, marketHist, pulseSeries]);
 
-    const SortableTh = ({ colId, label }: { colId: string, label: string }) => {
-        const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: colId });
-        const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1, zIndex: isDragging ? 100 : 'auto' };
-        
-        return (
-            <th 
-                ref={setNodeRef} 
-                style={style} 
-                className={`p-3 bg-gray-100 dark:bg-[#1e2329] text-xs font-black text-gray-500 uppercase tracking-widest cursor-pointer select-none group ${colId === 'asset' ? 'text-left' : 'text-center'}`}
-                onClick={() => handleSort(colId)}
-            >
-                <div className={`flex items-center gap-2 ${colId === 'asset' ? 'justify-start' : 'justify-center'}`}>
-                    <span 
-                        {...attributes} {...listeners} 
-                        onClick={(e) => e.stopPropagation()} 
-                        className={`p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 cursor-grab ${isDragging ? 'cursor-grabbing' : ''}`}
-                    >
-                        <GripVertical size={12} />
-                    </span>
-                    {label}
-                    <ChevronsUpDown size={12} className={`text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity ${sortConfig?.key === colId ? 'opacity-100 text-[#dd9933]' : ''}`} />
-                </div>
-            </th>
-        );
+  // --- Render 3D Bars Chart ---
+  useEffect(() => {
+    if (loadingExchange || errorExchange) return;
+    if (!exchangeRows.length) return;
+
+    // Destroy previous
+    if (barsChartRef.current) {
+      barsChartRef.current.destroy();
+      barsChartRef.current = null;
+    }
+
+    const el = document.getElementById('lsr-exchange-3d');
+    if (!el) return;
+
+    const categories = exchangeRows.map(x => x.exchange);
+
+    const longVals = exchangeRows.map(x => {
+      if (barsMode === 'ratio') return clamp(Number(x.buyRatio) || 0, 0, 100);
+      return Number(x.buyVolUsd) || 0;
+    });
+    const shortVals = exchangeRows.map(x => {
+      if (barsMode === 'ratio') return clamp(Number(x.sellRatio) || 0, 0, 100);
+      return Number(x.sellVolUsd) || 0;
+    });
+
+    barsChartRef.current = Highcharts.chart('lsr-exchange-3d', {
+      chart: {
+        type: 'column',
+        backgroundColor: 'transparent',
+        height: 420,
+        options3d: {
+          enabled: true,
+          alpha: 10,
+          beta: 18,
+          depth: 70,
+          viewDistance: 25
+        }
+      },
+      title: { text: '' },
+      credits: { enabled: false },
+      xAxis: {
+        categories,
+        labels: {
+          style: { color: 'rgba(255,255,255,0.75)', fontWeight: '700' }
+        }
+      },
+      yAxis: {
+        title: { text: barsMode === 'ratio' ? 'Long/Short (%)' : 'Volume (USD)' },
+        labels: {
+          formatter: function () {
+            return barsMode === 'ratio' ? `${Number(this.value).toFixed(0)}%` : fmtUSD(Number(this.value));
+          },
+          style: { color: 'rgba(255,255,255,0.75)' }
+        },
+        gridLineColor: 'rgba(255,255,255,0.06)'
+      },
+      legend: {
+        itemStyle: { color: 'rgba(255,255,255,0.85)', fontWeight: '800' }
+      },
+      tooltip: {
+        shared: true,
+        borderWidth: 0,
+        backgroundColor: 'rgba(17, 24, 39, 0.92)',
+        style: { color: '#fff' },
+        formatter: function () {
+          const pts: any = (this as any).points || [];
+          const name = (this as any).x;
+          const longY = pts[0]?.y ?? 0;
+          const shortY = pts[1]?.y ?? 0;
+          const longTxt = barsMode === 'ratio' ? `${longY.toFixed(2)}%` : fmtUSD(longY);
+          const shortTxt = barsMode === 'ratio' ? `${shortY.toFixed(2)}%` : fmtUSD(shortY);
+          return `<b>${name}</b><br/>Long: <b>${longTxt}</b><br/>Short: <b>${shortTxt}</b>`;
+        }
+      },
+      plotOptions: {
+        column: {
+          depth: 35,
+          grouping: true,
+          borderWidth: 0
+        }
+      },
+      series: [
+        { name: 'Long', data: longVals as any },
+        { name: 'Short', data: shortVals as any }
+      ]
+    } as any);
+
+    return () => {
+      if (barsChartRef.current) {
+        barsChartRef.current.destroy();
+        barsChartRef.current = null;
+      }
     };
+  }, [loadingExchange, errorExchange, exchangeRows, barsMode]);
 
-    const Watermark = () => (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden opacity-[0.05] z-0">
-            <img src="https://centralcrypto.com.br/2/wp-content/uploads/elementor/thumbs/cropped-logo1-transp-rarkb9ju51up2mb9t4773kfh16lczp3fjifl8qx228.png" className="w-3/4 h-auto grayscale filter" />
+  // --- UI Header values ---
+  const lastUpdated = useMemo(() => {
+    const a = exchangeSnap?.updatedAt ? new Date(exchangeSnap.updatedAt).toLocaleString() : null;
+    const b = marketHist?.updatedAt ? new Date(marketHist.updatedAt).toLocaleString() : null;
+    return { exchange: a, market: b };
+  }, [exchangeSnap, marketHist]);
+
+  return (
+    <div className="min-h-screen bg-[#0b0e11] text-white">
+      <div className="max-w-[1400px] mx-auto p-4 sm:p-6">
+        {/* Header */}
+        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
+              LSR Cockpit
+              <span className="ml-3 text-sm font-black text-white/60">{symbol} · {tf.toUpperCase()}</span>
+            </h1>
+            <p className="text-white/60 text-sm mt-1">
+              Zoom no scroll, pan no mouse (segure <b>Shift</b>). Linha agregada + breakdown por exchange.
+            </p>
+            <div className="flex flex-wrap gap-2 mt-3">
+              <Badge>Pulse: OI + LSR + Liq + Price</Badge>
+              <Badge>3D: Long vs Short</Badge>
+              <Badge>Tabela: Sort + leitura limpa</Badge>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-3 items-center justify-start lg:justify-end">
+            {/* Symbol */}
+            <div className="bg-white/5 border border-white/10 rounded-xl p-1 flex">
+              {SYMBOLS.map(s => (
+                <button
+                  key={s}
+                  onClick={() => setSymbol(s)}
+                  className={`px-4 py-2 rounded-lg text-sm font-black transition ${
+                    symbol === s ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+
+            {/* TF */}
+            <div className="bg-white/5 border border-white/10 rounded-xl p-1 flex">
+              {TFS.map(x => (
+                <button
+                  key={x}
+                  onClick={() => setTf(x)}
+                  className={`px-4 py-2 rounded-lg text-sm font-black transition ${
+                    tf === x ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'
+                  }`}
+                >
+                  {x.toUpperCase()}
+                </button>
+              ))}
+            </div>
+
+            {/* Bars Mode */}
+            <div className="bg-white/5 border border-white/10 rounded-xl p-1 flex">
+              <button
+                onClick={() => setBarsMode('usd')}
+                className={`px-4 py-2 rounded-lg text-sm font-black transition ${
+                  barsMode === 'usd' ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'
+                }`}
+              >
+                USD
+              </button>
+              <button
+                onClick={() => setBarsMode('ratio')}
+                className={`px-4 py-2 rounded-lg text-sm font-black transition ${
+                  barsMode === 'ratio' ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'
+                }`}
+              >
+                %
+              </button>
+            </div>
+          </div>
         </div>
-    );
 
-    // --- RENDER MAXIMIZED ---
-    if (item.isMaximized) {
-        return (
-            <div className="h-full flex flex-col bg-white dark:bg-[#0b0e11] text-gray-900 dark:text-white overflow-hidden relative p-4">
-                <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-4">
-                    <div className="text-lg font-black uppercase text-gray-700 dark:text-gray-200">Long/Short Ratio Matrix</div>
-                    
-                    <div className="flex bg-gray-100 dark:bg-[#1e2329] p-1 rounded-lg">
-                        {EXCHANGES.map(ex => (
-                            <button
-                                key={ex}
-                                onClick={() => setSelectedExchange(ex)}
-                                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${selectedExchange === ex ? 'bg-[#dd9933] text-black shadow-sm' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}
-                            >
-                                {ex}
-                            </button>
-                        ))}
-                    </div>
+        {/* Cards */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6">
+          {/* Pulse */}
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 relative overflow-hidden">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <div className="text-sm font-black text-white/80 uppercase tracking-widest">Market Pulse</div>
+                <div className="text-xs text-white/50 mt-1">
+                  {lastUpdated.market ? `Atualizado: ${lastUpdated.market}` : 'Sem timestamp'}
                 </div>
-
-                <div className="flex-1 overflow-auto custom-scrollbar border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-[#1a1c1e]">
-                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                        <table className="w-full text-left border-collapse">
-                            <thead className="sticky top-0 z-10">
-                                <tr>
-                                    <SortableContext items={colOrder} strategy={horizontalListSortingStrategy}>
-                                        {colOrder.map(colId => (
-                                            <SortableTh key={colId} colId={colId} label={COLS[colId].label} />
-                                        ))}
-                                    </SortableContext>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {isLoadingTable ? (
-                                    <tr><td colSpan={colOrder.length} className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-[#dd9933]" size={32}/></td></tr>
-                                ) : (
-                                    sortedTickers.map(row => (
-                                        <LiveLsrRow key={row.symbol} row={row} colOrder={colOrder} />
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
-                    </DndContext>
-                </div>
+              </div>
+              {loadingMarket && <Loader2 className="animate-spin text-[#dd9933]" size={18} />}
             </div>
-        );
-    }
 
-    // --- RENDER MINIMIZED ---
-    const lsrVal = displayLsr || 0;
-    const lsrAngle = ((Math.min(Math.max(lsrVal, 1), 5) - 1) / 4) * 180;
-
-    return (
-        <div className="h-full flex flex-col items-center justify-center relative bg-white dark:bg-[#2f3032] p-4 text-center">
-            <Watermark />
-            <div className="absolute top-2 w-full flex justify-between px-2 z-20">
-                <select value={lsrSymbol} onChange={e => setLsrSymbol(e.target.value)} className="bg-gray-100 dark:bg-[#1a1c1e] text-xs font-black p-1.5 rounded border-none outline-none text-gray-900 dark:text-white">
-                    {LSR_SYMBOLS.map(s => <option key={s} value={s}>{s.replace('USDT','')}</option>)}
-                </select>
-                <select value={lsrPeriod} onChange={e => setLsrPeriod(e.target.value)} className="bg-gray-100 dark:bg-[#1a1c1e] text-xs font-black p-1.5 rounded border-none outline-none text-gray-900 dark:text-white">
-                    {LSR_INTERVALS.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-            </div>
-            {isLoading ? <Loader2 className="animate-spin text-slate-500" /> : (
-                <>
-                <div className="mt-6 w-[80%] max-w-[240px] overflow-visible">
-                    <svg viewBox="0 0 200 110" className="overflow-visible">
-                        {/* Escala Externa (1-5) */}
-                        {[1, 2, 3, 4, 5].map(v => {
-                            const angle = ((v - 1) / 4) * 180;
-                            const rad = (angle - 180) * (Math.PI / 180);
-                            const tx = 100 + 80 * Math.cos(rad);
-                            const ty = 100 + 80 * Math.sin(rad);
-                            return (
-                                <text key={v} x={tx} y={ty} textAnchor="middle" fill="currentColor" className="text-gray-400 font-black" fontSize="9">{v}</text>
-                            );
-                        })}
-
-                        <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" className="stroke-gray-100 dark:stroke-slate-800" strokeWidth="18" strokeLinecap="round" />
-                        <path d="M 10 100 A 90 90 0 0 1 190 100" fill="none" stroke="#dd9933" strokeWidth="18" strokeDasharray={`${(lsrAngle/180)*283} 283`} strokeLinecap="round" />
-                        <g transform={`rotate(${lsrAngle - 90} 100 100)`}>
-                            <path d="M 100 100 L 100 20" className="stroke-gray-800 dark:stroke-white" strokeWidth="3" />
-                            <circle cx={100} cy={100} r="5" className="fill-gray-800 dark:fill-white" />
-                        </g>
-                    </svg>
+            {errorMarket ? (
+              <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-200 flex gap-2">
+                <AlertTriangle size={18} className="mt-0.5" />
+                <div className="text-sm">
+                  <div className="font-black">Falha no Market Pulse</div>
+                  <div className="opacity-80">{errorMarket}</div>
                 </div>
-                <div className="mt-2">
-                    <div className="text-[24px] font-black text-[#dd9933] leading-none">{lsrVal.toFixed(2)}</div>
-                    <div className="text-[8px] font-black text-gray-900 dark:text-white uppercase mt-1 tracking-widest">{lsrVal > 1.1 ? t.longs : lsrVal < 0.9 ? t.shorts : t.neutral}</div>
-                </div>
-                </>
+              </div>
+            ) : loadingMarket ? (
+              <Skeleton h={420} />
+            ) : (
+              <div id="lsr-pulse-chart" />
             )}
-        </div>
-    );
-};
 
-export default LsrWidget;
+            <div className="mt-3 text-xs text-white/50">
+              Dica: para pan, segure <b>Shift</b> e arraste. Zoom no scroll.
+            </div>
+          </div>
+
+          {/* 3D Bars */}
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 relative overflow-hidden">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <div className="text-sm font-black text-white/80 uppercase tracking-widest">Exchange 3D Bars</div>
+                <div className="text-xs text-white/50 mt-1">
+                  {lastUpdated.exchange ? `Atualizado: ${lastUpdated.exchange}` : 'Sem timestamp'}
+                </div>
+              </div>
+              {loadingExchange && <Loader2 className="animate-spin text-[#dd9933]" size={18} />}
+            </div>
+
+            {errorExchange ? (
+              <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-200 flex gap-2">
+                <AlertTriangle size={18} className="mt-0.5" />
+                <div className="text-sm">
+                  <div className="font-black">Falha no snapshot de Exchanges</div>
+                  <div className="opacity-80">{errorExchange}</div>
+                </div>
+              </div>
+            ) : loadingExchange ? (
+              <Skeleton h={420} />
+            ) : (
+              <div id="lsr-exchange-3d" />
+            )}
+
+            {agg && (
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <div className="rounded-xl bg-black/20 border border-white/10 p-3">
+                  <div className="text-xs text-white/50 uppercase font-black tracking-widest">Aggregated Long</div>
+                  <div className="text-lg font-black mt-1">{fmtPct(agg.buyRatio)}</div>
+                  <div className="text-sm text-white/70">{fmtUSD(agg.buyVolUsd)}</div>
+                </div>
+                <div className="rounded-xl bg-black/20 border border-white/10 p-3">
+                  <div className="text-xs text-white/50 uppercase font-black tracking-widest">Aggregated Short</div>
+                  <div className="text-lg font-black mt-1">{fmtPct(agg.sellRatio)}</div>
+                  <div className="text-sm text-white/70">{fmtUSD(agg.sellVolUsd)}</div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-black text-white/80 uppercase tracking-widest">Exchanges Table</div>
+              <div className="text-xs text-white/50 mt-1">
+                Clique nos headers para ordenar. A tabela é o “desembaraçador” do 3D.
+              </div>
+            </div>
+            <button
+              onClick={() => setShowTable(v => !v)}
+              className="px-3 py-2 rounded-xl bg-black/20 border border-white/10 hover:bg-black/30 transition flex items-center gap-2 text-sm font-black"
+            >
+              {showTable ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              {showTable ? 'Ocultar' : 'Mostrar'}
+            </button>
+          </div>
+
+          {showTable && (
+            <div className="mt-4 overflow-auto rounded-xl border border-white/10">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-[#0b0e11]">
+                  <tr className="text-white/70">
+                    <th className="p-3 text-left cursor-pointer" onClick={() => toggleSort('exchange')}>
+                      Exchange
+                    </th>
+                    <th className="p-3 text-right cursor-pointer" onClick={() => toggleSort('longPct')}>
+                      Long %
+                    </th>
+                    <th className="p-3 text-right cursor-pointer" onClick={() => toggleSort('shortPct')}>
+                      Short %
+                    </th>
+                    <th className="p-3 text-right cursor-pointer" onClick={() => toggleSort('longUsd')}>
+                      Long USD
+                    </th>
+                    <th className="p-3 text-right cursor-pointer" onClick={() => toggleSort('shortUsd')}>
+                      Short USD
+                    </th>
+                    <th className="p-3 text-right cursor-pointer" onClick={() => toggleSort('totalUsd')}>
+                      Total USD
+                    </th>
+                    <th className="p-3 text-right">
+                      LSR (aprox)
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loadingExchange ? (
+                    <tr><td colSpan={7} className="p-8 text-center"><Loader2 className="animate-spin mx-auto text-[#dd9933]" /></td></tr>
+                  ) : errorExchange ? (
+                    <tr><td colSpan={7} className="p-6 text-red-200">{errorExchange}</td></tr>
+                  ) : (
+                    sortedTableRows.map((r) => {
+                      const total = r.buyVolUsd + r.sellVolUsd;
+                      const approxLSR = r.sellRatio > 0 ? (r.buyRatio / r.sellRatio) : 0; // ratio aproximado
+                      return (
+                        <tr key={r.exchange} className="border-t border-white/10 hover:bg-white/5 transition">
+                          <td className="p-3">
+                            <div className="flex items-center gap-3">
+                              {r.iconUrl ? (
+                                <img
+                                  src={r.iconUrl}
+                                  alt=""
+                                  className="w-7 h-7 rounded-lg bg-white p-0.5"
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <div className="w-7 h-7 rounded-lg bg-white/10" />
+                              )}
+                              <div className="font-black text-white">{r.exchange}</div>
+                            </div>
+                          </td>
+                          <td className="p-3 text-right font-black text-emerald-300">{fmtPct(r.buyRatio)}</td>
+                          <td className="p-3 text-right font-black text-rose-300">{fmtPct(r.sellRatio)}</td>
+                          <td className="p-3 text-right text-white/80 font-mono">{fmtUSD(r.buyVolUsd)}</td>
+                          <td className="p-3 text-right text-white/80 font-mono">{fmtUSD(r.sellVolUsd)}</td>
+                          <td className="p-3 text-right text-white font-mono font-black">{fmtUSD(total)}</td>
+                          <td className="p-3 text-right text-[#dd9933] font-black font-mono">{fmtLSR(approxLSR)}</td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Footer tips */}
+        <div className="mt-6 text-xs text-white/45">
+          <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+            <div className="font-black text-white/70 mb-2">Notas de design (pra ficar “diferente” sem inventar dado)</div>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>3D é “impacto visual”. A tabela garante leitura precisa.</li>
+              <li>Pulse chart conta história: quando OI sobe e liquidações explodem, você enxerga o stress do mercado.</li>
+              <li>Zoom/pan já está habilitado; isso vira análise real, não só dashboard.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

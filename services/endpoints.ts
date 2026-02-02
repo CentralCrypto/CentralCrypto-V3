@@ -30,9 +30,9 @@ export const ENDPOINTS = {
       etfNetFlow: "/etfnetflow.json",
       // Specific ETF Files
       etfBtcFlows: "/spot-btc-etf-flows.json",
-      etfBtcVolume: "/spot-btc-etf-volumes.json", // FIXED: Plural "volumes" to match server file
+      etfBtcVolume: "/spot-btc-etf-volumes.json", 
       etfEthFlows: "/spot-eth-etf-flows.json",
-      etfEthVolume: "/spot-eth-etf-volume.json",
+      etfEthVolume: "/spot-eth-etf-volumes.json", // FIXED: Plural "volumes"
       etfSolFlows: "/spot-sol-etf-flows.json",
       etfSolVolumes: "/spot-sol-etf-volumes.json",
       etfXrpFlows: "/spot-xrp-etf-flows.json",
