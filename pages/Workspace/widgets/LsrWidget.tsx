@@ -5,8 +5,6 @@ import HCWheelZoom from 'highcharts/modules/mouse-wheel-zoom';
 import { Loader2, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 
 // ---- Highcharts module init (Vite/ESM-safe) ----
-// Some Highcharts modules load as { default: fn } under ESM.
-// This normalizes both cases.
 const init3D = (HC3D as any)?.default ?? HC3D;
 const initWheelZoom = (HCWheelZoom as any)?.default ?? HCWheelZoom;
 
@@ -20,8 +18,8 @@ type ExchangeRow = {
   exchange: string;
   buyRatio: number;   // long %
   sellRatio: number;  // short %
-  buyVolUsd: number;  // long vol
-  sellVolUsd: number; // short vol
+  buyVolUsd: number;  // long usd
+  sellVolUsd: number; // short usd
   iconUrl?: string;
 };
 
@@ -43,7 +41,7 @@ type MarketPoint = {
   ts: number; // ms epoch
   price?: number;
   openInterest?: number;
-  ls?: number; // LSR do TF selecionado (você controla no backend)
+  ls?: number;
   longVolUsd?: number;
   shortVolUsd?: number;
   liquidationUsd?: number;
@@ -58,11 +56,12 @@ type MarketHistory = {
 const SYMBOLS: Sym[] = ['BTC', 'ETH', 'SOL'];
 const TFS: Tf[] = ['5m', '1h', '12h', '1d'];
 
-// Ajuste conforme sua convenção real de arquivo
 const cachePathForExchange = (sym: Sym, tf: Tf) => `/cachecko/lsr-exchange-${sym.toLowerCase()}-${tf}.json`;
 
-// Endpoint esperado pelo Pulse (você cria no backend lendo seu cache de histórico)
+// Se você ainda não tem o endpoint, pode trocar para um cache assim:
+// /cachecko/lsr-market-btc.json
 const apiPathForMarketHistory = (sym: Sym) => `/api/lsr/market-history?symbol=${sym}`;
+const cachePathForMarketHistory = (sym: Sym) => `/cachecko/lsr-market-${sym.toLowerCase()}.json`;
 
 const fmtUSD = (v: number) => {
   const n = Number.isFinite(v) ? v : 0;
@@ -92,6 +91,22 @@ const Badge = ({ children }: { children: React.ReactNode }) => (
   </span>
 );
 
+// Fetch JSON robusto: evita o erro "Unexpected token '<'"
+async function fetchJsonStrict(url: string): Promise<any> {
+  const res = await fetch(url, { cache: 'no-store' });
+  const ct = res.headers.get('content-type') || '';
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`HTTP ${res.status} (${url})${text ? ` | ${text.slice(0, 80)}...` : ''}`);
+  }
+  if (!ct.includes('application/json')) {
+    const text = await res.text().catch(() => '');
+    // se vier HTML (<!DOCTYPE ...), estoura aqui com mensagem clara
+    throw new Error(`Resposta não é JSON (${url}). Recebi: ${text.slice(0, 60)}...`);
+  }
+  return res.json();
+}
+
 export default function LsrCockpitPage() {
   const [symbol, setSymbol] = useState<Sym>('BTC');
   const [tf, setTf] = useState<Tf>('5m');
@@ -107,7 +122,6 @@ export default function LsrCockpitPage() {
   const [showTable, setShowTable] = useState(true);
   const [barsMode, setBarsMode] = useState<'usd' | 'ratio'>('usd');
 
-  // simple sort
   const [sortKey, setSortKey] = useState<'exchange' | 'longPct' | 'shortPct' | 'longUsd' | 'shortUsd' | 'totalUsd'>('totalUsd');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
@@ -122,12 +136,9 @@ export default function LsrCockpitPage() {
       setErrorExchange(null);
       try {
         const url = cachePathForExchange(symbol, tf);
-        const res = await fetch(url, { cache: 'no-store' });
-        if (!res.ok) throw new Error(`HTTP ${res.status} (${url})`);
-        const json = await res.json();
+        const json = await fetchJsonStrict(url);
         if (!alive) return;
 
-        // Seu arquivo pode estar como array (no exemplo veio entre colchetes)
         const snap: ExchangeSnapshot = Array.isArray(json) ? json[0] : json;
         setExchangeSnap(snap);
       } catch (e: any) {
@@ -143,30 +154,35 @@ export default function LsrCockpitPage() {
     return () => { alive = false; };
   }, [symbol, tf]);
 
-  // --- Fetch Market History (cartesiano) ---
+  // --- Fetch Market History (Pulse) ---
   useEffect(() => {
     let alive = true;
     const run = async () => {
       setLoadingMarket(true);
       setErrorMarket(null);
-      try {
-        const url = apiPathForMarketHistory(symbol);
-        const res = await fetch(url, { cache: 'no-store' });
-        if (!res.ok) throw new Error(`HTTP ${res.status} (${url})`);
-        const json = await res.json();
-        if (!alive) return;
 
-        // Esperado: { symbol, updatedAt, points: [{ts, price, openInterest, ls, liquidationUsd, longVolUsd, shortVolUsd}] }
-        setMarketHist(json);
-      } catch (e: any) {
+      try {
+        // 1) tenta endpoint
+        const json = await fetchJsonStrict(apiPathForMarketHistory(symbol));
         if (!alive) return;
-        setMarketHist(null);
-        setErrorMarket(e?.message || 'Falha ao carregar histórico do mercado');
+        setMarketHist(json);
+      } catch (e1: any) {
+        // 2) fallback opcional: tenta cache local (se você criar)
+        try {
+          const json2 = await fetchJsonStrict(cachePathForMarketHistory(symbol));
+          if (!alive) return;
+          setMarketHist(json2);
+        } catch (e2: any) {
+          if (!alive) return;
+          setMarketHist(null);
+          setErrorMarket(e1?.message || e2?.message || 'Falha ao carregar histórico do mercado');
+        }
       } finally {
         if (!alive) return;
         setLoadingMarket(false);
       }
     };
+
     run();
     return () => { alive = false; };
   }, [symbol]);
@@ -185,6 +201,14 @@ export default function LsrCockpitPage() {
       }));
     return sortByTotalVolDesc(cleaned);
   }, [exchangeSnap]);
+
+  const exchangeIconByName = useMemo(() => {
+    const m = new Map<string, string>();
+    exchangeRows.forEach(r => {
+      if (r.iconUrl) m.set(r.exchange, r.iconUrl);
+    });
+    return m;
+  }, [exchangeRows]);
 
   const agg = useMemo(() => {
     const d = exchangeSnap?.data?.[0];
@@ -241,7 +265,6 @@ export default function LsrCockpitPage() {
     const price = p.map(x => [x.ts, Number(x.price) || 0]);
     const oi = p.map(x => [x.ts, Number(x.openInterest) || 0]);
     const lsr = p.map(x => [x.ts, Number(x.ls) || 0]);
-
     const liq = p.map(x => [x.ts, Number(x.liquidationUsd) || 0]);
 
     return { price, oi, lsr, liq };
@@ -263,7 +286,7 @@ export default function LsrCockpitPage() {
     pulseChartRef.current = Highcharts.stockChart('lsr-pulse-chart', {
       chart: {
         backgroundColor: 'transparent',
-        height: 420,
+        height: 480, // 👈 mais alto pra não cortar navigator/scrollbar
         animation: false,
         zooming: {
           mouseWheel: { enabled: true, sensitivity: 1.15 },
@@ -304,50 +327,30 @@ export default function LsrCockpitPage() {
           animation: false,
           dataGrouping: { enabled: false }
         },
-        column: {
-          borderWidth: 0
-        }
+        column: { borderWidth: 0 }
       },
       series: [
-        {
-          type: 'line',
-          name: 'LSR',
-          yAxis: 0,
-          data: pulseSeries.lsr,
-          tooltip: { valueDecimals: 3 }
-        },
+        { type: 'line', name: 'LSR', yAxis: 0, data: pulseSeries.lsr, tooltip: { valueDecimals: 3 } },
         {
           type: 'line',
           name: 'Open Interest',
           yAxis: 1,
           data: pulseSeries.oi,
-          tooltip: {
-            pointFormatter: function () {
-              return `<span>OI: <b>${fmtUSD(Number((this as any).y))}</b></span><br/>`;
-            }
-          }
+          tooltip: { pointFormatter: function () { return `<span>OI: <b>${fmtUSD(Number((this as any).y))}</b></span><br/>`; } }
         },
         {
           type: 'column',
           name: 'Liquidations',
           yAxis: 1,
           data: pulseSeries.liq,
-          tooltip: {
-            pointFormatter: function () {
-              return `<span>Liq: <b>${fmtUSD(Number((this as any).y))}</b></span><br/>`;
-            }
-          }
+          tooltip: { pointFormatter: function () { return `<span>Liq: <b>${fmtUSD(Number((this as any).y))}</b></span><br/>`; } }
         },
         {
           type: 'line',
           name: 'Price',
           yAxis: 1,
           data: pulseSeries.price,
-          tooltip: {
-            pointFormatter: function () {
-              return `<span>Price: <b>${fmtUSD(Number((this as any).y))}</b></span><br/>`;
-            }
-          }
+          tooltip: { pointFormatter: function () { return `<span>Price: <b>${fmtUSD(Number((this as any).y))}</b></span><br/>`; } }
         }
       ]
     } as any);
@@ -360,7 +363,7 @@ export default function LsrCockpitPage() {
     };
   }, [loadingMarket, errorMarket, marketHist, pulseSeries]);
 
-  // --- Render 3D Bars Chart ---
+  // --- Render 3D Bars Chart (STACKED: 1 bar per exchange) ---
   useEffect(() => {
     if (loadingExchange || errorExchange) return;
     if (!exchangeRows.length) return;
@@ -375,20 +378,25 @@ export default function LsrCockpitPage() {
 
     const categories = exchangeRows.map(x => x.exchange);
 
-    const longVals = exchangeRows.map(x => {
-      if (barsMode === 'ratio') return clamp(Number(x.buyRatio) || 0, 0, 100);
-      return Number(x.buyVolUsd) || 0;
-    });
-    const shortVals = exchangeRows.map(x => {
-      if (barsMode === 'ratio') return clamp(Number(x.sellRatio) || 0, 0, 100);
-      return Number(x.sellVolUsd) || 0;
-    });
+    // data points carry iconUrl for tooltip/labels
+    const longData = exchangeRows.map(r => ({
+      y: barsMode === 'ratio' ? clamp(r.buyRatio, 0, 100) : r.buyVolUsd,
+      exchange: r.exchange,
+      iconUrl: r.iconUrl || ''
+    }));
+
+    const shortData = exchangeRows.map(r => ({
+      y: barsMode === 'ratio' ? clamp(r.sellRatio, 0, 100) : r.sellVolUsd,
+      exchange: r.exchange,
+      iconUrl: r.iconUrl || ''
+    }));
 
     barsChartRef.current = Highcharts.chart('lsr-exchange-3d', {
       chart: {
         type: 'column',
         backgroundColor: 'transparent',
-        height: 420,
+        height: 560, // 👈 mais alto pra caber tudo (legenda + labels)
+        spacingBottom: 26,
         options3d: {
           enabled: true,
           alpha: 10,
@@ -399,51 +407,108 @@ export default function LsrCockpitPage() {
       },
       title: { text: '' },
       credits: { enabled: false },
+
+      legend: {
+        enabled: true,
+        align: 'center',
+        verticalAlign: 'bottom',
+        margin: 14,
+        padding: 8,
+        itemStyle: { color: 'rgba(255,255,255,0.85)', fontWeight: '800' },
+        itemHoverStyle: { color: 'rgba(255,255,255,1)' }
+      },
+
       xAxis: {
         categories,
+        lineColor: 'rgba(255,255,255,0.12)',
+        tickLength: 0,
         labels: {
-          style: { color: 'rgba(255,255,255,0.75)', fontWeight: '700' }
+          useHTML: true,
+          formatter: function () {
+            const name = String((this as any).value);
+            const icon = exchangeIconByName.get(name);
+            if (!icon) {
+              return `<div style="font-weight:800;color:rgba(255,255,255,0.75)">${name}</div>`;
+            }
+            return `
+              <div style="display:flex;align-items:center;justify-content:center;gap:8px">
+                <img src="${icon}" style="width:18px;height:18px;border-radius:4px;background:#fff;padding:1px" />
+                <span style="font-weight:800;color:rgba(255,255,255,0.75)">${name}</span>
+              </div>
+            `;
+          }
         }
       },
+
       yAxis: {
+        min: 0,
         title: { text: barsMode === 'ratio' ? 'Long/Short (%)' : 'Volume (USD)' },
+        gridLineColor: 'rgba(255,255,255,0.06)',
         labels: {
           formatter: function () {
             const v = Number((this as any).value);
             return barsMode === 'ratio' ? `${v.toFixed(0)}%` : fmtUSD(v);
           },
           style: { color: 'rgba(255,255,255,0.75)' }
-        },
-        gridLineColor: 'rgba(255,255,255,0.06)'
+        }
       },
-      legend: {
-        itemStyle: { color: 'rgba(255,255,255,0.85)', fontWeight: '800' }
-      },
+
       tooltip: {
         shared: true,
+        useHTML: true,
         borderWidth: 0,
         backgroundColor: 'rgba(17, 24, 39, 0.92)',
         style: { color: '#fff' },
         formatter: function () {
-          const pts: any = (this as any).points || [];
-          const name = (this as any).x;
-          const longY = pts[0]?.y ?? 0;
-          const shortY = pts[1]?.y ?? 0;
-          const longTxt = barsMode === 'ratio' ? `${Number(longY).toFixed(2)}%` : fmtUSD(Number(longY));
-          const shortTxt = barsMode === 'ratio' ? `${Number(shortY).toFixed(2)}%` : fmtUSD(Number(shortY));
-          return `<b>${name}</b><br/>Long: <b>${longTxt}</b><br/>Short: <b>${shortTxt}</b>`;
+          const ctx: any = this as any;
+          const pts: any[] = ctx.points || [];
+
+          const pLong = pts.find(p => p?.series?.name === 'Long');
+          const pShort = pts.find(p => p?.series?.name === 'Short');
+
+          const longY = Number(pLong?.y ?? 0);
+          const shortY = Number(pShort?.y ?? 0);
+
+          const longTxt = barsMode === 'ratio' ? `${longY.toFixed(2)}%` : fmtUSD(longY);
+          const shortTxt = barsMode === 'ratio' ? `${shortY.toFixed(2)}%` : fmtUSD(shortY);
+
+          const lsr = shortY > 0 ? (longY / shortY) : 0;
+
+          const exName = String(ctx.x);
+          const icon = exchangeIconByName.get(exName);
+
+          const head = icon
+            ? `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+                 <img src="${icon}" style="width:22px;height:22px;border-radius:6px;background:#fff;padding:1px" />
+                 <div style="font-weight:900">${exName}</div>
+               </div>`
+            : `<div style="font-weight:900;margin-bottom:6px">${exName}</div>`;
+
+          return `
+            ${head}
+            <div>Long: <b>${longTxt}</b></div>
+            <div>Short: <b>${shortTxt}</b></div>
+            <div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.12)">
+              LSR: <b>${fmtLSR(lsr)}</b>
+            </div>
+          `;
         }
       },
+
       plotOptions: {
         column: {
           depth: 35,
-          grouping: true,
-          borderWidth: 0
-        }
+          borderWidth: 0,
+          stacking: 'normal', // 👈 empilha: 1 barra por exchange
+          groupPadding: 0.15,
+          pointPadding: 0.05
+        },
+        series: { animation: false }
       },
+
       series: [
-        { name: 'Long', data: longVals as any },
-        { name: 'Short', data: shortVals as any }
+        { name: 'Long', data: longData as any, showInLegend: true },
+        { name: 'Short', data: shortData as any, showInLegend: true }
       ]
     } as any);
 
@@ -453,7 +518,7 @@ export default function LsrCockpitPage() {
         barsChartRef.current = null;
       }
     };
-  }, [loadingExchange, errorExchange, exchangeRows, barsMode]);
+  }, [loadingExchange, errorExchange, exchangeRows, barsMode, exchangeIconByName]);
 
   // --- UI Header values ---
   const lastUpdated = useMemo(() => {
@@ -473,12 +538,12 @@ export default function LsrCockpitPage() {
               <span className="ml-3 text-sm font-black text-white/60">{symbol} · {tf.toUpperCase()}</span>
             </h1>
             <p className="text-white/60 text-sm mt-1">
-              Zoom no scroll e pan no mouse (segure <b>Shift</b>). Linha agregada + breakdown por exchange.
+              Zoom no scroll e pan com Shift. Exchange 3D empilhado (1 barra por exchange).
             </p>
             <div className="flex flex-wrap gap-2 mt-3">
               <Badge>Pulse: OI + LSR + Liq + Price</Badge>
-              <Badge>3D: Long vs Short</Badge>
-              <Badge>Tabela: Sort + leitura limpa</Badge>
+              <Badge>3D: Stack Long+Short</Badge>
+              <Badge>Tooltip: LSR por exchange</Badge>
             </div>
           </div>
 
@@ -538,7 +603,7 @@ export default function LsrCockpitPage() {
         {/* Cards */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6">
           {/* Pulse */}
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 relative overflow-hidden">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 relative overflow-visible">
             <div className="flex items-center justify-between mb-3">
               <div>
                 <div className="text-sm font-black text-white/80 uppercase tracking-widest">Market Pulse</div>
@@ -555,24 +620,28 @@ export default function LsrCockpitPage() {
                 <div className="text-sm">
                   <div className="font-black">Falha no Market Pulse</div>
                   <div className="opacity-80">{errorMarket}</div>
+                  <div className="opacity-70 mt-1">
+                    Isso acontece quando o endpoint devolve HTML (SPA/404). Se você ainda não tem o endpoint,
+                    crie um cache em {cachePathForMarketHistory(symbol)} e ele vai cair no fallback.
+                  </div>
                 </div>
               </div>
             ) : loadingMarket ? (
-              <Skeleton h={420} />
+              <Skeleton h={480} />
             ) : (
-              <div id="lsr-pulse-chart" />
+              <div id="lsr-pulse-chart" className="min-h-[480px]" />
             )}
 
             <div className="mt-3 text-xs text-white/50">
-              Dica: para pan, segure <b>Shift</b> e arraste. Zoom no scroll.
+              Pan: Shift + arrastar. Zoom: scroll.
             </div>
           </div>
 
           {/* 3D Bars */}
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 relative overflow-hidden">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 relative overflow-visible">
             <div className="flex items-center justify-between mb-3">
               <div>
-                <div className="text-sm font-black text-white/80 uppercase tracking-widest">Exchange 3D Bars</div>
+                <div className="text-sm font-black text-white/80 uppercase tracking-widest">Exchange 3D</div>
                 <div className="text-xs text-white/50 mt-1">
                   {lastUpdated.exchange ? `Atualizado: ${lastUpdated.exchange}` : 'Sem timestamp'}
                 </div>
@@ -589,9 +658,9 @@ export default function LsrCockpitPage() {
                 </div>
               </div>
             ) : loadingExchange ? (
-              <Skeleton h={420} />
+              <Skeleton h={560} />
             ) : (
-              <div id="lsr-exchange-3d" />
+              <div id="lsr-exchange-3d" className="min-h-[560px]" />
             )}
 
             {agg && (
@@ -617,7 +686,7 @@ export default function LsrCockpitPage() {
             <div>
               <div className="text-sm font-black text-white/80 uppercase tracking-widest">Exchanges Table</div>
               <div className="text-xs text-white/50 mt-1">
-                Clique nos headers para ordenar. A tabela é o “desembaraçador” do 3D.
+                Clique nos headers para ordenar.
               </div>
             </div>
             <button
@@ -634,27 +703,13 @@ export default function LsrCockpitPage() {
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-[#0b0e11]">
                   <tr className="text-white/70">
-                    <th className="p-3 text-left cursor-pointer" onClick={() => toggleSort('exchange')}>
-                      Exchange
-                    </th>
-                    <th className="p-3 text-right cursor-pointer" onClick={() => toggleSort('longPct')}>
-                      Long %
-                    </th>
-                    <th className="p-3 text-right cursor-pointer" onClick={() => toggleSort('shortPct')}>
-                      Short %
-                    </th>
-                    <th className="p-3 text-right cursor-pointer" onClick={() => toggleSort('longUsd')}>
-                      Long USD
-                    </th>
-                    <th className="p-3 text-right cursor-pointer" onClick={() => toggleSort('shortUsd')}>
-                      Short USD
-                    </th>
-                    <th className="p-3 text-right cursor-pointer" onClick={() => toggleSort('totalUsd')}>
-                      Total USD
-                    </th>
-                    <th className="p-3 text-right">
-                      LSR (aprox)
-                    </th>
+                    <th className="p-3 text-left cursor-pointer" onClick={() => toggleSort('exchange')}>Exchange</th>
+                    <th className="p-3 text-right cursor-pointer" onClick={() => toggleSort('longPct')}>Long %</th>
+                    <th className="p-3 text-right cursor-pointer" onClick={() => toggleSort('shortPct')}>Short %</th>
+                    <th className="p-3 text-right cursor-pointer" onClick={() => toggleSort('longUsd')}>Long USD</th>
+                    <th className="p-3 text-right cursor-pointer" onClick={() => toggleSort('shortUsd')}>Short USD</th>
+                    <th className="p-3 text-right cursor-pointer" onClick={() => toggleSort('totalUsd')}>Total USD</th>
+                    <th className="p-3 text-right">LSR</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -665,18 +720,13 @@ export default function LsrCockpitPage() {
                   ) : (
                     sortedTableRows.map((r) => {
                       const total = r.buyVolUsd + r.sellVolUsd;
-                      const approxLSR = r.sellRatio > 0 ? (r.buyRatio / r.sellRatio) : 0; // ratio aproximado
+                      const lsr = r.sellVolUsd > 0 ? (r.buyVolUsd / r.sellVolUsd) : 0;
                       return (
                         <tr key={r.exchange} className="border-t border-white/10 hover:bg-white/5 transition">
                           <td className="p-3">
                             <div className="flex items-center gap-3">
                               {r.iconUrl ? (
-                                <img
-                                  src={r.iconUrl}
-                                  alt=""
-                                  className="w-7 h-7 rounded-lg bg-white p-0.5"
-                                  loading="lazy"
-                                />
+                                <img src={r.iconUrl} alt="" className="w-7 h-7 rounded-lg bg-white p-0.5" loading="lazy" />
                               ) : (
                                 <div className="w-7 h-7 rounded-lg bg-white/10" />
                               )}
@@ -688,7 +738,7 @@ export default function LsrCockpitPage() {
                           <td className="p-3 text-right text-white/80 font-mono">{fmtUSD(r.buyVolUsd)}</td>
                           <td className="p-3 text-right text-white/80 font-mono">{fmtUSD(r.sellVolUsd)}</td>
                           <td className="p-3 text-right text-white font-mono font-black">{fmtUSD(total)}</td>
-                          <td className="p-3 text-right text-[#dd9933] font-black font-mono">{fmtLSR(approxLSR)}</td>
+                          <td className="p-3 text-right text-[#dd9933] font-black font-mono">{fmtLSR(lsr)}</td>
                         </tr>
                       );
                     })
@@ -697,18 +747,6 @@ export default function LsrCockpitPage() {
               </table>
             </div>
           )}
-        </div>
-
-        {/* Footer tips */}
-        <div className="mt-6 text-xs text-white/45">
-          <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-            <div className="font-black text-white/70 mb-2">Notas</div>
-            <ul className="list-disc pl-5 space-y-1">
-              <li>3D é impacto visual. A tabela garante leitura precisa.</li>
-              <li>Pulse chart: quando OI sobe e liquidações explodem, você enxerga stress do mercado.</li>
-              <li>Zoom/pan já está habilitado.</li>
-            </ul>
-          </div>
         </div>
       </div>
     </div>

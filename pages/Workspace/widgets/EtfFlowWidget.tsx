@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { Loader2, TrendingUp, BarChart3, Layers, AlertTriangle, LineChart, Info, ChevronLeft, ChevronRight, DollarSign, ArrowUp, ArrowDown } from 'lucide-react';
 import { fetchEtfFlow, fetchEtfDetailed, EtfFlowData } from '../../../services/api';
 import { DashboardItem, Language } from '../../../types';
@@ -185,7 +186,7 @@ const StackedEtfChart: React.FC<ChartBaseProps> = ({ data, metric, allTickers, c
     };
   }, [data, metric, allTickers.join('|'), isDark, textColor, gridColor]);
 
-  return <div ref={chartRef} className="w-full min-h-[420px]" />;
+  return <div ref={chartRef} className="w-full h-full" />;
 };
 
 const TotalBarChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
@@ -260,7 +261,7 @@ const TotalBarChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
     };
   }, [data, metric, isDark, textColor, gridColor]);
 
-  return <div ref={chartRef} className="w-full min-h-[420px]" />;
+  return <div ref={chartRef} className="w-full h-full" />;
 };
 
 const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }> = ({ data, metric, selectedTicker, colorMap }) => {
@@ -328,7 +329,7 @@ const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }
 
   if (!selectedTicker) {
     return (
-      <div className="w-full min-h-[420px] flex items-center justify-center text-gray-400">
+      <div className="w-full h-full flex items-center justify-center text-gray-400">
         <div className="flex flex-col items-center gap-2">
           <LineChart size={28} />
           <span className="text-xs font-black uppercase">Selecione uma ETF</span>
@@ -337,241 +338,80 @@ const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }
     );
   }
 
-  return <div ref={chartRef} className="w-full min-h-[420px]" />;
+  return <div ref={chartRef} className="w-full h-full" />;
 };
 
-// --- MINI TABLE (NO INTERNAL SCROLL) ---
+// --- PORTAL TOOLTIP COMPONENT ---
+const PortalTooltip = ({ content }: { content: string }) => {
+  const [visible, setVisible] = useState(false);
+  const [coords, setCoords] = useState({ top: 0, left: 0 });
+  const triggerRef = useRef<HTMLDivElement>(null);
 
-const MarketSharePanel: React.FC<{
-  data: any[];
-  metric: Metric;
-  asset: Asset;
-  selectedIndex: number;
-  onIndexChange: (idx: number) => void;
-  allTickers: string[];
-  colorMap: Record<string, string>;
-}> = ({ data, metric, selectedIndex, onIndexChange, allTickers, colorMap }) => {
-
-  const clampIndex = (idx: number) => {
-    if (!Array.isArray(data) || data.length === 0) return -1;
-    return Math.max(0, Math.min(idx, data.length - 1));
-  };
-
-  const safeIndex = clampIndex(selectedIndex);
-  const currentDay = safeIndex >= 0 ? data[safeIndex] : null;
-
-  const handlePrev = () => {
-    const next = clampIndex((safeIndex >= 0 ? safeIndex : 0) - 1);
-    if (next >= 0) onIndexChange(next);
-  };
-  const handleNext = () => {
-    const next = clampIndex((safeIndex >= 0 ? safeIndex : 0) + 1);
-    if (next >= 0) onIndexChange(next);
-  };
-
-  const dateStr = currentDay
-    ? new Date(currentDay.date).toLocaleDateString(undefined, { year: 'numeric', month: 'numeric', day: 'numeric', timeZone: 'UTC' })
-    : '--/--/----';
-
-  const sumTickersAtIndex = (idx: number) => {
-    const day = data[idx];
-    if (!day) return 0;
-    let s = 0;
-    for (const t of allTickers) s += Number(day[t] ?? 0);
-    return s;
-  };
-
-  const stats = useMemo(() => {
-    if (!currentDay || safeIndex < 0) return { d1: 0, d7: 0, d30: 0 };
-
-    const sum1 = sumTickersAtIndex(safeIndex);
-
-    let sum7 = 0;
-    for (let i = safeIndex; i >= 0 && i > safeIndex - 7; i--) sum7 += sumTickersAtIndex(i);
-
-    let sum30 = 0;
-    for (let i = safeIndex; i >= 0 && i > safeIndex - 30; i--) sum30 += sumTickersAtIndex(i);
-
-    return { d1: sum1, d7: sum7, d30: sum30 };
-  }, [data, safeIndex, currentDay, allTickers.join('|')]);
-
-  const ranking = useMemo(() => {
-    if (!currentDay) return [];
-    return allTickers
-      .map(t => ({ ticker: t, value: Number(currentDay[t] ?? 0) }))
-      .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
-  }, [currentDay, allTickers.join('|')]);
-
-  const SummaryCard = ({ label, value }: { label: string, value: number }) => {
-    const colorClass =
-      metric === 'volume' ? 'text-blue-400'
-      : (value >= 0 ? 'text-green-400' : 'text-red-400');
-
-    return (
-      <div className="flex flex-col items-center justify-center p-2 bg-gray-50 dark:bg-black/30 rounded-lg border border-gray-200 dark:border-slate-800 shadow-sm flex-1">
-        <span className="text-[10px] font-black text-gray-400 uppercase tracking-wide">{label}</span>
-        <span className={`text-sm font-black font-mono ${colorClass}`}>
-          ${formatCompactNumber(value)}
-        </span>
-      </div>
-    );
+  const show = () => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setCoords({ top: rect.top - 8, left: rect.left });
+      setVisible(true);
+    }
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex gap-2 mb-3 shrink-0">
-        <SummaryCard label="1D" value={stats.d1} />
-        <SummaryCard label="7D" value={stats.d7} />
-        <SummaryCard label="30D" value={stats.d30} />
+    <>
+      <div 
+        ref={triggerRef} 
+        onMouseEnter={show} 
+        onMouseLeave={() => setVisible(false)}
+        className="inline-flex items-center ml-1 cursor-help"
+      >
+        <Info size={12} className="text-gray-500 hover:text-[#dd9933]" />
       </div>
+      {visible && createPortal(
+        <div 
+          className="fixed z-[9999] pointer-events-none bg-black text-white text-[10px] p-2 rounded border border-gray-700 shadow-xl max-w-[200px] leading-relaxed"
+          style={{ top: coords.top, left: coords.left, transform: 'translateY(-100%)' }}
+        >
+          {content}
+          <div className="absolute top-full left-2 w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[4px] border-t-black"></div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+};
 
-      <div className="p-3 bg-gray-50 dark:bg-black/30 border-b border-gray-100 dark:border-slate-800 font-black text-xs uppercase text-gray-500 tracking-widest flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2"><Layers size={14} /> Market Share</div>
-        <div className="flex items-center gap-2">
-          <button onClick={handlePrev} disabled={safeIndex <= 0} className="p-1 hover:text-[#dd9933] disabled:opacity-30 disabled:hover:text-gray-500"><ChevronLeft size={16} /></button>
-          <span className="text-gray-800 dark:text-gray-200 font-mono">{dateStr}</span>
-          <button onClick={handleNext} disabled={safeIndex >= data.length - 1} className="p-1 hover:text-[#dd9933] disabled:opacity-30 disabled:hover:text-gray-500"><ChevronRight size={16} /></button>
+// --- PORTAL HELP TOOLTIP ---
+const HelpTooltip = () => {
+  const [visible, setVisible] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const ref = useRef<HTMLDivElement>(null);
+
+  const show = () => {
+      if(ref.current) {
+          const rect = ref.current.getBoundingClientRect();
+          setPos({ top: rect.bottom + 8, left: rect.right - 256 });
+          setVisible(true);
+      }
+  };
+
+  return (
+    <>
+        <div ref={ref} onMouseEnter={show} onMouseLeave={() => setVisible(false)} className="absolute top-2 right-2 group z-20">
+            <Info size={16} className="text-gray-400 hover:text-[#dd9933] cursor-help" />
         </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto custom-scrollbar">
-        {ranking.length === 0 ? (
-          <div className="p-4 text-center text-xs text-gray-500">Sem dados para esta data.</div>
-        ) : (
-          <table className="w-full text-left text-xs">
-            <thead className="bg-gray-50 dark:bg-black/20 text-gray-500 dark:text-slate-400 border-b border-gray-100 dark:border-slate-800 sticky top-0 z-10">
-              <tr>
-                <th className="p-2 font-black uppercase">ETF</th>
-                <th className="p-2 text-right font-black uppercase">Value (USD)</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
-              {ranking.map(item => {
-                const isPos = item.value >= 0;
-                const colorClass = metric === 'volume'
-                  ? 'text-gray-900 dark:text-white'
-                  : (isPos ? 'text-green-400' : 'text-red-400');
-
-                const dot = colorMap[item.ticker] ?? '#94a3b8';
-
-                return (
-                  <tr key={item.ticker} className="hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">
-                    <td className="p-2 font-bold text-gray-700 dark:text-slate-300">
-                      <span className="inline-flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: dot }} />
-                        {item.ticker}
-                      </span>
-                    </td>
-                    <td className={`p-2 text-right font-mono font-black ${colorClass}`}>
-                      ${formatCompactNumber(item.value)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        {visible && createPortal(
+            <div 
+                className="fixed z-[9999] w-64 p-3 bg-white dark:bg-[#1a1c1e] border border-gray-200 dark:border-slate-700 rounded-lg shadow-xl opacity-100 pointer-events-none text-xs text-gray-600 dark:text-gray-300"
+                style={{ top: pos.top, left: pos.left }}
+            >
+                <p className="font-bold mb-1">Como ler?</p>
+                <p>Empilhado: contribuição por ETF no dia.</p>
+                <p className="mt-1">Use roda do mouse para zoom horizontal e arraste para pan.</p>
+            </div>,
+            document.body
         )}
-      </div>
-    </div>
+    </>
   );
 };
-
-// --- BUBBLES ---
-
-const EtfBubbles: React.FC<{
-  data: any[];
-  selectedIndex: number;
-  metric: Metric;
-  allTickers: string[];
-  colorMap: Record<string, string>;
-}> = ({ data, selectedIndex, metric, allTickers, colorMap }) => {
-
-  const idx = useMemo(() => {
-    if (!Array.isArray(data) || data.length === 0) return -1;
-    if (selectedIndex < 0) return data.length - 1;
-    return Math.max(0, Math.min(selectedIndex, data.length - 1));
-  }, [data, selectedIndex]);
-
-  const currentDay = idx >= 0 ? data[idx] : null;
-
-  const bubbles = useMemo(() => {
-    if (!currentDay) return [];
-    return allTickers.map(t => {
-      const raw = currentDay[t];
-      const hasValue = raw !== undefined && raw !== null && Number.isFinite(Number(raw));
-      const val = hasValue ? Number(raw) : 0;
-      return { id: t, val, absVal: Math.abs(val), hasValue };
-    }).sort((a, b) => b.absVal - a.absVal);
-  }, [currentDay, allTickers.join('|')]);
-
-  if (!currentDay || bubbles.length === 0) {
-    return (
-      <div className="flex-1 h-full bg-gray-50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-slate-800 flex items-center justify-center">
-        <div className="text-xs text-gray-500">Sem dados de bolhas.</div>
-      </div>
-    );
-  }
-
-  const maxVal = Math.max(...bubbles.map(b => b.absVal)) || 1;
-
-  const minSize = 44;
-  const maxSize = 132;
-
-  return (
-    <div className="flex flex-col h-full bg-gray-50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-slate-800 overflow-hidden">
-      <div className="flex items-center justify-between mb-3 shrink-0">
-        <div className="flex items-center gap-2 text-xs font-black uppercase text-gray-500 dark:text-gray-400">
-          <DollarSign size={14} /> ETF Bubbles
-        </div>
-      </div>
-
-      <div className="flex-1 relative w-full overflow-visible">
-        <div className="flex flex-wrap content-start justify-center gap-4 p-3 min-h-full">
-            {bubbles.map(b => {
-            const size = b.hasValue
-                ? (minSize + ((b.absVal / maxVal) * (maxSize - minSize)))
-                : 52;
-
-            const baseColor = colorMap[b.id] ?? '#94a3b8';
-
-            const bgStyle = b.hasValue
-                ? {
-                background: `radial-gradient(circle at 30% 30%, rgba(255,255,255,0.22), rgba(255,255,255,0.06) 40%, rgba(0,0,0,0.12) 100%), ${baseColor}22`
-                }
-                : {
-                background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.18), rgba(255,255,255,0.06) 45%, rgba(0,0,0,0.14) 100%), rgba(148,163,184,0.20)'
-                };
-
-            return (
-                <div
-                key={b.id}
-                className="rounded-full border border-white/10 flex flex-col items-center justify-center transition-transform duration-300 hover:scale-110 shadow-lg backdrop-blur-sm text-slate-50 shrink-0"
-                style={{ width: size, height: size, ...(bgStyle as any) }}
-                >
-                <span className="font-black text-[10px] sm:text-xs leading-none">{b.id}</span>
-                <span className="text-[9px] sm:text-[10px] font-bold mt-0.5">
-                    ${formatCompactNumber(b.val)}
-                </span>
-                </div>
-            );
-            })}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// --- HELP TOOLTIP (small) ---
-const HelpTooltip = () => (
-  <div className="absolute top-2 right-2 group z-20">
-    <Info size={16} className="text-gray-400 hover:text-[#dd9933] cursor-help" />
-    <div className="absolute right-0 top-6 w-64 p-3 bg-white dark:bg-[#1a1c1e] border border-gray-200 dark:border-slate-700 rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none text-xs text-gray-600 dark:text-gray-300 z-50">
-      <p className="font-bold mb-1">Como ler?</p>
-      <p>Empilhado: contribuição por ETF no dia.</p>
-      <p className="mt-1">Use roda do mouse para zoom horizontal e arraste para pan.</p>
-    </div>
-  </div>
-);
 
 // --- MAXIMIZED WIDGET ---
 const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ language }) => {
@@ -677,21 +517,23 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
     return <StackedEtfChart data={data} metric={metric} asset={asset} allTickers={allTickers} colorMap={colorMap} />;
   };
 
-  // Fixed: Removed overflow-hidden and fixed heights to allow natural growth
   return (
-    <div className="w-full flex flex-col bg-white dark:bg-[#1a1c1e] text-gray-900 dark:text-white p-6 h-auto min-h-0">
+    <div className="w-full flex flex-col bg-white dark:bg-[#1a1c1e] text-gray-900 dark:text-white p-6 h-full min-h-0">
       {/* TOP BAR */}
       <div className="flex flex-col gap-3 mb-6 border-b border-gray-100 dark:border-slate-800 pb-4 shrink-0">
         <div className="flex justify-between items-center flex-wrap gap-4">
           <div className="flex items-center gap-4 flex-wrap">
-            <div className="flex items-baseline gap-2">
-              <div className="text-xs font-black text-gray-400 uppercase tracking-widest">Total Net Flow</div>
-              <div className={`text-xl font-black font-mono ${summaryData ? flowColor : 'text-gray-400'}`}>
+            <div className="flex flex-col items-start">
+              <div className="flex items-center gap-1 text-xs font-black text-gray-400 uppercase tracking-widest">
+                 Total Net Flow
+                 <PortalTooltip content="Soma do valor em USD de todos os ETFs monitorados (diário)." />
+              </div>
+              <div className={`text-xl font-black font-mono mt-0.5 ${summaryData ? flowColor : 'text-gray-400'}`}>
                 {summaryData ? '$' + formatCompactNumber(displayTotal) : '---'}
               </div>
             </div>
 
-            <div className="w-px h-6 bg-gray-200 dark:bg-slate-700 hidden md:block" />
+            <div className="w-px h-8 bg-gray-200 dark:bg-slate-700 hidden md:block mx-2" />
 
             {/* ASSET SELECTOR */}
             <div className="flex bg-gray-100 dark:bg-black/30 p-1 rounded-lg border border-gray-200 dark:border-slate-700">
@@ -762,55 +604,12 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void }> = ({ 
         )}
       </div>
 
-      {/* MAIN GRID - Removed fixed heights and overflow hidden to allow expansion */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-auto">
-        
-        {/* LEFT COLUMN: Charts & Bubbles */}
-        <div className="lg:col-span-2 flex flex-col gap-6 h-auto">
-          
-          {/* TOP CHART */}
-          <div className="relative bg-gray-5 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4 flex flex-col h-auto">
-             <div className="relative min-h-[400px]">
-                 <ChartArea />
-             </div>
-             <HelpTooltip />
-          </div>
-
-          {/* BUBBLES - Removed fixed flex ratio, allow natural height */}
-          <div className="h-auto flex flex-col">
-            {isMissingCombo ? (
-              <div className="relative h-[300px]">
-                <div className="w-full h-full rounded-xl bg-black/10 blur-[2px]" />
-                <MissingDataOverlay />
-              </div>
-            ) : (
-              <EtfBubbles
-                data={data}
-                selectedIndex={selectedIndex}
-                metric={metric}
-                allTickers={allTickers}
-                colorMap={colorMap}
-              />
-            )}
-          </div>
-        </div>
-
-        {/* RIGHT COLUMN: Table */}
-        <div className="bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-slate-800 rounded-xl p-3 h-auto flex flex-col">
-          {loading && !isMissingCombo ? (
-            <div className="flex items-center justify-center h-[400px]"><Loader2 className="animate-spin text-gray-400" /></div>
-          ) : (
-            <MarketSharePanel
-              data={data}
-              metric={metric}
-              asset={asset}
-              selectedIndex={selectedIndex}
-              onIndexChange={setSelectedIndex}
-              allTickers={allTickers}
-              colorMap={colorMap}
-            />
-          )}
-        </div>
+      {/* MAIN CHART CONTAINER - FULL HEIGHT, NO GRID */}
+      <div className="flex-1 min-h-0 relative bg-gray-5 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4 flex flex-col">
+         <div className="relative flex-1 min-h-0">
+             <ChartArea />
+         </div>
+         <HelpTooltip />
       </div>
     </div>
   );
