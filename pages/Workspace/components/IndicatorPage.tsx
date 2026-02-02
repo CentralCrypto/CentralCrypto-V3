@@ -315,8 +315,9 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
 
             {activePage === 'CCT_INDEX' && <PlaceholderPage title="CCT Index" />}
 
+            {/* LSR Container: Adjusted height to prevent cutoff */}
             {activePage === 'LSR' && (
-              <div className="h-[600px] w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800 relative">
+              <div className="w-full h-auto min-h-[850px] rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800 relative">
                 {userTier === UserTier.TIER_1 && <LockOverlay />}
                 <div className={userTier === UserTier.TIER_1 ? 'blur-sm h-full' : 'h-full'}>
                   <CryptoWidget item={{ id: 'lsr-page', type: WidgetType.LONG_SHORT_RATIO, title: 'Long/Short Ratio', symbol: 'GLOBAL', isMaximized: true }} language={language} />
