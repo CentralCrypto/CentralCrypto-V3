@@ -874,7 +874,7 @@ export function LsrCockpitPage() {
   );
 }
 
-// === LsrGridWidget (Minimized). ===
+// === LsrGridWidget (Minimized) ===
 const LsrGridWidget: React.FC<{ language: Language }> = ({ language }) => {
   const [symbol, setSymbol] = useState('BTCUSDT');
   const [period, setPeriod] = useState('5m');
@@ -1005,13 +1005,13 @@ const LsrGridWidget: React.FC<{ language: Language }> = ({ language }) => {
       <div className="flex justify-between px-2 pt-1 border-t border-gray-100 dark:border-slate-700/50 mt-1">
         <div className="text-center">
           <div className="text-[10px] text-gray-500 dark:text-slate-500 font-black uppercase tracking-tighter">Shorts</div>
-          <div className="text-xs font-mono font-black text-red-500">
+          <div className="text-base font-mono font-black text-red-500">
             {data?.shorts != null ? `${data.shorts.toFixed(1)}%` : '--'}
           </div>
         </div>
         <div className="text-center">
           <div className="text-[10px] text-gray-500 dark:text-slate-500 font-black uppercase tracking-tighter">Longs</div>
-          <div className="text-xs font-mono font-black text-green-500">
+          <div className="text-base font-mono font-black text-green-500">
             {data?.longs != null ? `${data.longs.toFixed(1)}%` : '--'}
           </div>
         </div>

@@ -114,7 +114,7 @@ const MissingDataOverlay: React.FC = () => (
   </div>
 );
 
-// --- COMPONENTES VISUAIS (Charts, Tables) .---
+// --- COMPONENTES VISUAIS (Charts, Tables) ---
 
 const StackedEtfChart: React.FC<ChartBaseProps> = ({ data, metric, allTickers, colorMap }) => {
   const chartRef = useRef<HTMLDivElement>(null);
@@ -343,39 +343,33 @@ const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }
 };
 
 const MarketSharePanel: React.FC<{ 
-    currentData: any, 
+    currentFlowData: any, 
+    currentVolData: any,
     allTickers: string[], 
     colorMap: Record<string, string>, 
-    metric: Metric, 
     asset: string,
     stats: { d1: number, d7: number, d30: number },
     onPrev: () => void,
     onNext: () => void,
     isFirst: boolean,
     isLast: boolean
-}> = ({ currentData, allTickers, colorMap, metric, asset, stats, onPrev, onNext, isFirst, isLast }) => {
+}> = ({ currentFlowData, currentVolData, allTickers, colorMap, asset, stats, onPrev, onNext, isFirst, isLast }) => {
     
-    // Sort logic for the day (Sort by ABSOLUTE value to show importance)
+    // Sort logic: Sort by VOLUME descending
     const sortedTickers = useMemo(() => {
-        if (!currentData) return [];
+        if (!currentFlowData && !currentVolData) return [];
         
-        let totalAbs = 0;
         const items = allTickers.map(t => {
-            const val = Number(currentData[t] || 0);
-            totalAbs += Math.abs(val);
-            return { ticker: t, val };
+            const flow = Number(currentFlowData?.[t] || 0);
+            const vol = Number(currentVolData?.[t] || 0);
+            return { ticker: t, flow, vol };
         });
 
-        // Sort descending by ABSOLUTE value to show biggest movers (in or out)
-        return items
-            .sort((a, b) => Math.abs(b.val) - Math.abs(a.val))
-            .map(item => ({
-                ...item,
-                share: totalAbs > 0 ? (Math.abs(item.val) / totalAbs) * 100 : 0
-            }));
-    }, [currentData, allTickers]);
+        // Sort descending by VOLUME
+        return items.sort((a, b) => b.vol - a.vol);
+    }, [currentFlowData, currentVolData, allTickers]);
 
-    const dateStr = currentData ? new Date(currentData.date).toLocaleDateString(undefined, { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' }) : '---';
+    const dateStr = currentFlowData ? new Date(currentFlowData.date).toLocaleDateString(undefined, { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' }) : '---';
 
     const StatBox = ({ label, value }: { label: string, value: number }) => (
         <div className="flex flex-col items-center justify-center bg-gray-100 dark:bg-[#2f3032] rounded-lg p-2 border border-gray-200 dark:border-slate-700">
@@ -390,7 +384,7 @@ const MarketSharePanel: React.FC<{
         <div className="flex flex-col h-full bg-white dark:bg-[#1a1c1e] border-l border-gray-100 dark:border-slate-800/50">
             {/* STATS HEADER */}
             <div className="p-3 border-b border-gray-100 dark:border-slate-800/50">
-                <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 text-center">{asset} {metric === 'flows' ? 'Net Flow' : 'Volume'}</div>
+                <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 text-center">{asset} Net Flow</div>
                 <div className="grid grid-cols-3 gap-2">
                     <StatBox label="1D" value={stats.d1} />
                     <StatBox label="7D" value={stats.d7} />
@@ -417,18 +411,19 @@ const MarketSharePanel: React.FC<{
                 </button>
             </div>
             
-            {/* Table Header - SIMPLIFIED */}
-             <div className="grid grid-cols-[1fr_1fr] px-2 py-1 bg-gray-50 dark:bg-black/10 border-b border-gray-100 dark:border-slate-800/50 text-[9px] font-bold text-gray-400 uppercase tracking-widest">
+            {/* Table Header */}
+             <div className="grid grid-cols-[1fr_1fr_1fr] px-2 py-1 bg-gray-50 dark:bg-black/10 border-b border-gray-100 dark:border-slate-800/50 text-[9px] font-bold text-gray-400 uppercase tracking-widest">
                 <span>Ativo</span>
-                <span className="text-right">Valor (USD)</span>
+                <span className="text-right">Flow</span>
+                <span className="text-right">Vol</span>
             </div>
 
             <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
                 <table className="w-full text-xs">
                     <tbody>
-                        {sortedTickers.map(({ticker, val}) => {
-                            const isZero = val === 0;
-                            const isPositive = val >= 0;
+                        {sortedTickers.map(({ticker, flow, vol}) => {
+                            const isZero = flow === 0 && vol === 0;
+                            const isPositive = flow >= 0;
                             return (
                                 <tr key={ticker} className="border-b border-gray-50 dark:border-slate-800/30 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
                                     <td className="py-2 pl-1 w-[40%]">
@@ -437,14 +432,17 @@ const MarketSharePanel: React.FC<{
                                             <span className={`font-bold ${isZero ? 'text-gray-400' : 'text-gray-700 dark:text-gray-300'}`}>{ticker}</span>
                                         </div>
                                     </td>
-                                    <td className={`py-2 text-right font-mono font-bold w-[60%] ${isZero ? 'text-gray-300 dark:text-gray-600' : (isPositive ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500')}`}>
-                                        ${formatCompactNumber(val)}
+                                    <td className={`py-2 text-right font-mono font-bold w-[30%] ${flow === 0 ? 'text-gray-300 dark:text-gray-600' : (isPositive ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500')}`}>
+                                        ${formatCompactNumber(flow)}
+                                    </td>
+                                    <td className={`py-2 text-right font-mono font-bold w-[30%] text-gray-500 dark:text-slate-400`}>
+                                        ${formatCompactNumber(vol)}
                                     </td>
                                 </tr>
                             );
                         })}
                         {sortedTickers.length === 0 && (
-                            <tr><td colSpan={2} className="text-center py-4 text-gray-400">Sem dados</td></tr>
+                            <tr><td colSpan={3} className="text-center py-4 text-gray-400">Sem dados</td></tr>
                         )}
                     </tbody>
                 </table>
@@ -454,7 +452,8 @@ const MarketSharePanel: React.FC<{
 };
 
 // --- PHYSICS BUBBLES ---
-const EtfBubbles: React.FC<{ currentData: any, allTickers: string[], colorMap: Record<string,string> }> = ({ currentData, allTickers, colorMap }) => {
+// Size based on Volume, Color based on Flow
+const EtfBubbles: React.FC<{ currentFlowData: any, currentVolData: any, allTickers: string[], colorMap: Record<string,string> }> = ({ currentFlowData, currentVolData, allTickers, colorMap }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const requestRef = useRef<number>(0);
@@ -464,24 +463,29 @@ const EtfBubbles: React.FC<{ currentData: any, allTickers: string[], colorMap: R
     const [tooltip, setTooltip] = useState<{visible: boolean, x: number, y: number, content: any} | null>(null);
 
     useEffect(() => {
-        if (!currentData || !allTickers.length) {
+        if (!currentFlowData && !currentVolData) {
             particlesRef.current = [];
             return;
         }
 
-        // 1. Extract values for current day
-        const vals: Record<string, number> = {};
-        let maxAbsVal = 0;
+        // 1. Extract values
+        // Size comes from Volume
+        // Color comes from Flow
+        const bubbleData: Record<string, { vol: number, flow: number }> = {};
+        let maxVol = 0;
         
         allTickers.forEach(t => {
-            const v = Number(currentData[t] || 0);
-            if (v !== 0) { // Keep even negatives
-                vals[t] = v;
-                if (Math.abs(v) > maxAbsVal) maxAbsVal = Math.abs(v);
+            const vol = Number(currentVolData?.[t] || 0);
+            const flow = Number(currentFlowData?.[t] || 0);
+            
+            // Only show if there is Volume (activity) OR significant Flow
+            if (vol > 0 || Math.abs(flow) > 0) {
+                bubbleData[t] = { vol, flow };
+                if (vol > maxVol) maxVol = vol;
             }
         });
 
-        const activeTickers = Object.keys(vals);
+        const activeTickers = Object.keys(bubbleData);
         
         // 2. Initialize Particles
         const container = containerRef.current;
@@ -490,16 +494,19 @@ const EtfBubbles: React.FC<{ currentData: any, allTickers: string[], colorMap: R
         const height = container.clientHeight;
 
         const newParticles = activeTickers.map(t => {
-            const val = vals[t];
-            // Radius proportional to sqrt of ABSOLUTE value
-            const radius = 15 + (Math.sqrt(Math.abs(val)) / Math.sqrt(maxAbsVal || 1)) * 55;
+            const data = bubbleData[t];
+            
+            // Radius proportional to sqrt of VOLUME (Area)
+            // Min size 20, Max size 65
+            const radius = 20 + (Math.sqrt(data.vol) / Math.sqrt(maxVol || 1)) * 55;
             
             // Reuse existing particle to keep position
             const existing = particlesRef.current.find(p => p.id === t);
             
             if (existing) {
                 existing.targetRadius = radius;
-                existing.val = val;
+                existing.vol = data.vol;
+                existing.flow = data.flow;
                 return existing;
             }
 
@@ -512,14 +519,15 @@ const EtfBubbles: React.FC<{ currentData: any, allTickers: string[], colorMap: R
                 radius: 0,
                 targetRadius: radius,
                 color: colorMap[t] || '#888',
-                val,
+                vol: data.vol,
+                flow: data.flow,
                 mass: radius
             };
         });
         
         particlesRef.current = newParticles;
 
-    }, [currentData, allTickers, colorMap]);
+    }, [currentFlowData, currentVolData, allTickers, colorMap]);
 
     useEffect(() => {
         const animate = () => {
@@ -596,8 +604,13 @@ const EtfBubbles: React.FC<{ currentData: any, allTickers: string[], colorMap: R
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
                 
-                if (p.val >= 0) {
-                    // Positive Flow: Solid Color
+                if (p.flow >= 0) {
+                    // Positive Flow: Solid Color (Using Ticker Color)
+                    // Or Green? The requirement says "Colors normally but pastel" or "Metalized"
+                    // Let's stick to the colorMap color if positive, or Green if requested.
+                    // User said: "vINCULA o aparecimento ao FLOW... Se negativo bolha com anel vermelho"
+                    // Interpretation: Positive = Normal (Color Map) / Negative = Hollow Red
+                    
                     ctx.fillStyle = p.color;
                     ctx.globalAlpha = 0.85;
                     ctx.fill();
@@ -680,7 +693,7 @@ const EtfBubbles: React.FC<{ currentData: any, allTickers: string[], colorMap: R
                 visible: true,
                 x: e.clientX,
                 y: e.clientY,
-                content: { name: found.id, flow: found.val }
+                content: { name: found.id, flow: found.flow, vol: found.vol }
             });
         } else {
             setTooltip(null);
@@ -708,6 +721,12 @@ const EtfBubbles: React.FC<{ currentData: any, allTickers: string[], colorMap: R
                         <span className="text-gray-400">Flow:</span> 
                         <span className={`font-mono font-bold ${tooltip.content.flow >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                             ${formatCompactNumber(tooltip.content.flow)}
+                        </span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                        <span className="text-gray-400">Vol:</span> 
+                        <span className="font-mono font-bold text-gray-200">
+                            ${formatCompactNumber(tooltip.content.vol)}
                         </span>
                     </div>
                 </div>,
@@ -796,6 +815,11 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void, item: D
   const [viewMode, setViewMode] = useState<ViewMode>('stacked');
 
   const [data, setData] = useState<any[]>([]);
+  
+  // New States for Simultaneous Data
+  const [flowsData, setFlowsData] = useState<any[]>([]);
+  const [volData, setVolData] = useState<any[]>([]);
+
   const [summaryData, setSummaryData] = useState<EtfFlowData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -810,14 +834,26 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void, item: D
     fetchEtfFlow().then(res => setSummaryData(res));
   }, []);
 
+  // Fetch Logic Updated: Always fetch what's needed, but track the "main" data for the chart separately if needed
+  // Actually, to support the table showing both Flow and Vol, we need both datasets loaded.
   useEffect(() => {
     setLoading(true);
-    fetchEtfDetailed(asset, metric).then(res => {
-      const arr = Array.isArray(res) ? res : [];
-      setData(arr);
-      // Set to last available date by default
-      setViewDateIndex(arr.length > 0 ? arr.length - 1 : -1);
-      setLoading(false);
+    
+    Promise.all([
+        fetchEtfDetailed(asset, 'flows'),
+        fetchEtfDetailed(asset, 'volume')
+    ]).then(([flows, vols]) => {
+        setFlowsData(flows || []);
+        setVolData(vols || []);
+        
+        // Determine which one is used for the Main Chart based on `metric` toggle
+        const primaryData = metric === 'flows' ? flows : vols;
+        const arr = Array.isArray(primaryData) ? primaryData : [];
+        setData(arr);
+        
+        // Set to last available date by default based on primary data
+        setViewDateIndex(arr.length > 0 ? arr.length - 1 : -1);
+        setLoading(false);
     });
   }, [asset, metric]);
 
@@ -871,12 +907,26 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void, item: D
       return { d1, d7, d30 };
   }, [data]);
 
-  const currentDayData = useMemo(() => {
-      if (viewDateIndex >= 0 && viewDateIndex < data.length) {
-          return data[viewDateIndex];
-      }
-      return null;
-  }, [data, viewDateIndex]);
+  // Derive Current Day Data for Table/Bubbles
+  // We need to sync Flow and Vol data by Date.
+  // Assuming arrays are sorted by date and roughly align, we try to match by timestamp.
+  const { currentFlowData, currentVolData } = useMemo(() => {
+      if (viewDateIndex < 0) return { currentFlowData: null, currentVolData: null };
+      
+      // Get date from primary data
+      const primaryItem = data[viewDateIndex];
+      if (!primaryItem) return { currentFlowData: null, currentVolData: null };
+
+      const targetDate = primaryItem.date;
+
+      // Find matching in Flows
+      const f = flowsData.find(d => Math.abs(d.date - targetDate) < 86400000); // 24h slack just in case
+      // Find matching in Vols
+      const v = volData.find(d => Math.abs(d.date - targetDate) < 86400000);
+
+      return { currentFlowData: f, currentVolData: v };
+
+  }, [data, flowsData, volData, viewDateIndex]);
 
   const handlePrevDay = () => setViewDateIndex(i => Math.max(0, i - 1));
   const handleNextDay = () => setViewDateIndex(i => Math.min(data.length - 1, i + 1));
@@ -994,10 +1044,10 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void, item: D
           <div className="grid grid-cols-12 gap-4" style={{ height: '620px', minHeight: '620px' }}>
               <div className="col-span-12 lg:col-span-2 overflow-hidden bg-gray-5 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 flex flex-col">
                   <MarketSharePanel 
-                    currentData={currentDayData} 
+                    currentFlowData={currentFlowData} 
+                    currentVolData={currentVolData}
                     allTickers={allTickers} 
                     colorMap={colorMap} 
-                    metric={metric} 
                     asset={asset}
                     stats={sidebarStats}
                     onPrev={handlePrevDay}
@@ -1015,7 +1065,12 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void, item: D
               <div className="col-span-12 lg:col-span-3 overflow-hidden bg-gray-5 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4 flex flex-col relative">
                   <h4 className="text-xs font-bold text-gray-500 uppercase mb-2 text-center tracking-widest">Share Volumétrico (Dia)</h4>
                   <div className="flex-1 min-h-0 relative bg-black/5 dark:bg-black/20 rounded-lg">
-                      <EtfBubbles currentData={currentDayData} allTickers={allTickers} colorMap={colorMap} />
+                      <EtfBubbles 
+                        currentFlowData={currentFlowData} 
+                        currentVolData={currentVolData} 
+                        allTickers={allTickers} 
+                        colorMap={colorMap} 
+                      />
                   </div>
               </div>
           </div>
