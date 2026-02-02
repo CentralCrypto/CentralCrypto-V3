@@ -1,8 +1,9 @@
+
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Highcharts from 'highcharts/highstock';
 import HC3D from 'highcharts/highcharts-3d';
 import HCWheelZoom from 'highcharts/modules/mouse-wheel-zoom';
-import { Loader2, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Loader2, AlertTriangle, ChevronDown, ChevronUp, Eye, EyeOff } from 'lucide-react';
 import { DashboardItem, Language } from '../../../types';
 import { fetchLongShortRatio, LsrData } from '../../../services/api';
 import { getTranslations } from '../../../locales';
@@ -154,8 +155,15 @@ export function LsrCockpitPage() {
   const [sortKey, setSortKey] = useState<'exchange' | 'longPct' | 'shortPct' | 'longUsd' | 'shortUsd' | 'totalUsd'>('totalUsd');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
+  // Series Toggles
+  const [showLongs, setShowLongs] = useState(true);
+  const [showShorts, setShowShorts] = useState(true);
+
   const pulseChartRef = useRef<Highcharts.Chart | null>(null);
   const barsChartRef = useRef<Highcharts.Chart | null>(null);
+  
+  // 3D Rotation State
+  const rotationStartRef = useRef<{ x: number, y: number, alpha: number, beta: number } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -309,6 +317,57 @@ export function LsrCockpitPage() {
     };
   }, [pulseCoin, tf]);
 
+  // Update Series Visibility without recreating chart
+  useEffect(() => {
+      if (barsChartRef.current) {
+          const chart = barsChartRef.current;
+          if (chart.series[0]) chart.series[0].setVisible(showLongs, false);
+          if (chart.series[1]) chart.series[1].setVisible(showShorts, false);
+          chart.redraw();
+      }
+  }, [showLongs, showShorts]);
+
+  // 3D Interaction Handlers
+  const handle3DMouseDown = (e: React.MouseEvent) => {
+      if (barsChartRef.current) {
+          const chart = barsChartRef.current;
+          e.preventDefault();
+          rotationStartRef.current = {
+              x: e.clientX,
+              y: e.clientY,
+              alpha: chart.options.chart?.options3d?.alpha || 10,
+              beta: chart.options.chart?.options3d?.beta || 18
+          };
+      }
+  };
+
+  const handle3DMouseMove = (e: React.MouseEvent) => {
+      if (rotationStartRef.current && barsChartRef.current) {
+          const start = rotationStartRef.current;
+          const chart = barsChartRef.current;
+          
+          const sensitivity = 5;
+          const newBeta = start.beta + (e.clientX - start.x) / sensitivity;
+          const newAlpha = start.alpha + (e.clientY - start.y) / sensitivity;
+
+          chart.update({
+              chart: {
+                  options3d: {
+                      alpha: Math.max(0, Math.min(60, newAlpha)), // Limit Elevation
+                      beta: newBeta
+                  }
+              }
+          }, false, false, false); // No redraw for performance
+          
+          // Request simple redraw frame
+          requestAnimationFrame(() => chart.redraw(false));
+      }
+  };
+
+  const handle3DMouseUp = () => {
+      rotationStartRef.current = null;
+  };
+
   useEffect(() => {
     if (loadingPulse || errorPulse) return;
     if (!pulseMetrics) return;
@@ -340,7 +399,7 @@ export function LsrCockpitPage() {
     pulseChartRef.current = Highcharts.chart('lsr-pulse-chart', {
       chart: {
         backgroundColor: 'transparent',
-        height: 620,
+        height: 520, // Reduced height
         animation: false,
         zooming: {
           mouseWheel: { enabled: true, sensitivity: 1.15 },
@@ -348,8 +407,8 @@ export function LsrCockpitPage() {
         },
         panning: { enabled: true, type: 'x' },
         panKey: 'shift',
-        spacingBottom: 56, 
-        marginBottom: 90
+        spacingBottom: 40, 
+        marginBottom: 80
       },
       title: { text: '' },
       credits: { enabled: false },
@@ -495,22 +554,28 @@ export function LsrCockpitPage() {
       iconUrl: r.iconUrl || ''
     }));
 
-    const LONG_PASTEL = 'rgba(167, 243, 208, 0.88)';
-    const SHORT_PASTEL = 'rgba(251, 182, 206, 0.88)';
+    // DARKER PASTEL COLORS
+    const LONG_PASTEL = 'rgba(34, 197, 94, 0.85)'; // Emerald 500, higher opacity
+    const SHORT_PASTEL = 'rgba(239, 68, 68, 0.85)'; // Red 500, higher opacity
 
     barsChartRef.current = Highcharts.chart('lsr-exchange-3d', {
       chart: {
         type: 'column',
         backgroundColor: 'transparent',
-        height: 740,
-        spacingBottom: 72,
-        marginBottom: 110,
+        height: 520, // Reduced from 740
+        spacingBottom: 50,
+        marginBottom: 90,
         options3d: {
           enabled: true,
           alpha: 10,
           beta: 18,
-          depth: 70,
-          viewDistance: 25
+          depth: 250, // Increased depth for better look
+          viewDistance: 25,
+          frame: {
+            bottom: { size: 1, color: 'rgba(255,255,255,0.05)' },
+            side: { size: 1, color: 'rgba(255,255,255,0.05)' },
+            back: { size: 1, color: 'rgba(255,255,255,0.05)' }
+          }
         }
       },
       title: { text: '' },
@@ -520,7 +585,7 @@ export function LsrCockpitPage() {
         enabled: true,
         align: 'center',
         verticalAlign: 'bottom',
-        margin: 18,
+        margin: 10,
         padding: 10,
         itemStyle: {
           color: 'rgba(255,255,255,0.75)',
@@ -536,19 +601,14 @@ export function LsrCockpitPage() {
         tickColor: 'rgba(255,255,255,0.08)',
         tickLength: 0,
         labels: {
-          useHTML: true,
+          useHTML: false, // Turned off HTML
+          style: {
+              color: 'rgba(255,255,255,0.60)',
+              fontSize: '10px',
+              fontWeight: '600'
+          },
           formatter: function () {
-            const name = String((this as any).value);
-            const icon = exchangeIconByName.get(name);
-            if (!icon) {
-              return `<div style="font-weight:400;color:rgba(255,255,255,0.70)">${name}</div>`;
-            }
-            return `
-              <div style="display:flex;align-items:center;justify-content:center;gap:8px">
-                <img src="${icon}" style="width:18px;height:18px;border-radius:5px;background:#fff;padding:1px" />
-                <span style="font-weight:400;color:rgba(255,255,255,0.70)">${name}</span>
-              </div>
-            `;
+             return String(this.value); // Just the name
           }
         }
       },
@@ -574,7 +634,7 @@ export function LsrCockpitPage() {
         shared: true,
         useHTML: true,
         borderWidth: 0,
-        backgroundColor: 'rgba(17, 24, 39, 0.92)',
+        backgroundColor: 'rgba(17, 24, 39, 0.95)',
         style: { color: '#fff' },
         headerFormat: '',
         pointFormat: '',
@@ -584,6 +644,13 @@ export function LsrCockpitPage() {
 
           const pLong = pts.find(p => p?.series?.name === 'Long');
           const pShort = pts.find(p => p?.series?.name === 'Short');
+          
+          // Get correct point to extract data from
+          const point = pLong ? pLong.point : (pShort ? pShort.point : null);
+          if (!point) return '';
+
+          const exName = point.exchange;
+          const icon = point.iconUrl;
 
           const longY = Number(pLong?.y ?? 0);
           const shortY = Number(pShort?.y ?? 0);
@@ -593,22 +660,19 @@ export function LsrCockpitPage() {
 
           const lsr = shortY > 0 ? (longY / shortY) : 0;
 
-          const exName = String(ctx.x);
-          const icon = exchangeIconByName.get(exName);
-
           const head = icon
             ? `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-                 <img src="${icon}" style="width:22px;height:22px;border-radius:6px;background:#fff;padding:1px" />
-                 <div style="font-weight:800">${exName}</div>
+                 <img src="${icon}" style="width:24px;height:24px;border-radius:6px;background:#fff;padding:1px" />
+                 <div style="font-weight:900;font-size:14px;text-transform:uppercase;">${exName}</div>
                </div>`
-            : `<div style="font-weight:800;margin-bottom:8px">${exName}</div>`;
+            : `<div style="font-weight:900;font-size:14px;text-transform:uppercase;margin-bottom:8px">${exName}</div>`;
 
           return `
             ${head}
-            <div>Long: <b>${longTxt}</b></div>
-            <div>Short: <b>${shortTxt}</b></div>
+            <div>Long: <b style="color:#4ade80">${longTxt}</b></div>
+            <div>Short: <b style="color:#f87171">${shortTxt}</b></div>
             <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.12)">
-              LSR: <b>${fmtLSR(lsr)}</b>
+              LSR: <b style="color:#dd9933">${fmtLSR(lsr)}</b>
             </div>
           `;
         }
@@ -616,11 +680,12 @@ export function LsrCockpitPage() {
 
       plotOptions: {
         column: {
-          depth: 35,
+          depth: 40, // Increased depth per column
           borderWidth: 0,
           stacking: 'normal',
-          groupPadding: 0.15,
-          pointPadding: 0.05
+          groupPadding: 0.1,
+          pointPadding: 0.05,
+          dataLabels: { enabled: false }
         },
         series: { animation: false }
       },
@@ -630,13 +695,13 @@ export function LsrCockpitPage() {
           name: 'Long',
           color: LONG_PASTEL,
           data: longData as any,
-          showInLegend: true
+          visible: showLongs
         },
         {
           name: 'Short',
           color: SHORT_PASTEL,
           data: shortData as any,
-          showInLegend: true
+          visible: showShorts
         }
       ]
     } as any);
@@ -673,8 +738,8 @@ export function LsrCockpitPage() {
             </p>
             <div className="flex flex-wrap gap-2 mt-3">
               <Badge>Pulse: OI + Vol + Liq + LSR</Badge>
-              <Badge>3D: Stack Long+Short</Badge>
-              <Badge>Tooltip: Logo + Valores + LSR</Badge>
+              <Badge>3D: Stack Long+Short (Draggable)</Badge>
+              <Badge>Toggle: Click Box to Filter</Badge>
             </div>
           </div>
 
@@ -749,9 +814,9 @@ export function LsrCockpitPage() {
                 </div>
               </div>
             ) : loadingPulse ? (
-              <Skeleton h={620} />
+              <Skeleton h={520} />
             ) : (
-              <div id="lsr-pulse-chart" className="min-h-[620px]" />
+              <div id="lsr-pulse-chart" className="min-h-[520px]" />
             )}
 
             <div className="mt-3 text-xs text-white/50">
@@ -759,8 +824,8 @@ export function LsrCockpitPage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 pb-10 overflow-visible">
-            <div className="flex items-center justify-between mb-3">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 pb-10 overflow-visible flex flex-col">
+            <div className="flex items-center justify-between mb-3 shrink-0">
               <div>
                 <div className="text-sm font-black text-white/80 uppercase tracking-widest">Exchange 3D</div>
                 <div className="text-xs text-white/50 mt-1">
@@ -770,32 +835,61 @@ export function LsrCockpitPage() {
               {loadingExchange && <Loader2 className="animate-spin text-[#dd9933]" size={18} />}
             </div>
 
-            {errorExchange ? (
-              <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-200 flex gap-2">
-                <AlertTriangle size={18} className="mt-0.5" />
-                <div className="text-sm">
-                  <div className="font-black">Falha no snapshot de Exchanges</div>
-                  <div className="opacity-80">{errorExchange}</div>
+            <div className="flex-1 min-h-0 relative">
+                {errorExchange ? (
+                <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-200 flex gap-2">
+                    <AlertTriangle size={18} className="mt-0.5" />
+                    <div className="text-sm">
+                    <div className="font-black">Falha no snapshot de Exchanges</div>
+                    <div className="opacity-80">{errorExchange}</div>
+                    </div>
                 </div>
-              </div>
-            ) : loadingExchange ? (
-              <Skeleton h={740} />
-            ) : (
-              <div id="lsr-exchange-3d" className="min-h-[740px]" />
-            )}
+                ) : loadingExchange ? (
+                <Skeleton h={520} />
+                ) : (
+                <div 
+                    id="lsr-exchange-3d" 
+                    className="min-h-[520px] cursor-move"
+                    onMouseDown={handle3DMouseDown}
+                    onMouseMove={handle3DMouseMove}
+                    onMouseUp={handle3DMouseUp}
+                    onMouseLeave={handle3DMouseUp}
+                />
+                )}
+                <div className="absolute top-2 right-2 text-[10px] bg-black/40 px-2 py-1 rounded text-white/50 pointer-events-none">
+                    Arraste para girar
+                </div>
+            </div>
 
             {agg && (
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <div className="rounded-xl bg-black/20 border border-white/10 p-3">
-                  <div className="text-xs text-white/50 uppercase font-black tracking-widest">Aggregated Long</div>
-                  <div className="text-lg font-black mt-1">{fmtPct(agg.buyRatio)}</div>
+              <div className="mt-4 grid grid-cols-2 gap-3 shrink-0">
+                <button 
+                    onClick={() => setShowLongs(!showLongs)}
+                    className={`rounded-xl border p-3 transition-all text-left group ${showLongs ? 'bg-emerald-900/20 border-emerald-500/30' : 'bg-black/20 border-white/5 opacity-50'}`}
+                >
+                  <div className="flex justify-between items-center">
+                    <div className="text-xs text-emerald-400 uppercase font-black tracking-widest flex items-center gap-2">
+                        {showLongs ? <Eye size={12}/> : <EyeOff size={12}/>} Aggregated Long
+                    </div>
+                    {showLongs && <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>}
+                  </div>
+                  <div className={`text-lg font-black mt-1 ${showLongs ? 'text-white' : 'text-gray-500'}`}>{fmtPct(agg.buyRatio)}</div>
                   <div className="text-sm text-white/70">{fmtUSD(agg.buyVolUsd)}</div>
-                </div>
-                <div className="rounded-xl bg-black/20 border border-white/10 p-3">
-                  <div className="text-xs text-white/50 uppercase font-black tracking-widest">Aggregated Short</div>
-                  <div className="text-lg font-black mt-1">{fmtPct(agg.sellRatio)}</div>
+                </button>
+                
+                <button 
+                    onClick={() => setShowShorts(!showShorts)}
+                    className={`rounded-xl border p-3 transition-all text-left group ${showShorts ? 'bg-rose-900/20 border-rose-500/30' : 'bg-black/20 border-white/5 opacity-50'}`}
+                >
+                  <div className="flex justify-between items-center">
+                     <div className="text-xs text-rose-400 uppercase font-black tracking-widest flex items-center gap-2">
+                        {showShorts ? <Eye size={12}/> : <EyeOff size={12}/>} Aggregated Short
+                     </div>
+                     {showShorts && <div className="w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]"></div>}
+                  </div>
+                  <div className={`text-lg font-black mt-1 ${showShorts ? 'text-white' : 'text-gray-500'}`}>{fmtPct(agg.sellRatio)}</div>
                   <div className="text-sm text-white/70">{fmtUSD(agg.sellVolUsd)}</div>
-                </div>
+                </button>
               </div>
             )}
           </div>
@@ -853,8 +947,8 @@ export function LsrCockpitPage() {
                               <div className="font-black text-white">{r.exchange}</div>
                             </div>
                           </td>
-                          <td className="p-3 text-right font-black text-emerald-300">{fmtPct(r.buyRatio)}</td>
-                          <td className="p-3 text-right font-black text-rose-300">{fmtPct(r.sellRatio)}</td>
+                          <td className="p-3 text-right font-black text-emerald-400">{fmtPct(r.buyRatio)}</td>
+                          <td className="p-3 text-right font-black text-rose-400">{fmtPct(r.sellRatio)}</td>
                           <td className="p-3 text-right text-white/80 font-mono">{fmtUSD(r.buyVolUsd)}</td>
                           <td className="p-3 text-right text-white/80 font-mono">{fmtUSD(r.sellVolUsd)}</td>
                           <td className="p-3 text-right text-white font-mono font-black">{fmtUSD(total)}</td>
