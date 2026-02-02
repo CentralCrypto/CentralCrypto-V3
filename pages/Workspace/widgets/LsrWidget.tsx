@@ -3,10 +3,11 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Highcharts from 'highcharts/highstock';
 import HC3D from 'highcharts/highcharts-3d';
 import HCWheelZoom from 'highcharts/modules/mouse-wheel-zoom';
-import { Loader2, AlertTriangle, ChevronDown, ChevronUp, Eye, EyeOff, GripVertical, ChevronsUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Loader2, AlertTriangle, ChevronDown, ChevronUp, Eye, EyeOff, GripVertical, ChevronsUpDown, ArrowUp, ArrowDown, TrendingUp, TrendingDown } from 'lucide-react';
 import { DashboardItem, Language } from '../../../types';
 import { fetchLongShortRatio, LsrData } from '../../../services/api';
 import { getTranslations } from '../../../locales';
+import { useBinanceWS } from '../../../services/BinanceWebSocketContext';
 
 // DnD Kit
 import {
@@ -58,6 +59,7 @@ type ExchangeSnapshot = {
 };
 
 type Lsr20Coin = {
+  id?: string;
   symbol: string;
   price?: number;
   marketCap?: number;
@@ -71,7 +73,6 @@ type Lsr20Coin = {
   ls12h?: number;
   ls24h?: number;
   iconUrl?: string;
-  // Outros campos ignorados conforme pedido
 };
 
 const SYMBOLS: Sym[] = ['BTC', 'ETH', 'SOL'];
@@ -108,6 +109,12 @@ const Badge = ({ children }: { children: React.ReactNode }) => (
   </span>
 );
 
+// Colors matching the boxes exactly (Emerald 500 / Rose 500) but with opacity for 3D bars
+const COLOR_LONG_RGBA = 'rgba(16, 185, 129, 0.5)'; // Emerald 500 @ 50%
+const COLOR_SHORT_RGBA = 'rgba(244, 63, 94, 0.5)'; // Rose 500 @ 50%
+const COLOR_LONG_HEX = '#10b981';
+const COLOR_SHORT_HEX = '#f43f5e';
+
 async function fetchJsonStrict(url: string): Promise<any> {
   const res = await fetch(url, { cache: 'no-store' });
   const ct = res.headers.get('content-type') || '';
@@ -123,9 +130,43 @@ function pickLsrByTf(coin: Lsr20Coin, tf: Tf) {
   return Number(coin.ls24h) || 0;
 }
 
-// CORES EXATAS DOS BOXES (Emerald-500 / Rose-500)
-const COLOR_LONG = '#10b981';
-const COLOR_SHORT = '#f43f5e';
+// --- SUB-COMPONENT: Live Coin Row with Flashing & WS ---
+const LsrCoinRow = React.memo(({ coin, colOrder, renderCell }: { coin: Lsr20Coin, colOrder: string[], renderCell: (r: any, c: string, livePrice?: number) => React.ReactNode }) => {
+    const { tickers } = useBinanceWS();
+    const [displayPrice, setDisplayPrice] = useState(coin.price || 0);
+    const [flashClass, setFlashClass] = useState('');
+    const prevPriceRef = useRef(displayPrice);
+
+    useEffect(() => {
+        // Tenta achar o ticker. Símbolo geralmente vem como 'BTC', então add 'USDT'
+        const tickerKey = `${coin.symbol.toUpperCase()}USDT`;
+        const liveData = tickers[tickerKey];
+        
+        if (liveData) {
+            const newPrice = parseFloat(liveData.c);
+            if (!isNaN(newPrice)) {
+                setDisplayPrice(newPrice);
+            }
+        }
+    }, [tickers, coin.symbol]);
+
+    // Flashing Logic
+    useEffect(() => {
+        if (prevPriceRef.current !== displayPrice) {
+            const isUp = displayPrice > prevPriceRef.current;
+            setFlashClass(isUp ? 'bg-green-500/10' : 'bg-red-500/10');
+            prevPriceRef.current = displayPrice;
+            const timer = setTimeout(() => setFlashClass(''), 300);
+            return () => clearTimeout(timer);
+        }
+    }, [displayPrice]);
+
+    return (
+        <tr className={`transition-colors duration-300 ${flashClass} hover:bg-white/5`}>
+            {colOrder.map(colId => renderCell(coin, colId, displayPrice))}
+        </tr>
+    );
+});
 
 export function LsrCockpitPage() {
   const [symbol, setSymbol] = useState<Sym>('BTC');
@@ -158,7 +199,6 @@ export function LsrCockpitPage() {
   const pulseChartRef = useRef<Highcharts.Chart | null>(null);
   const barsChartRef = useRef<Highcharts.Chart | null>(null);
   
-  // 3D Rotation State
   const rotationStartRef = useRef<{ x: number, y: number, alpha: number, beta: number } | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -308,17 +348,18 @@ export function LsrCockpitPage() {
       chart: {
         type: 'column',
         backgroundColor: 'transparent',
-        height: 340, // REDUZIDO
-        spacingBottom: 10,
-        marginBottom: 70,
+        height: 340,
+        margin: [0, 0, 40, 0], // Elimina espaços extras, deixa só embaixo pros labels
+        spacingBottom: 0,
         options3d: {
           enabled: true,
           alpha: 10, beta: 18, depth: 250, viewDistance: 25,
           frame: { bottom: { size: 1, color: 'rgba(255,255,255,0.05)' }, side: { size: 1, color: 'rgba(255,255,255,0.05)' }, back: { size: 1, color: 'rgba(255,255,255,0.05)' } }
         }
       },
-      title: { text: null }, credits: { enabled: false },
-      legend: { enabled: true, align: 'center', verticalAlign: 'bottom', itemStyle: { color: 'rgba(255,255,255,0.75)' } },
+      title: { text: null }, 
+      credits: { enabled: false },
+      legend: { enabled: false }, // ELIMINA A LEGENDA DO CHART
       xAxis: {
         categories: exchangeRows.map(x => x.exchange),
         gridLineWidth: 0,
@@ -328,9 +369,8 @@ export function LsrCockpitPage() {
         min: 0,
         title: { text: null },
         gridLineColor: 'rgba(255,255,255,0.05)',
-        labels: { formatter: function () { const v = Number(this.value); return barsMode === 'ratio' ? `${v}%` : fmtUSD(v); }, style: { color: 'rgba(255,255,255,0.5)' } }
+        labels: { enabled: false } // Oculta eixo Y para limpar visual
       },
-      // IMPORTANT: DISABLE NAVIGATOR/SCROLLBAR TO FIX OVERLAP
       navigator: { enabled: false },
       scrollbar: { enabled: false },
       rangeSelector: { enabled: false },
@@ -351,15 +391,15 @@ export function LsrCockpitPage() {
             : `<b>${point.exchange}</b>`;
 
           return `${head}
-            <div>Long: <b style="color:${COLOR_LONG}">${barsMode==='ratio'?lVal.toFixed(2)+'%':fmtUSD(lVal)}</b></div>
-            <div>Short: <b style="color:${COLOR_SHORT}">${barsMode==='ratio'?sVal.toFixed(2)+'%':fmtUSD(sVal)}</b></div>
+            <div>Long: <b style="color:${COLOR_LONG_HEX}">${barsMode==='ratio'?lVal.toFixed(2)+'%':fmtUSD(lVal)}</b></div>
+            <div>Short: <b style="color:${COLOR_SHORT_HEX}">${barsMode==='ratio'?sVal.toFixed(2)+'%':fmtUSD(sVal)}</b></div>
             <div style="margin-top:4px;border-top:1px solid rgba(255,255,255,0.1)">LSR: <b style="color:#dd9933">${fmtLSR(lsr)}</b></div>`;
         }
       },
       plotOptions: { column: { depth: 40, stacking: 'normal', borderWidth: 0, groupPadding: 0.1 } },
       series: [
-        { name: 'Long', color: COLOR_LONG, data: longData, visible: showLongs },
-        { name: 'Short', color: COLOR_SHORT, data: shortData, visible: showShorts }
+        { name: 'Long', color: COLOR_LONG_RGBA, data: longData, visible: showLongs },
+        { name: 'Short', color: COLOR_SHORT_RGBA, data: shortData, visible: showShorts }
       ]
     } as any);
   }, [loadingExchange, exchangeRows, barsMode]);
@@ -402,7 +442,7 @@ export function LsrCockpitPage() {
         );
   };
 
-  const renderExchangeCell = (r: any, colId: string) => {
+  const renderExchangeCell = (r: any, colId: string, _lp?: number) => {
       const lsr = r.sellVolUsd > 0 ? r.buyVolUsd/r.sellVolUsd : 0;
       switch(colId) {
           case 'exchange': return (
@@ -413,8 +453,8 @@ export function LsrCockpitPage() {
                   </div>
               </td>
           );
-          case 'longPct': return <td className="p-3 text-right font-black" style={{color: COLOR_LONG}}>{fmtPct(r.buyRatio)}</td>;
-          case 'shortPct': return <td className="p-3 text-right font-black" style={{color: COLOR_SHORT}}>{fmtPct(r.sellRatio)}</td>;
+          case 'longPct': return <td className="p-3 text-right font-black" style={{color: COLOR_LONG_HEX}}>{fmtPct(r.buyRatio)}</td>;
+          case 'shortPct': return <td className="p-3 text-right font-black" style={{color: COLOR_SHORT_HEX}}>{fmtPct(r.sellRatio)}</td>;
           case 'lsr': return <td className="p-3 text-right font-black font-mono text-[#dd9933]">{fmtLSR(lsr)}</td>;
           case 'longUsd': return <td className="p-3 text-right font-mono text-gray-400 text-xs">{fmtUSD(r.buyVolUsd)}</td>;
           case 'shortUsd': return <td className="p-3 text-right font-mono text-gray-400 text-xs">{fmtUSD(r.sellVolUsd)}</td>;
@@ -423,13 +463,22 @@ export function LsrCockpitPage() {
       }
   };
 
-  const renderCoinCell = (r: any, colId: string) => {
+  const renderCoinCell = (r: Lsr20Coin, colId: string, livePrice?: number) => {
+      const getTrendArrow = (val: number, prevTFVal?: number) => {
+          if (!prevTFVal) return null;
+          if (val > prevTFVal) return <ArrowUp size={10} className="text-green-500 inline ml-1" />;
+          if (val < prevTFVal) return <ArrowDown size={10} className="text-red-500 inline ml-1" />;
+          return null;
+      };
+
       const lsrColor = (v: number) => {
           if (v >= 2) return 'text-red-500';
           if (v <= 0.8) return 'text-green-500';
           return 'text-gray-400';
       };
       
+      const priceToUse = livePrice || r.price || 0;
+
       switch(colId) {
           case 'asset': return (
               <td className="p-3">
@@ -439,14 +488,14 @@ export function LsrCockpitPage() {
                   </div>
               </td>
           );
-          case 'price': return <td className="p-3 text-right font-mono font-bold text-gray-300">${r.price < 1 ? r.price.toFixed(4) : r.price.toLocaleString()}</td>;
-          case 'ls5m': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls5m)}`}>{fmtLSR(r.ls5m)}</td>;
-          case 'ls15m': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls15m)}`}>{fmtLSR(r.ls15m)}</td>;
-          case 'ls30m': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls30m)}`}>{fmtLSR(r.ls30m)}</td>;
-          case 'ls1h': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls1h)}`}>{fmtLSR(r.ls1h)}</td>;
-          case 'ls4h': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls4h)}`}>{fmtLSR(r.ls4h)}</td>;
-          case 'ls12h': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls12h)}`}>{fmtLSR(r.ls12h)}</td>;
-          case 'ls24h': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls24h)}`}>{fmtLSR(r.ls24h)}</td>;
+          case 'price': return <td className="p-3 text-right font-mono font-bold text-gray-300 transition-colors">${priceToUse < 1 ? priceToUse.toFixed(4) : priceToUse.toLocaleString()}</td>;
+          case 'ls5m': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls5m||0)}`}>{fmtLSR(r.ls5m||0)}{getTrendArrow(r.ls5m||0, r.ls15m)}</td>;
+          case 'ls15m': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls15m||0)}`}>{fmtLSR(r.ls15m||0)}{getTrendArrow(r.ls15m||0, r.ls30m)}</td>;
+          case 'ls30m': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls30m||0)}`}>{fmtLSR(r.ls30m||0)}{getTrendArrow(r.ls30m||0, r.ls1h)}</td>;
+          case 'ls1h': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls1h||0)}`}>{fmtLSR(r.ls1h||0)}{getTrendArrow(r.ls1h||0, r.ls4h)}</td>;
+          case 'ls4h': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls4h||0)}`}>{fmtLSR(r.ls4h||0)}{getTrendArrow(r.ls4h||0, r.ls12h)}</td>;
+          case 'ls12h': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls12h||0)}`}>{fmtLSR(r.ls12h||0)}{getTrendArrow(r.ls12h||0, r.ls24h)}</td>;
+          case 'ls24h': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls24h||0)}`}>{fmtLSR(r.ls24h||0)}</td>;
           default: return <td className="p-3"></td>;
       }
   };
@@ -502,16 +551,25 @@ export function LsrCockpitPage() {
                 }
             </div>
             {agg && (
-              <div className="mt-4 grid grid-cols-2 gap-3 shrink-0">
-                <button onClick={() => setShowLongs(!showLongs)} className={`rounded-xl border p-3 transition-all text-left group ${showLongs ? 'bg-emerald-900/20 border-emerald-500/30' : 'bg-black/20 border-white/5 opacity-50'}`}>
-                  <div className="flex justify-between items-center"><div className="text-xs text-emerald-400 uppercase font-black tracking-widest flex items-center gap-2">{showLongs ? <Eye size={12}/> : <EyeOff size={12}/>} Aggregated Long</div>{showLongs && <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>}</div>
-                  <div className={`text-lg font-black mt-1 ${showLongs ? 'text-white' : 'text-gray-500'}`}>{fmtPct(agg.buyRatio)}</div>
-                  <div className="text-sm text-white/70">{fmtUSD(agg.buyVolUsd)}</div>
+              <div className="mt-2 grid grid-cols-2 gap-3 shrink-0">
+                <button onClick={() => setShowLongs(!showLongs)} className={`rounded-xl border px-3 py-2 transition-all text-left group flex items-center justify-between ${showLongs ? 'bg-emerald-900/20 border-emerald-500/30' : 'bg-black/20 border-white/5 opacity-50'}`}>
+                  <div className="flex items-center gap-2">
+                      <div className="flex flex-col">
+                          <div className="text-[10px] text-emerald-400 uppercase font-black tracking-widest flex items-center gap-1">{showLongs ? <Eye size={10}/> : <EyeOff size={10}/>} Long</div>
+                          <div className={`text-lg font-black leading-none mt-0.5 ${showLongs ? 'text-white' : 'text-gray-500'}`}>{fmtPct(agg.buyRatio)}</div>
+                      </div>
+                  </div>
+                  <div className="text-xs text-white/50 font-mono bg-black/20 px-2 py-1 rounded">{fmtUSD(agg.buyVolUsd)}</div>
                 </button>
-                <button onClick={() => setShowShorts(!showShorts)} className={`rounded-xl border p-3 transition-all text-left group ${showShorts ? 'bg-rose-900/20 border-rose-500/30' : 'bg-black/20 border-white/5 opacity-50'}`}>
-                  <div className="flex justify-between items-center"><div className="text-xs text-rose-400 uppercase font-black tracking-widest flex items-center gap-2">{showShorts ? <Eye size={12}/> : <EyeOff size={12}/>} Aggregated Short</div>{showShorts && <div className="w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]"></div>}</div>
-                  <div className={`text-lg font-black mt-1 ${showShorts ? 'text-white' : 'text-gray-500'}`}>{fmtPct(agg.sellRatio)}</div>
-                  <div className="text-sm text-white/70">{fmtUSD(agg.sellVolUsd)}</div>
+                
+                <button onClick={() => setShowShorts(!showShorts)} className={`rounded-xl border px-3 py-2 transition-all text-left group flex items-center justify-between ${showShorts ? 'bg-rose-900/20 border-rose-500/30' : 'bg-black/20 border-white/5 opacity-50'}`}>
+                  <div className="flex items-center gap-2">
+                      <div className="flex flex-col">
+                          <div className="text-[10px] text-rose-400 uppercase font-black tracking-widest flex items-center gap-1">{showShorts ? <Eye size={10}/> : <EyeOff size={10}/>} Short</div>
+                          <div className={`text-lg font-black leading-none mt-0.5 ${showShorts ? 'text-white' : 'text-gray-500'}`}>{fmtPct(agg.sellRatio)}</div>
+                      </div>
+                  </div>
+                  <div className="text-xs text-white/50 font-mono bg-black/20 px-2 py-1 rounded">{fmtUSD(agg.sellVolUsd)}</div>
                 </button>
               </div>
             )}
@@ -550,7 +608,7 @@ export function LsrCockpitPage() {
                       sortedData.map((r: any) => <tr key={r.exchange} className="hover:bg-white/5 transition">{exColOrder.map(c => renderExchangeCell(r, c))}</tr>)
                   ) : (
                       loadingPulse ? <tr><td colSpan={coinColOrder.length} className="p-8 text-center"><Loader2 className="animate-spin mx-auto text-[#dd9933]" /></td></tr> :
-                      sortedData.map((r: any) => <tr key={r.symbol} className="hover:bg-white/5 transition">{coinColOrder.map(c => renderCoinCell(r, c))}</tr>)
+                      sortedData.map((r: any) => <LsrCoinRow key={r.symbol} coin={r} colOrder={coinColOrder} renderCell={renderCoinCell} />)
                   )}
                 </tbody>
               </table>
