@@ -117,35 +117,49 @@ export const getCandidateLogoUrls = (coin: { id: string; symbol?: string; image?
   const sym = coin?.symbol ? String(coin.symbol).toLowerCase() : '';
   const urls: string[] = [];
 
-  if (!id && !sym) return [SITE_LOGO];
+  // Se nada foi passado, fallback direto
+  if (!id && !sym && !coin.image) return [SITE_LOGO];
 
-  // 1) cache validado
+  // 1) Cache validado (memória)
   if (id && validatedLogoCache.has(id)) return [validatedLogoCache.get(id)!];
 
-  // 2) local exato (manifest)
+  // 2) Local exato (via manifest.json se houver)
   if (id && localUrlById[id]) urls.push(localUrlById[id]);
 
-  // 3) Chute Local por ID (Plural & Singular)
+  // 3) Chute Local por ID: webp -> png -> jpg -> jpeg
   if (id) {
+      // Plural folder
       urls.push(`${VPS_LOGO_BASE}/${id}.webp`);
-      urls.push(`${VPS_LOGO_BASE_ALT}/${id}.webp`);
       urls.push(`${VPS_LOGO_BASE}/${id}.png`);
+      urls.push(`${VPS_LOGO_BASE}/${id}.jpg`);
+      urls.push(`${VPS_LOGO_BASE}/${id}.jpeg`);
+      // Singular folder
+      urls.push(`${VPS_LOGO_BASE_ALT}/${id}.webp`);
       urls.push(`${VPS_LOGO_BASE_ALT}/${id}.png`);
+      urls.push(`${VPS_LOGO_BASE_ALT}/${id}.jpg`);
+      urls.push(`${VPS_LOGO_BASE_ALT}/${id}.jpeg`);
   }
 
-  // 4) Chute Local por Símbolo (Plural & Singular) - Importante para casos onde ID != Filename
+  // 4) Chute Local por Símbolo: webp -> png -> jpg -> jpeg
   if (sym && sym !== id) {
       urls.push(`${VPS_LOGO_BASE}/${sym}.webp`);
-      urls.push(`${VPS_LOGO_BASE_ALT}/${sym}.webp`);
       urls.push(`${VPS_LOGO_BASE}/${sym}.png`);
+      urls.push(`${VPS_LOGO_BASE}/${sym}.jpg`);
+      urls.push(`${VPS_LOGO_BASE}/${sym}.jpeg`);
+
+      urls.push(`${VPS_LOGO_BASE_ALT}/${sym}.webp`);
       urls.push(`${VPS_LOGO_BASE_ALT}/${sym}.png`);
+      urls.push(`${VPS_LOGO_BASE_ALT}/${sym}.jpg`);
+      urls.push(`${VPS_LOGO_BASE_ALT}/${sym}.jpeg`);
   }
 
-  // 5) Remoto (map ou campo do objeto)
-  if (id && remoteUrlById[id]) urls.push(remoteUrlById[id]);
+  // 5) Imagem explícita no objeto (vindo do JSON da API)
   if (coin.image && isHttp(coin.image)) urls.push(coin.image);
 
-  // 6) Fallback Site
+  // 6) Remoto (map carregado do coins_min.json)
+  if (id && remoteUrlById[id]) urls.push(remoteUrlById[id]);
+
+  // 7) Fallback Site
   urls.push(SITE_LOGO);
 
   // Remove duplicadas mantendo a ordem de prioridade

@@ -240,7 +240,8 @@ export function LsrCockpitPage() {
             symbol: String(x.symbol).toUpperCase(),
             price: Number(x.price),
             ls5m: Number(x.ls5m), ls15m: Number(x.ls15m), ls30m: Number(x.ls30m),
-            ls1h: Number(x.ls1h), ls4h: Number(x.ls4h), ls12h: Number(x.ls12h), ls24h: Number(x.ls24h)
+            ls1h: Number(x.ls1h), ls4h: Number(x.ls4h), ls12h: Number(x.ls12h), ls24h: Number(x.ls24h),
+            iconUrl: x.iconUrl || x.image || x.logo // Capture image URL from any probable field
         })) as Lsr20Coin[];
         setTopCoins(cleaned);
       } catch (e: any) {
@@ -546,7 +547,7 @@ export function LsrCockpitPage() {
           case 'asset': return (
               <td className="p-3">
                   <div className="flex items-center gap-3">
-                      <CoinLogo coin={{id: r.id || r.symbol.toLowerCase(), symbol: r.symbol}} className="w-6 h-6 rounded-full" />
+                      <CoinLogo coin={{id: r.id || r.symbol.toLowerCase(), symbol: r.symbol, image: r.iconUrl}} className="w-6 h-6 rounded-full" />
                       <div className="flex flex-col"><span className="font-bold text-white leading-none">{r.symbol}</span></div>
                   </div>
               </td>
@@ -706,7 +707,7 @@ export function LsrCockpitPage() {
   );
 }
 
-// === LsrGridWidget (Minimized). ===
+// === LsrGridWidget (Minimized) ===
 const LsrGridWidget: React.FC<{ language: Language }> = ({ language }) => {
   const [symbol, setSymbol] = useState('BTCUSDT');
   const [period, setPeriod] = useState('5m');
