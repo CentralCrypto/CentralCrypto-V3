@@ -79,6 +79,33 @@ type Lsr20Coin = {
 const SYMBOLS: Sym[] = ['BTC', 'ETH', 'SOL'];
 const TFS: Tf[] = ['5m', '1h', '12h', '1d'];
 
+// Mapping for local files (symbol -> filename slug)
+const SLUG_MAP: Record<string, string> = {
+    'BTC': 'bitcoin',
+    'ETH': 'ethereum',
+    'SOL': 'solana',
+    'XRP': 'ripple',
+    'DOGE': 'dogecoin',
+    'ADA': 'cardano',
+    'AVAX': 'avalanche-2',
+    'DOT': 'polkadot',
+    'TRX': 'tron',
+    'LINK': 'chainlink',
+    'LTC': 'litecoin',
+    'BCH': 'bitcoin-cash',
+    'NEAR': 'near',
+    'UNI': 'uniswap',
+    'ICP': 'internet-computer',
+    'APT': 'aptos',
+    'FIL': 'filecoin',
+    'ATOM': 'cosmos',
+    'ARB': 'arbitrum',
+    'OP': 'optimism',
+    'INJ': 'injective',
+    'RNDR': 'render-token',
+    'PEPE': 'pepe'
+};
+
 const cachePathForExchange = (sym: Sym, tf: Tf) => `/cachecko/lsr-exchange-${sym.toLowerCase()}-${tf}.json`;
 const cachePathForTopCoins = () => `/cachecko/lsr-20-coins.json`;
 
@@ -236,7 +263,8 @@ export function LsrCockpitPage() {
         
         const cleaned = arr.map(x => ({
             ...x,
-            id: x.id || String(x.symbol).toLowerCase(),
+            // Try to map symbol to slug for local files, or fallback to id/lowercase symbol
+            id: x.id || SLUG_MAP[String(x.symbol).toUpperCase()] || String(x.symbol).toLowerCase(),
             symbol: String(x.symbol).toUpperCase(),
             price: Number(x.price),
             ls5m: Number(x.ls5m), ls15m: Number(x.ls15m), ls30m: Number(x.ls30m),
@@ -543,11 +571,19 @@ export function LsrCockpitPage() {
       
       const priceToUse = livePrice || r.price || 0;
 
+      // Ensure CoinLogo receives the id/symbol that maps to local files if possible
+      // r.id already normalized in the fetch effect
+      const coinObj = { 
+          id: r.id || r.symbol.toLowerCase(), 
+          symbol: r.symbol, 
+          image: r.iconUrl 
+      };
+
       switch(colId) {
           case 'asset': return (
               <td className="p-3">
                   <div className="flex items-center gap-3">
-                      <CoinLogo coin={{id: r.id || r.symbol.toLowerCase(), symbol: r.symbol, image: r.iconUrl}} className="w-6 h-6 rounded-full" />
+                      <CoinLogo coin={coinObj} className="w-6 h-6 rounded-full" />
                       <div className="flex flex-col"><span className="font-bold text-white leading-none">{r.symbol}</span></div>
                   </div>
               </td>
