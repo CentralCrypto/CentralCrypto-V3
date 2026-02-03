@@ -1,3 +1,4 @@
+
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Highcharts from 'highcharts/highstock';
 import HC3D from 'highcharts/highcharts-3d';
@@ -606,7 +607,6 @@ export function LsrCockpitPage() {
             </div>
 
             {agg && (
-              {/* ↓↓ AJUSTE: encosta os boxes (mt-1) */}
               <div className="mt-1 grid grid-cols-2 gap-3 shrink-0">
                 <button onClick={() => setShowLongs(!showLongs)} className={`rounded-xl border px-3 py-2 transition-all text-left group flex items-center justify-between ${showLongs ? 'bg-emerald-900/20 border-emerald-500/30' : 'bg-black/20 border-white/5 opacity-50'}`}>
                   <div className="flex items-center gap-2">
@@ -678,7 +678,7 @@ export function LsrCockpitPage() {
   );
 }
 
-// === LsrGridWidget (Minimized) .===
+// === LsrGridWidget (Minimized) ===
 const LsrGridWidget: React.FC<{ language: Language }> = ({ language }) => {
   const [symbol, setSymbol] = useState('BTCUSDT');
   const [period, setPeriod] = useState('5m');
