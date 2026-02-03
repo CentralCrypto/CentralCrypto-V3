@@ -1,4 +1,3 @@
-
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Highcharts from 'highcharts/highstock';
 import HC3D from 'highcharts/highcharts-3d';
@@ -8,6 +7,7 @@ import { DashboardItem, Language } from '../../../types';
 import { fetchLongShortRatio, LsrData } from '../../../services/api';
 import { getTranslations } from '../../../locales';
 import { useBinanceWS } from '../../../services/BinanceWebSocketContext';
+import CoinLogo from '../../../components/CoinLogo';
 
 // DnD Kit
 import {
@@ -131,7 +131,8 @@ function pickLsrByTf(coin: Lsr20Coin, tf: Tf) {
 }
 
 // --- SUB-COMPONENT: Live Coin Row with Flashing & WS ---
-const LsrCoinRow = React.memo(({ coin, colOrder, renderCell }: { coin: Lsr20Coin, colOrder: string[], renderCell: (r: any, c: string, livePrice?: number) => React.ReactNode }) => {
+// Flash class agora passado para o renderCell, não no TR
+const LsrCoinRow = React.memo(({ coin, colOrder, renderCell }: { coin: Lsr20Coin, colOrder: string[], renderCell: (r: any, c: string, livePrice?: number, flashClass?: string) => React.ReactNode }) => {
     const { tickers } = useBinanceWS();
     const [displayPrice, setDisplayPrice] = useState(coin.price || 0);
     const [flashClass, setFlashClass] = useState('');
@@ -150,11 +151,12 @@ const LsrCoinRow = React.memo(({ coin, colOrder, renderCell }: { coin: Lsr20Coin
         }
     }, [tickers, coin.symbol]);
 
-    // Flashing Logic
+    // Flashing Logic - Scoped to Price Cell
     useEffect(() => {
         if (prevPriceRef.current !== displayPrice) {
             const isUp = displayPrice > prevPriceRef.current;
-            setFlashClass(isUp ? 'bg-green-500/10' : 'bg-red-500/10');
+            // Cores de texto ou background leve apenas no preço
+            setFlashClass(isUp ? 'text-green-400 bg-green-900/20' : 'text-red-400 bg-red-900/20');
             prevPriceRef.current = displayPrice;
             const timer = setTimeout(() => setFlashClass(''), 300);
             return () => clearTimeout(timer);
@@ -162,8 +164,8 @@ const LsrCoinRow = React.memo(({ coin, colOrder, renderCell }: { coin: Lsr20Coin
     }, [displayPrice]);
 
     return (
-        <tr className={`transition-colors duration-300 ${flashClass} hover:bg-white/5`}>
-            {colOrder.map(colId => renderCell(coin, colId, displayPrice))}
+        <tr className="hover:bg-white/5 transition-colors">
+            {colOrder.map(colId => renderCell(coin, colId, displayPrice, flashClass))}
         </tr>
     );
 });
@@ -233,6 +235,7 @@ export function LsrCockpitPage() {
         
         const cleaned = arr.map(x => ({
             ...x,
+            id: x.id || String(x.symbol).toLowerCase(),
             symbol: String(x.symbol).toUpperCase(),
             price: Number(x.price),
             ls5m: Number(x.ls5m), ls15m: Number(x.ls15m), ls30m: Number(x.ls30m),
@@ -348,34 +351,67 @@ export function LsrCockpitPage() {
       chart: {
         type: 'column',
         backgroundColor: 'transparent',
-        height: 310, // Adjusted height
-        margin: [0, 0, 30, 0], // Elimina espaços extras, deixa só embaixo pros labels (eixo X)
-        spacing: [0, 0, 0, 0], // Zero spacing
+
+        // ↓↓ AJUSTE 1: altura um pouco menor pra “grudar” no KPI
+        height: 300,
+
+        // ↓↓ AJUSTE 2: margens controladas (sem cortar labels)
+        marginTop: 0,
+        marginLeft: 0,
+        marginRight: 0,
+
+        // O corte do eixo X vinha daqui: 35 era pouco. Agora tem barriga suficiente.
+        marginBottom: 72,
+
+        // Zera spacing (você já queria)
+        spacing: [0, 0, 0, 0],
+
         options3d: {
           enabled: true,
           alpha: 10, beta: 18, depth: 250, viewDistance: 25,
-          frame: { bottom: { size: 1, color: 'rgba(255,255,255,0.05)' }, side: { size: 1, color: 'rgba(255,255,255,0.05)' }, back: { size: 1, color: 'rgba(255,255,255,0.05)' } }
+          frame: {
+            bottom: { size: 1, color: 'rgba(255,255,255,0.05)' },
+            side: { size: 1, color: 'rgba(255,255,255,0.05)' },
+            back: { size: 1, color: 'rgba(255,255,255,0.05)' }
+          }
         }
       },
       title: { text: null }, 
       credits: { enabled: false },
-      legend: { enabled: false }, // ELIMINA A LEGENDA DO CHART
+      legend: { enabled: false },
       xAxis: {
         categories: exchangeRows.map(x => x.exchange),
         gridLineWidth: 0,
-        labels: { style: { color: 'rgba(255,255,255,0.60)', fontSize: '10px', fontWeight: 'bold' }, rotation: -45, autoRotation: [-45] }
+        tickLength: 0,
+        labels: {
+          style: {
+            color: 'rgba(255,255,255,0.60)',
+            fontSize: '10px',
+            fontWeight: 'bold'
+          },
+          rotation: -45,
+          autoRotation: [-45],
+          // ↓↓ AJUSTE 3: empurra label pra dentro do chart (anti-tesoura)
+          y: 32,
+          // ↓↓ AJUSTE 4: evita “amontoar” em telas menores
+          step: 1
+        }
       },
       yAxis: {
         min: 0,
         title: { text: null },
         gridLineColor: 'rgba(255,255,255,0.05)',
-        labels: { enabled: false } // Oculta eixo Y para limpar visual
+        labels: { enabled: false }
       },
       navigator: { enabled: false },
       scrollbar: { enabled: false },
       rangeSelector: { enabled: false },
       tooltip: {
-        shared: true, useHTML: true, backgroundColor: 'rgba(17, 24, 39, 0.95)', style: { color: '#fff' }, borderWidth: 0,
+        shared: true,
+        useHTML: true,
+        backgroundColor: 'rgba(17, 24, 39, 0.95)',
+        style: { color: '#fff' },
+        borderWidth: 0,
         formatter: function () {
           const pts: any[] = (this as any).points || [];
           const pLong = pts.find(p => p.series.name === 'Long');
@@ -396,7 +432,15 @@ export function LsrCockpitPage() {
             <div style="margin-top:4px;border-top:1px solid rgba(255,255,255,0.1)">LSR: <b style="color:#dd9933">${fmtLSR(lsr)}</b></div>`;
         }
       },
-      plotOptions: { column: { depth: 40, stacking: 'normal', borderWidth: 0, groupPadding: 0.1 } },
+      plotOptions: {
+        column: {
+          depth: 40,
+          stacking: 'normal',
+          borderWidth: 0,
+          groupPadding: 0.1,
+          pointPadding: 0.02
+        }
+      },
       series: [
         { name: 'Long', color: COLOR_LONG_RGBA, data: longData, visible: showLongs },
         { name: 'Short', color: COLOR_SHORT_RGBA, data: shortData, visible: showShorts }
@@ -463,7 +507,7 @@ export function LsrCockpitPage() {
       }
   };
 
-  const renderCoinCell = (r: Lsr20Coin, colId: string, livePrice?: number) => {
+  const renderCoinCell = (r: Lsr20Coin, colId: string, livePrice?: number, flashClass?: string) => {
       const getTrendArrow = (val: number, prevTFVal?: number) => {
           if (!prevTFVal) return null;
           if (val > prevTFVal) return <ArrowUp size={10} className="text-green-500 inline ml-1" />;
@@ -483,12 +527,19 @@ export function LsrCockpitPage() {
           case 'asset': return (
               <td className="p-3">
                   <div className="flex items-center gap-3">
-                      <img src={`https://assets.coincap.io/assets/icons/${r.symbol.toLowerCase()}@2x.png`} className="w-6 h-6 rounded-full" onError={(e) => e.currentTarget.style.display='none'} />
+                      <CoinLogo coin={{id: r.id || r.symbol.toLowerCase(), symbol: r.symbol}} className="w-6 h-6 rounded-full" />
                       <div className="flex flex-col"><span className="font-bold text-white leading-none">{r.symbol}</span></div>
                   </div>
               </td>
           );
-          case 'price': return <td className="p-3 text-right font-mono font-bold text-gray-300 transition-colors">${priceToUse < 1 ? priceToUse.toFixed(4) : priceToUse.toLocaleString()}</td>;
+          case 'price': return (
+              <td className="p-3 text-right">
+                  {/* Aplicar o flash APENAS no valor do preço */}
+                  <span className={`font-mono font-bold text-gray-300 transition-colors duration-300 px-1 py-0.5 rounded ${flashClass}`}>
+                      ${priceToUse < 1 ? priceToUse.toFixed(4) : priceToUse.toLocaleString()}
+                  </span>
+              </td>
+          );
           case 'ls5m': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls5m||0)}`}>{fmtLSR(r.ls5m||0)}{getTrendArrow(r.ls5m||0, r.ls15m)}</td>;
           case 'ls15m': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls15m||0)}`}>{fmtLSR(r.ls15m||0)}{getTrendArrow(r.ls15m||0, r.ls30m)}</td>;
           case 'ls30m': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls30m||0)}`}>{fmtLSR(r.ls30m||0)}{getTrendArrow(r.ls30m||0, r.ls1h)}</td>;
@@ -539,19 +590,24 @@ export function LsrCockpitPage() {
           </div>
 
           {/* EXCHANGE 3D (RIGHT) */}
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 pb-6 overflow-visible flex flex-col">
-            <div className="flex items-center justify-between mb-3 shrink-0">
-              <div><div className="text-sm font-black text-white/80 uppercase tracking-widest">Exchange 3D</div></div>
+          {/* ↓↓ AJUSTE: menos padding bottom pra reduzir “vão” */}
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 pb-3 overflow-visible flex flex-col">
+            <div className="flex items-center justify-between mb-2 shrink-0">
+              <div><div className="text-sm font-black text-white/80 uppercase tracking-widest">LSR Agregado</div></div>
               {loadingExchange && <Loader2 className="animate-spin text-[#dd9933]" size={18} />}
             </div>
-            <div className="flex-1 min-h-0 relative">
+
+            {/* ↓↓ AJUSTE: overflow visível e sem “reserva fantasma” */}
+            <div className="relative overflow-visible">
                 {errorExchange ? <div className="p-4 text-red-200 bg-red-900/20 border border-red-900/50 rounded">{errorExchange}</div> :
-                 loadingExchange ? <Skeleton h={310} /> : 
-                 <div id="lsr-exchange-3d" className="min-h-[310px]" />
+                 loadingExchange ? <Skeleton h={300} /> : 
+                 <div id="lsr-exchange-3d" className="min-h-[300px]" />
                 }
             </div>
+
             {agg && (
-              <div className="mt-2 grid grid-cols-2 gap-3 shrink-0">
+              {/* ↓↓ AJUSTE: encosta os boxes (mt-1) */}
+              <div className="mt-1 grid grid-cols-2 gap-3 shrink-0">
                 <button onClick={() => setShowLongs(!showLongs)} className={`rounded-xl border px-3 py-2 transition-all text-left group flex items-center justify-between ${showLongs ? 'bg-emerald-900/20 border-emerald-500/30' : 'bg-black/20 border-white/5 opacity-50'}`}>
                   <div className="flex items-center gap-2">
                       <div className="flex flex-col">
