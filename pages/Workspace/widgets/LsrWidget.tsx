@@ -678,7 +678,7 @@ export function LsrCockpitPage() {
   );
 }
 
-// === LsrGridWidget (Minimized) ===
+// === LsrGridWidget (Minimized) .===
 const LsrGridWidget: React.FC<{ language: Language }> = ({ language }) => {
   const [symbol, setSymbol] = useState('BTCUSDT');
   const [period, setPeriod] = useState('5m');
