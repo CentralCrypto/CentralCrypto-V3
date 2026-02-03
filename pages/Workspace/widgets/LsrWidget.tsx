@@ -275,6 +275,12 @@ export function LsrCockpitPage() {
     };
   }, [exchangeSnap]);
 
+  // CALCULAR VALOR AGREGADO DO LSR
+  const aggLsrValue = useMemo(() => {
+      if (!agg || agg.sellVolUsd === 0) return 0;
+      return agg.buyVolUsd / agg.sellVolUsd;
+  }, [agg]);
+
   const pulseCoin = useMemo(() => topCoins.find(x => x.symbol === symbol), [topCoins, symbol]);
   
   const pulseMetrics = useMemo(() => {
@@ -608,11 +614,10 @@ export function LsrCockpitPage() {
             <div className="flex items-center justify-between mb-2 shrink-0">
               <div className="flex items-center gap-4">
                   <div className="text-sm font-black text-white/80 uppercase tracking-widest">LSR Agregado</div>
-                  {/* AGGREGATED STATS IN HEADER */}
+                  {/* AGGREGATED STATS IN TITLE - NOW CORRECTLY DISPLAYING LSR VALUE */}
                   {agg && (
-                      <div className="flex items-center gap-3 text-xs font-mono">
-                          <span className="text-emerald-400 font-bold flex items-center gap-1">L: {fmtPct(agg.buyRatio)}</span>
-                          <span className="text-rose-400 font-bold flex items-center gap-1">S: {fmtPct(agg.sellRatio)}</span>
+                      <div className="text-[#dd9933] font-mono font-black text-lg">
+                          {fmtLSR(aggLsrValue)}
                       </div>
                   )}
               </div>
@@ -626,6 +631,31 @@ export function LsrCockpitPage() {
                  <div id="lsr-exchange-3d" className="min-h-[300px]" />
                 }
             </div>
+
+            {/* RESTORED BOTTOM BOXES */}
+            {agg && (
+              <div className="mt-1 grid grid-cols-2 gap-3 shrink-0">
+                <button onClick={() => setShowLongs(!showLongs)} className={`rounded-xl border px-3 py-2 transition-all text-left group flex items-center justify-between ${showLongs ? 'bg-emerald-900/20 border-emerald-500/30' : 'bg-black/20 border-white/5 opacity-50'}`}>
+                  <div className="flex items-center gap-2">
+                      <div className="flex flex-col">
+                          <div className="text-[10px] text-emerald-400 uppercase font-black tracking-widest flex items-center gap-1">{showLongs ? <Eye size={10}/> : <EyeOff size={10}/>} Long</div>
+                          <div className={`text-lg font-black leading-none mt-0.5 ${showLongs ? 'text-white' : 'text-gray-500'}`}>{fmtPct(agg.buyRatio)}</div>
+                      </div>
+                  </div>
+                  <div className="text-xs text-white/50 font-mono bg-black/20 px-2 py-1 rounded">{fmtUSD(agg.buyVolUsd)}</div>
+                </button>
+                
+                <button onClick={() => setShowShorts(!showShorts)} className={`rounded-xl border px-3 py-2 transition-all text-left group flex items-center justify-between ${showShorts ? 'bg-rose-900/20 border-rose-500/30' : 'bg-black/20 border-white/5 opacity-50'}`}>
+                  <div className="flex items-center gap-2">
+                      <div className="flex flex-col">
+                          <div className="text-[10px] text-rose-400 uppercase font-black tracking-widest flex items-center gap-1">{showShorts ? <Eye size={10}/> : <EyeOff size={10}/>} Short</div>
+                          <div className={`text-lg font-black leading-none mt-0.5 ${showShorts ? 'text-white' : 'text-gray-500'}`}>{fmtPct(agg.sellRatio)}</div>
+                      </div>
+                  </div>
+                  <div className="text-xs text-white/50 font-mono bg-black/20 px-2 py-1 rounded">{fmtUSD(agg.sellVolUsd)}</div>
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
