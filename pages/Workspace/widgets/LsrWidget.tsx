@@ -358,7 +358,9 @@ export function LsrCockpitPage() {
 
         // ↓↓ AJUSTE 2: margens controladas (sem cortar labels)
         marginTop: 0,
-        marginLeft: 0,
+        
+        // Permite margem esquerda automática para os labels do eixo Y
+        marginLeft: undefined, 
         marginRight: 0,
 
         // O corte do eixo X vinha daqui: 35 era pouco. Agora tem barriga suficiente.
@@ -386,9 +388,9 @@ export function LsrCockpitPage() {
         tickLength: 0,
         labels: {
           style: {
-            color: 'rgba(255,255,255,0.60)',
+            color: 'rgba(255,255,255,0.70)', // Mais visível
             fontSize: '10px',
-            fontWeight: 'bold'
+            fontWeight: 'normal' // Mais fino
           },
           rotation: -45,
           autoRotation: [-45],
@@ -402,7 +404,17 @@ export function LsrCockpitPage() {
         min: 0,
         title: { text: null },
         gridLineColor: 'rgba(255,255,255,0.05)',
-        labels: { enabled: false }
+        labels: { 
+            enabled: true,
+            style: {
+                color: 'rgba(255,255,255,0.50)',
+                fontSize: '9px'
+            },
+            formatter: function() {
+                // Adapta formatação baseado no modo
+                return barsMode === 'ratio' ? this.value + '%' : fmtUSD(this.value);
+            }
+        }
       },
       navigator: { enabled: false },
       scrollbar: { enabled: false },
@@ -594,7 +606,16 @@ export function LsrCockpitPage() {
           {/* ↓↓ AJUSTE: menos padding bottom pra reduzir “vão” */}
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4 pb-3 overflow-visible flex flex-col">
             <div className="flex items-center justify-between mb-2 shrink-0">
-              <div><div className="text-sm font-black text-white/80 uppercase tracking-widest">LSR Agregado</div></div>
+              <div className="flex items-center gap-4">
+                  <div className="text-sm font-black text-white/80 uppercase tracking-widest">LSR Agregado</div>
+                  {/* AGGREGATED STATS IN HEADER */}
+                  {agg && (
+                      <div className="flex items-center gap-3 text-xs font-mono">
+                          <span className="text-emerald-400 font-bold flex items-center gap-1">L: {fmtPct(agg.buyRatio)}</span>
+                          <span className="text-rose-400 font-bold flex items-center gap-1">S: {fmtPct(agg.sellRatio)}</span>
+                      </div>
+                  )}
+              </div>
               {loadingExchange && <Loader2 className="animate-spin text-[#dd9933]" size={18} />}
             </div>
 
@@ -605,30 +626,6 @@ export function LsrCockpitPage() {
                  <div id="lsr-exchange-3d" className="min-h-[300px]" />
                 }
             </div>
-
-            {agg && (
-              <div className="mt-1 grid grid-cols-2 gap-3 shrink-0">
-                <button onClick={() => setShowLongs(!showLongs)} className={`rounded-xl border px-3 py-2 transition-all text-left group flex items-center justify-between ${showLongs ? 'bg-emerald-900/20 border-emerald-500/30' : 'bg-black/20 border-white/5 opacity-50'}`}>
-                  <div className="flex items-center gap-2">
-                      <div className="flex flex-col">
-                          <div className="text-[10px] text-emerald-400 uppercase font-black tracking-widest flex items-center gap-1">{showLongs ? <Eye size={10}/> : <EyeOff size={10}/>} Long</div>
-                          <div className={`text-lg font-black leading-none mt-0.5 ${showLongs ? 'text-white' : 'text-gray-500'}`}>{fmtPct(agg.buyRatio)}</div>
-                      </div>
-                  </div>
-                  <div className="text-xs text-white/50 font-mono bg-black/20 px-2 py-1 rounded">{fmtUSD(agg.buyVolUsd)}</div>
-                </button>
-                
-                <button onClick={() => setShowShorts(!showShorts)} className={`rounded-xl border px-3 py-2 transition-all text-left group flex items-center justify-between ${showShorts ? 'bg-rose-900/20 border-rose-500/30' : 'bg-black/20 border-white/5 opacity-50'}`}>
-                  <div className="flex items-center gap-2">
-                      <div className="flex flex-col">
-                          <div className="text-[10px] text-rose-400 uppercase font-black tracking-widest flex items-center gap-1">{showShorts ? <Eye size={10}/> : <EyeOff size={10}/>} Short</div>
-                          <div className={`text-lg font-black leading-none mt-0.5 ${showShorts ? 'text-white' : 'text-gray-500'}`}>{fmtPct(agg.sellRatio)}</div>
-                      </div>
-                  </div>
-                  <div className="text-xs text-white/50 font-mono bg-black/20 px-2 py-1 rounded">{fmtUSD(agg.sellVolUsd)}</div>
-                </button>
-              </div>
-            )}
           </div>
         </div>
 
