@@ -1,7 +1,9 @@
+
 import { httpGetJson } from './http';
 import { LOGO_URL as SITE_LOGO } from '../pages/Workspace/constants';
 
 const VPS_LOGO_BASE = '/cachecko/logos';
+const VPS_LOGO_BASE_ALT = '/cachecko/logo'; // Fallback para pasta no singular
 
 // Cache em memória: ID -> URL que funcionou (para <img/>)
 export const validatedLogoCache = new Map<string, string>();
@@ -21,27 +23,21 @@ function toPublicLogoUrl(p: string): string {
   if (!p) return '';
   // Já está em URL pública
   if (p.startsWith(`${VPS_LOGO_BASE}/`)) return p;
+  if (p.startsWith(`${VPS_LOGO_BASE_ALT}/`)) return p;
 
-  // Se vier com caminho absoluto do FS, pega só o que interessa
-  const idx = p.indexOf(`${VPS_LOGO_BASE}/`);
-  if (idx >= 0) return p.slice(idx);
-
-  // Se vier no formato "/cachecko/logos/..."
-  if (p.startsWith('/cachecko/logos/')) return p;
+  // Se vier com caminho absoluto do FS, tenta limpar
+  if (p.includes('/logos/')) {
+      const idx = p.indexOf('/logos/');
+      return `/cachecko${p.slice(idx)}`;
+  }
 
   // Se vier só "dogecoin.webp"
   if (!p.includes('/')) return `${VPS_LOGO_BASE}/${p}`;
 
-  // Último recurso: tenta usar basename
-  const base = p.split('/').pop() || '';
-  return base ? `${VPS_LOGO_BASE}/${base}` : '';
+  return p;
 }
 
 function normalizeCoinsContainer(data: any): any[] {
-  // Aceita:
-  // - array direto
-  // - { coins: [...] }
-  // - { data: [...] } (dependendo do httpGetJson)
   if (Array.isArray(data)) return data;
   if (data && Array.isArray(data.coins)) return data.coins;
   if (data && Array.isArray(data.data)) return data.data;
@@ -50,8 +46,6 @@ function normalizeCoinsContainer(data: any): any[] {
 
 /**
  * Inicializa (uma vez) os mapas local/remoto.
- * - localUrlById vem do manifest (fileName/localFsPath)
- * - remoteUrlById vem do coins_min (id->imageUrl) e complementa com manifest.imageUrl
  */
 export const initLogoService = async (): Promise<void> => {
   if (isInitializing) return initPromise ?? Promise.resolve();
@@ -69,15 +63,9 @@ export const initLogoService = async (): Promise<void> => {
       const minData = minRes?.data;
       const manifestData = manifestRes?.data;
 
-      // ---- coins_min.json ----
-      // Pode ser:
-      // - mapa { [id]: url }
-      // - array [{id,image},{id,imageUrl},...]
-      // - objeto { coins: [...] } (menos comum)
       const minCoins = normalizeCoinsContainer(minData);
 
       if (minData && typeof minData === 'object' && !Array.isArray(minData) && !Array.isArray(minData.coins)) {
-        // Parece mapa id->url
         for (const [k, v] of Object.entries(minData)) {
           if (typeof k === 'string' && isHttp(v)) {
             remoteUrlById[k] = String(v);
@@ -93,23 +81,18 @@ export const initLogoService = async (): Promise<void> => {
         }
       }
 
-      // ---- manifest.json ----
-      // Seu manifest real costuma ser:
-      // { generatedAt, ..., coins:[ {id,imageUrl,fileName,localFsPath}, ... ] }
       const manifestCoins = normalizeCoinsContainer(manifestData);
 
       for (const c of manifestCoins) {
         const id = c?.id;
         if (!id) continue;
 
-        // 1) Local (preferência total)
         const fileName = c?.fileName || c?.localFsPath;
         const publicLocal = typeof fileName === 'string' ? toPublicLogoUrl(fileName) : '';
         if (publicLocal) {
           localUrlById[id] = publicLocal;
         }
 
-        // 2) Remoto (fallback)
         const imgUrl = c?.imageUrl;
         if (isHttp(imgUrl)) {
           remoteUrlById[id] = String(imgUrl);
@@ -117,7 +100,6 @@ export const initLogoService = async (): Promise<void> => {
       }
     } catch (e) {
       console.warn('[LogoService] Falha ao carregar maps.', e);
-      // mantém maps vazios, mas não quebra o app
     } finally {
       isInitializing = false;
     }
@@ -128,45 +110,48 @@ export const initLogoService = async (): Promise<void> => {
 
 /**
  * Retorna candidatos para <img/> com fallback em cadeia.
- * (Aqui pode tentar várias URLs porque o <img onError> resolve.)
+ * Prioriza arquivos locais (.webp) e tenta variações de ID e Símbolo.
  */
 export const getCandidateLogoUrls = (coin: { id: string; symbol?: string; image?: string }): string[] => {
-  const id = coin?.id;
+  const id = coin?.id ? String(coin.id).toLowerCase() : '';
+  const sym = coin?.symbol ? String(coin.symbol).toLowerCase() : '';
   const urls: string[] = [];
 
-  if (!id) return [SITE_LOGO];
+  if (!id && !sym) return [SITE_LOGO];
 
   // 1) cache validado
-  if (validatedLogoCache.has(id)) return [validatedLogoCache.get(id)!];
+  if (id && validatedLogoCache.has(id)) return [validatedLogoCache.get(id)!];
 
   // 2) local exato (manifest)
-  if (localUrlById[id]) urls.push(localUrlById[id]);
+  if (id && localUrlById[id]) urls.push(localUrlById[id]);
 
-  // 3) chute local (caso map ainda não carregou)
-  urls.push(`${VPS_LOGO_BASE}/${id}.webp`);
-  urls.push(`${VPS_LOGO_BASE}/${id}.png`);
-  urls.push(`${VPS_LOGO_BASE}/${id}.jpg`);
-  urls.push(`${VPS_LOGO_BASE}/${id}.jpeg`);
+  // 3) Chute Local por ID (Plural & Singular)
+  if (id) {
+      urls.push(`${VPS_LOGO_BASE}/${id}.webp`);
+      urls.push(`${VPS_LOGO_BASE_ALT}/${id}.webp`);
+      urls.push(`${VPS_LOGO_BASE}/${id}.png`);
+      urls.push(`${VPS_LOGO_BASE_ALT}/${id}.png`);
+  }
 
-  // 4) remoto (map ou campo do objeto)
-  if (remoteUrlById[id]) urls.push(remoteUrlById[id]);
+  // 4) Chute Local por Símbolo (Plural & Singular) - Importante para casos onde ID != Filename
+  if (sym && sym !== id) {
+      urls.push(`${VPS_LOGO_BASE}/${sym}.webp`);
+      urls.push(`${VPS_LOGO_BASE_ALT}/${sym}.webp`);
+      urls.push(`${VPS_LOGO_BASE}/${sym}.png`);
+      urls.push(`${VPS_LOGO_BASE_ALT}/${sym}.png`);
+  }
+
+  // 5) Remoto (map ou campo do objeto)
+  if (id && remoteUrlById[id]) urls.push(remoteUrlById[id]);
   if (coin.image && isHttp(coin.image)) urls.push(coin.image);
 
-  // 5) site logo (último)
+  // 6) Fallback Site
   urls.push(SITE_LOGO);
 
-  // remove duplicadas mantendo ordem
+  // Remove duplicadas mantendo a ordem de prioridade
   return Array.from(new Set(urls.filter(Boolean)));
 };
 
-/**
- * IMPORTANTÍSSIMO para Highcharts:
- * precisa ser síncrono e retornar um caminho "provável" que NÃO quebre.
- *
- * Aqui a regra é:
- * - se temos localUrlById => usa ele (garantido)
- * - senão, já retorna SITE_LOGO (para não ficar ícone quebrado no scatter)
- */
 export const getBestLocalLogo = (coin: { id: string }): string => {
   const id = coin?.id;
   if (!id) return SITE_LOGO;

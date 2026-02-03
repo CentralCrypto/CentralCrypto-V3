@@ -595,16 +595,17 @@ export function LsrCockpitPage() {
         </div>
 
         {/* TOP SECTION: PULSE + 3D */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6 items-stretch">
+        {/* CHANGED items-stretch to items-start to avoid excess whitespace */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6 items-start">
           
-          {/* MARKET PULSE (LEFT) */}
+          {/* MARKET PULSE (LEFT) - Reduced min-height from 520px to 400px */}
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4 pb-8 overflow-visible">
             <div className="flex items-center justify-between mb-3">
               <div><div className="text-sm font-black text-white/80 uppercase tracking-widest">Market Pulse</div></div>
               {loadingPulse && <Loader2 className="animate-spin text-[#dd9933]" size={18} />}
             </div>
             {errorPulse ? <div className="p-4 text-red-200 bg-red-900/20 border border-red-900/50 rounded">{errorPulse}</div> : 
-             loadingPulse ? <Skeleton h={520} /> : <div id="lsr-pulse-chart" className="min-h-[520px]" />
+             loadingPulse ? <Skeleton h={400} /> : <div id="lsr-pulse-chart" className="min-h-[400px]" />
             }
           </div>
 
