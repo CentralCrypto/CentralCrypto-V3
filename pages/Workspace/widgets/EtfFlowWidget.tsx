@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Loader2, TrendingUp, BarChart3, Layers, AlertTriangle, LineChart, Info, ChevronLeft, ChevronRight, DollarSign, ArrowUp, ArrowDown } from 'lucide-react';
@@ -53,6 +54,7 @@ interface ChartBaseProps {
   asset: Asset;
   allTickers: string[];
   colorMap: Record<string, string>;
+  language: string;
 }
 
 const useChartTheme = () => {
@@ -116,7 +118,7 @@ const MissingDataOverlay: React.FC = () => (
 
 // --- COMPONENTES VISUAIS (Charts, Tables) ---
 
-const StackedEtfChart: React.FC<ChartBaseProps> = ({ data, metric, allTickers, colorMap }) => {
+const StackedEtfChart: React.FC<ChartBaseProps> = ({ data, metric, allTickers, colorMap, language }) => {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<Highcharts.Chart | null>(null);
   const { isDark, textColor, gridColor } = useChartTheme();
@@ -183,7 +185,7 @@ const StackedEtfChart: React.FC<ChartBaseProps> = ({ data, metric, allTickers, c
         style: { color: isDark ? '#fff' : '#333', fontSize: '11px', fontWeight: 'bold' },
         formatter: function () {
             // @ts-ignore
-            return new Date(this.x).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            return new Date(this.x).toLocaleDateString(language, { timeZone: 'UTC', day: '2-digit', month: '2-digit', year: 'numeric' });
         }
       },
       series
@@ -195,12 +197,12 @@ const StackedEtfChart: React.FC<ChartBaseProps> = ({ data, metric, allTickers, c
         chartInstance.current = null;
       }
     };
-  }, [data, metric, allTickers.join('|'), isDark, textColor, gridColor]);
+  }, [data, metric, allTickers.join('|'), isDark, textColor, gridColor, language]);
 
   return <div ref={chartRef} className="w-full h-full" />;
 };
 
-const TotalBarChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
+const TotalBarChart: React.FC<ChartBaseProps> = ({ data, metric, language }) => {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<Highcharts.Chart | null>(null);
   const { isDark, textColor, gridColor } = useChartTheme();
@@ -264,7 +266,7 @@ const TotalBarChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
         style: { color: isDark ? '#fff' : '#333', fontSize: '11px', fontWeight: 'bold' },
         formatter: function () {
             // @ts-ignore
-            return new Date(this.x).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            return new Date(this.x).toLocaleDateString(language, { timeZone: 'UTC', day: '2-digit', month: '2-digit', year: 'numeric' });
         }
       },
       plotOptions: {
@@ -280,12 +282,12 @@ const TotalBarChart: React.FC<ChartBaseProps> = ({ data, metric }) => {
         chartInstance.current = null;
       }
     };
-  }, [data, metric, isDark, textColor, gridColor]);
+  }, [data, metric, isDark, textColor, gridColor, language]);
 
   return <div ref={chartRef} className="w-full h-full" />;
 };
 
-const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }> = ({ data, metric, selectedTicker, colorMap }) => {
+const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }> = ({ data, metric, selectedTicker, colorMap, language }) => {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<Highcharts.Chart | null>(null);
   const { isDark, textColor, gridColor } = useChartTheme();
@@ -346,7 +348,7 @@ const EtfLinesChart: React.FC<ChartBaseProps & { selectedTicker: string | null }
         chartInstance.current = null;
       }
     };
-  }, [data, metric, selectedTicker, isDark, textColor, gridColor]);
+  }, [data, metric, selectedTicker, isDark, textColor, gridColor, language]);
 
   if (!selectedTicker) {
     return (
@@ -372,8 +374,9 @@ const MarketSharePanel: React.FC<{
     onPrev: () => void,
     onNext: () => void,
     isFirst: boolean,
-    isLast: boolean
-}> = ({ currentFlowData, currentVolData, allTickers, colorMap, asset, stats, onPrev, onNext, isFirst, isLast }) => {
+    isLast: boolean,
+    language: string
+}> = ({ currentFlowData, currentVolData, allTickers, colorMap, asset, stats, onPrev, onNext, isFirst, isLast, language }) => {
     
     // Sort logic: Sort by VOLUME descending
     const sortedTickers = useMemo(() => {
@@ -389,7 +392,8 @@ const MarketSharePanel: React.FC<{
         return items.sort((a, b) => b.vol - a.vol);
     }, [currentFlowData, currentVolData, allTickers]);
 
-    const dateStr = currentFlowData ? new Date(currentFlowData.date).toLocaleDateString(undefined, { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' }) : '---';
+    // Force UTC for display date
+    const dateStr = currentFlowData ? new Date(currentFlowData.date).toLocaleDateString(language, { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' }) : '---';
 
     const StatBox = ({ label, value }: { label: string, value: number }) => (
         <div className="flex flex-col items-center justify-center bg-gray-100 dark:bg-[#2f3032] rounded-lg p-2 border border-gray-200 dark:border-slate-700">
@@ -625,12 +629,6 @@ const EtfBubbles: React.FC<{ currentFlowData: any, currentVolData: any, allTicke
                 ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
                 
                 if (p.flow >= 0) {
-                    // Positive Flow: Solid Color (Using Ticker Color)
-                    // Or Green? The requirement says "Colors normally but pastel" or "Metalized"
-                    // Let's stick to the colorMap color if positive, or Green if requested.
-                    // User said: "vINCULA o aparecimento ao FLOW... Se negativo bolha com anel vermelho"
-                    // Interpretation: Positive = Normal (Color Map) / Negative = Hollow Red
-                    
                     ctx.fillStyle = p.color;
                     ctx.globalAlpha = 0.85;
                     ctx.fill();
@@ -840,7 +838,7 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void, item: D
   const [flowsData, setFlowsData] = useState<any[]>([]);
   const [volData, setVolData] = useState<any[]>([]);
 
-  const [summaryData, setSummaryData] = useState<EtfFlowData | null>(null);
+  // Removed Summary Data State - Now derived from detailed data
   const [loading, setLoading] = useState(true);
 
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
@@ -849,10 +847,6 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void, item: D
   const [viewDateIndex, setViewDateIndex] = useState<number>(-1);
 
   const showExtras = item.id === 'etf-page';
-
-  useEffect(() => {
-    fetchEtfFlow().then(res => setSummaryData(res));
-  }, []);
 
   // Fetch Logic Updated: Always fetch what's needed, but track the "main" data for the chart separately if needed
   // Actually, to support the table showing both Flow and Vol, we need both datasets loaded.
@@ -892,14 +886,12 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void, item: D
   }, [viewMode, allTickers.join('|')]);
 
   const displayTotal = useMemo(() => {
-    if (!summaryData) return 0;
-    const sum =
-      Number(summaryData.btcValue ?? 0) +
-      Number(summaryData.ethValue ?? 0) +
-      Number(summaryData.solValue ?? 0) +
-      Number(summaryData.xrpValue ?? 0);
-    return Number.isFinite(sum) && sum !== 0 ? sum : Number(summaryData.netFlow ?? 0);
-  }, [summaryData]);
+      // Logic to get the LAST available Global Total from the currently loaded data
+      // This ensures the header matches the table/chart
+      if (!data || data.length === 0) return 0;
+      const lastPoint = data[data.length - 1];
+      return Number(lastPoint?.totalGlobal || 0);
+  }, [data]);
 
   const flowColor = displayTotal >= 0 ? 'text-green-400' : 'text-red-400';
 
@@ -972,9 +964,9 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void, item: D
       );
     }
 
-    if (viewMode === 'total') return <TotalBarChart data={data} metric={metric} asset={asset} allTickers={allTickers} colorMap={colorMap} />;
-    if (viewMode === 'lines') return <EtfLinesChart data={data} metric={metric} asset={asset} allTickers={allTickers} colorMap={colorMap} selectedTicker={selectedTicker} />;
-    return <StackedEtfChart data={data} metric={metric} asset={asset} allTickers={allTickers} colorMap={colorMap} />;
+    if (viewMode === 'total') return <TotalBarChart data={data} metric={metric} asset={asset} allTickers={allTickers} colorMap={colorMap} language={language} />;
+    if (viewMode === 'lines') return <EtfLinesChart data={data} metric={metric} asset={asset} allTickers={allTickers} colorMap={colorMap} selectedTicker={selectedTicker} language={language} />;
+    return <StackedEtfChart data={data} metric={metric} asset={asset} allTickers={allTickers} colorMap={colorMap} language={language} />;
   };
 
   return (
@@ -987,8 +979,8 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void, item: D
                  Total Net Flow
                  <PortalTooltip content="Soma do valor em USD de todos os ETFs monitorados (diário)." />
               </div>
-              <div className={`text-xl font-black font-mono mt-0.5 ${summaryData ? flowColor : 'text-gray-400'}`}>
-                {summaryData ? '$' + formatCompactNumber(displayTotal) : '---'}
+              <div className={`text-xl font-black font-mono mt-0.5 ${flowColor}`}>
+                {loading ? '...' : '$' + formatCompactNumber(displayTotal)}
               </div>
             </div>
 
@@ -1074,6 +1066,7 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void, item: D
                     onNext={handleNextDay}
                     isFirst={viewDateIndex <= 0}
                     isLast={viewDateIndex >= data.length - 1}
+                    language={language}
                   />
               </div>
               <div className="col-span-12 lg:col-span-7 overflow-hidden relative bg-gray-5 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-slate-800/50 p-4 flex flex-col">
@@ -1106,7 +1099,7 @@ const EtfMaximized: React.FC<{ language: Language, onClose?: () => void, item: D
   );
 };
 
-// --- MINIMIZED WIDGET (SUMMARY) ---
+// --- MINIMIZED WIDGET .(SUMMARY). ---
 const EtfSummary: React.FC<{ language: Language }> = ({ language }) => {
   const [etfData, setEtfData] = useState<EtfFlowData | null>(null);
   const t = getTranslations(language).workspace.widgets.etf;
