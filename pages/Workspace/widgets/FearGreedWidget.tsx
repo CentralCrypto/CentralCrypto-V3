@@ -77,7 +77,7 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
                 <Watermark />
                 <div className="z-10 flex flex-col lg:flex-row items-center justify-center gap-16 p-8 mb-4 shrink-0 animate-in fade-in duration-500">
                     <div className="w-full max-w-[280px] flex flex-col items-center">
-                        <svg viewBox="0 0 200 130" className="w-full overflow-visible">
+                        <svg viewBox="0 0 200 180" className="w-full overflow-visible">
                             <defs>
                                 <linearGradient id="fngGradFull" x1="0" y1="0" x2="1" y2="0">
                                     <stop offset="0%" stopColor="#CD534B" />
@@ -91,8 +91,8 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
                                 <path d="M 100 75 L 100 15" className="stroke-gray-900 dark:stroke-white" strokeWidth="4" strokeLinecap="round" />
                                 <circle cx={100} cy={75} r="6" className="fill-gray-900 dark:fill-white" />
                             </g>
-                            <text x={100} y={105} textAnchor="middle" className="fill-gray-900 dark:fill-[#dd9933]" fontSize="38" fontWeight="1000" fontFamily="monospace">{fgValue}</text>
-                            <text x={100} y={122} textAnchor="middle" className="fill-gray-600 dark:fill-gray-300" fontSize="8" fontWeight="1000" letterSpacing="1" style={{ textTransform: 'uppercase' }}>{fgLabel}</text>
+                            <text x={100} y={145} textAnchor="middle" className="fill-gray-900 dark:fill-[#dd9933]" fontSize="38" fontWeight="1000" fontFamily="monospace">{fgValue}</text>
+                            <text x={100} y={162} textAnchor="middle" className="fill-gray-600 dark:fill-gray-300" fontSize="8" fontWeight="1000" letterSpacing="1" style={{ textTransform: 'uppercase' }}>{fgLabel}</text>
                         </svg>
                     </div>
                     <div className="flex flex-wrap justify-center gap-6">
@@ -159,8 +159,8 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
                     </g>
                 </svg>
             </div>
-            {/* Margem ajustada: mt-2 para dar "respiro" entre o ponteiro e o número */}
-            <div className="flex flex-col items-center mt-2 z-10">
+            {/* Margem aumentada para dar respiro ao numero */}
+            <div className="flex flex-col items-center mt-7 z-10">
                 <div className="text-3xl font-black text-[#dd9933] leading-none font-mono tracking-tighter">{fgValue}</div>
                 <div className="text-sm font-bold text-gray-900 dark:text-white uppercase mt-0.5">{fgLabel}</div>
             </div>

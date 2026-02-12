@@ -11,7 +11,8 @@ const STABLECOINS = ['USDT', 'USDC', 'DAI', 'FDUSD', 'TUSD', 'USDD', 'PYUSD', 'U
  */
 export const fetchWithFallback = async (url: string): Promise<any | null> => {
   try {
-    const salt = Math.floor(Date.now() / 60000);
+    // AGGRESSIVE CACHE BUSTING: Use random string instead of minute-based salt to force fresh fetch
+    const salt = Math.random().toString(36).substring(7);
     const finalUrl = url.includes('?') ? `${url}&_cb=${salt}` : `${url}?_cb=${salt}`;
     const { data } = await httpGetJson(finalUrl, { timeoutMs: 15000, retries: 2 });
     return data;

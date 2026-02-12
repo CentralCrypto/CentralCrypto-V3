@@ -148,8 +148,9 @@ const GAUGE_CX = 100;
 const GAUGE_CY = 75; 
 const GAUGE_R = 65;  
 const GAUGE_RY = 65; 
-const TEXT_VAL_Y = 104; 
-const TEXT_LBL_Y = 122; 
+// Reverted Y positions for Main Dashboard Widget to preserve layout
+const TEXT_VAL_Y = 105; 
+const TEXT_LBL_Y = 125; 
 const GAUGE_STROKE = 10; 
 
 const FearAndGreedWidget = ({ language, onNavigate }: { language: Language; onNavigate: () => void }) => {
