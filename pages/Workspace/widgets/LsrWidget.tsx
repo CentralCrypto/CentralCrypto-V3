@@ -387,12 +387,19 @@ export function LsrCockpitPage() {
       chart: {
         backgroundColor: 'transparent',
         height: 400,
-        zooming: { 
+        zooming: {
             mouseWheel: { enabled: true },
-            type: undefined // DISABLE SELECTION ZOOM to allow PAN
+            type: 'x', // Enable X axis selection zooming
+            resetButton: {
+                theme: {
+                    fill: '#1f2937',
+                    stroke: '#374151',
+                    style: { color: '#fff' }
+                }
+            }
         },
-        panning: { enabled: true, type: 'x' }, // ENABLE DRAG PAN
-        panKey: undefined, // Pan without key
+        panning: { enabled: true, type: 'x' }, // Enable Drag Panning
+        panKey: 'shift', // Standard pan key, or drag if zoomed in
         spacing: [10, 10, 10, 10]
       },
       title: { text: null },
@@ -582,11 +589,11 @@ export function LsrCockpitPage() {
       chart: {
         type: 'column',
         backgroundColor: 'transparent',
-        height: 380, // INCREASED HEIGHT
+        height: 420, // INCREASED HEIGHT
         marginTop: 10,
         marginLeft: undefined, 
         marginRight: 0,
-        marginBottom: 50, // ADJUSTED MARGIN
+        marginBottom: 50,
         spacing: [0, 0, 0, 0],
         options3d: {
           enabled: true,
@@ -891,10 +898,10 @@ export function LsrCockpitPage() {
               </div>
             </div>
 
-            <div className="relative overflow-visible flex-1 min-h-[380px] mt-4 mb-4">
+            <div className="relative overflow-visible flex-1 min-h-[420px] mt-4 mb-4">
                 {errorExchange ? <div className="p-4 text-red-200 bg-red-900/20 border border-red-900/50 rounded h-full flex items-center justify-center">{errorExchange}</div> :
-                 loadingExchange ? <Skeleton h={380} /> : 
-                 <div id="lsr-exchange-3d" className="h-full min-h-[380px]" />
+                 loadingExchange ? <Skeleton h={420} /> : 
+                 <div id="lsr-exchange-3d" className="h-full min-h-[420px]" />
                 }
             </div>
 
