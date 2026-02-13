@@ -75,9 +75,10 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
         return (
             <div className="h-full flex flex-col relative bg-white dark:bg-[#1a1c1e] overflow-hidden">
                 <Watermark />
-                <div className="z-10 flex flex-col lg:flex-row items-center justify-center gap-16 p-8 mb-4 shrink-0 animate-in fade-in duration-500">
+                {/* Compacted padding and gap to bring chart closer */}
+                <div className="z-10 flex flex-col lg:flex-row items-center justify-center gap-6 p-4 mb-1 shrink-0 animate-in fade-in duration-500">
                     <div className="w-full max-w-[280px] flex flex-col items-center">
-                        <svg viewBox="0 0 200 180" className="w-full overflow-visible">
+                        <svg viewBox="0 0 200 170" className="w-full overflow-visible">
                             <defs>
                                 <linearGradient id="fngGradFull" x1="0" y1="0" x2="1" y2="0">
                                     <stop offset="0%" stopColor="#CD534B" />
@@ -91,8 +92,9 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
                                 <path d="M 100 75 L 100 15" className="stroke-gray-900 dark:stroke-white" strokeWidth="4" strokeLinecap="round" />
                                 <circle cx={100} cy={75} r="6" className="fill-gray-900 dark:fill-white" />
                             </g>
-                            <text x={100} y={145} textAnchor="middle" className="fill-gray-900 dark:fill-[#dd9933]" fontSize="38" fontWeight="1000" fontFamily="monospace">{fgValue}</text>
-                            <text x={100} y={162} textAnchor="middle" className="fill-gray-600 dark:fill-gray-300" fontSize="8" fontWeight="1000" letterSpacing="1" style={{ textTransform: 'uppercase' }}>{fgLabel}</text>
+                            {/* Adjusted Y positions: -10px from previous 145/162 */}
+                            <text x={100} y={135} textAnchor="middle" className="fill-gray-900 dark:fill-[#dd9933]" fontSize="38" fontWeight="1000" fontFamily="monospace">{fgValue}</text>
+                            <text x={100} y={152} textAnchor="middle" className="fill-gray-600 dark:fill-gray-300" fontSize="8" fontWeight="1000" letterSpacing="1" style={{ textTransform: 'uppercase' }}>{fgLabel}</text>
                         </svg>
                     </div>
                     <div className="flex flex-wrap justify-center gap-6">
@@ -159,8 +161,8 @@ const FearGreedWidget: React.FC<{ item: DashboardItem, language?: Language }> = 
                     </g>
                 </svg>
             </div>
-            {/* Margem aumentada para dar respiro ao numero */}
-            <div className="flex flex-col items-center mt-7 z-10">
+            {/* Reduced margin from mt-7 to mt-4 as requested (-10px roughly) */}
+            <div className="flex flex-col items-center mt-4 z-10">
                 <div className="text-3xl font-black text-[#dd9933] leading-none font-mono tracking-tighter">{fgValue}</div>
                 <div className="text-sm font-bold text-gray-900 dark:text-white uppercase mt-0.5">{fgLabel}</div>
             </div>

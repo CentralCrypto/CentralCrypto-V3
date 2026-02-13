@@ -1,4 +1,3 @@
-
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Highcharts from 'highcharts/highstock';
 import HC3D from 'highcharts/highcharts-3d';
@@ -35,6 +34,9 @@ if (typeof initWheelZoom === 'function') initWheelZoom(Highcharts);
 
 type Tf = '5m' | '1h' | '12h' | '1d';
 type Sym = 'BTC' | 'ETH' | 'SOL';
+
+// HISTORIC TF (para o JSON /cachecko/lsr-historic-${histTf}.json)
+type HistTf = '5m' | '15m' | '30m' | '1h' | '4h' | '12h' | '1d';
 
 type ExchangeRow = {
   exchange: string;
@@ -79,6 +81,8 @@ type Lsr20Coin = {
 const SYMBOLS: Sym[] = ['BTC', 'ETH', 'SOL'];
 const TFS: Tf[] = ['5m', '1h', '12h', '1d'];
 
+const HIST_TFS: HistTf[] = ['5m', '15m', '30m', '1h', '4h', '12h', '1d'];
+
 // Mapping for local files (symbol -> filename slug)
 const SLUG_MAP: Record<string, string> = {
     'BTC': 'bitcoin',
@@ -108,6 +112,7 @@ const SLUG_MAP: Record<string, string> = {
 
 const cachePathForExchange = (sym: Sym, tf: Tf) => `/cachecko/lsr-exchange-${sym.toLowerCase()}-${tf}.json`;
 const cachePathForTopCoins = () => `/cachecko/lsr-20-coins.json`;
+const cachePathForHistoric = (histTf: HistTf) => `/cachecko/lsr-historic-${histTf}.json`;
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
@@ -156,6 +161,63 @@ function pickLsrByTf(coin: Lsr20Coin, tf: Tf) {
   if (tf === '1h') return Number(coin.ls1h) || 0;
   if (tf === '12h') return Number(coin.ls12h) || 0;
   return Number(coin.ls24h) || 0;
+}
+
+// Normaliza formatos diferentes do JSON histórico
+function normalizeHistoricPoints(json: any): Array<[number, number]> {
+  const root = Array.isArray(json) ? (json[0] ?? json) : json;
+
+  const candidates =
+    root?.data ??
+    root?.points ??
+    root?.series ??
+    root?.history ??
+    root?.rows ??
+    root;
+
+  const arr = Array.isArray(candidates) ? candidates : (Array.isArray(root) ? root : []);
+
+  const points: Array<[number, number]> = [];
+  for (const it of arr) {
+    if (!it) continue;
+
+    // formatos comuns:
+    // {t: 1700000000, lsr: 1.23} | {timestamp: 1700000000000, value: 1.23} | [1700000000000, 1.23]
+    if (Array.isArray(it) && it.length >= 2) {
+      const xRaw = Number(it[0]);
+      const yRaw = Number(it[1]);
+      if (Number.isFinite(xRaw) && Number.isFinite(yRaw)) {
+        const ms = xRaw < 2e12 ? xRaw * 1000 : xRaw;
+        points.push([ms, yRaw]);
+      }
+      continue;
+    }
+
+    const tRaw =
+      it.t ??
+      it.time ??
+      it.ts ??
+      it.timestamp ??
+      it.date ??
+      it.x;
+
+    const vRaw =
+      it.lsr ??
+      it.value ??
+      it.y ??
+      it.val;
+
+    const tNum = Number(tRaw);
+    const vNum = Number(vRaw);
+
+    if (Number.isFinite(tNum) && Number.isFinite(vNum)) {
+      const ms = tNum < 2e12 ? tNum * 1000 : tNum;
+      points.push([ms, vNum]);
+    }
+  }
+
+  points.sort((a, b) => a[0] - b[0]);
+  return points;
 }
 
 // --- SUB-COMPONENT: Live Coin Row with Flashing & WS ---
@@ -210,6 +272,12 @@ export function LsrCockpitPage() {
   const [errorExchange, setErrorExchange] = useState<string | null>(null);
   const [errorPulse, setErrorPulse] = useState<string | null>(null);
 
+  // HISTORIC (MarketPulse cartesiano)
+  const [histTf, setHistTf] = useState<HistTf>('1h');
+  const [histPoints, setHistPoints] = useState<Array<[number, number]>>([]);
+  const [loadingHist, setLoadingHist] = useState(false);
+  const [errorHist, setErrorHist] = useState<string | null>(null);
+
   const [showTable, setShowTable] = useState(true);
   const [activeTab, setActiveTab] = useState<'exchanges' | 'coins'>('exchanges');
   const [barsMode, setBarsMode] = useState<'usd' | 'ratio'>('usd');
@@ -228,6 +296,7 @@ export function LsrCockpitPage() {
 
   const pulseChartRef = useRef<Highcharts.Chart | null>(null);
   const barsChartRef = useRef<Highcharts.Chart | null>(null);
+  const histChartRef = useRef<Highcharts.Chart | null>(null);
   
   const rotationStartRef = useRef<{ x: number, y: number, alpha: number, beta: number } | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -280,6 +349,123 @@ export function LsrCockpitPage() {
     run();
     return () => { alive = false; };
   }, []);
+
+  // FETCH HISTORIC (Market Pulse cartesiano)
+  useEffect(() => {
+    let alive = true;
+    const run = async () => {
+      setLoadingHist(true);
+      setErrorHist(null);
+      try {
+        const json = await fetchJsonStrict(cachePathForHistoric(histTf));
+        if (!alive) return;
+        const points = normalizeHistoricPoints(json);
+        setHistPoints(points);
+      } catch (e: any) {
+        if (!alive) return;
+        setErrorHist(e?.message || 'Erro ao carregar histórico');
+        setHistPoints([]);
+      } finally {
+        if (alive) setLoadingHist(false);
+      }
+    };
+    run();
+    return () => { alive = false; };
+  }, [histTf]);
+
+  // RENDER HISTORIC CHART (2D cartesian)
+  useEffect(() => {
+    if (loadingHist) return;
+
+    const el = document.getElementById('lsr-historic-chart');
+    if (!el) return;
+
+    if (histChartRef.current) {
+      try { histChartRef.current.destroy(); } catch {}
+      histChartRef.current = null;
+    }
+
+    if (errorHist || !histPoints.length) return;
+
+    histChartRef.current = (Highcharts as any).stockChart('lsr-historic-chart', {
+      chart: {
+        backgroundColor: 'transparent',
+        height: 400,
+        spacing: [8, 8, 8, 8]
+      },
+      title: { text: null },
+      credits: { enabled: false },
+      legend: { enabled: false },
+      rangeSelector: { enabled: false },
+      navigator: { enabled: false },
+      scrollbar: { enabled: false },
+      xAxis: {
+        type: 'datetime',
+        labels: { style: { color: 'rgba(255,255,255,0.55)', fontSize: '10px' } },
+        lineColor: 'rgba(255,255,255,0.08)',
+        tickColor: 'rgba(255,255,255,0.08)'
+      },
+      yAxis: {
+        title: { text: null },
+        gridLineColor: 'rgba(255,255,255,0.06)',
+        labels: { style: { color: 'rgba(255,255,255,0.55)', fontSize: '10px' } },
+        plotLines: [
+          {
+            value: 1,
+            color: 'rgba(221,153,51,0.55)',
+            width: 1,
+            zIndex: 3,
+            dashStyle: 'ShortDash',
+            label: {
+              text: 'LSR 1.00',
+              style: { color: 'rgba(221,153,51,0.75)', fontSize: '10px', fontWeight: 'bold' }
+            }
+          }
+        ]
+      },
+      tooltip: {
+        shared: false,
+        useHTML: true,
+        backgroundColor: 'rgba(17, 24, 39, 0.95)',
+        borderWidth: 0,
+        style: { color: '#fff' },
+        formatter: function () {
+          const p: any = this.point;
+          const dt = new Date(p.x);
+          const dateStr = dt.toLocaleString();
+          return `
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <div style="color:rgba(255,255,255,0.7);font-size:11px">${dateStr}</div>
+              <div>LSR: <b style="color:#dd9933">${fmtLSR(p.y)}</b></div>
+            </div>
+          `;
+        }
+      },
+      plotOptions: {
+        series: {
+          animation: false,
+          turboThreshold: 0
+        }
+      },
+      series: [
+        {
+          type: 'line',
+          name: `LSR Historic (${histTf.toUpperCase()})`,
+          data: histPoints,
+          color: '#dd9933',
+          lineWidth: 2,
+          tooltip: { valueDecimals: 2 }
+        }
+      ]
+    } as any);
+
+    return () => {
+      if (histChartRef.current) {
+        try { histChartRef.current.destroy(); } catch {}
+        histChartRef.current = null;
+      }
+    };
+  }, [loadingHist, errorHist, histPoints, histTf]);
 
   // COMPUTED DATA
   const exchangeRows = useMemo(() => {
@@ -447,7 +633,7 @@ export function LsrCockpitPage() {
             },
             formatter: function() {
                 // Adapta formatação baseado no modo
-                return barsMode === 'ratio' ? this.value + '%' : fmtUSD(this.value);
+                return barsMode === 'ratio' ? this.value + '%' : fmtUSD(this.value as any);
             }
         }
       },
@@ -635,15 +821,38 @@ export function LsrCockpitPage() {
         {/* CHANGED items-stretch to items-start to avoid excess whitespace */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6 items-start">
           
-          {/* MARKET PULSE (LEFT) - Reduced min-height from 520px to 400px */}
+          {/* MARKET PULSE (LEFT) - NOW CARTESIAN HISTORIC */}
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4 pb-8 overflow-visible">
             <div className="flex items-center justify-between mb-3">
-              <div><div className="text-sm font-black text-white/80 uppercase tracking-widest">Market Pulse</div></div>
-              {loadingPulse && <Loader2 className="animate-spin text-[#dd9933]" size={18} />}
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-black text-white/80 uppercase tracking-widest">Market Pulse (Historic)</div>
+
+                {/* selector do histórico */}
+                <div className="bg-black/20 border border-white/10 rounded-xl p-1 flex">
+                  {HIST_TFS.map(x => (
+                    <button
+                      key={x}
+                      onClick={() => setHistTf(x)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-black transition ${histTf === x ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'}`}
+                    >
+                      {x.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {loadingHist && <Loader2 className="animate-spin text-[#dd9933]" size={18} />}
             </div>
-            {errorPulse ? <div className="p-4 text-red-200 bg-red-900/20 border border-red-900/50 rounded">{errorPulse}</div> : 
-             loadingPulse ? <Skeleton h={400} /> : <div id="lsr-pulse-chart" className="min-h-[400px]" />
-            }
+
+            {errorHist ? (
+              <div className="p-4 text-red-200 bg-red-900/20 border border-red-900/50 rounded">{errorHist}</div>
+            ) : loadingHist ? (
+              <Skeleton h={400} />
+            ) : (
+              <div id="lsr-historic-chart" className="min-h-[400px]" />
+            )}
+
+            {/* Mantém o fetch de topCoins (não mexi), mas o Market Pulse agora é o histórico cartesiano */}
           </div>
 
           {/* EXCHANGE 3D (RIGHT) */}
