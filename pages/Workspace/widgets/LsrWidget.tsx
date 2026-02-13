@@ -36,6 +36,8 @@ if (typeof initWheelZoom === 'function') initWheelZoom(Highcharts);
 type Tf = '5m' | '1h' | '12h' | '1d';
 type Sym = 'BTC' | 'ETH' | 'SOL';
 
+const SYMBOLS: Sym[] = ['BTC', 'ETH', 'SOL'];
+
 // NOVOS INTERVALOS DO JSON
 type HistInterval = '5min' | '30min' | '1hour' | '4hour' | '12hour' | 'daily';
 
@@ -79,7 +81,6 @@ type Lsr20Coin = {
   iconUrl?: string;
 };
 
-const SYMBOLS: Sym[] = ['BTC', 'ETH', 'SOL'];
 const TFS: Tf[] = ['5m', '1h', '12h', '1d'];
 
 const HIST_INTERVALS: HistInterval[] = ['5min', '30min', '1hour', '4hour', '12hour', 'daily'];
@@ -111,7 +112,7 @@ const SLUG_MAP: Record<string, string> = {
     'PEPE': 'pepe'
 };
 
-const cachePathForExchange = (sym: Sym, tf: Tf) => `/cachecko/lsr-exchange-${sym.toLowerCase()}-${tf}.json`;
+const cachePathForExchange = (sym: string, tf: Tf) => `/cachecko/lsr-exchange-${sym.toLowerCase()}-${tf}.json`;
 const cachePathForTopCoins = () => `/cachecko/lsr-20-coins.json`;
 const cachePathForHistoric = (interval: HistInterval) => `/cachecko/lsr-historic-${interval}.json`;
 
@@ -150,11 +151,10 @@ async function fetchJsonStrict(url: string): Promise<any> {
   try { return JSON.parse(raw); } catch { throw new Error(`Invalid JSON`); }
 }
 
-function pickLsrByTf(coin: Lsr20Coin, tf: Tf) {
-  if (tf === '5m') return Number(coin.ls5m) || 0;
-  if (tf === '1h') return Number(coin.ls1h) || 0;
-  if (tf === '12h') return Number(coin.ls12h) || 0;
-  return Number(coin.ls24h) || 0;
+function getBaseSymbol(fullSymbol: string) {
+    if (!fullSymbol) return 'BTC';
+    // Remove suffix like 'USDT_PERP.A' or 'USDT'
+    return fullSymbol.split('USDT')[0];
 }
 
 // --- SUB-COMPONENT: Live Coin Row with Flashing & WS ---
@@ -191,7 +191,12 @@ const LsrCoinRow = React.memo(({ coin, colOrder, renderCell }: { coin: Lsr20Coin
 });
 
 export function LsrCockpitPage() {
-  const [symbol, setSymbol] = useState<Sym>('BTC');
+  // Use explicit symbol state, default 'BTC' base, but stores full ID from JSON
+  const [selectedHistoricSymbol, setSelectedHistoricSymbol] = useState<string>('BTCUSDT_PERP.A');
+  
+  // Base symbol used for Exchange 3D Widget (BTC, ETH, SOL only usually available)
+  const [exchangeSymbol, setExchangeSymbol] = useState<Sym>('BTC');
+  
   const [tf, setTf] = useState<Tf>('5m');
 
   const [exchangeSnap, setExchangeSnap] = useState<ExchangeSnapshot | null>(null);
@@ -204,6 +209,7 @@ export function LsrCockpitPage() {
 
   // HISTORIC DATA
   const [histInterval, setHistInterval] = useState<HistInterval>('1hour');
+  const [availableSymbols, setAvailableSymbols] = useState<string[]>([]);
   // Store 3 series
   const [histData, setHistData] = useState<{ r: [number, number][], l: [number, number][], s: [number, number][] } | null>(null);
   const [loadingHist, setLoadingHist] = useState(false);
@@ -212,7 +218,7 @@ export function LsrCockpitPage() {
   // CHART FILTERS
   const [showHistRate, setShowHistRate] = useState(true);
   const [showHistLongs, setShowHistLongs] = useState(true);
-  const [showHistShorts, setShowHistShorts] = useState(false); // Shorts hidden by default to declutter
+  const [showHistShorts, setShowHistShorts] = useState(false); 
 
   const [showTable, setShowTable] = useState(true);
   const [activeTab, setActiveTab] = useState<'exchanges' | 'coins'>('exchanges');
@@ -241,7 +247,7 @@ export function LsrCockpitPage() {
     const run = async () => {
       setLoadingExchange(true); setErrorExchange(null);
       try {
-        const json = await fetchJsonStrict(cachePathForExchange(symbol, tf));
+        const json = await fetchJsonStrict(cachePathForExchange(exchangeSymbol, tf));
         if (!alive) return;
         setExchangeSnap(Array.isArray(json) ? json[0] : json);
       } catch (e: any) {
@@ -251,7 +257,7 @@ export function LsrCockpitPage() {
     };
     run();
     return () => { alive = false; };
-  }, [symbol, tf]);
+  }, [exchangeSymbol, tf]);
 
   // FETCH TOP COINS
   useEffect(() => {
@@ -284,7 +290,7 @@ export function LsrCockpitPage() {
     return () => { alive = false; };
   }, []);
 
-  // FETCH LSR HISTORIC
+  // FETCH LSR HISTORIC & POPULATE SYMBOLS
   useEffect(() => {
     let alive = true;
     const run = async () => {
@@ -297,9 +303,28 @@ export function LsrCockpitPage() {
         if (!alive) return;
         
         const dataArr = json.data || [];
-        // Find correct symbol in the JSON array (fuzzy match for USDT pairs)
-        const targetSym = symbol.toUpperCase(); // e.g. BTC
-        const coinData = dataArr.find((d: any) => d.symbol && d.symbol.includes(targetSym));
+        
+        // Extract available symbols
+        const symbols = dataArr.map((d: any) => d.symbol).sort();
+        setAvailableSymbols(symbols);
+
+        // Try to find currently selected, or default to BTC, or first available
+        let targetSym = selectedHistoricSymbol;
+        
+        // If current selection not in new data, try to find matching base
+        if (!dataArr.find((d: any) => d.symbol === targetSym)) {
+             const base = getBaseSymbol(targetSym);
+             const match = dataArr.find((d: any) => d.symbol.includes(base));
+             if (match) {
+                 targetSym = match.symbol;
+                 setSelectedHistoricSymbol(targetSym);
+             } else if (dataArr.length > 0) {
+                 targetSym = dataArr[0].symbol;
+                 setSelectedHistoricSymbol(targetSym);
+             }
+        }
+
+        const coinData = dataArr.find((d: any) => d.symbol === targetSym);
 
         if (coinData && Array.isArray(coinData.history)) {
             const seriesR: [number, number][] = [];
@@ -321,7 +346,7 @@ export function LsrCockpitPage() {
 
             setHistData({ r: seriesR, l: seriesL, s: seriesS });
         } else {
-            setErrorHist(`Sem dados históricos para ${symbol} neste intervalo.`);
+            setErrorHist(`Sem dados históricos para ${targetSym} neste intervalo.`);
         }
 
       } catch (e: any) {
@@ -333,7 +358,15 @@ export function LsrCockpitPage() {
     };
     run();
     return () => { alive = false; };
-  }, [histInterval, symbol]); // Reload when interval OR symbol changes
+  }, [histInterval, selectedHistoricSymbol]); // Re-run if interval changes or if user selects new symbol manually
+
+  // SYNC EXCHANGE WIDGET WITH HISTORIC SELECTION (Only if supported)
+  useEffect(() => {
+      const base = getBaseSymbol(selectedHistoricSymbol);
+      if (['BTC', 'ETH', 'SOL'].includes(base)) {
+          setExchangeSymbol(base as Sym);
+      }
+  }, [selectedHistoricSymbol]);
 
   // UPDATE CHART VISIBILITY WITHOUT RECREATING
   useEffect(() => {
@@ -362,14 +395,17 @@ export function LsrCockpitPage() {
       chart: {
         backgroundColor: 'transparent',
         height: 400,
-        zooming: { type: 'x', mouseWheel: { enabled: true } },
-        panning: { enabled: true, type: 'x' },
-        panKey: 'shift', // or just drag if zooming is x
+        zooming: { 
+            mouseWheel: { enabled: true },
+            type: undefined // DISABLE DRAG ZOOM to allow panning
+        },
+        panning: { enabled: true, type: 'x' }, // ENABLE DRAG PAN
+        panKey: undefined, // Pan without key
         spacing: [10, 10, 10, 10]
       },
       title: { text: null },
       credits: { enabled: false },
-      legend: { enabled: false }, // Controlled by external UI
+      legend: { enabled: false }, 
       xAxis: {
         type: 'datetime',
         labels: { style: { color: 'rgba(255,255,255,0.55)', fontSize: '10px' } },
@@ -378,11 +414,14 @@ export function LsrCockpitPage() {
         crosshair: { width: 1, color: 'rgba(255,255,255,0.2)', dashStyle: 'Dash' }
       },
       yAxis: [{
-        // Axis 0: LSR Rate (Left)
+        // Axis 0: LSR Rate (Left) - AUTO SCALING
         title: { text: 'LSR Rate', style: { color: '#dd9933' } },
-        gridLineColor: 'rgba(255,255,255,0.06)',
+        gridLineColor: 'rgba(255,255,255,0.1)', // Visible Grid Lines
+        gridLineWidth: 1,
         labels: { style: { color: '#dd9933', fontSize: '10px' } },
-        plotLines: [{ value: 1, color: '#ffffff', width: 1, dashStyle: 'Dot', zIndex: 2 }]
+        plotLines: [{ value: 1, color: '#ffffff', width: 1, dashStyle: 'Dot', zIndex: 2 }],
+        min: null, // Auto scale
+        max: null  // Auto scale
       }, {
         // Axis 1: Percentages (Right)
         title: { text: 'Ratio %', style: { color: '#ffffff' } },
@@ -402,7 +441,7 @@ export function LsrCockpitPage() {
             // @ts-ignore
             const points = this.points || [];
             // @ts-ignore
-            const date = new Date(this.x).toLocaleString();
+            const date = new Date(this.x).toLocaleDateString('pt-BR'); // DD/MM/YYYY
             
             let s = `<div style="font-size:11px;color:#aaa;margin-bottom:4px;">${date}</div>`;
             points.forEach((p: any) => {
@@ -456,7 +495,7 @@ export function LsrCockpitPage() {
         histChartRef.current = null;
       }
     };
-  }, [histData, histInterval, symbol]); // Depend on data and basic config, visibility handled separately
+  }, [histData, histInterval, selectedHistoricSymbol]); 
 
   // COMPUTED DATA
   const exchangeRows = useMemo(() => {
@@ -735,12 +774,12 @@ export function LsrCockpitPage() {
         {/* HEADER CONTROLS */}
         <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight">Long/Short Ratio Cockpit <span className="ml-3 text-sm font-black text-white/60">{symbol} · {tf.toUpperCase()}</span></h1>
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight">Long/Short Ratio Cockpit <span className="ml-3 text-sm font-black text-white/60">{exchangeSymbol} · {tf.toUpperCase()}</span></h1>
             <p className="text-white/60 text-sm mt-1">Dados de LSR em tempo real das principais exchanges e agregados.</p>
           </div>
           <div className="flex flex-wrap gap-3 items-center">
             <div className="bg-white/5 border border-white/10 rounded-xl p-1 flex">
-              {SYMBOLS.map(s => (<button key={s} onClick={() => setSymbol(s)} className={`px-4 py-2 rounded-lg text-sm font-black transition ${symbol === s ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'}`}>{s}</button>))}
+              {SYMBOLS.map(s => (<button key={s} onClick={() => setExchangeSymbol(s)} className={`px-4 py-2 rounded-lg text-sm font-black transition ${exchangeSymbol === s ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'}`}>{s}</button>))}
             </div>
             <div className="bg-white/5 border border-white/10 rounded-xl p-1 flex">
               {TFS.map(x => (<button key={x} onClick={() => setTf(x)} className={`px-4 py-2 rounded-lg text-sm font-black transition ${tf === x ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'}`}>{x.toUpperCase()}</button>))}
@@ -753,21 +792,43 @@ export function LsrCockpitPage() {
         </div>
 
         {/* TOP SECTION: LSR HISTORIC + AGGREGATED */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6 items-start">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6 items-stretch">
           
           {/* LSR HISTORIC CHART (LEFT) */}
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 pb-8 overflow-visible">
-            <div className="flex items-center justify-between mb-3">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 pb-8 overflow-visible h-full flex flex-col">
+            <div className="flex flex-wrap items-center justify-between mb-3 gap-2">
               <div className="flex items-center gap-3">
                 <div className="text-sm font-black text-white/80 uppercase tracking-widest">LSR Historic</div>
                 
+                {/* Coin Selector with Logo */}
+                <div className="relative group">
+                    <select 
+                        value={selectedHistoricSymbol}
+                        onChange={(e) => setSelectedHistoricSymbol(e.target.value)}
+                        className="appearance-none bg-black/40 border border-white/10 rounded-lg py-1.5 pl-9 pr-8 text-xs font-bold text-white hover:bg-black/60 cursor-pointer outline-none focus:border-[#dd9933]"
+                    >
+                        {availableSymbols.map(sym => (
+                            <option key={sym} value={sym} className="bg-[#1a1c1e] text-white">
+                                {getBaseSymbol(sym)}
+                            </option>
+                        ))}
+                    </select>
+                    <div className="absolute left-2 top-1.5 pointer-events-none">
+                        <CoinLogo 
+                            coin={{ id: getBaseSymbol(selectedHistoricSymbol).toLowerCase(), symbol: getBaseSymbol(selectedHistoricSymbol) }} 
+                            className="w-5 h-5 rounded-full" 
+                        />
+                    </div>
+                    <ChevronDown size={14} className="absolute right-2 top-2 text-gray-400 pointer-events-none" />
+                </div>
+
                 {/* Interval Selector */}
-                <div className="bg-black/20 border border-white/10 rounded-xl p-1 flex">
+                <div className="bg-black/20 border border-white/10 rounded-xl p-1 flex overflow-x-auto">
                   {HIST_INTERVALS.map(x => (
                     <button
                       key={x}
                       onClick={() => setHistInterval(x)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-black transition ${histInterval === x ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'}`}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-black transition whitespace-nowrap ${histInterval === x ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'}`}
                     >
                       {x.replace('min','m').replace('hour','h').replace('daily','D').toUpperCase()}
                     </button>
@@ -785,17 +846,19 @@ export function LsrCockpitPage() {
               {loadingHist && <Loader2 className="animate-spin text-[#dd9933]" size={18} />}
             </div>
 
-            {errorHist ? (
-              <div className="p-4 text-red-200 bg-red-900/20 border border-red-900/50 rounded flex items-center justify-center h-[400px]">{errorHist}</div>
-            ) : loadingHist ? (
-              <Skeleton h={400} />
-            ) : (
-              <div id="lsr-historic-chart" className="min-h-[400px]" />
-            )}
+            <div className="flex-1 min-h-[400px]">
+                {errorHist ? (
+                  <div className="p-4 text-red-200 bg-red-900/20 border border-red-900/50 rounded flex items-center justify-center h-full">{errorHist}</div>
+                ) : loadingHist ? (
+                  <Skeleton h={400} />
+                ) : (
+                  <div id="lsr-historic-chart" className="h-full" />
+                )}
+            </div>
           </div>
 
           {/* EXCHANGE 3D (RIGHT) */}
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 pb-3 overflow-visible flex flex-col">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 pb-3 overflow-visible flex flex-col h-full">
             <div className="flex items-center justify-between mb-2 shrink-0">
               <div className="flex items-center gap-4">
                   <div className="text-sm font-black text-white/80 uppercase tracking-widest">LSR Agregado</div>
@@ -808,10 +871,10 @@ export function LsrCockpitPage() {
               {loadingExchange && <Loader2 className="animate-spin text-[#dd9933]" size={18} />}
             </div>
 
-            <div className="relative overflow-visible">
-                {errorExchange ? <div className="p-4 text-red-200 bg-red-900/20 border border-red-900/50 rounded">{errorExchange}</div> :
+            <div className="relative overflow-visible flex-1 min-h-[300px]">
+                {errorExchange ? <div className="p-4 text-red-200 bg-red-900/20 border border-red-900/50 rounded h-full flex items-center justify-center">{errorExchange}</div> :
                  loadingExchange ? <Skeleton h={300} /> : 
-                 <div id="lsr-exchange-3d" className="min-h-[300px]" />
+                 <div id="lsr-exchange-3d" className="h-full min-h-[300px]" />
                 }
             </div>
 
