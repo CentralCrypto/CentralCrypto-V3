@@ -360,6 +360,14 @@ export function LsrCockpitPage() {
     return () => { alive = false; };
   }, [histInterval, selectedHistoricSymbol]); // Re-run if interval changes or if user selects new symbol manually
 
+  // SYNC EXCHANGE WIDGET WITH HISTORIC SELECTION (Only if supported)
+  useEffect(() => {
+      const base = getBaseSymbol(selectedHistoricSymbol);
+      if (['BTC', 'ETH', 'SOL'].includes(base)) {
+          setExchangeSymbol(base as Sym);
+      }
+  }, [selectedHistoricSymbol]);
+
   // UPDATE CHART VISIBILITY WITHOUT RECREATING
   useEffect(() => {
       if (histChartRef.current) {
@@ -389,7 +397,7 @@ export function LsrCockpitPage() {
         height: 400,
         zooming: { 
             mouseWheel: { enabled: true },
-            type: undefined // DISABLE DRAG ZOOM to allow panning
+            type: undefined // DISABLE SELECTION ZOOM to allow PAN
         },
         panning: { enabled: true, type: 'x' }, // ENABLE DRAG PAN
         panKey: undefined, // Pan without key
@@ -454,6 +462,7 @@ export function LsrCockpitPage() {
           data: histData.r,
           color: '#dd9933', // Gold/Orange
           lineWidth: 1, // 1 PIXEL
+          states: { hover: { lineWidthPlus: 0 } }, // Keep thin on hover
           yAxis: 0,
           visible: showHistRate,
           zIndex: 3
@@ -464,6 +473,7 @@ export function LsrCockpitPage() {
           data: histData.l,
           color: '#22c55e', // Green
           lineWidth: 1, // 1 PIXEL
+          states: { hover: { lineWidthPlus: 0 } },
           yAxis: 1,
           visible: showHistLongs,
           zIndex: 2
@@ -474,6 +484,7 @@ export function LsrCockpitPage() {
           data: histData.s,
           color: '#ef4444', // Red
           lineWidth: 1, // 1 PIXEL
+          states: { hover: { lineWidthPlus: 0 } },
           yAxis: 1,
           visible: showHistShorts,
           zIndex: 1
@@ -580,7 +591,7 @@ export function LsrCockpitPage() {
         type: 'column',
         backgroundColor: 'transparent',
         height: 300,
-        marginTop: 0,
+        marginTop: 10,
         marginLeft: undefined, 
         marginRight: 0,
         marginBottom: 72,
@@ -763,11 +774,28 @@ export function LsrCockpitPage() {
     <div className="min-h-screen bg-[#0b0e11] text-white" style={{ paddingBottom: '140px' }}>
       <div className="max-w-[1400px] mx-auto p-4 sm:p-6">
         
-        {/* HEADER CONTROLS (Moved inside widgets) */}
-        <h1 className="text-2xl sm:text-3xl font-black tracking-tight mb-6">Long/Short Ratio Cockpit</h1>
+        {/* HEADER CONTROLS */}
+        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight">Long/Short Ratio Cockpit <span className="ml-3 text-sm font-black text-white/60">{exchangeSymbol} · {tf.toUpperCase()}</span></h1>
+            <p className="text-white/60 text-sm mt-1">Dados de LSR em tempo real das principais exchanges e agregados.</p>
+          </div>
+          <div className="flex flex-wrap gap-3 items-center">
+            <div className="bg-white/5 border border-white/10 rounded-xl p-1 flex">
+              {SYMBOLS.map(s => (<button key={s} onClick={() => setExchangeSymbol(s)} className={`px-4 py-2 rounded-lg text-sm font-black transition ${exchangeSymbol === s ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'}`}>{s}</button>))}
+            </div>
+            <div className="bg-white/5 border border-white/10 rounded-xl p-1 flex">
+              {TFS.map(x => (<button key={x} onClick={() => setTf(x)} className={`px-4 py-2 rounded-lg text-sm font-black transition ${tf === x ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'}`}>{x.toUpperCase()}</button>))}
+            </div>
+            <div className="bg-white/5 border border-white/10 rounded-xl p-1 flex">
+              <button onClick={() => setBarsMode('usd')} className={`px-4 py-2 rounded-lg text-sm font-black transition ${barsMode === 'usd' ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'}`}>USD</button>
+              <button onClick={() => setBarsMode('ratio')} className={`px-4 py-2 rounded-lg text-sm font-black transition ${barsMode === 'ratio' ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'}`}>%</button>
+            </div>
+          </div>
+        </div>
 
         {/* TOP SECTION: LSR HISTORIC + AGGREGATED */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-stretch">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6 items-stretch">
           
           {/* LSR HISTORIC CHART (LEFT) */}
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4 pb-8 overflow-visible h-full flex flex-col">
@@ -843,9 +871,19 @@ export function LsrCockpitPage() {
             
             {/* Header: Controls + Stats */}
             <div className="flex flex-wrap items-center justify-between mb-3 gap-2">
-              <div className="flex items-center gap-2">
-                  <div className="text-sm font-black text-white/80 uppercase tracking-widest mr-2">LSR Agregado</div>
-                  
+              <div className="flex items-center gap-4">
+                  <div className="text-sm font-black text-white/80 uppercase tracking-widest">LSR Agregado</div>
+                  <div className="w-px h-4 bg-white/10"></div>
+                  {agg && (
+                      <div className="text-[#dd9933] font-mono font-black text-lg">
+                          {fmtLSR(aggLsrValue)}
+                      </div>
+                  )}
+                  {loadingExchange && <Loader2 className="animate-spin text-[#dd9933]" size={18} />}
+              </div>
+
+              {/* Right Side: Dropdowns + Toggle */}
+              <div className="flex items-center gap-3 ml-auto">
                    {/* Exchange Coin Selector (Dropdown) */}
                    <div className="relative group">
                     <select
@@ -869,24 +907,16 @@ export function LsrCockpitPage() {
                     </select>
                     <ChevronDown size={14} className="absolute right-2 top-2 text-gray-400 pointer-events-none" />
                    </div>
-              </div>
-
-              {/* Right Side: Toggle & Value */}
-              <div className="flex items-center gap-3 ml-auto">
-                 <div className="flex bg-black/40 rounded p-0.5 border border-white/10">
-                    <button onClick={() => setBarsMode('usd')} className={`px-2 py-0.5 text-[10px] font-bold rounded transition ${barsMode === 'usd' ? 'bg-[#dd9933] text-black' : 'text-gray-400 hover:text-white'}`}>USD</button>
-                    <button onClick={() => setBarsMode('ratio')} className={`px-2 py-0.5 text-[10px] font-bold rounded transition ${barsMode === 'ratio' ? 'bg-[#dd9933] text-black' : 'text-gray-400 hover:text-white'}`}>%</button>
-                 </div>
-                 {agg && (
-                      <div className="text-[#dd9933] font-mono font-black text-lg border-l border-white/10 pl-3">
-                          {fmtLSR(aggLsrValue)}
-                      </div>
-                  )}
-                 {loadingExchange && <Loader2 className="animate-spin text-[#dd9933]" size={18} />}
+                   
+                   {/* Toggle USD/% */}
+                   <div className="flex bg-black/40 rounded p-0.5 border border-white/10">
+                      <button onClick={() => setBarsMode('usd')} className={`px-2 py-0.5 text-[10px] font-bold rounded transition ${barsMode === 'usd' ? 'bg-[#dd9933] text-black' : 'text-gray-400 hover:text-white'}`}>USD</button>
+                      <button onClick={() => setBarsMode('ratio')} className={`px-2 py-0.5 text-[10px] font-bold rounded transition ${barsMode === 'ratio' ? 'bg-[#dd9933] text-black' : 'text-gray-400 hover:text-white'}`}>%</button>
+                   </div>
               </div>
             </div>
 
-            <div className="relative overflow-visible flex-1 min-h-[300px]">
+            <div className="relative overflow-visible flex-1 min-h-[300px] mt-4 mb-4">
                 {errorExchange ? <div className="p-4 text-red-200 bg-red-900/20 border border-red-900/50 rounded h-full flex items-center justify-center">{errorExchange}</div> :
                  loadingExchange ? <Skeleton h={300} /> : 
                  <div id="lsr-exchange-3d" className="h-full min-h-[300px]" />
