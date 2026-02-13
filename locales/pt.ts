@@ -88,6 +88,7 @@ export const pt = {
       swarm: "Market Wind Swarm",
       faq: {
         title: "Metodologia e FAQ",
+        faqTitle: "Metodologia e FAQ",
         fng: {
           q1: "Como o Fear & Greed Index é calculado?",
           a1: "O índice é uma análise de sentimento multifatorial. Processamos dados de volatilidade, volume de mercado, sentimento em redes sociais e dominância do Bitcoin para gerar um valor de 0 a 100.",
@@ -180,7 +181,7 @@ export const pt = {
       macd: { title: "Média MACD", avgLabel: "Média Global MACD", desc: "Tendência Global MACD", timeframe: "Timeframe", xAxis: "Eixo X", loading: "Carregando...", tooltip: { price: "Preço", mcap: "Cap. Mercado", change: "Var", signal: "Signal", hist: "Hist" }, context: { mcap: "Visão por capitalização", priceChange: "Visão por variação" } },
       lsr: { title: "Long/Short Ratio", desc: "Proporção Long/Short", price: "Preço", size: "Tamanho", total: "Total", noData: "Sem dados" },
       altseason: { title: "Altcoin Season", index: "Índice ASI", altsMcap: "Cap Alts", yesterday: "Ontem", week: "Semana", month: "Mês", desc: "Temporada de Altcoins" },
-      etf: { title: "Fluxo ETF", dailyFlow: "Fluxo Diário", btcEtf: "BTC ETFs", ethEtf: "ETH ETFs", last7d: "7 Días", last30d: "30 Dias", last90d: "90 Días", lastUpdate: "Atualizado em", desc: "Fluxo institucional de ETFs" },
+      etf: { title: "Fluxo ETF", dailyFlow: "Fluxo Diário", btcEtf: "BTC ETFs", ethEtf: "ETH ETFs", last7d: "7 Dias", last30d: "30 Dias", last90d: "90 Dias", lastUpdate: "Atualizado em", desc: "Fluxo institucional de ETFs" },
       gainers: { title: "Top Movers", gainers: "Ganhadores", losers: "Perdedores", desc: "Principais variações do mercado" },
       trump: { title: "Trump-o-Meter", viewPost: "Ver Post", desc: "Impacto político no mercado" },
       calendar: { title: "Calendário Econômico", today: "HOJE", tomorrow: "AMANHÃ", previous: "Prev", forecast: "Proj", actual: "Atu", desc: "Eventos macroeconómicos" },

@@ -80,6 +80,7 @@ export const en = {
       swarm: "Market Wind Swarm",
       faq: {
         title: "Methodology and FAQ",
+        faqTitle: "Methodology and FAQ",
         fng: {
           q1: "How is the Fear & Greed Index calculated?",
           a1: "The index is a multi-factor sentiment analysis. We process data from volatility, market volume, social media sentiment, and Bitcoin dominance to generate a value from 0 to 100.",

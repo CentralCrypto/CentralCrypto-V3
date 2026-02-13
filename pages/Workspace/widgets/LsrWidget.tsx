@@ -10,8 +10,7 @@ import { getTranslations } from '../../../locales';
 import { useBinanceWS } from '../../../services/BinanceWebSocketContext';
 import CoinLogo from '../../../components/CoinLogo';
 
-// DnD Kit - Not needed anymore if removing tables, but kept if user reverts, 
-// strictly we can remove unused imports to clean up, but keeping structure stable.
+// DnD Kit
 import {
   DndContext,
   closestCenter,
@@ -175,7 +174,40 @@ const calculateSMA = (data: [number, number][], period: number): [number, number
     return sma;
 };
 
-export function LsrCockpitPage({ language }: { language: Language }) {
+// --- SUB-COMPONENT: Live Coin Row with Flashing & WS ---
+const LsrCoinRow = React.memo(({ coin, colOrder, renderCell }: { coin: Lsr20Coin, colOrder: string[], renderCell: (r: any, c: string, livePrice?: number, flashClass?: string) => React.ReactNode }) => {
+    const { tickers } = useBinanceWS();
+    const [displayPrice, setDisplayPrice] = useState(coin.price || 0);
+    const [flashClass, setFlashClass] = useState('');
+    const prevPriceRef = useRef(displayPrice);
+
+    useEffect(() => {
+        const tickerKey = `${coin.symbol.toUpperCase()}USDT`;
+        const liveData = tickers[tickerKey];
+        if (liveData) {
+            const newPrice = parseFloat(liveData.c);
+            if (!isNaN(newPrice)) setDisplayPrice(newPrice);
+        }
+    }, [tickers, coin.symbol]);
+
+    useEffect(() => {
+        if (prevPriceRef.current !== displayPrice) {
+            const isUp = displayPrice > prevPriceRef.current;
+            setFlashClass(isUp ? 'text-green-400 bg-green-900/20' : 'text-red-400 bg-red-900/20');
+            prevPriceRef.current = displayPrice;
+            const timer = setTimeout(() => setFlashClass(''), 300);
+            return () => clearTimeout(timer);
+        }
+    }, [displayPrice]);
+
+    return (
+        <tr className="hover:bg-white/5 transition-colors">
+            {colOrder.map(colId => renderCell(coin, colId, displayPrice, flashClass))}
+        </tr>
+    );
+});
+
+export function LsrCockpitPage({ language, item }: { language: Language, item: DashboardItem }) {
   const tLoc = getTranslations(language).dashboard.widgets.lsr;
 
   // Use explicit symbol state, default 'BTC' base, but stores full ID from JSON
@@ -187,9 +219,12 @@ export function LsrCockpitPage({ language }: { language: Language }) {
   const [tf, setTf] = useState<Tf>('5m');
 
   const [exchangeSnap, setExchangeSnap] = useState<ExchangeSnapshot | null>(null);
+  const [topCoins, setTopCoins] = useState<Lsr20Coin[]>([]);
 
   const [loadingExchange, setLoadingExchange] = useState(false);
+  const [loadingPulse, setLoadingPulse] = useState(false);
   const [errorExchange, setErrorExchange] = useState<string | null>(null);
+  const [errorPulse, setErrorPulse] = useState<string | null>(null);
 
   // HISTORIC DATA
   const [histInterval, setHistInterval] = useState<HistInterval>('1hour');
@@ -205,14 +240,28 @@ export function LsrCockpitPage({ language }: { language: Language }) {
   const [showHistShorts, setShowHistShorts] = useState(false);
   const [showSma, setShowSma] = useState(true); // Default ON
 
+  // Table State
+  const [activeTab, setActiveTab] = useState<'exchanges' | 'coins'>('coins');
   const [barsMode, setBarsMode] = useState<'usd' | 'ratio'>('usd');
 
   // Series Toggles (3D Chart)
   const [showLongs, setShowLongs] = useState(true);
   const [showShorts, setShowShorts] = useState(true);
 
+  // Sorting
+  const [sortKey, setSortKey] = useState<string>('totalUsd');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
+  // Column Orders
+  const [exColOrder, setExColOrder] = useState(['exchange', 'longPct', 'shortPct', 'lsr', 'longUsd', 'shortUsd', 'totalUsd']);
+  const [coinColOrder, setCoinColOrder] = useState(['asset', 'price', 'ls5m', 'ls15m', 'ls30m', 'ls1h', 'ls4h', 'ls24h']);
+
   const barsChartRef = useRef<Highcharts.Chart | null>(null);
   const histChartRef = useRef<Highcharts.Chart | null>(null);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  // SHOW TABLE LOGIC: Only show if item ID is 'lsr-page' (The Full Page view)
+  const showTable = item.id === 'lsr-page';
   
   // FETCH EXCHANGE DATA
   useEffect(() => {
@@ -231,6 +280,38 @@ export function LsrCockpitPage({ language }: { language: Language }) {
     run();
     return () => { alive = false; };
   }, [exchangeSymbol, tf]);
+
+  // FETCH TOP COINS (Only if table is shown)
+  useEffect(() => {
+    if (!showTable) return;
+    let alive = true;
+    const run = async () => {
+      setLoadingPulse(true); setErrorPulse(null);
+      try {
+        const json = await fetchJsonStrict(cachePathForTopCoins());
+        if (!alive) return;
+        let arr: any[] = [];
+        if (Array.isArray(json)) arr = json[0]?.data || json;
+        else if (json?.data) arr = json.data;
+        
+        const cleaned = arr.map(x => ({
+            ...x,
+            id: x.id || SLUG_MAP[String(x.symbol).toUpperCase()] || String(x.symbol).toLowerCase(),
+            symbol: String(x.symbol).toUpperCase(),
+            price: Number(x.price),
+            ls5m: Number(x.ls5m), ls15m: Number(x.ls15m), ls30m: Number(x.ls30m),
+            ls1h: Number(x.ls1h), ls4h: Number(x.ls4h), ls12h: Number(x.ls12h), ls24h: Number(x.ls24h),
+            iconUrl: x.iconUrl || x.image || x.logo
+        })) as Lsr20Coin[];
+        setTopCoins(cleaned);
+      } catch (e: any) {
+        if (!alive) return;
+        setErrorPulse(e?.message);
+      } finally { if (alive) setLoadingPulse(false); }
+    };
+    run();
+    return () => { alive = false; };
+  }, [showTable]);
 
   // FETCH LSR HISTORIC & POPULATE SYMBOLS
   useEffect(() => {
@@ -453,7 +534,7 @@ export function LsrCockpitPage({ language }: { language: Language }) {
     };
   }, [histData, histInterval, selectedHistoricSymbol]); 
 
-  // COMPUTED DATA
+  // COMPUTED DATA (Exchanges)
   const exchangeRows = useMemo(() => {
     const list = exchangeSnap?.data?.[0]?.list || [];
     const cleaned = list.map(x => ({
@@ -480,6 +561,45 @@ export function LsrCockpitPage({ language }: { language: Language }) {
       if (!agg || agg.sellVolUsd === 0) return 0;
       return agg.buyVolUsd / agg.sellVolUsd;
   }, [agg]);
+
+  // SORTING & DnD Logic
+  const handleSort = (key: string) => {
+      if (sortKey === key) setSortDir(prev => prev === 'desc' ? 'asc' : 'desc');
+      else { setSortKey(key); setSortDir('desc'); }
+  };
+
+  const sortedData = useMemo(() => {
+      if (!showTable) return [];
+      const data = activeTab === 'exchanges' ? [...exchangeRows] : [...topCoins];
+      const dir = sortDir === 'asc' ? 1 : -1;
+      
+      data.sort((a: any, b: any) => {
+          let av = 0, bv = 0;
+          if (activeTab === 'exchanges') {
+              if (sortKey === 'totalUsd') { av = a.buyVolUsd + a.sellVolUsd; bv = b.buyVolUsd + b.sellVolUsd; }
+              else if (sortKey === 'lsr') { av = a.sellVolUsd ? a.buyVolUsd/a.sellVolUsd : 0; bv = b.sellVolUsd ? b.buyVolUsd/b.sellVolUsd : 0; }
+              else if (sortKey === 'exchange') return a.exchange.localeCompare(b.exchange) * dir;
+              else av = a[sortKey]; bv = b[sortKey];
+          } else {
+              if (sortKey === 'asset') return a.symbol.localeCompare(b.symbol) * dir;
+              av = a[sortKey]; bv = b[sortKey];
+          }
+          return (av - bv) * dir;
+      });
+      return data;
+  }, [activeTab, exchangeRows, topCoins, sortKey, sortDir, showTable]);
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+        const setOrder = activeTab === 'exchanges' ? setExColOrder : setCoinColOrder;
+        setOrder((items) => {
+            const oldIndex = items.indexOf(active.id as string);
+            const newIndex = items.indexOf(over.id as string);
+            return arrayMove(items, oldIndex, newIndex);
+        });
+    }
+  };
 
   // 3D CHART EFFECT (For Exchanges Panel)
   useEffect(() => {
@@ -584,6 +704,106 @@ export function LsrCockpitPage({ language }: { language: Language }) {
       ]
     } as any);
   }, [loadingExchange, exchangeRows, barsMode]);
+
+  // TABLE COLUMNS & COMPONENTS
+  const EX_COLS: Record<string, { label: string, key?: string, align?: string }> = {
+      exchange: { label: "Exchange", key: "exchange", align: "left" },
+      longPct: { label: "Long %", key: "buyRatio", align: "right" },
+      shortPct: { label: "Short %", key: "sellRatio", align: "right" },
+      lsr: { label: "LSR", key: "lsr", align: "right" },
+      longUsd: { label: "Long $", key: "buyVolUsd", align: "right" },
+      shortUsd: { label: "Short $", key: "sellVolUsd", align: "right" },
+      totalUsd: { label: "Total $", key: "totalUsd", align: "right" }
+  };
+
+  const COIN_COLS: Record<string, { label: string, key?: string, align?: string }> = {
+      asset: { label: "Ativo", key: "asset", align: "left" },
+      price: { label: "Preço", key: "price", align: "right" },
+      ls5m: { label: "LSR 5m", key: "ls5m", align: "center" },
+      ls15m: { label: "LSR 15m", key: "ls15m", align: "center" },
+      ls30m: { label: "LSR 30m", key: "ls30m", align: "center" },
+      ls1h: { label: "LSR 1h", key: "ls1h", align: "center" },
+      ls4h: { label: "LSR 4h", key: "ls4h", align: "center" },
+      ls12h: { label: "LSR 12h", key: "ls12h", align: "center" },
+      ls24h: { label: "LSR 24h", key: "ls24h", align: "center" }
+  };
+
+  const SortableTh = ({ colId, label, sortKey, activeKey, onSort, align }: any) => {
+        const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: colId });
+        const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1, zIndex: isDragging ? 100 : 'auto' };
+        return (
+            <th ref={setNodeRef} style={style} className={`p-3 bg-[#0b0e11] cursor-pointer group select-none ${align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'}`} onClick={() => sortKey && onSort(sortKey)}>
+                <div className={`flex items-center gap-1 ${align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : 'justify-start'}`}>
+                    <span className={`p-1 rounded hover:bg-white/10 cursor-grab ${isDragging ? 'cursor-grabbing' : ''}`} {...attributes} {...listeners} onClick={e => e.stopPropagation()}><GripVertical size={12} className="text-gray-600" /></span>
+                    <span className="text-xs font-black text-gray-400 uppercase">{label}</span>
+                    {sortKey && <ChevronsUpDown size={12} className={`text-gray-600 transition-colors ${activeKey === sortKey ? 'text-[#dd9933]' : 'opacity-0 group-hover:opacity-100'}`} />}
+                </div>
+            </th>
+        );
+  };
+
+  const renderExchangeCell = (r: any, colId: string, _lp?: number) => {
+      const lsr = r.sellVolUsd > 0 ? r.buyVolUsd/r.sellVolUsd : 0;
+      switch(colId) {
+          case 'exchange': return (
+              <td className="p-3">
+                  <div className="flex items-center gap-3">
+                      {r.iconUrl ? <img src={r.iconUrl} className="w-6 h-6 rounded bg-white p-0.5" /> : <div className="w-6 h-6 rounded bg-white/10" />}
+                      <span className="font-bold text-white">{r.exchange}</span>
+                  </div>
+              </td>
+          );
+          case 'longPct': return <td className="p-3 text-right font-black" style={{color: COLOR_LONG_HEX}}>{fmtPct(r.buyRatio)}</td>;
+          case 'shortPct': return <td className="p-3 text-right font-black" style={{color: COLOR_SHORT_HEX}}>{fmtPct(r.sellRatio)}</td>;
+          case 'lsr': return <td className="p-3 text-right font-black font-mono text-[#dd9933]">{fmtLSR(lsr)}</td>;
+          case 'longUsd': return <td className="p-3 text-right font-mono text-gray-400 text-xs">{fmtUSD(r.buyVolUsd)}</td>;
+          case 'shortUsd': return <td className="p-3 text-right font-mono text-gray-400 text-xs">{fmtUSD(r.sellVolUsd)}</td>;
+          case 'totalUsd': return <td className="p-3 text-right font-mono font-bold text-gray-300 text-xs">{fmtUSD(r.buyVolUsd + r.sellVolUsd)}</td>;
+          default: return <td className="p-3"></td>;
+      }
+  };
+
+  const renderCoinCell = (r: Lsr20Coin, colId: string, livePrice?: number, flashClass?: string) => {
+      const getTrendArrow = (val: number, prevTFVal?: number) => {
+          if (!prevTFVal) return null;
+          if (val > prevTFVal) return <ArrowUp size={10} className="text-green-500 inline ml-1" />;
+          if (val < prevTFVal) return <ArrowDown size={10} className="text-red-500 inline ml-1" />;
+          return null;
+      };
+      const lsrColor = (v: number) => {
+          if (v >= 2) return 'text-red-500';
+          if (v <= 0.8) return 'text-green-500';
+          return 'text-gray-400';
+      };
+      const priceToUse = livePrice || r.price || 0;
+      const coinObj = { id: r.id || r.symbol.toLowerCase(), symbol: r.symbol, image: r.iconUrl };
+
+      switch(colId) {
+          case 'asset': return (
+              <td className="p-3">
+                  <div className="flex items-center gap-3">
+                      <CoinLogo coin={coinObj} className="w-6 h-6 rounded-full" />
+                      <div className="flex flex-col"><span className="font-bold text-white leading-none">{r.symbol}</span></div>
+                  </div>
+              </td>
+          );
+          case 'price': return (
+              <td className="p-3 text-right">
+                  <span className={`font-mono font-bold text-gray-300 transition-colors duration-300 px-1 py-0.5 rounded ${flashClass}`}>
+                      ${priceToUse < 1 ? priceToUse.toFixed(4) : priceToUse.toLocaleString()}
+                  </span>
+              </td>
+          );
+          case 'ls5m': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls5m||0)}`}>{fmtLSR(r.ls5m||0)}{getTrendArrow(r.ls5m||0, r.ls15m)}</td>;
+          case 'ls15m': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls15m||0)}`}>{fmtLSR(r.ls15m||0)}{getTrendArrow(r.ls15m||0, r.ls30m)}</td>;
+          case 'ls30m': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls30m||0)}`}>{fmtLSR(r.ls30m||0)}{getTrendArrow(r.ls30m||0, r.ls1h)}</td>;
+          case 'ls1h': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls1h||0)}`}>{fmtLSR(r.ls1h||0)}{getTrendArrow(r.ls1h||0, r.ls4h)}</td>;
+          case 'ls4h': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls4h||0)}`}>{fmtLSR(r.ls4h||0)}{getTrendArrow(r.ls4h||0, r.ls12h)}</td>;
+          case 'ls12h': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls12h||0)}`}>{fmtLSR(r.ls12h||0)}{getTrendArrow(r.ls12h||0, r.ls24h)}</td>;
+          case 'ls24h': return <td className={`p-3 text-center font-mono font-black ${lsrColor(r.ls24h||0)}`}>{fmtLSR(r.ls24h||0)}</td>;
+          default: return <td className="p-3"></td>;
+      }
+  };
 
   return (
     <div className="min-h-screen bg-[#0b0e11] text-white w-full h-full" style={{ paddingBottom: '140px' }}>
@@ -761,6 +981,44 @@ export function LsrCockpitPage({ language }: { language: Language }) {
             )}
           </div>
         </div>
+
+        {/* BOTTOM TABLE SECTION - CONDITIONALLY RENDERED */}
+        {showTable && (
+          <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex gap-4">
+                  <button onClick={() => setActiveTab('coins')} className={`text-sm font-black uppercase tracking-widest pb-1 border-b-2 transition-colors ${activeTab === 'coins' ? 'text-[#dd9933] border-[#dd9933]' : 'text-gray-500 border-transparent hover:text-white'}`}>LSR by COINS</button>
+                  <button onClick={() => setActiveTab('exchanges')} className={`text-sm font-black uppercase tracking-widest pb-1 border-b-2 transition-colors ${activeTab === 'exchanges' ? 'text-[#dd9933] border-[#dd9933]' : 'text-gray-500 border-transparent hover:text-white'}`}>LSR by EXCHANGE</button>
+              </div>
+            </div>
+
+            <div className="overflow-auto rounded-xl border border-white/10">
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-[#0b0e11] z-10">
+                  <tr className="border-b border-white/10">
+                    <SortableContext items={activeTab === 'exchanges' ? exColOrder : coinColOrder} strategy={horizontalListSortingStrategy}>
+                        {(activeTab === 'exchanges' ? exColOrder : coinColOrder).map(colId => {
+                            const def = activeTab === 'exchanges' ? EX_COLS[colId] : COIN_COLS[colId];
+                            return <SortableTh key={colId} colId={colId} label={def.label} sortKey={def.key} activeKey={sortKey} onSort={handleSort} align={def.align} />;
+                        })}
+                    </SortableContext>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {activeTab === 'exchanges' ? (
+                      loadingExchange ? <tr><td colSpan={exColOrder.length} className="p-8 text-center"><Loader2 className="animate-spin mx-auto text-[#dd9933]" /></td></tr> :
+                      sortedData.map((r: any) => <tr key={r.exchange} className="hover:bg-white/5 transition">{exColOrder.map(c => renderExchangeCell(r, c))}</tr>)
+                  ) : (
+                      loadingPulse ? <tr><td colSpan={coinColOrder.length} className="p-8 text-center"><Loader2 className="animate-spin mx-auto text-[#dd9933]" /></td></tr> :
+                      sortedData.map((r: any) => <LsrCoinRow key={r.symbol} coin={r} colOrder={coinColOrder} renderCell={renderCoinCell} />)
+                  )}
+                </tbody>
+              </table>
+              </DndContext>
+            </div>
+          </div>
+        )}
         <div className="h-12" />
       </div>
     </div>
@@ -915,7 +1173,7 @@ const LsrGridWidget: React.FC<{ language: Language }> = ({ language }) => {
 
 const LsrWidget: React.FC<{ item: DashboardItem, language?: Language }> = ({ item, language = 'pt' }) => {
   if (item.isMaximized) {
-    return <LsrCockpitPage language={language} />;
+    return <LsrCockpitPage language={language} item={item} />;
   }
   return <LsrGridWidget language={language} />;
 };

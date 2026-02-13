@@ -92,7 +92,7 @@ function PageFaq({ language, pageType }: { language: Language; pageType: string 
 
   return (
     <div className="mt-8 mb-12 max-w-4xl mx-auto px-4">
-      <h3 className="text-xl font-black text-gray-800 dark:text-[#dd9933] uppercase tracking-widest text-center mb-8">Metodologia e FAQ</h3>
+      <h3 className="text-xl font-black text-gray-800 dark:text-[#dd9933] uppercase tracking-widest text-center mb-8">{t.faqTitle || 'Metodologia e FAQ'}</h3>
       <div className="space-y-3">
         {items.map((item, i) => (
           <div key={i} className="bg-white dark:bg-[#1a1c1e] border border-gray-100 dark:border-tech-800 rounded-xl overflow-hidden shadow-sm transition-all duration-500">
