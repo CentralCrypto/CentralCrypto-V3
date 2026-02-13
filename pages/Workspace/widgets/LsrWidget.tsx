@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Highcharts from 'highcharts/highstock';
 import HC3D from 'highcharts/highcharts-3d';
 import HCWheelZoom from 'highcharts/modules/mouse-wheel-zoom';
-import { Loader2, AlertTriangle, ChevronDown, ChevronUp, Eye, EyeOff, GripVertical, ChevronsUpDown, ArrowUp, ArrowDown, TrendingUp, TrendingDown, Filter, MousePointer2, ZoomIn } from 'lucide-react';
+import { Loader2, AlertTriangle, ChevronDown, ChevronUp, Eye, EyeOff, GripVertical, ChevronsUpDown, ArrowUp, ArrowDown, TrendingUp, TrendingDown, Filter, Info, MousePointer2 } from 'lucide-react';
 import { DashboardItem, Language } from '../../../types';
 import { fetchLongShortRatio, LsrData } from '../../../services/api';
 import { getTranslations } from '../../../locales';
@@ -157,6 +157,23 @@ function getBaseSymbol(fullSymbol: string) {
     return fullSymbol.split('USDT')[0];
 }
 
+// Calculate SMA Helper
+const calculateSMA = (data: [number, number][], period: number): [number, number | null][] => {
+    const sma: [number, number | null][] = [];
+    for (let i = 0; i < data.length; i++) {
+        if (i < period - 1) {
+            sma.push([data[i][0], null]);
+            continue;
+        }
+        let sum = 0;
+        for (let j = 0; j < period; j++) {
+            sum += data[i - j][1];
+        }
+        sma.push([data[i][0], sum / period]);
+    }
+    return sma;
+};
+
 // --- SUB-COMPONENT: Live Coin Row with Flashing & WS ---
 const LsrCoinRow = React.memo(({ coin, colOrder, renderCell }: { coin: Lsr20Coin, colOrder: string[], renderCell: (r: any, c: string, livePrice?: number, flashClass?: string) => React.ReactNode }) => {
     const { tickers } = useBinanceWS();
@@ -210,15 +227,16 @@ export function LsrCockpitPage() {
   // HISTORIC DATA
   const [histInterval, setHistInterval] = useState<HistInterval>('1hour');
   const [availableSymbols, setAvailableSymbols] = useState<string[]>([]);
-  // Store 3 series
-  const [histData, setHistData] = useState<{ r: [number, number][], l: [number, number][], s: [number, number][] } | null>(null);
+  // Store series
+  const [histData, setHistData] = useState<{ r: [number, number][], l: [number, number][], s: [number, number][], sma: [number, number | null][] } | null>(null);
   const [loadingHist, setLoadingHist] = useState(false);
   const [errorHist, setErrorHist] = useState<string | null>(null);
   
   // CHART FILTERS
   const [showHistRate, setShowHistRate] = useState(true);
   const [showHistLongs, setShowHistLongs] = useState(true);
-  const [showHistShorts, setShowHistShorts] = useState(false); 
+  const [showHistShorts, setShowHistShorts] = useState(false);
+  const [showSma, setShowSma] = useState(true); // Default ON
 
   const [showTable, setShowTable] = useState(true);
   const [activeTab, setActiveTab] = useState<'exchanges' | 'coins'>('coins');
@@ -344,7 +362,10 @@ export function LsrCockpitPage() {
             seriesL.sort(sortFn);
             seriesS.sort(sortFn);
 
-            setHistData({ r: seriesR, l: seriesL, s: seriesS });
+            // Calculate SMA 21 for Rate
+            const smaSeries = calculateSMA(seriesR, 21);
+
+            setHistData({ r: seriesR, l: seriesL, s: seriesS, sma: smaSeries });
         } else {
             setErrorHist(`Sem dados históricos para ${targetSym} neste intervalo.`);
         }
@@ -365,11 +386,12 @@ export function LsrCockpitPage() {
       if (histChartRef.current) {
           const chart = histChartRef.current;
           if (chart.series[0]) chart.series[0].setVisible(showHistRate, false);
-          if (chart.series[1]) chart.series[1].setVisible(showHistLongs, false);
-          if (chart.series[2]) chart.series[2].setVisible(showHistShorts, false);
+          if (chart.series[1]) chart.series[1].setVisible(showSma, false);
+          if (chart.series[2]) chart.series[2].setVisible(showHistLongs, false);
+          if (chart.series[3]) chart.series[3].setVisible(showHistShorts, false);
           chart.redraw();
       }
-  }, [showHistRate, showHistLongs, showHistShorts]);
+  }, [showHistRate, showHistLongs, showHistShorts, showSma]);
 
   // RENDER HISTORIC CHART - USING STOCK CHART FOR BETTER NAVIGATION
   useEffect(() => {
@@ -442,8 +464,8 @@ export function LsrCockpitPage() {
                 s += `<div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;">
                         <span style="color:${p.series.color}">●</span> 
                         <span>${p.series.name}:</span> 
-                        <b>${p.y.toFixed(2)}</b>
-                        ${p.series.name !== 'Rate' ? '%' : ''}
+                        <b>${p.y.toFixed(3)}</b>
+                        ${(p.series.name === 'Longs' || p.series.name === 'Shorts') ? '%' : ''}
                       </div>`;
             });
             return s;
@@ -455,18 +477,31 @@ export function LsrCockpitPage() {
           name: 'Rate',
           data: histData.r,
           color: '#dd9933', // Gold/Orange
-          lineWidth: 1, // 1 PIXEL
-          states: { hover: { lineWidthPlus: 0 } }, // Keep thin on hover
+          lineWidth: 1, 
+          states: { hover: { lineWidthPlus: 0 } },
           yAxis: 0,
           visible: showHistRate,
           zIndex: 3
         },
         {
           type: 'line',
+          name: 'SMA 21',
+          data: histData.sma,
+          color: '#ffffff', // White
+          lineWidth: 1,
+          dashStyle: 'ShortDash',
+          states: { hover: { lineWidthPlus: 0 } },
+          yAxis: 0,
+          visible: showSma,
+          zIndex: 4,
+          enableMouseTracking: false 
+        },
+        {
+          type: 'line',
           name: 'Longs',
           data: histData.l,
           color: '#22c55e', // Green
-          lineWidth: 1, // 1 PIXEL
+          lineWidth: 1, 
           states: { hover: { lineWidthPlus: 0 } },
           yAxis: 1,
           visible: showHistLongs,
@@ -477,7 +512,7 @@ export function LsrCockpitPage() {
           name: 'Shorts',
           data: histData.s,
           color: '#ef4444', // Red
-          lineWidth: 1, // 1 PIXEL
+          lineWidth: 1, 
           states: { hover: { lineWidthPlus: 0 } },
           yAxis: 1,
           visible: showHistShorts,
@@ -825,6 +860,7 @@ export function LsrCockpitPage() {
               {/* Series Toggles (Aligned Right) */}
               <div className="flex gap-2 ml-auto">
                   <button onClick={() => setShowHistRate(!showHistRate)} className={`px-2 py-1 text-[10px] font-bold rounded border ${showHistRate ? 'bg-[#dd9933]/20 border-[#dd9933] text-[#dd9933]' : 'border-white/10 text-gray-500'}`}>Rate</button>
+                  <button onClick={() => setShowSma(!showSma)} className={`px-2 py-1 text-[10px] font-bold rounded border ${showSma ? 'bg-white/20 border-white text-white' : 'border-white/10 text-gray-500'}`}>SMA 21</button>
                   <button onClick={() => setShowHistLongs(!showHistLongs)} className={`px-2 py-1 text-[10px] font-bold rounded border ${showHistLongs ? 'bg-green-500/20 border-green-500 text-green-500' : 'border-white/10 text-gray-500'}`}>Longs</button>
                   <button onClick={() => setShowHistShorts(!showHistShorts)} className={`px-2 py-1 text-[10px] font-bold rounded border ${showHistShorts ? 'bg-red-500/20 border-red-500 text-red-500' : 'border-white/10 text-gray-500'}`}>Shorts</button>
               </div>
@@ -833,15 +869,18 @@ export function LsrCockpitPage() {
             </div>
 
             <div className="flex-1 min-h-[480px] mt-4 relative">
-                {/* TOOLTIP OVERLAY FOR CONTROLS */}
-                <div className="absolute top-2 right-2 z-10 flex items-center gap-3 bg-black/40 px-3 py-1.5 rounded-lg border border-white/10 pointer-events-none select-none">
-                    <span className="flex items-center gap-1.5 text-[10px] text-gray-400 font-bold uppercase tracking-wider">
-                         <MousePointer2 size={12} className="text-[#dd9933]" /> Pan
-                    </span>
-                    <div className="w-px h-3 bg-white/10"></div>
-                    <span className="flex items-center gap-1.5 text-[10px] text-gray-400 font-bold uppercase tracking-wider">
-                         <ZoomIn size={12} className="text-[#dd9933]" /> Zoom
-                    </span>
+                {/* TOOLTIP FOR CONTROLS */}
+                <div className="absolute top-2 right-2 z-10 group/help">
+                    <div className="bg-black/40 p-1.5 rounded-lg border border-white/10 cursor-help transition-colors hover:bg-black/60 hover:border-[#dd9933]/50">
+                        <Info size={16} className="text-gray-400 group-hover/help:text-[#dd9933]" />
+                    </div>
+                    <div className="absolute right-0 top-full mt-2 w-48 p-3 bg-[#1a1c1e] border border-gray-700 rounded-lg shadow-xl text-xs text-gray-300 opacity-0 group-hover/help:opacity-100 transition-opacity pointer-events-none group-hover/help:pointer-events-auto z-[60]">
+                        <div className="flex items-center gap-2 mb-2 font-bold text-white border-b border-white/10 pb-1">
+                            <MousePointer2 size={12} className="text-[#dd9933]" /> Interação
+                        </div>
+                        <p className="mb-1"><span className="text-[#dd9933] font-bold">Zoom:</span> Use o scroll do mouse.</p>
+                        <p><span className="text-[#dd9933] font-bold">Pan:</span> Clique e arraste o gráfico.</p>
+                    </div>
                 </div>
 
                 {errorHist ? (
@@ -944,9 +983,7 @@ export function LsrCockpitPage() {
                 <button onClick={() => setActiveTab('coins')} className={`text-sm font-black uppercase tracking-widest pb-1 border-b-2 transition-colors ${activeTab === 'coins' ? 'text-[#dd9933] border-[#dd9933]' : 'text-gray-500 border-transparent hover:text-white'}`}>LSR by COINS</button>
                 <button onClick={() => setActiveTab('exchanges')} className={`text-sm font-black uppercase tracking-widest pb-1 border-b-2 transition-colors ${activeTab === 'exchanges' ? 'text-[#dd9933] border-[#dd9933]' : 'text-gray-500 border-transparent hover:text-white'}`}>LSR by EXCHANGE</button>
             </div>
-            <button onClick={() => setShowTable(v => !v)} className="px-3 py-2 rounded-xl bg-black/20 border border-white/10 hover:bg-black/30 transition flex items-center gap-2 text-sm font-black">
-              {showTable ? <ChevronUp size={16} /> : <ChevronDown size={16} />}{showTable ? 'Ocultar' : 'Mostrar'}
-            </button>
+            {/* HIDE BUTTON REMOVED AS REQUESTED */}
           </div>
 
           {showTable && (
