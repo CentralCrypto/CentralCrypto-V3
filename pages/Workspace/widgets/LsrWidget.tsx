@@ -386,20 +386,13 @@ export function LsrCockpitPage() {
     histChartRef.current = Highcharts.chart('lsr-historic-chart', {
       chart: {
         backgroundColor: 'transparent',
-        height: 400,
-        zooming: {
+        height: 480, // INCREASED HEIGHT
+        zooming: { 
             mouseWheel: { enabled: true },
-            type: 'x', // Enable X axis selection zooming
-            resetButton: {
-                theme: {
-                    fill: '#1f2937',
-                    stroke: '#374151',
-                    style: { color: '#fff' }
-                }
-            }
+            type: undefined // DISABLE SELECTION ZOOM (No blue box)
         },
-        panning: { enabled: true, type: 'x' }, // Enable Drag Panning
-        panKey: 'shift', // Standard pan key, or drag if zoomed in
+        panning: { enabled: true, type: 'x' }, // ENABLE DRAG PANNING
+        panKey: undefined, // Direct drag without key
         spacing: [10, 10, 10, 10]
       },
       title: { text: null },
@@ -773,7 +766,7 @@ export function LsrCockpitPage() {
     <div className="min-h-screen bg-[#0b0e11] text-white" style={{ paddingBottom: '140px' }}>
       <div className="max-w-[1400px] mx-auto p-4 sm:p-6">
         
-        {/* HEADER CONTROLS (Removed duplicate buttons) */}
+        {/* HEADER CONTROLS */}
         <h1 className="text-2xl sm:text-3xl font-black tracking-tight mb-6">Long/Short Ratio Cockpit</h1>
 
         {/* TOP SECTION: LSR HISTORIC + AGGREGATED */}
@@ -837,11 +830,11 @@ export function LsrCockpitPage() {
               {loadingHist && <Loader2 className="animate-spin text-[#dd9933]" size={18} />}
             </div>
 
-            <div className="flex-1 min-h-[400px]">
+            <div className="flex-1 min-h-[480px] mt-4">
                 {errorHist ? (
                   <div className="p-4 text-red-200 bg-red-900/20 border border-red-900/50 rounded flex items-center justify-center h-full">{errorHist}</div>
                 ) : loadingHist ? (
-                  <Skeleton h={400} />
+                  <Skeleton h={480} />
                 ) : (
                   <div id="lsr-historic-chart" className="h-full" />
                 )}
