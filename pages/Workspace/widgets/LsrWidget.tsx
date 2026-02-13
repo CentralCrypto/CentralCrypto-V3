@@ -360,14 +360,6 @@ export function LsrCockpitPage() {
     return () => { alive = false; };
   }, [histInterval, selectedHistoricSymbol]); // Re-run if interval changes or if user selects new symbol manually
 
-  // SYNC EXCHANGE WIDGET WITH HISTORIC SELECTION (Only if supported)
-  useEffect(() => {
-      const base = getBaseSymbol(selectedHistoricSymbol);
-      if (['BTC', 'ETH', 'SOL'].includes(base)) {
-          setExchangeSymbol(base as Sym);
-      }
-  }, [selectedHistoricSymbol]);
-
   // UPDATE CHART VISIBILITY WITHOUT RECREATING
   useEffect(() => {
       if (histChartRef.current) {
@@ -461,7 +453,7 @@ export function LsrCockpitPage() {
           name: 'Rate',
           data: histData.r,
           color: '#dd9933', // Gold/Orange
-          lineWidth: 2,
+          lineWidth: 1, // 1 PIXEL
           yAxis: 0,
           visible: showHistRate,
           zIndex: 3
@@ -471,7 +463,7 @@ export function LsrCockpitPage() {
           name: 'Longs',
           data: histData.l,
           color: '#22c55e', // Green
-          lineWidth: 1.5,
+          lineWidth: 1, // 1 PIXEL
           yAxis: 1,
           visible: showHistLongs,
           zIndex: 2
@@ -481,7 +473,7 @@ export function LsrCockpitPage() {
           name: 'Shorts',
           data: histData.s,
           color: '#ef4444', // Red
-          lineWidth: 1.5,
+          lineWidth: 1, // 1 PIXEL
           yAxis: 1,
           visible: showHistShorts,
           zIndex: 1
@@ -771,28 +763,11 @@ export function LsrCockpitPage() {
     <div className="min-h-screen bg-[#0b0e11] text-white" style={{ paddingBottom: '140px' }}>
       <div className="max-w-[1400px] mx-auto p-4 sm:p-6">
         
-        {/* HEADER CONTROLS */}
-        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight">Long/Short Ratio Cockpit <span className="ml-3 text-sm font-black text-white/60">{exchangeSymbol} · {tf.toUpperCase()}</span></h1>
-            <p className="text-white/60 text-sm mt-1">Dados de LSR em tempo real das principais exchanges e agregados.</p>
-          </div>
-          <div className="flex flex-wrap gap-3 items-center">
-            <div className="bg-white/5 border border-white/10 rounded-xl p-1 flex">
-              {SYMBOLS.map(s => (<button key={s} onClick={() => setExchangeSymbol(s)} className={`px-4 py-2 rounded-lg text-sm font-black transition ${exchangeSymbol === s ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'}`}>{s}</button>))}
-            </div>
-            <div className="bg-white/5 border border-white/10 rounded-xl p-1 flex">
-              {TFS.map(x => (<button key={x} onClick={() => setTf(x)} className={`px-4 py-2 rounded-lg text-sm font-black transition ${tf === x ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'}`}>{x.toUpperCase()}</button>))}
-            </div>
-            <div className="bg-white/5 border border-white/10 rounded-xl p-1 flex">
-              <button onClick={() => setBarsMode('usd')} className={`px-4 py-2 rounded-lg text-sm font-black transition ${barsMode === 'usd' ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'}`}>USD</button>
-              <button onClick={() => setBarsMode('ratio')} className={`px-4 py-2 rounded-lg text-sm font-black transition ${barsMode === 'ratio' ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'}`}>%</button>
-            </div>
-          </div>
-        </div>
+        {/* HEADER CONTROLS (Moved inside widgets) */}
+        <h1 className="text-2xl sm:text-3xl font-black tracking-tight mb-6">Long/Short Ratio Cockpit</h1>
 
         {/* TOP SECTION: LSR HISTORIC + AGGREGATED */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6 items-stretch">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-stretch">
           
           {/* LSR HISTORIC CHART (LEFT) */}
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4 pb-8 overflow-visible h-full flex flex-col">
@@ -815,29 +790,35 @@ export function LsrCockpitPage() {
                     </select>
                     <div className="absolute left-2 top-1.5 pointer-events-none">
                         <CoinLogo 
-                            coin={{ id: getBaseSymbol(selectedHistoricSymbol).toLowerCase(), symbol: getBaseSymbol(selectedHistoricSymbol) }} 
+                            coin={{ 
+                                id: SLUG_MAP[getBaseSymbol(selectedHistoricSymbol)] || getBaseSymbol(selectedHistoricSymbol).toLowerCase(), 
+                                symbol: getBaseSymbol(selectedHistoricSymbol) 
+                            }} 
                             className="w-5 h-5 rounded-full" 
                         />
                     </div>
                     <ChevronDown size={14} className="absolute right-2 top-2 text-gray-400 pointer-events-none" />
                 </div>
 
-                {/* Interval Selector */}
-                <div className="bg-black/20 border border-white/10 rounded-xl p-1 flex overflow-x-auto">
-                  {HIST_INTERVALS.map(x => (
-                    <button
-                      key={x}
-                      onClick={() => setHistInterval(x)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-black transition whitespace-nowrap ${histInterval === x ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'}`}
+                {/* Interval Selector (Dropdown) */}
+                 <div className="relative group">
+                    <select
+                      value={histInterval}
+                      onChange={(e) => setHistInterval(e.target.value as HistInterval)}
+                      className="appearance-none bg-black/40 border border-white/10 rounded-lg py-1.5 pl-3 pr-8 text-xs font-bold text-white hover:bg-black/60 cursor-pointer outline-none focus:border-[#dd9933]"
                     >
-                      {x.replace('min','m').replace('hour','h').replace('daily','D').toUpperCase()}
-                    </button>
-                  ))}
+                      {HIST_INTERVALS.map(x => (
+                        <option key={x} value={x} className="bg-[#1a1c1e]">
+                          {x.replace('min','m').replace('hour','h').replace('daily','D').toUpperCase()}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-2 top-2 text-gray-400 pointer-events-none" />
                 </div>
               </div>
 
-              {/* Series Toggles */}
-              <div className="flex gap-2">
+              {/* Series Toggles (Aligned Right) */}
+              <div className="flex gap-2 ml-auto">
                   <button onClick={() => setShowHistRate(!showHistRate)} className={`px-2 py-1 text-[10px] font-bold rounded border ${showHistRate ? 'bg-[#dd9933]/20 border-[#dd9933] text-[#dd9933]' : 'border-white/10 text-gray-500'}`}>Rate</button>
                   <button onClick={() => setShowHistLongs(!showHistLongs)} className={`px-2 py-1 text-[10px] font-bold rounded border ${showHistLongs ? 'bg-green-500/20 border-green-500 text-green-500' : 'border-white/10 text-gray-500'}`}>Longs</button>
                   <button onClick={() => setShowHistShorts(!showHistShorts)} className={`px-2 py-1 text-[10px] font-bold rounded border ${showHistShorts ? 'bg-red-500/20 border-red-500 text-red-500' : 'border-white/10 text-gray-500'}`}>Shorts</button>
@@ -859,16 +840,50 @@ export function LsrCockpitPage() {
 
           {/* EXCHANGE 3D (RIGHT) */}
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4 pb-3 overflow-visible flex flex-col h-full">
-            <div className="flex items-center justify-between mb-2 shrink-0">
-              <div className="flex items-center gap-4">
-                  <div className="text-sm font-black text-white/80 uppercase tracking-widest">LSR Agregado</div>
-                  {agg && (
-                      <div className="text-[#dd9933] font-mono font-black text-lg">
+            
+            {/* Header: Controls + Stats */}
+            <div className="flex flex-wrap items-center justify-between mb-3 gap-2">
+              <div className="flex items-center gap-2">
+                  <div className="text-sm font-black text-white/80 uppercase tracking-widest mr-2">LSR Agregado</div>
+                  
+                   {/* Exchange Coin Selector (Dropdown) */}
+                   <div className="relative group">
+                    <select
+                        value={exchangeSymbol}
+                        onChange={(e) => setExchangeSymbol(e.target.value as Sym)}
+                        className="appearance-none bg-black/40 border border-white/10 rounded-lg py-1.5 pl-3 pr-8 text-xs font-bold text-white hover:bg-black/60 cursor-pointer outline-none focus:border-[#dd9933]"
+                    >
+                        {SYMBOLS.map(s => <option key={s} value={s} className="bg-[#1a1c1e]">{s}</option>)}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-2 top-2 text-gray-400 pointer-events-none" />
+                   </div>
+
+                   {/* Timeframe Selector (Dropdown) */}
+                   <div className="relative group">
+                    <select
+                        value={tf}
+                        onChange={(e) => setTf(e.target.value as Tf)}
+                        className="appearance-none bg-black/40 border border-white/10 rounded-lg py-1.5 pl-3 pr-8 text-xs font-bold text-white hover:bg-black/60 cursor-pointer outline-none focus:border-[#dd9933]"
+                    >
+                        {TFS.map(x => <option key={x} value={x} className="bg-[#1a1c1e]">{x.toUpperCase()}</option>)}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-2 top-2 text-gray-400 pointer-events-none" />
+                   </div>
+              </div>
+
+              {/* Right Side: Toggle & Value */}
+              <div className="flex items-center gap-3 ml-auto">
+                 <div className="flex bg-black/40 rounded p-0.5 border border-white/10">
+                    <button onClick={() => setBarsMode('usd')} className={`px-2 py-0.5 text-[10px] font-bold rounded transition ${barsMode === 'usd' ? 'bg-[#dd9933] text-black' : 'text-gray-400 hover:text-white'}`}>USD</button>
+                    <button onClick={() => setBarsMode('ratio')} className={`px-2 py-0.5 text-[10px] font-bold rounded transition ${barsMode === 'ratio' ? 'bg-[#dd9933] text-black' : 'text-gray-400 hover:text-white'}`}>%</button>
+                 </div>
+                 {agg && (
+                      <div className="text-[#dd9933] font-mono font-black text-lg border-l border-white/10 pl-3">
                           {fmtLSR(aggLsrValue)}
                       </div>
                   )}
+                 {loadingExchange && <Loader2 className="animate-spin text-[#dd9933]" size={18} />}
               </div>
-              {loadingExchange && <Loader2 className="animate-spin text-[#dd9933]" size={18} />}
             </div>
 
             <div className="relative overflow-visible flex-1 min-h-[300px]">
