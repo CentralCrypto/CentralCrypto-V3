@@ -371,7 +371,7 @@ export function LsrCockpitPage() {
       }
   }, [showHistRate, showHistLongs, showHistShorts]);
 
-  // RENDER HISTORIC CHART
+  // RENDER HISTORIC CHART - USING STOCK CHART FOR BETTER NAVIGATION
   useEffect(() => {
     if (loadingHist || !histData) return;
 
@@ -383,18 +383,19 @@ export function LsrCockpitPage() {
       histChartRef.current = null;
     }
 
-    histChartRef.current = Highcharts.chart('lsr-historic-chart', {
+    // Using stockChart for automatic pan/zoom handling
+    histChartRef.current = Highcharts.stockChart('lsr-historic-chart', {
       chart: {
         backgroundColor: 'transparent',
         height: 480, // INCREASED HEIGHT
-        zooming: { 
-            mouseWheel: { enabled: true },
-            type: undefined // DISABLE SELECTION ZOOM (No blue box)
-        },
-        panning: { enabled: true, type: 'x' }, // ENABLE DRAG PANNING
-        panKey: undefined, // Direct drag without key
-        spacing: [10, 10, 10, 10]
+        spacing: [10, 0, 10, 0],
+        panning: { enabled: true, type: 'x' },
+        panKey: undefined,
+        zooming: { mouseWheel: { enabled: true } }
       },
+      rangeSelector: { enabled: false }, // Hide default range selector
+      navigator: { enabled: false },     // Hide default navigator
+      scrollbar: { enabled: false },     // Hide default scrollbar
       title: { text: null },
       credits: { enabled: false },
       legend: { enabled: false }, 
@@ -763,10 +764,10 @@ export function LsrCockpitPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0b0e11] text-white" style={{ paddingBottom: '140px' }}>
-      <div className="max-w-[1400px] mx-auto p-4 sm:p-6">
+    <div className="min-h-screen bg-[#0b0e11] text-white w-full h-full" style={{ paddingBottom: '140px' }}>
+      <div className="w-full h-full p-2 sm:p-4">
         
-        {/* HEADER CONTROLS */}
+        {/* HEADER CONTROLS (Removed duplicate buttons) */}
         <h1 className="text-2xl sm:text-3xl font-black tracking-tight mb-6">Long/Short Ratio Cockpit</h1>
 
         {/* TOP SECTION: LSR HISTORIC + AGGREGATED */}
