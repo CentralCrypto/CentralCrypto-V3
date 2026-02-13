@@ -32,7 +32,7 @@ export const pt = {
       time: { yesterday: "Ontem", d7: "7 Dias", d30: "30 Dias" },
       rsi: { title: "Média RSI", overbought: "Sobrecompra", oversold: "Sobrevenda", neutral: "Neutro" },
       macd: { title: "Média MACD", bullish: "Bullish", bearish: "Bearish", neutral: "Neutro" },
-      lsr: { title: "Long/Short Ratio", longs: "Longs", shorts: "Shorts", neutral: "Neutro" },
+      lsr: { title: "Long/Short Ratio", longs: "Longs", shorts: "Shorts", neutral: "Neutro", historicTitle: "LSR Histórico", aggregatedTitle: "LSR Agregado" },
       altseason: { title: "Altcoin Season", btcDomZone: "BTC Dominance", bitcoinSeason: "Bitcoin Season", altcoinSeason: "Altcoin Season", transition: "Transição", yesterday: "Ontem", week: "Semana", month: "Mês" },
       mktcapHistory: { title: "Market Cap", yesterday: "Ontem", week: "Semana", month: "Mês" },
       etf: { title: "Fluxo ETF", netFlow: "Fluxo Líquido", btcEtf: "BTC ETFs", ethEtf: "ETH ETFs", last7d: "7 Dias", last30d: "30 Dias", last90d: "90 Dias", lastUpdate: "Atualizado em", dailyFlow: "Fluxo Diário" },
@@ -135,8 +135,10 @@ export const pt = {
           a1: "Representa a proporção entre contas líquidas longas e curtas em relação ao total de contas com posições. Cada conta é contada apenas uma vez. <br/><br/><b>% Contas Long</b> = Contas com posições líquidas longas / Total de contas com posições.<br/><b>% Contas Short</b> = Contas com posições líquidas curtas / Total de contas com posições.",
           q2: "Como utilizar o LSR na tomada de decisão?",
           a2: "Um ratio extremante alto (ex: acima de 2.5) sugere que o sentimento de varejo está excessivamente otimista (muitos Longs). Institucionalmente, isso cria liquidez para baixo, aumentando a probabilidade de um movimento corretivo (Long Squeeze). O inverso ocorre com ratios muito baixos, sugerindo oportunidade de alta (Short Squeeze).",
-          q3: "O que significa uma divergência entre Preço e LSR?",
-          a3: "Se o preço do ativo está caindo, mas o LSR está subindo agressivamente, significa que o varejo está tentando 'adivinhar o fundo' (comprando a queda) enquanto o preço continua caindo. Isso geralmente é um sinal bearish de continuação de queda até que ocorra uma capitulação das posições longas."
+          q3: "Interpretação de Sentimento Contrário",
+          a3: "Se o preço do ativo está caindo, mas o LSR está subindo agressivamente, significa que o varejo está tentando 'adivinhar o fundo' (comprando a queda) enquanto o preço continua caindo. Isso geralmente é um sinal bearish de continuação de queda até que ocorra uma capitulação das posições longas.",
+          q4: "O que significa uma divergência entre Preço e LSR?",
+          a4: "Se o preço do ativo está caindo, mas o LSR está subindo agressivamente, significa que o varejo está tentando 'adivinhar o fundo' (comprando a queda) enquanto o preço continua caindo. Isso geralmente é um sinal bearish de continuação de queda até que ocorra uma capitulação das posições longas."
         },
         trump: {
           q1: "O que o Trump-o-Meter mede?",
@@ -219,7 +221,7 @@ export const pt = {
         public: "Público",
         basic: "Básico",
         intermediate: "Intermediário",
-        advanced: "Avançado"
+        advanced: "Avanzado"
     }
   },
   authModal: {

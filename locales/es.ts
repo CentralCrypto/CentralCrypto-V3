@@ -32,7 +32,7 @@ export const es = {
       time: { yesterday: "Ayer", d7: "7 Días", d30: "30 Días" },
       rsi: { title: "Media RSI", overbought: "Sobrecompra", oversold: "Sobreventa", neutral: "Neutro" },
       macd: { title: "Media MACD", bullish: "Bullish", bearish: "Bearish", neutral: "Neutro" },
-      lsr: { title: "Ratio Long/Short", longs: "Longs", shorts: "Shorts", neutral: "Neutro" },
+      lsr: { title: "Ratio Long/Short", longs: "Longs", shorts: "Shorts", neutral: "Neutro", historicTitle: "LSR Histórico", aggregatedTitle: "LSR Agregado" },
       altseason: { title: "Temporada de Altcoins", btcDomZone: "Dominancia BTC", bitcoinSeason: "Temporada de Bitcoin", altcoinSeason: "Temporada de Altcoins", transition: "Transición", yesterday: "Ayer", week: "Semana", month: "Mes" },
       mktcapHistory: { title: "Market Cap", yesterday: "Ayer", week: "Semana", month: "Mes" },
       etf: { title: "Flujo ETF", netFlow: "Flujo Neto", btcEtf: "BTC ETFs", ethEtf: "ETH ETFs", last7d: "7 Días", last30d: "30 Dias", last90d: "90 Días", lastUpdate: "Actualizado en", dailyFlow: "Flujo Diario" },
@@ -140,7 +140,7 @@ export const es = {
           q1: "¿Qué muestra el Bubble Chart?",
           a1: "Es una visión volumétrica y dinámica de los Top Movers. Las burbujas más grandes representan activos con mayor volumen o variación porcentual en el día.",
           q2: "¿Para qué sirven los colores?",
-          a2: "Los colores clasifican el sentimiento: de Bearish extremo a Bullish extremo, lo que permite visualizar hacia dónde se dirige el flujo de capital."
+          a2: "Los colores clasifican el sentimiento: de Bearish extremo a Bullish extremo, o que permite visualizar hacia dónde se dirige el flujo de capital."
         }
       }
     },

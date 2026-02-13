@@ -32,7 +32,7 @@ export const en = {
       time: { yesterday: "Yesterday", d7: "7 Days", d30: "30 Days" },
       rsi: { title: "RSI Average", overbought: "Overbought", oversold: "Oversold", neutral: "Neutral" },
       macd: { title: "MACD Average", bullish: "Bullish", bearish: "Bearish", neutral: "Neutral" },
-      lsr: { title: "Long/Short Ratio", longs: "Longs", shorts: "Shorts", neutral: "Neutral" },
+      lsr: { title: "Long/Short Ratio", longs: "Longs", shorts: "Shorts", neutral: "Neutral", historicTitle: "LSR Historic", aggregatedTitle: "Aggregated LSR" },
       altseason: { title: "Altcoin Season", btcDomZone: "BTC Dom Zone", bitcoinSeason: "Bitcoin Season", altcoinSeason: "Altcoin Season", transition: "Transition", yesterday: "Yesterday", week: "Week", month: "Month" },
       mktcapHistory: { title: "Market Cap", yesterday: "Yesterday", week: "Week", month: "Month" },
       etf: { title: "ETF Flow", netFlow: "Net Flow", btcEtf: "BTC ETFs", ethEtf: "ETH ETFs", last7d: "7 Days", last30d: "30 Days", last90d: "90 Days", lastUpdate: "Updated on", dailyFlow: "Daily Flow" },
