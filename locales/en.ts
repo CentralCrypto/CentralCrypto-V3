@@ -112,9 +112,11 @@ export const en = {
         },
         lsr: {
           q1: "What is the Long/Short Ratio?",
-          a1: "It represents the proportion between long and short bets in the futures market of major exchanges.",
-          q2: "How to interpret?",
-          a2: "A very high ratio (e.g., 3.0) is usually a contrarian signal, indicating that there are many 'long' traders, which facilitates liquidation cascades."
+          a1: "The proportion of net long and net short accounts to total accounts with positions. Each account is counted once only. <br/><br/><b>Long Account %</b> = Accounts with net long positions / Total Accounts with positions.<br/><b>Short Account %</b> = Accounts with net short positions / Total Accounts with positions.",
+          q2: "How to use LSR for decision making?",
+          a2: "A very high ratio (e.g., above 2.5) suggests that retail sentiment is overly bullish (many Longs). Institutionally, this creates downside liquidity, increasing the probability of a corrective move (Long Squeeze). The opposite happens with very low ratios.",
+          q3: "What does a divergence between Price and LSR mean?",
+          a3: "If the asset's price is falling, but the LSR is aggressively rising, it means retail traders are trying to 'catch the knife' (buying the dip) while the price keeps dropping. This is usually a bearish signal for continued decline until long positions capitulate."
         },
         trump: {
           q1: "What does the Trump-o-Meter measure?",

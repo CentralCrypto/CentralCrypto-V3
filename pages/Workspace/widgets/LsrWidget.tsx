@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Highcharts from 'highcharts/highstock';
 import HC3D from 'highcharts/highcharts-3d';
 import HCWheelZoom from 'highcharts/modules/mouse-wheel-zoom';
-import { Loader2, AlertTriangle, ChevronDown, ChevronUp, Eye, EyeOff, GripVertical, ChevronsUpDown, ArrowUp, ArrowDown, TrendingUp, TrendingDown, Filter } from 'lucide-react';
+import { Loader2, AlertTriangle, ChevronDown, ChevronUp, Eye, EyeOff, GripVertical, ChevronsUpDown, ArrowUp, ArrowDown, TrendingUp, TrendingDown, Filter, MousePointer2, ZoomIn } from 'lucide-react';
 import { DashboardItem, Language } from '../../../types';
 import { fetchLongShortRatio, LsrData } from '../../../services/api';
 import { getTranslations } from '../../../locales';
@@ -221,7 +221,7 @@ export function LsrCockpitPage() {
   const [showHistShorts, setShowHistShorts] = useState(false); 
 
   const [showTable, setShowTable] = useState(true);
-  const [activeTab, setActiveTab] = useState<'exchanges' | 'coins'>('exchanges');
+  const [activeTab, setActiveTab] = useState<'exchanges' | 'coins'>('coins');
   const [barsMode, setBarsMode] = useState<'usd' | 'ratio'>('usd');
 
   // Series Toggles (3D Chart)
@@ -414,7 +414,8 @@ export function LsrCockpitPage() {
         labels: { style: { color: '#dd9933', fontSize: '10px' } },
         plotLines: [{ value: 1, color: '#ffffff', width: 1, dashStyle: 'Dot', zIndex: 2 }],
         min: null, // Auto scale
-        max: null  // Auto scale
+        max: null,  // Auto scale
+        opposite: false
       }, {
         // Axis 1: Percentages (Right)
         title: { text: 'Ratio %', style: { color: '#ffffff' } },
@@ -767,14 +768,14 @@ export function LsrCockpitPage() {
     <div className="min-h-screen bg-[#0b0e11] text-white w-full h-full" style={{ paddingBottom: '140px' }}>
       <div className="w-full h-full p-2 sm:p-4">
         
-        {/* HEADER CONTROLS (Removed duplicate buttons) */}
+        {/* HEADER CONTROLS */}
         <h1 className="text-2xl sm:text-3xl font-black tracking-tight mb-6">Long/Short Ratio Cockpit</h1>
 
         {/* TOP SECTION: LSR HISTORIC + AGGREGATED */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-stretch">
           
           {/* LSR HISTORIC CHART (LEFT) */}
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 pb-8 overflow-visible h-full flex flex-col">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 pb-8 overflow-visible h-full flex flex-col relative">
             <div className="flex flex-wrap items-center justify-between mb-3 gap-2">
               <div className="flex items-center gap-3">
                 <div className="text-sm font-black text-white/80 uppercase tracking-widest">LSR Historic</div>
@@ -831,7 +832,18 @@ export function LsrCockpitPage() {
               {loadingHist && <Loader2 className="animate-spin text-[#dd9933]" size={18} />}
             </div>
 
-            <div className="flex-1 min-h-[480px] mt-4">
+            <div className="flex-1 min-h-[480px] mt-4 relative">
+                {/* TOOLTIP OVERLAY FOR CONTROLS */}
+                <div className="absolute top-2 right-2 z-10 flex items-center gap-3 bg-black/40 px-3 py-1.5 rounded-lg border border-white/10 pointer-events-none select-none">
+                    <span className="flex items-center gap-1.5 text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                         <MousePointer2 size={12} className="text-[#dd9933]" /> Pan
+                    </span>
+                    <div className="w-px h-3 bg-white/10"></div>
+                    <span className="flex items-center gap-1.5 text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                         <ZoomIn size={12} className="text-[#dd9933]" /> Zoom
+                    </span>
+                </div>
+
                 {errorHist ? (
                   <div className="p-4 text-red-200 bg-red-900/20 border border-red-900/50 rounded flex items-center justify-center h-full">{errorHist}</div>
                 ) : loadingHist ? (
@@ -929,8 +941,8 @@ export function LsrCockpitPage() {
         <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
           <div className="flex items-center justify-between mb-4">
             <div className="flex gap-4">
-                <button onClick={() => setActiveTab('exchanges')} className={`text-sm font-black uppercase tracking-widest pb-1 border-b-2 transition-colors ${activeTab === 'exchanges' ? 'text-[#dd9933] border-[#dd9933]' : 'text-gray-500 border-transparent hover:text-white'}`}>Exchanges (Detail)</button>
-                <button onClick={() => setActiveTab('coins')} className={`text-sm font-black uppercase tracking-widest pb-1 border-b-2 transition-colors ${activeTab === 'coins' ? 'text-[#dd9933] border-[#dd9933]' : 'text-gray-500 border-transparent hover:text-white'}`}>Coins (LSR Overview)</button>
+                <button onClick={() => setActiveTab('coins')} className={`text-sm font-black uppercase tracking-widest pb-1 border-b-2 transition-colors ${activeTab === 'coins' ? 'text-[#dd9933] border-[#dd9933]' : 'text-gray-500 border-transparent hover:text-white'}`}>LSR by COINS</button>
+                <button onClick={() => setActiveTab('exchanges')} className={`text-sm font-black uppercase tracking-widest pb-1 border-b-2 transition-colors ${activeTab === 'exchanges' ? 'text-[#dd9933] border-[#dd9933]' : 'text-gray-500 border-transparent hover:text-white'}`}>LSR by EXCHANGE</button>
             </div>
             <button onClick={() => setShowTable(v => !v)} className="px-3 py-2 rounded-xl bg-black/20 border border-white/10 hover:bg-black/30 transition flex items-center gap-2 text-sm font-black">
               {showTable ? <ChevronUp size={16} /> : <ChevronDown size={16} />}{showTable ? 'Ocultar' : 'Mostrar'}

@@ -132,17 +132,17 @@ export const pt = {
         },
         lsr: {
           q1: "O que é o Long/Short Ratio?",
-          a1: "Representa a proporção entre apostas de alta (Longs) e baixa (Shorts) no mercado de futuros das principais exchanges.",
-          q2: "Como interpretar?",
-          a2: "Um ratio muito alto (ex: 3.0) costuma ser um sinal contrário, indicando que há muitos traders 'comprados', o que facilita cascatas de liquidação.",
-          q3: "Como operar contra a manada?",
-          a3: "Entenda a liquidez. Quando o LSR está extremo, as baleias tendem a caçar os stops da maioria. Aprenda a ler a liquidez institucional na <a href='/academy' class='text-[#dd9933] hover:underline font-bold'>Central Academy</a>."
+          a1: "Representa a proporção entre contas líquidas longas e curtas em relação ao total de contas com posições. Cada conta é contada apenas uma vez. <br/><br/><b>% Contas Long</b> = Contas com posições líquidas longas / Total de contas com posições.<br/><b>% Contas Short</b> = Contas com posições líquidas curtas / Total de contas com posições.",
+          q2: "Como utilizar o LSR na tomada de decisão?",
+          a2: "Um ratio extremante alto (ex: acima de 2.5) sugere que o sentimento de varejo está excessivamente otimista (muitos Longs). Institucionalmente, isso cria liquidez para baixo, aumentando a probabilidade de um movimento corretivo (Long Squeeze). O inverso ocorre com ratios muito baixos, sugerindo oportunidade de alta (Short Squeeze).",
+          q3: "O que significa uma divergência entre Preço e LSR?",
+          a3: "Se o preço do ativo está caindo, mas o LSR está subindo agressivamente, significa que o varejo está tentando 'adivinhar o fundo' (comprando a queda) enquanto o preço continua caindo. Isso geralmente é um sinal bearish de continuação de queda até que ocorra uma capitulação das posições longas."
         },
         trump: {
           q1: "O que o Trump-o-Meter mede?",
           a1: "Processamos via Inteligência Artificial (NLP) as postagens de Donald Trump em redes sociais para medir o impacto emocional imediato no mercado cripto.",
           q2: "Como ler o medidor?",
-          a2: "O medidor vai de -50 (Bearish extremo) a +50 (Bullish extremo). Quanto mais à direita, maior a correlação positiva esperada com ativos de risco como BTC.",
+          a2: "O medidor vai de -50 (Bearish extremo) a +50 (Bullish extremo). Quanto mais à direita, maior a correlação positiva esperada com ativos de riesgo como BTC.",
           q3: "Política afeta preço?",
           a3: "Absolutamente. Regulação e narrativas políticas movem bilhões. Entenda os ciclos macroeconômicos e políticos com nossos estudos de caso na <a href='/academy' class='text-[#dd9933] hover:underline font-bold'>Central Academy</a>."
         },

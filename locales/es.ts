@@ -41,7 +41,7 @@ export const es = {
       calendar: { title: "Calendario Económico", today: "HOY", tomorrow: "MAÑANA", yesterday: "AYER", previous: "Prev", forecast: "Fore", actual: "Actu" }
     },
     magazine: {
-      recentStudies: "Estudios Recientes",
+      recentStudies: "Estudios Recentes",
       featuredAnalysis: "Análisis Destacados",
       highlight: "Destacado",
       trendingTopics: "Más Leídas",
@@ -82,7 +82,7 @@ export const es = {
         title: "Metodologia y FAQ",
         fng: {
           q1: "¿Cómo se calcula el Fear & Greed Index?",
-          a1: "El índice es un análisis de sentimiento multifatorial. Procesamos datos de volatilidad, volumen de mercado, sentimiento en redes sociales y dominancia de Bitcoin para generar un valor de 0 a 100.",
+          a1: "El índice es un análisis de sentimiento multifatorial. Procesamos datos de volatilidad, volumen de mercado, sentimiento en redes sociales y dominancia de Bitcoin para gerar un valor de 0 a 100.",
           q2: "¿Qué significa cada rango del índice?",
           a2: "<ul class='space-y-2 font-mono text-xs'><li class='flex gap-2'><b class='text-red-500 w-16 shrink-0'>0-25:</b> <span><b>Miedo Extremo</b> (oportunidad histórica de compra)</span></li><li class='flex gap-2'><b class='text-orange-500 w-16 shrink-0'>26-45:</b> <span><b>Miedo</b> (miedo presente en el mercado)</span></li><li class='flex gap-2'><b class='text-yellow-500 w-16 shrink-0'>46-55:</b> <span><b>Neutro</b> (incertidumbre y falta de volume)</span></li><li class='flex gap-2'><b class='text-green-400 w-16 shrink-0'>56-75:</b> <span><b>Codicia</b> (la codicia comienza a dominar)</span></li><li class='flex gap-2'><b class='text-green-600 w-16 shrink-0'>76-94:</b> <span><b>Codicia Extrema</b> (codicia extrema)</span></li><li class='flex gap-2'><b class='text-cyan-400 w-16 shrink-0'>95-100:</b> <span><b>Euforia</b> (euforia peligrosa, corrección inminente)</span></li></ul>"
         },
@@ -90,7 +90,7 @@ export const es = {
           q1: "¿Qué es el Promedio Global de RSI?",
           a1: "Es el promedio aritmético del Índice de Fuerza Relativa de las 100 principales criptomonedas por capitalización. Ayuda a identificar cuando el mercado en su conjunto está en zonas macro de sobrecompra o sobreventa.",
           q2: "¿Como interpretar los valores?",
-          a2: "Por encima de 70 indica que la mayoría de los activos están estirados (sobrecomprados). Por debajo de 30 indica que el mercado está en pánico vendedor (sobrevendido)."
+          a2: "Por encima de 70 indica que la mayoría dos activos están estirados (sobrecomprados). Por debajo de 30 indica que el mercado está en pánico vendedor (sobrevendido)."
         },
         macd: {
           q1: "¿Cómo funciona el Rastreador MACD?",
@@ -112,9 +112,11 @@ export const es = {
         },
         lsr: {
           q1: "¿Qué es el Long/Short Ratio?",
-          a1: "Representa la proporción entre apuestas alcistas (Longs) y bajistas (Shorts) en el mercado de futuros de las principales bolsas.",
-          q2: "¿Cómo interpretar?",
-          a2: "Un ratio muy alto (por ejemplo, 3.0) suele ser una señal contraria, lo que indica que hay muchos operadores 'comprados', lo que facilita las cascadas de liquidación."
+          a1: "La proporción de cuentas netas largas y cortas en relación con el total de cuentas con posiciones. Cada cuenta se cuenta una sola vez. <br/><br/><b>% Cuentas Largas</b> = Cuentas con posiciones netas largas / Total de cuentas con posiciones.<br/><b>% Cuentas Cortas</b> = Cuentas con posiciones netas cortas / Total de cuentas con posiciones.",
+          q2: "¿Cómo utilizar el LSR para la toma de decisiones?",
+          a2: "Un ratio extremadamente alto (ej: por encima de 2.5) sugiere que el sentimiento minorista es excesivamente alcista (muchos Longs). Institucionalmente, esto crea liquidez a la baja, aumentando la probabilidad de un movimiento correctivo (Long Squeeze). Lo contrario ocurre con ratios muy bajos (Short Squeeze).",
+          q3: "¿Qué significa una divergencia entre Precio y LSR?",
+          a3: "Si el precio del activo está cayendo, pero el LSR está subiendo agresivamente, significa que el comercio minorista está tratando de 'adivinar el fondo' (comprando la caída) mientras el precio sigue bajando. Esto suele ser una señal bajista de continuación de la caída hasta que ocurra una capitulación."
         },
         trump: {
           q1: "¿Qué mide el Trump-o-Meter?",
