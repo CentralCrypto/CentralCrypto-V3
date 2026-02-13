@@ -1,5 +1,4 @@
 
-// IndicatorPage.tsx
 import React, { useState, useMemo, useEffect } from 'react';
 import { ApiCoin, Language, WidgetType, UserTier } from '../../../types';
 import { getTranslations } from '../../../locales';
@@ -83,12 +82,14 @@ function PageFaq({ language, pageType }: { language: Language; pageType: string 
   // Safe return after all hooks are called
   if (!faqData) return null;
 
-  // Generic handling (max 3 questions if not specific component)
+  // Generic handling (max 5 questions if not specific component)
   const items = [];
   const data = faqData as any;
   if (data.q1) items.push({ q: data.q1, a: data.a1 });
   if (data.q2) items.push({ q: data.q2, a: data.a2 });
   if (data.q3) items.push({ q: data.q3, a: data.a3 });
+  if (data.q4) items.push({ q: data.q4, a: data.a4 });
+  if (data.q5) items.push({ q: data.q5, a: data.a5 });
 
   return (
     <div className="mt-8 mb-12 max-w-4xl mx-auto px-4">

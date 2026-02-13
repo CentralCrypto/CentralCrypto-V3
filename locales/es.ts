@@ -117,7 +117,9 @@ export const es = {
           q2: "¿Cómo utilizar el LSR para la toma de decisiones?",
           a2: "Un ratio extremadamente alto (ej: por encima de 2.5) sugiere que el sentimiento minorista es excesivamente alcista (muchos Longs). Institucionalmente, esto crea liquidez a la baja, aumentando la probabilidad de un movimiento correctivo (Long Squeeze). Lo contrario ocurre con ratios muy bajos (Short Squeeze).",
           q3: "¿Qué significa una divergencia entre Precio y LSR?",
-          a3: "Si el precio del activo está cayendo, pero el LSR está subiendo agresivamente, significa que el comercio minorista está tratando de 'adivinar el fondo' (comprando la caída) mientras el precio sigue bajando. Esto suele ser una señal bajista de continuación de la caída hasta que ocurra una capitulación."
+          a3: "Si el precio del activo está cayendo, pero el LSR está subiendo agresivamente, significa que el comercio minorista está tratando de 'adivinar el fondo' (comprando la caída) mientras el precio sigue bajando. Esto suele ser una señal bajista de continuación de la caída hasta que ocurra una capitulación.",
+          q5: "¿Cómo puedo aprender más y dominar esta herramienta?",
+          a5: "La herramienta es solo el comienzo. Para dominar la lectura institucional, entender el flujo de órdenes y operar como los grandes jugadores, visita ahora la <a href='/academy' class='text-[#dd9933] hover:underline font-bold'>Central Academy</a>. Allí encontrarás rutas completas desde cero hasta avanzado."
         },
         trump: {
           q1: "¿Qué mide el Trump-o-Meter?",

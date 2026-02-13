@@ -139,7 +139,9 @@ export const pt = {
           q3: "Interpretação de Sentimento Contrário",
           a3: "Se o preço do ativo está caindo, mas o LSR está subindo agressivamente, significa que o varejo está tentando 'adivinhar o fundo' (comprando a queda) enquanto o preço continua caindo. Isso geralmente é um sinal bearish de continuação de queda até que ocorra uma capitulação das posições longas.",
           q4: "O que significa uma divergência entre Preço e LSR?",
-          a4: "Se o preço do ativo está caindo, mas o LSR está subindo agressivamente, significa que o varejo está tentando 'adivinhar o fundo' (comprando a queda) enquanto o preço continua caindo. Isso geralmente é um sinal bearish de continuação de queda até que ocorra uma capitulação das posições longas."
+          a4: "Se o preço do ativo está caindo, mas o LSR está subindo agressivamente, significa que o varejo está tentando 'adivinhar o fundo' (comprando a queda) enquanto o preço continua caindo. Isso geralmente é um sinal bearish de continuação de queda até que ocorra uma capitulação das posições longas.",
+          q5: "Como faço para aprender mais e dominar essa ferramenta?",
+          a5: "A ferramenta é apenas o começo. Para dominar a leitura institucional, entender o fluxo de ordens e operar como os grandes players, visite agora a <a href='/academy' class='text-[#dd9933] hover:underline font-bold'>Central Academy</a>. Lá você encontra trilhas completas do zero ao avançado."
         },
         trump: {
           q1: "O que o Trump-o-Meter mede?",

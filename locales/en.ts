@@ -117,7 +117,9 @@ export const en = {
           q2: "How to use LSR for decision making?",
           a2: "A very high ratio (e.g., above 2.5) suggests that retail sentiment is overly bullish (many Longs). Institutionally, this creates downside liquidity, increasing the probability of a corrective move (Long Squeeze). The opposite happens with very low ratios.",
           q3: "What does a divergence between Price and LSR mean?",
-          a3: "If the asset's price is falling, but the LSR is aggressively rising, it means retail traders are trying to 'catch the knife' (buying the dip) while the price keeps dropping. This is usually a bearish signal for continued decline until long positions capitulate."
+          a3: "If the asset's price is falling, but the LSR is aggressively rising, it means retail traders are trying to 'catch the knife' (buying the dip) while the price keeps dropping. This is usually a bearish signal for continued decline until long positions capitulate.",
+          q5: "How can I learn more and master this tool?",
+          a5: "The tool is just the beginning. To master institutional reading, understand order flow, and trade like the big players, visit the <a href='/academy' class='text-[#dd9933] hover:underline font-bold'>Central Academy</a> now. There you will find complete tracks from zero to advanced."
         },
         trump: {
           q1: "What does the Trump-o-Meter measure?",
