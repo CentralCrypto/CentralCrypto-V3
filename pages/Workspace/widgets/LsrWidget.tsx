@@ -360,14 +360,6 @@ export function LsrCockpitPage() {
     return () => { alive = false; };
   }, [histInterval, selectedHistoricSymbol]); // Re-run if interval changes or if user selects new symbol manually
 
-  // SYNC EXCHANGE WIDGET WITH HISTORIC SELECTION (Only if supported)
-  useEffect(() => {
-      const base = getBaseSymbol(selectedHistoricSymbol);
-      if (['BTC', 'ETH', 'SOL'].includes(base)) {
-          setExchangeSymbol(base as Sym);
-      }
-  }, [selectedHistoricSymbol]);
-
   // UPDATE CHART VISIBILITY WITHOUT RECREATING
   useEffect(() => {
       if (histChartRef.current) {
@@ -590,11 +582,11 @@ export function LsrCockpitPage() {
       chart: {
         type: 'column',
         backgroundColor: 'transparent',
-        height: 300,
+        height: 380, // INCREASED HEIGHT
         marginTop: 10,
         marginLeft: undefined, 
         marginRight: 0,
-        marginBottom: 72,
+        marginBottom: 50, // ADJUSTED MARGIN
         spacing: [0, 0, 0, 0],
         options3d: {
           enabled: true,
@@ -615,7 +607,7 @@ export function LsrCockpitPage() {
         tickLength: 0,
         labels: {
           style: { color: 'rgba(255,255,255,0.70)', fontSize: '10px', fontWeight: 'normal' },
-          rotation: -45, autoRotation: [-45], y: 32, step: 1
+          rotation: -45, autoRotation: [-45], y: 20, step: 1
         }
       },
       yAxis: {
@@ -774,28 +766,11 @@ export function LsrCockpitPage() {
     <div className="min-h-screen bg-[#0b0e11] text-white" style={{ paddingBottom: '140px' }}>
       <div className="max-w-[1400px] mx-auto p-4 sm:p-6">
         
-        {/* HEADER CONTROLS */}
-        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight">Long/Short Ratio Cockpit <span className="ml-3 text-sm font-black text-white/60">{exchangeSymbol} · {tf.toUpperCase()}</span></h1>
-            <p className="text-white/60 text-sm mt-1">Dados de LSR em tempo real das principais exchanges e agregados.</p>
-          </div>
-          <div className="flex flex-wrap gap-3 items-center">
-            <div className="bg-white/5 border border-white/10 rounded-xl p-1 flex">
-              {SYMBOLS.map(s => (<button key={s} onClick={() => setExchangeSymbol(s)} className={`px-4 py-2 rounded-lg text-sm font-black transition ${exchangeSymbol === s ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'}`}>{s}</button>))}
-            </div>
-            <div className="bg-white/5 border border-white/10 rounded-xl p-1 flex">
-              {TFS.map(x => (<button key={x} onClick={() => setTf(x)} className={`px-4 py-2 rounded-lg text-sm font-black transition ${tf === x ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'}`}>{x.toUpperCase()}</button>))}
-            </div>
-            <div className="bg-white/5 border border-white/10 rounded-xl p-1 flex">
-              <button onClick={() => setBarsMode('usd')} className={`px-4 py-2 rounded-lg text-sm font-black transition ${barsMode === 'usd' ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'}`}>USD</button>
-              <button onClick={() => setBarsMode('ratio')} className={`px-4 py-2 rounded-lg text-sm font-black transition ${barsMode === 'ratio' ? 'bg-[#dd9933] text-black' : 'text-white/70 hover:text-white'}`}>%</button>
-            </div>
-          </div>
-        </div>
+        {/* HEADER CONTROLS (Removed duplicate buttons) */}
+        <h1 className="text-2xl sm:text-3xl font-black tracking-tight mb-6">Long/Short Ratio Cockpit</h1>
 
         {/* TOP SECTION: LSR HISTORIC + AGGREGATED */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6 items-stretch">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-stretch">
           
           {/* LSR HISTORIC CHART (LEFT) */}
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4 pb-8 overflow-visible h-full flex flex-col">
@@ -916,10 +891,10 @@ export function LsrCockpitPage() {
               </div>
             </div>
 
-            <div className="relative overflow-visible flex-1 min-h-[300px] mt-4 mb-4">
+            <div className="relative overflow-visible flex-1 min-h-[380px] mt-4 mb-4">
                 {errorExchange ? <div className="p-4 text-red-200 bg-red-900/20 border border-red-900/50 rounded h-full flex items-center justify-center">{errorExchange}</div> :
-                 loadingExchange ? <Skeleton h={300} /> : 
-                 <div id="lsr-exchange-3d" className="h-full min-h-[300px]" />
+                 loadingExchange ? <Skeleton h={380} /> : 
+                 <div id="lsr-exchange-3d" className="h-full min-h-[380px]" />
                 }
             </div>
 
