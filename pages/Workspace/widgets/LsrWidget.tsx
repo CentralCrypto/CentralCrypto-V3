@@ -1,4 +1,3 @@
-
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Highcharts from 'highcharts/highstock';
 import HC3D from 'highcharts/highcharts-3d';
@@ -459,10 +458,11 @@ export function LsrCockpitPage({ language, item }: { language: Language, item: D
         borderWidth: 0,
         style: { color: '#fff' },
         formatter: function () {
+            const locale = language === 'pt' ? 'pt-BR' : language === 'en' ? 'en-US' : 'es-ES';
             // @ts-ignore
             const points = this.points || [];
             // @ts-ignore
-            const date = new Date(this.x).toLocaleDateString(language === 'pt' ? 'pt-BR' : 'en-US'); 
+            const date = new Date(this.x).toLocaleDateString(locale, { timeZone: 'UTC', day: '2-digit', month: '2-digit', year: 'numeric' }); 
             
             let s = `<div style="font-size:11px;color:#aaa;margin-bottom:4px;">${date}</div>`;
             points.forEach((p: any) => {

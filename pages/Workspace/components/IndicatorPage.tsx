@@ -1,12 +1,13 @@
-
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ApiCoin, Language, WidgetType, UserTier } from '../../../types';
-import { getTranslations } from '../../../locales';
 import CryptoWidget from './CryptoWidget';
 import CryptoMarketBubbles from '../widgets/CryptoMarketBubbles';
 import MarketCapTable from '../widgets/MarketCapTable';
 import { RsiGauge, RsiScatterChart, RsiTableList, RsiFaq } from '../widgets/RsiWidget';
 import { MacdSidebar, MacdScatterChart, MacdTableList, MacdFaq } from '../widgets/MacdWidget';
+import ReturnsWidget from '../widgets/ReturnsWidget';
+// FIX: Import getTranslations
+import { getTranslations } from '../../../locales';
 
 import {
   Activity,
@@ -186,7 +187,8 @@ type PageType =
   | 'CALENDAR' 
   | 'FNG' 
   | 'ALTSEASON' 
-  | 'TRUMP';
+  | 'TRUMP'
+  | 'RETURNS';
 
 function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageProps) {
   const [activePage, setActivePage] = useState<PageType>('MARKETCAP');
@@ -204,6 +206,7 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
         { id: 'HEATMAP' as PageType, label: "HeatMap Tree", icon: <LayoutGrid size={18} /> },
         { id: 'BUBBLES' as PageType, label: "CryptoBubbles", icon: <CircleDashed size={18} /> },
         { id: 'ETF' as PageType, label: "ETFs", icon: <ArrowUpRight size={18} /> },
+        { id: 'RETURNS' as PageType, label: "Retornos", icon: <BarChart2 size={18} /> },
       ] 
     },
     { 
@@ -336,6 +339,7 @@ function IndicatorPage({ language, coinMap: _coinMap, userTier }: IndicatorPageP
             {activePage === 'FNG' && <div className="h-[700px] w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'fng-page', type: WidgetType.FEAR_GREED, title: 'Fear & Greed Index', symbol: 'GLOBAL', isMaximized: true }} language={language} /></div>}
             {activePage === 'ALTSEASON' && <div className="h-[500px] w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'altseason-page', type: WidgetType.ALTCOIN_SEASON, title: 'Altcoin Season Index', symbol: 'GLOBAL', isMaximized: true }} language={language} /></div>}
             {activePage === 'TRUMP' && <div className="h-[600px] w-full rounded-xl overflow-hidden shadow-lg border-0 dark:border dark:border-slate-800"><CryptoWidget item={{ id: 'trump-page', type: WidgetType.TRUMP_METER, title: 'Trump-o-Meter', symbol: 'SENTIMENT', isMaximized: true }} language={language} /></div>}
+            {activePage === 'RETURNS' && <ReturnsWidget language={language} />}
           </div>
 
           <PageFaq language={language} pageType={activePage} />
